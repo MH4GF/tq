@@ -133,9 +133,9 @@ Body.
 func TestRender_AllVariables(t *testing.T) {
 	tmpl := &Template{
 		ID: "test",
-		Body: `Task: {{.Task.ID}} {{.Task.Title}} {{.Task.URL}}
+		Body: `Task: {{.Task.ID}} {{.Task.Title}} {{.Task.URL}} {{.Task.Status}}
 Project: {{.Project.ID}} {{.Project.Name}} {{.Project.WorkDir}}
-Action: {{.Action.ID}}
+Action: {{.Action.ID}} {{.Action.TemplateID}} {{.Action.Status}} {{.Action.Priority}} {{.Action.Source}}
 TaskMeta: {{index .Task.Meta "key"}}
 ProjectMeta: {{index .Project.Meta "key"}}
 ActionMeta: {{index .Action.Meta "key"}}`,
@@ -143,10 +143,11 @@ ActionMeta: {{index .Action.Meta "key"}}`,
 
 	data := PromptData{
 		Task: TaskData{
-			ID:    1,
-			Title: "Test Task",
-			URL:   "https://example.com/1",
-			Meta:  map[string]any{"key": "tval"},
+			ID:     1,
+			Title:  "Test Task",
+			URL:    "https://example.com/1",
+			Status: "open",
+			Meta:   map[string]any{"key": "tval"},
 		},
 		Project: ProjectData{
 			ID:      2,
@@ -155,8 +156,12 @@ ActionMeta: {{index .Action.Meta "key"}}`,
 			Meta:    map[string]any{"key": "pval"},
 		},
 		Action: ActionData{
-			ID:   3,
-			Meta: map[string]any{"key": "aval"},
+			ID:         3,
+			TemplateID: "implement",
+			Status:     "pending",
+			Priority:   10,
+			Source:      "github",
+			Meta:       map[string]any{"key": "aval"},
 		},
 	}
 
@@ -165,9 +170,9 @@ ActionMeta: {{index .Action.Meta "key"}}`,
 		t.Fatal(err)
 	}
 
-	expected := `Task: 1 Test Task https://example.com/1
+	expected := `Task: 1 Test Task https://example.com/1 open
 Project: 2 MyProject /tmp/proj
-Action: 3
+Action: 3 implement pending 10 github
 TaskMeta: tval
 ProjectMeta: pval
 ActionMeta: aval`

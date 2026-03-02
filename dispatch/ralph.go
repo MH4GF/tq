@@ -161,8 +161,12 @@ func buildPromptDataFromDB(database *db.DB, action *db.Action, tqDir string) (te
 		}
 	}
 	data.Action = template.ActionData{
-		ID:   action.ID,
-		Meta: actionMeta,
+		ID:         action.ID,
+		TemplateID: action.TemplateID,
+		Status:     action.Status,
+		Priority:   action.Priority,
+		Source:     action.Source,
+		Meta:       actionMeta,
 	}
 
 	if action.TaskID.Valid {
@@ -177,10 +181,11 @@ func buildPromptDataFromDB(database *db.DB, action *db.Action, tqDir string) (te
 			}
 		}
 		data.Task = template.TaskData{
-			ID:    task.ID,
-			Title: task.Title,
-			URL:   task.URL,
-			Meta:  taskMeta,
+			ID:     task.ID,
+			Title:  task.Title,
+			URL:    task.URL,
+			Status: task.Status,
+			Meta:   taskMeta,
 		}
 
 		project, err := database.GetProjectByID(task.ProjectID)
