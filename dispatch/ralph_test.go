@@ -39,9 +39,19 @@ func setupTemplatesDir(t *testing.T) string {
 
 func writeTestTemplate(t *testing.T, dir, name string, interactive bool, maxRetries int) {
 	t.Helper()
+	writeTestTemplateWithOnDone(t, dir, name, interactive, maxRetries, "")
+}
+
+func writeTestTemplateWithOnDone(t *testing.T, dir, name string, interactive bool, maxRetries int, onDone string) {
+	t.Helper()
 	interactiveStr := "false"
 	if interactive {
 		interactiveStr = "true"
+	}
+
+	onDoneLine := ""
+	if onDone != "" {
+		onDoneLine = fmt.Sprintf("on_done: %s\n", onDone)
 	}
 
 	content := fmt.Sprintf(`---
@@ -50,9 +60,9 @@ auto: true
 interactive: %s
 timeout: 10
 max_retries: %d
----
+%s---
 Do %s for {{.Task.Title}}.
-`, name, interactiveStr, maxRetries, name)
+`, name, interactiveStr, maxRetries, onDoneLine, name)
 
 	os.WriteFile(filepath.Join(dir, name+".md"), []byte(content), 0o644)
 }
@@ -210,6 +220,64 @@ func TestRalphLoop_RetryOnFailure(t *testing.T) {
 	// fix-ci has max_retries=1, first failure resets to pending, then retried
 	if callCount < 2 {
 		t.Errorf("interactive worker called %d times, want >= 2 (retry)", callCount)
+	}
+}
+
+func TestRalphLoop_OnDoneTriggersFollowUp(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	tqDir := t.TempDir()
+	templatesDir := filepath.Join(tqDir, "templates")
+	os.MkdirAll(templatesDir, 0o755)
+
+	writeTestTemplateWithOnDone(t, templatesDir, "check-pr", false, 0, "review")
+	writeTestTemplate(t, templatesDir, "review", false, 0)
+
+	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
+	d.InsertAction("check-pr", &taskID, "{}", "pending", 0, "test")
+
+	worker := &countingWorker{result: `{"status":"merged"}`}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	cfg := RalphConfig{
+		TQDir:          tqDir,
+		DB:             d,
+		MaxInteractive: 3,
+		PollInterval:   50 * time.Millisecond,
+		NonInteractiveFunc: func(tqDir string) Worker {
+			return worker
+		},
+		InteractiveFunc: func(tqDir string) Worker {
+			return worker
+		},
+	}
+
+	err := RalphLoop(ctx, cfg)
+	if err != context.DeadlineExceeded {
+		t.Fatalf("RalphLoop error = %v, want context.DeadlineExceeded", err)
+	}
+
+	// check-pr should be done
+	action, _ := d.GetAction(1)
+	if action.Status != "done" {
+		t.Errorf("check-pr status = %q, want done", action.Status)
+	}
+
+	// review should have been auto-created as pending
+	actions, _ := d.ListActions("", nil)
+	if len(actions) < 2 {
+		t.Fatalf("expected at least 2 actions, got %d", len(actions))
+	}
+
+	review := actions[1]
+	if review.TemplateID != "review" {
+		t.Errorf("follow-up template = %q, want review", review.TemplateID)
+	}
+	if review.Source != "on_done" {
+		t.Errorf("follow-up source = %q, want on_done", review.Source)
 	}
 }
 

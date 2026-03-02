@@ -2,6 +2,9 @@ package cmd_test
 
 import (
 	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
@@ -80,5 +83,55 @@ func TestDone_InvalidID(t *testing.T) {
 
 	if err := root.Execute(); err == nil {
 		t.Fatal("expected error for non-existent action ID")
+	}
+}
+
+func TestDone_TriggersOnDone(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	tqDir := t.TempDir()
+	templatesDir := filepath.Join(tqDir, "templates")
+	os.MkdirAll(templatesDir, 0o755)
+
+	for _, tc := range []struct{ name string; auto bool; onDone string }{
+		{"check-pr", true, "review"},
+		{"review", true, ""},
+	} {
+		content := fmt.Sprintf("---\ndescription: %s\nauto: %v\non_done: %s\n---\nDo %s.\n", tc.name, tc.auto, tc.onDone, tc.name)
+		os.WriteFile(filepath.Join(templatesDir, tc.name+".md"), []byte(content), 0o644)
+	}
+
+	cmd.SetTQDir(tqDir)
+
+	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
+	d.InsertAction("check-pr", &taskID, "{}", "running", 0, "test")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"action", "done", "1", `{"result":"PR merged"}`})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	actions, _ := d.ListActions("", nil)
+	if len(actions) != 2 {
+		t.Fatalf("expected 2 actions, got %d", len(actions))
+	}
+
+	followUp := actions[1]
+	if followUp.TemplateID != "review" {
+		t.Errorf("template_id = %q, want review", followUp.TemplateID)
+	}
+	if followUp.Status != "pending" {
+		t.Errorf("status = %q, want pending", followUp.Status)
+	}
+	if followUp.Source != "on_done" {
+		t.Errorf("source = %q, want on_done", followUp.Source)
 	}
 }

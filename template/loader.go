@@ -18,6 +18,7 @@ type Config struct {
 	AllowedTools string `yaml:"allowed_tools"`
 	Timeout      int    `yaml:"timeout"`
 	MaxRetries   int    `yaml:"max_retries"`
+	OnDone       string `yaml:"on_done"`
 }
 
 type Template struct {

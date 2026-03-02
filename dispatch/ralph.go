@@ -136,6 +136,12 @@ func dispatchNonInteractive(ctx context.Context, cfg RalphConfig, action *db.Act
 	if err := cfg.DB.MarkDone(action.ID, result); err != nil {
 		return true, fmt.Errorf("mark done: %w", err)
 	}
+
+	templatesDir := filepath.Join(cfg.TQDir, "templates")
+	if err := TriggerOnDone(cfg.DB, templatesDir, action, result); err != nil {
+		slog.Warn("on_done trigger failed", "action_id", action.ID, "error", err)
+	}
+
 	slog.Info("action done", "action_id", action.ID)
 	return true, nil
 }

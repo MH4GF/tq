@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 
 	"github.com/MH4GF/tq/db"
@@ -88,6 +89,11 @@ var dispatchCmd = &cobra.Command{
 		if err := database.MarkDone(action.ID, result); err != nil {
 			return fmt.Errorf("mark done: %w", err)
 		}
+
+		if err := dispatch.TriggerOnDone(database, templatesDir, action, result); err != nil {
+			slog.Warn("on_done trigger failed", "action_id", action.ID, "error", err)
+		}
+
 		fmt.Fprintf(cmd.OutOrStdout(), "action #%d done\n", action.ID)
 		return nil
 	},

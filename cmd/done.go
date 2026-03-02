@@ -2,8 +2,11 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
+	"path/filepath"
 	"strconv"
 
+	"github.com/MH4GF/tq/dispatch"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +24,8 @@ var doneCmd = &cobra.Command{
 			return fmt.Errorf("invalid action ID: %w", err)
 		}
 
-		if _, err := database.GetAction(id); err != nil {
+		action, err := database.GetAction(id)
+		if err != nil {
 			return fmt.Errorf("action #%d not found: %w", id, err)
 		}
 
@@ -33,6 +37,12 @@ var doneCmd = &cobra.Command{
 		if err := database.MarkDone(id, result); err != nil {
 			return fmt.Errorf("mark done: %w", err)
 		}
+
+		templatesDir := filepath.Join(tqDirResolved, "templates")
+		if err := dispatch.TriggerOnDone(database, templatesDir, action, result); err != nil {
+			slog.Warn("on_done trigger failed", "action_id", id, "error", err)
+		}
+
 		fmt.Fprintf(cmd.OutOrStdout(), "action #%d done\n", id)
 		return nil
 	},
