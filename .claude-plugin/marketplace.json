@@ -1,0 +1,13 @@
+{
+  "name": "tq-marketplace",
+  "owner": { "name": "MH4GF" },
+  "plugins": [
+    {
+      "name": "tq",
+      "source": "./.claude-plugins/tq",
+      "description": "tq task queue worker commands",
+      "version": "0.1.0",
+      "author": { "name": "MH4GF" }
+    }
+  ]
+}

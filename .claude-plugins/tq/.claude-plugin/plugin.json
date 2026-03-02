@@ -1,0 +1,6 @@
+{
+  "name": "tq",
+  "description": "tq task queue worker commands",
+  "version": "0.1.0",
+  "author": { "name": "MH4GF" }
+}
