@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ func (m *MockRunner) Run(ctx context.Context, name string, args []string, dir st
 }
 
 func TestNonInteractiveWorker_Execute(t *testing.T) {
-	mock := &MockRunner{Output: []byte(`{"result":"ok"}`)}
+	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"success","result":"{\"result\":\"ok\"}","cost_usd":0.01}`)}
 	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
 
 	cfg := tmpl.Config{
@@ -92,7 +93,7 @@ func TestNonInteractiveWorker_Execute_Error(t *testing.T) {
 }
 
 func TestNonInteractiveWorker_Execute_Timeout(t *testing.T) {
-	mock := &MockRunner{Output: []byte("ok")}
+	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"success","result":"ok"}`)}
 	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
 
 	cfg := tmpl.Config{AllowedTools: "Bash", Timeout: 30}
@@ -116,7 +117,8 @@ func TestNonInteractiveWorker_Execute_Timeout(t *testing.T) {
 
 func TestNonInteractiveWorker_Execute_Output(t *testing.T) {
 	want := `{"status":"success","data":[1,2,3]}`
-	mock := &MockRunner{Output: []byte(want)}
+	wrapperJSON := `{"type":"result","subtype":"success","result":"{\"status\":\"success\",\"data\":[1,2,3]}"}`
+	mock := &MockRunner{Output: []byte(wrapperJSON)}
 	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
 
 	cfg := tmpl.Config{AllowedTools: "Bash,Read,Edit", Timeout: 120}
@@ -127,5 +129,35 @@ func TestNonInteractiveWorker_Execute_Output(t *testing.T) {
 	}
 	if got != want {
 		t.Errorf("output = %q, want %q", got, want)
+	}
+}
+
+func TestNonInteractiveWorker_Execute_ErrorSubtype(t *testing.T) {
+	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"error","result":"model refused"}`)}
+	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
+
+	cfg := tmpl.Config{AllowedTools: "Bash", Timeout: 60}
+
+	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got := err.Error(); got != `claude returned subtype "error": model refused` {
+		t.Errorf("error = %q, want %q", got, `claude returned subtype "error": model refused`)
+	}
+}
+
+func TestNonInteractiveWorker_Execute_MalformedJSON(t *testing.T) {
+	mock := &MockRunner{Output: []byte(`not json at all`)}
+	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
+
+	cfg := tmpl.Config{AllowedTools: "Bash", Timeout: 60}
+
+	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got := err.Error(); !strings.Contains(got, "failed to parse claude JSON output") {
+		t.Errorf("error = %q, want it to contain %q", got, "failed to parse claude JSON output")
 	}
 }

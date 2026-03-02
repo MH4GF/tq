@@ -2,10 +2,17 @@ package dispatch
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	tmpl "github.com/MH4GF/tq/template"
 )
+
+type claudeJSONOutput struct {
+	Subtype string `json:"subtype"`
+	Result  string `json:"result"`
+}
 
 // NonInteractiveWorker runs `claude -p` for non-interactive actions.
 type NonInteractiveWorker struct {
@@ -24,5 +31,13 @@ func (w *NonInteractiveWorker) Execute(ctx context.Context, prompt string, cfg t
 	if err != nil {
 		return "", err
 	}
-	return string(output), nil
+
+	var wrapper claudeJSONOutput
+	if err := json.Unmarshal(output, &wrapper); err != nil {
+		return "", fmt.Errorf("failed to parse claude JSON output: %w", err)
+	}
+	if wrapper.Subtype != "success" {
+		return "", fmt.Errorf("claude returned subtype %q: %s", wrapper.Subtype, wrapper.Result)
+	}
+	return wrapper.Result, nil
 }
