@@ -338,3 +338,59 @@ func TestClassify_AutoFalseTemplate(t *testing.T) {
 		t.Errorf("status = %q, want %q", action.Status, "waiting_human")
 	}
 }
+
+func TestClassify_EmptyProjectName(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+	setupClassifyEnv(t)
+
+	type actionEntry struct {
+		TemplateID string `json:"template_id"`
+		Priority   int    `json:"priority"`
+	}
+	resultJSON := struct {
+		Task struct {
+			ID          int64  `json:"id"`
+			ProjectName string `json:"project_name"`
+			Title       string `json:"title"`
+			URL         string `json:"url"`
+		} `json:"task"`
+		Actions []actionEntry `json:"actions"`
+	}{
+		Task: struct {
+			ID          int64  `json:"id"`
+			ProjectName string `json:"project_name"`
+			Title       string `json:"title"`
+			URL         string `json:"url"`
+		}{
+			ProjectName: "",
+			Title:       "Some task",
+			URL:         "https://github.com/test/1",
+		},
+		Actions: []actionEntry{
+			{TemplateID: "check-pr-status", Priority: 5},
+		},
+	}
+	resultBytes, _ := json.Marshal(resultJSON)
+
+	cmd.SetWorkerFactory(func(tqDir string) dispatch.Worker {
+		return &mockWorker{result: string(resultBytes)}
+	})
+	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"classify", `{"type":"push"}`})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error for empty project_name, got nil")
+	}
+	if !contains(err.Error(), "empty project_name") {
+		t.Errorf("error = %q, want to contain 'empty project_name'", err.Error())
+	}
+}
