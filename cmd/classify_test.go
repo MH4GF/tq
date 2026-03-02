@@ -2,7 +2,9 @@ package cmd_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -133,6 +135,17 @@ func TestClassify_NewTask(t *testing.T) {
 	}
 	if action.Source != "classify" {
 		t.Errorf("source = %q, want %q", action.Source, "classify")
+	}
+
+	var actionMeta map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(action.Metadata), &actionMeta); err != nil {
+		t.Fatalf("parse action metadata: %v", err)
+	}
+	if _, ok := actionMeta["notification"]; !ok {
+		t.Error("action metadata missing 'notification' key")
+	}
+	if _, ok := actionMeta["classify_output"]; !ok {
+		t.Error("action metadata missing 'classify_output' key")
 	}
 }
 
@@ -392,5 +405,131 @@ func TestClassify_EmptyProjectName(t *testing.T) {
 	}
 	if !contains(err.Error(), "empty project_name") {
 		t.Errorf("error = %q, want to contain 'empty project_name'", err.Error())
+	}
+}
+
+func TestClassify_ExecutionFailure(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+	setupClassifyEnv(t)
+
+	cmd.SetWorkerFactory(func(tqDir string) dispatch.Worker {
+		return &mockWorker{err: fmt.Errorf("LLM timeout")}
+	})
+	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"classify", `{"type":"push"}`})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	actions, _ := d.ListActions("failed", nil)
+	if len(actions) != 1 {
+		t.Fatalf("failed action count = %d, want 1", len(actions))
+	}
+	action := actions[0]
+	if action.TemplateID != "classify" {
+		t.Errorf("template_id = %q, want %q", action.TemplateID, "classify")
+	}
+	if action.Source != "classify" {
+		t.Errorf("source = %q, want %q", action.Source, "classify")
+	}
+	if !action.Result.Valid || !contains(action.Result.String, "LLM timeout") {
+		t.Errorf("result = %v, want to contain 'LLM timeout'", action.Result)
+	}
+	if !contains(action.Metadata, `"notification"`) {
+		t.Errorf("metadata = %q, want to contain notification", action.Metadata)
+	}
+}
+
+func TestClassify_InvalidLLMOutput(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+	setupClassifyEnv(t)
+
+	cmd.SetWorkerFactory(func(tqDir string) dispatch.Worker {
+		return &mockWorker{result: "not valid json at all"}
+	})
+	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"classify", `{"type":"push"}`})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	actions, _ := d.ListActions("failed", nil)
+	if len(actions) != 1 {
+		t.Fatalf("failed action count = %d, want 1", len(actions))
+	}
+	action := actions[0]
+	if action.TemplateID != "classify" {
+		t.Errorf("template_id = %q, want %q", action.TemplateID, "classify")
+	}
+	if !contains(action.Metadata, "not valid json at all") {
+		t.Errorf("metadata = %q, want to contain LLM output", action.Metadata)
+	}
+	if !action.Result.Valid || !contains(action.Result.String, "parse classify result") {
+		t.Errorf("result = %v, want to contain 'parse classify result'", action.Result)
+	}
+}
+
+func TestClassify_FailureWithContextDeadline(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+	setupClassifyEnv(t)
+
+	cmd.SetWorkerFactory(func(tqDir string) dispatch.Worker {
+		return &mockWorker{err: context.DeadlineExceeded}
+	})
+	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"classify", `{"type":"review","repo":"test/repo"}`})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	actions, _ := d.ListActions("failed", nil)
+	if len(actions) != 1 {
+		t.Fatalf("failed action count = %d, want 1", len(actions))
+	}
+	action := actions[0]
+
+	var meta map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(action.Metadata), &meta); err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+	notif, ok := meta["notification"]
+	if !ok {
+		t.Fatal("metadata missing 'notification' key")
+	}
+	if !contains(string(notif), "test/repo") {
+		t.Errorf("notification = %s, want to contain 'test/repo'", notif)
+	}
+	if _, ok := meta["classify_output"]; ok {
+		t.Error("metadata should not have 'classify_output' when execution failed")
 	}
 }
