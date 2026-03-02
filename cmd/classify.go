@@ -51,11 +51,13 @@ func runClassify(cmd *cobra.Command, notificationJSON string) error {
 	templatesDir := filepath.Join(tqDirResolved, "templates")
 	tmpl, err := template.Load(templatesDir, "classify")
 	if err != nil {
+		recordClassifyFailure(notificationJSON, "", fmt.Sprintf("load classify template: %v", err))
 		return fmt.Errorf("load classify template: %w", err)
 	}
 
 	existingTasks, err := buildExistingTasksList()
 	if err != nil {
+		recordClassifyFailure(notificationJSON, "", fmt.Sprintf("build tasks list: %v", err))
 		return fmt.Errorf("build tasks list: %w", err)
 	}
 
@@ -69,6 +71,7 @@ func runClassify(cmd *cobra.Command, notificationJSON string) error {
 	}
 	prompt, err := tmpl.Render(promptData)
 	if err != nil {
+		recordClassifyFailure(notificationJSON, "", fmt.Sprintf("render template: %v", err))
 		return fmt.Errorf("render template: %w", err)
 	}
 
@@ -76,17 +79,24 @@ func runClassify(cmd *cobra.Command, notificationJSON string) error {
 	worker := getWorkerFactory()(tqDirResolved)
 	result, err := worker.Execute(ctx, prompt, tmpl.Config, tqDirResolved, 0)
 	if err != nil {
+		recordClassifyFailure(notificationJSON, "", fmt.Sprintf("classify execution: %v", err))
 		return fmt.Errorf("classify execution: %w", err)
 	}
 
-	return processClassifyResult(cmd, result)
+	if err := processClassifyResult(cmd, notificationJSON, result); err != nil {
+		recordClassifyFailure(notificationJSON, result, err.Error())
+		return err
+	}
+	return nil
 }
 
-func processClassifyResult(cmd *cobra.Command, resultJSON string) error {
+func processClassifyResult(cmd *cobra.Command, notificationJSON, resultJSON string) error {
 	var result ClassifyResult
 	if err := json.Unmarshal([]byte(resultJSON), &result); err != nil {
 		return fmt.Errorf("parse classify result: %w", err)
 	}
+
+	metadata := buildClassifyMetadata(notificationJSON, resultJSON)
 
 	var taskID int64
 	if result.Task.ID > 0 {
@@ -129,7 +139,7 @@ func processClassifyResult(cmd *cobra.Command, resultJSON string) error {
 			status = "waiting_human"
 		}
 
-		id, err := database.InsertAction(a.TemplateID, &taskID, "{}", status, a.Priority, "classify")
+		id, err := database.InsertAction(a.TemplateID, &taskID, metadata, status, a.Priority, "classify")
 		if err != nil {
 			return fmt.Errorf("insert action: %w", err)
 		}
@@ -137,6 +147,38 @@ func processClassifyResult(cmd *cobra.Command, resultJSON string) error {
 	}
 
 	return nil
+}
+
+func buildClassifyMetadata(notificationJSON, llmOutput string) string {
+	meta := map[string]any{}
+	if notificationJSON != "" {
+		if json.Valid([]byte(notificationJSON)) {
+			meta["notification"] = json.RawMessage(notificationJSON)
+		} else {
+			meta["notification"] = notificationJSON
+		}
+	}
+	if llmOutput != "" {
+		if json.Valid([]byte(llmOutput)) {
+			meta["classify_output"] = json.RawMessage(llmOutput)
+		} else {
+			meta["classify_output"] = llmOutput
+		}
+	}
+	b, err := json.Marshal(meta)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
+func recordClassifyFailure(notificationJSON, llmOutput, errMsg string) {
+	meta := buildClassifyMetadata(notificationJSON, llmOutput)
+	id, err := database.InsertAction("classify", nil, meta, "failed", 0, "classify")
+	if err != nil {
+		return
+	}
+	_ = database.MarkFailed(id, errMsg)
 }
 
 func buildExistingTasksList() (string, error) {
