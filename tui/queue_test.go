@@ -1,0 +1,149 @@
+package tui
+
+import (
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/MH4GF/tq/testutil"
+)
+
+func TestQueueModel_Empty(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := NewQueueModel(d)
+	view := m.View()
+	if !contains(view, "No actions") {
+		t.Errorf("empty view should show 'No actions', got %q", view)
+	}
+}
+
+func TestQueueModel_LoadActions(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	d.InsertAction("check-pr", &taskID, "{}", "pending", 5, "auto")
+	d.InsertAction("fix-ci", &taskID, "{}", "running", 3, "auto")
+
+	m := NewQueueModel(d)
+
+	// Simulate load
+	cmd := m.Init()
+	msg := cmd()
+	m, _ = m.Update(msg)
+
+	view := m.View()
+	if !contains(view, "check-pr") {
+		t.Errorf("view should contain 'check-pr', got %q", view)
+	}
+	if !contains(view, "fix-ci") {
+		t.Errorf("view should contain 'fix-ci', got %q", view)
+	}
+}
+
+func TestQueueModel_Navigation(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	d.InsertAction("a", nil, "{}", "pending", 0, "auto")
+	d.InsertAction("b", nil, "{}", "pending", 0, "auto")
+	d.InsertAction("c", nil, "{}", "pending", 0, "auto")
+
+	m := NewQueueModel(d)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	if m.cursor != 0 {
+		t.Errorf("initial cursor = %d, want 0", m.cursor)
+	}
+
+	// Move down
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.cursor != 1 {
+		t.Errorf("after j, cursor = %d, want 1", m.cursor)
+	}
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.cursor != 2 {
+		t.Errorf("after 2nd j, cursor = %d, want 2", m.cursor)
+	}
+
+	// Can't go past end
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.cursor != 2 {
+		t.Errorf("at end, cursor = %d, want 2", m.cursor)
+	}
+
+	// Move up
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	if m.cursor != 1 {
+		t.Errorf("after k, cursor = %d, want 1", m.cursor)
+	}
+
+	// Can't go before start
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	if m.cursor != 0 {
+		t.Errorf("at start, cursor = %d, want 0", m.cursor)
+	}
+}
+
+func TestQueueModel_Reload(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := NewQueueModel(d)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	if len(m.actions) != 0 {
+		t.Errorf("initial actions = %d, want 0", len(m.actions))
+	}
+
+	// Insert after initial load
+	d.InsertAction("new-one", nil, "{}", "pending", 0, "auto")
+
+	// Reload
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	if cmd != nil {
+		reloadMsg := cmd()
+		m, _ = m.Update(reloadMsg)
+	}
+
+	if len(m.actions) != 1 {
+		t.Errorf("after reload, actions = %d, want 1", len(m.actions))
+	}
+}
+
+func TestQueueModel_StatusIcons(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	d.InsertAction("pending-action", nil, "{}", "pending", 0, "auto")
+	d.InsertAction("running-action", nil, "{}", "running", 0, "auto")
+
+	m := NewQueueModel(d)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	view := m.View()
+	if !contains(view, "○") {
+		t.Errorf("view should contain pending icon ○, got %q", view)
+	}
+	if !contains(view, "●") {
+		t.Errorf("view should contain running icon ●, got %q", view)
+	}
+}
+
+func TestQueueModel_SetSize(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := NewQueueModel(d)
+	m = m.SetSize(100, 50)
+
+	if m.width != 100 || m.height != 50 {
+		t.Errorf("size = %dx%d, want 100x50", m.width, m.height)
+	}
+}

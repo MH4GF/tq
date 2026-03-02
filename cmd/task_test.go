@@ -1,0 +1,204 @@
+package cmd_test
+
+import (
+	"bytes"
+	"testing"
+
+	"github.com/MH4GF/tq/cmd"
+	"github.com/MH4GF/tq/testutil"
+)
+
+func TestTaskCreate(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "create", "--project", "immedio", "--title", "test task", "--url", "https://example.com"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !contains(out, "task #1 created") {
+		t.Errorf("output = %q, want to contain 'task #1 created'", out)
+	}
+	if !contains(out, "project: immedio") {
+		t.Errorf("output = %q, want to contain 'project: immedio'", out)
+	}
+
+	task, err := d.GetTask(1)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if task.Title != "test task" {
+		t.Errorf("title = %q, want %q", task.Title, "test task")
+	}
+	if task.URL != "https://example.com" {
+		t.Errorf("url = %q, want %q", task.URL, "https://example.com")
+	}
+}
+
+func TestTaskCreate_MissingProject(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"task", "create", "--title", "test"})
+
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected error for missing --project flag")
+	}
+}
+
+func TestTaskCreate_UnknownProject(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"task", "create", "--project", "nonexistent", "--title", "test"})
+
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected error for unknown project")
+	}
+}
+
+func TestTaskCreate_MissingTitle(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"task", "create", "--project", "immedio"})
+
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected error for missing --title flag")
+	}
+}
+
+func TestTaskList(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "task A", "https://example.com/a", "{}")
+	d.InsertTask(1, "task B", "", "{}")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "list"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !contains(out, "task A") {
+		t.Errorf("output should contain 'task A', got %q", out)
+	}
+	if !contains(out, "task B") {
+		t.Errorf("output should contain 'task B', got %q", out)
+	}
+}
+
+func TestTaskList_StatusFilter(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "open task", "", "{}")
+	id2, _ := d.InsertTask(1, "done task", "", "{}")
+	d.UpdateTask(id2, "done")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "list", "--status", "open"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !contains(out, "open task") {
+		t.Errorf("output should contain 'open task', got %q", out)
+	}
+	if contains(out, "done task") {
+		t.Errorf("output should not contain 'done task', got %q", out)
+	}
+}
+
+func TestTaskList_ProjectFilter(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "immedio task", "", "{}")
+	d.InsertTask(2, "hearable task", "", "{}")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "list", "--project", "immedio"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !contains(out, "immedio task") {
+		t.Errorf("output should contain 'immedio task', got %q", out)
+	}
+	if contains(out, "hearable task") {
+		t.Errorf("output should not contain 'hearable task', got %q", out)
+	}
+}
+
+func TestTaskList_Empty(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "list"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !contains(out, "no tasks found") {
+		t.Errorf("output = %q, want 'no tasks found'", out)
+	}
+}
+
+func contains(s, substr string) bool {
+	return bytes.Contains([]byte(s), []byte(substr))
+}

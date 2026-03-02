@@ -1,0 +1,145 @@
+package tui
+
+import (
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/MH4GF/tq/testutil"
+)
+
+func TestNew(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := New(d, "")
+	if m.ActiveTab() != tabQueue {
+		t.Errorf("initial tab = %d, want tabQueue(0)", m.ActiveTab())
+	}
+	if m.IsQuitting() {
+		t.Error("should not be quitting initially")
+	}
+}
+
+func TestTabSwitch(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := New(d, "")
+
+	// Tab key switches
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+	if m.ActiveTab() != tabTasks {
+		t.Errorf("after tab, active = %d, want tabTasks(1)", m.ActiveTab())
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+	if m.ActiveTab() != tabQueue {
+		t.Errorf("after 2nd tab, active = %d, want tabQueue(0)", m.ActiveTab())
+	}
+
+	// Number keys
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	m = updated.(Model)
+	if m.ActiveTab() != tabTasks {
+		t.Errorf("after '2', active = %d, want tabTasks(1)", m.ActiveTab())
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
+	m = updated.(Model)
+	if m.ActiveTab() != tabQueue {
+		t.Errorf("after '1', active = %d, want tabQueue(0)", m.ActiveTab())
+	}
+}
+
+func TestQuit(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := New(d, "")
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m = updated.(Model)
+
+	if !m.IsQuitting() {
+		t.Error("should be quitting after 'q'")
+	}
+	if cmd == nil {
+		t.Error("expected tea.Quit cmd")
+	}
+	if m.View() != "" {
+		t.Errorf("quitting view should be empty, got %q", m.View())
+	}
+}
+
+func TestWindowResize(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := New(d, "")
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = updated.(Model)
+
+	if m.width != 120 || m.height != 40 {
+		t.Errorf("size = %dx%d, want 120x40", m.width, m.height)
+	}
+}
+
+func TestInit(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := New(d, "")
+	cmd := m.Init()
+	if cmd == nil {
+		t.Error("Init should return a batch command")
+	}
+}
+
+func TestViewContainsTabs(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := New(d, "")
+	view := m.View()
+	if !contains(view, "Queue") {
+		t.Errorf("view should contain 'Queue', got %q", view)
+	}
+	if !contains(view, "Tasks") {
+		t.Errorf("view should contain 'Tasks', got %q", view)
+	}
+}
+
+func TestHelpText(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := New(d, "")
+
+	// Queue tab help
+	view := m.View()
+	if !contains(view, "j/k: navigate") {
+		t.Errorf("queue help missing navigate, got %q", view)
+	}
+
+	// Tasks tab help
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+	view = m.View()
+	if !contains(view, "enter: expand") {
+		t.Errorf("tasks help missing expand, got %q", view)
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && searchString(s, substr)
+}
+
+func searchString(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
