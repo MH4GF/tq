@@ -35,10 +35,11 @@ type PromptData struct {
 }
 
 type TaskData struct {
-	ID    int64
-	Title string
-	URL   string
-	Meta  map[string]any
+	ID     int64
+	Title  string
+	URL    string
+	Status string
+	Meta   map[string]any
 }
 
 type ProjectData struct {
@@ -49,8 +50,12 @@ type ProjectData struct {
 }
 
 type ActionData struct {
-	ID   int64
-	Meta map[string]any
+	ID         int64
+	TemplateID string
+	Status     string
+	Priority   int
+	Source     string
+	Meta       map[string]any
 }
 
 func Load(templatesDir, templateID string) (*Template, error) {
