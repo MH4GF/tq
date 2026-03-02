@@ -97,6 +97,9 @@ func processClassifyResult(cmd *cobra.Command, resultJSON string) error {
 		taskID = result.Task.ID
 		fmt.Fprintf(cmd.OutOrStdout(), "linked to existing task #%d\n", taskID)
 	} else {
+		if result.Task.ProjectName == "" {
+			return fmt.Errorf("classify result has empty project_name for new task")
+		}
 		project, err := database.GetProjectByName(result.Task.ProjectName)
 		if err != nil {
 			return fmt.Errorf("project %q not found: %w", result.Task.ProjectName, err)
