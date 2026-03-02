@@ -19,7 +19,13 @@ tqアクションの完了報告を行う。セッション中の作業内容を
 2. 初回プロンプト（セッション冒頭のユーザーメッセージ）に含まれる `tq action done <数字>` パターンから抽出する
 3. `TQ_DIR` 配下の DB から running アクションを検索する: `tq --dir "$TQ_DIR" action list --status running`
 
-いずれでも特定できない場合、「action_id を特定できませんでした。`/tq:done <action_id>` の形式で指定してください。」と伝えて終了する。
+いずれでも特定できない場合、初回プロンプトから task_id と template を読み取り、アクションを作成してその ID を使用する:
+
+```bash
+tq --dir "$TQ_DIR" action create --task <task_id> --template <template> --source human --status running
+```
+
+初回プロンプトに task_id や template の情報もない場合は、「action_id を特定できませんでした。`/tq:done <action_id>` の形式で指定してください。」と伝えて終了する。
 
 ### 2. サマリー生成
 
