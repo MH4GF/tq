@@ -198,7 +198,7 @@ func (m Model) renderTabs() string {
 }
 
 func (m Model) renderHelp() string {
-	help := "j/k: navigate  a: approve  x: reject  tab: switch  r: reload  q: quit"
+	help := "j/k: navigate  a: reset  x: reject  tab: switch  r: reload  q: quit"
 	if m.activeTab == tabTasks {
 		switch m.tasks.Mode() {
 		case modePickTemplate, modePickProject, modePickStatus:

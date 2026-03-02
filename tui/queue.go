@@ -77,8 +77,8 @@ func (m QueueModel) Update(msg tea.Msg) (QueueModel, tea.Cmd) {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
 			return m, m.loadActions()
 		case key.Matches(msg, key.NewBinding(key.WithKeys("a"))):
-			if a := m.selectedAction(); a != nil && a.Status == "waiting_human" {
-				return m, m.approveAction(a.ID)
+			if a := m.selectedAction(); a != nil && (a.Status == "waiting_human" || a.Status == "failed") {
+				return m, m.resetAction(a.ID)
 			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("x"))):
 			if a := m.selectedAction(); a != nil && a.Status == "waiting_human" {
@@ -89,12 +89,12 @@ func (m QueueModel) Update(msg tea.Msg) (QueueModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m QueueModel) approveAction(id int64) tea.Cmd {
+func (m QueueModel) resetAction(id int64) tea.Cmd {
 	return func() tea.Msg {
 		if err := m.database.ResetToPending(id); err != nil {
-			return actionUpdatedMsg{id: id, action: "approve failed"}
+			return actionUpdatedMsg{id: id, action: "reset failed"}
 		}
-		return actionUpdatedMsg{id: id, action: "approved → pending"}
+		return actionUpdatedMsg{id: id, action: "reset → pending"}
 	}
 }
 

@@ -55,7 +55,7 @@ Tasks タブでタスクにカーソル → `n` → テンプレート選択 →
 
 worker が失敗すると `waiting_human` になる。Queue タブで:
 - 該当アクションにカーソルを合わせると失敗理由が表示される
-- `a`: approve（pending に戻してリトライ）
+- `a`: reset（pending に戻してリトライ。`failed` にも使える）
 - `x`: reject（failed にして終了）
 
 ### キーバインド
@@ -64,7 +64,7 @@ worker が失敗すると `waiting_human` になる。Queue タブで:
 |------|-----------|-----------|
 | `j`/`k` | カーソル移動 | カーソル移動 |
 | `enter` | — | 展開/折りたたみ |
-| `a` | approve | — |
+| `a` | reset | — |
 | `x` | reject | — |
 | `s` | — | ステータス変更 |
 | `c` | — | タスク作成 |
@@ -121,7 +121,7 @@ tq project delete --id 3
 
 ```bash
 tq action list                   # アクション一覧
-tq action approve <id>           # waiting_human → pending
+tq action reset <id>             # failed/waiting_human → pending
 tq action reject <id>            # waiting_human → failed
 tq task list                     # タスク一覧
 tq project list                  # プロジェクト一覧
@@ -162,11 +162,15 @@ tq watch                         # GitHub通知取得 → classify
       │                 ▼         │        │
       │           new action      │        │
       │                           │        │
-      │          human approve    │        │ reject
+      │          human reset      │        │ reject
       └───────────────────────────┘        │
                                     ┌──────▼───┐
-                                    │  failed   │
-                                    └──────────┘
+                                    │  failed   │────────┐
+                                    └──────────┘         │
+                                                  reset  │
+                                    ┌─────────┐          │
+                                    │ pending │◄─────────┘
+                                    └─────────┘
 ```
 
 ### Worker の種類
