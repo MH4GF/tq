@@ -3,8 +3,8 @@ package dispatch
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
+	"strings"
 
 	tmpl "github.com/MH4GF/tq/template"
 )
@@ -19,12 +19,6 @@ type InteractiveWorker struct {
 func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg tmpl.Config, workDir string, actionID int64) (string, error) {
 	windowName := fmt.Sprintf("tq-action-%d", actionID)
 
-	// Write prompt to temp file to avoid shell escaping issues with send-keys
-	promptFile := fmt.Sprintf("/tmp/tq-prompt-%d.txt", actionID)
-	if err := os.WriteFile(promptFile, []byte(prompt), 0644); err != nil {
-		return "", fmt.Errorf("write prompt file: %w", err)
-	}
-
 	// 1. Create tmux window
 	out, err := w.Runner.Run(ctx, "tmux", []string{
 		"new-window", "-t", "main", "-n", windowName, "-c", workDir,
@@ -34,7 +28,8 @@ func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg tmpl
 	}
 
 	// 2. Send claude command text
-	claudeCmd := fmt.Sprintf("TQ_DIR=%s claude --worktree \"$(cat %s)\"", w.TQDir, promptFile)
+	escapedPrompt := strings.ReplaceAll(prompt, "'", "'\\''")
+	claudeCmd := fmt.Sprintf("TQ_DIR=%s claude --worktree '%s'", w.TQDir, escapedPrompt)
 	out, err = w.Runner.Run(ctx, "tmux", []string{
 		"send-keys", "-t", fmt.Sprintf("main:%s", windowName), claudeCmd,
 	}, workDir, nil)

@@ -2,7 +2,6 @@ package dispatch
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 
@@ -86,6 +85,9 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 	if strings.Contains(argsStr, "--tmux") {
 		t.Errorf("call[1] args = %v, must NOT contain --tmux", c.args)
 	}
+	if !strings.Contains(argsStr, "Fix the bug") {
+		t.Errorf("call[1] args = %v, want to contain prompt text 'Fix the bug'", c.args)
+	}
 
 	// Call 3: tmux send-keys Enter
 	c = runner.calls[2]
@@ -95,17 +97,6 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 	if len(c.args) < 4 || c.args[3] != "Enter" {
 		t.Errorf("call[2] args = %v, want last arg to be Enter", c.args)
 	}
-
-	// Prompt file should exist
-	promptFile := "/tmp/tq-prompt-42.txt"
-	data, err := os.ReadFile(promptFile)
-	if err != nil {
-		t.Fatalf("prompt file not found: %v", err)
-	}
-	if string(data) != "Fix the bug" {
-		t.Errorf("prompt file content = %q, want %q", string(data), "Fix the bug")
-	}
-	os.Remove(promptFile)
 }
 
 func TestInteractiveWorker_NewWindowError(t *testing.T) {
@@ -123,7 +114,6 @@ func TestInteractiveWorker_NewWindowError(t *testing.T) {
 	if !strings.Contains(err.Error(), "create tmux window") {
 		t.Errorf("error = %q, want to contain 'create tmux window'", err.Error())
 	}
-	os.Remove("/tmp/tq-prompt-1.txt")
 }
 
 func TestInteractiveWorker_SendKeysError(t *testing.T) {
@@ -141,5 +131,24 @@ func TestInteractiveWorker_SendKeysError(t *testing.T) {
 	if !strings.Contains(err.Error(), "send claude command") {
 		t.Errorf("error = %q, want to contain 'send claude command'", err.Error())
 	}
-	os.Remove("/tmp/tq-prompt-2.txt")
+}
+
+func TestInteractiveWorker_SingleQuoteEscape(t *testing.T) {
+	runner := &mockRunner{output: []byte("ok"), failAt: -1}
+	w := &InteractiveWorker{
+		Runner: runner,
+		TQDir:  "/tmp/tq",
+	}
+
+	cfg := tmpl.Config{}
+	_, err := w.Execute(context.Background(), "it's a test", cfg, "/work/dir", 99)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	// send-keys command should contain the escaped single quote
+	argsStr := strings.Join(runner.calls[1].args, " ")
+	if !strings.Contains(argsStr, "it'\\''s a test") {
+		t.Errorf("call[1] args = %v, want to contain escaped single quote", runner.calls[1].args)
+	}
 }
