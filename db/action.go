@@ -63,10 +63,10 @@ func (db *DB) InsertAction(templateID string, taskID *int64, metadata string, st
 	return res.LastInsertId()
 }
 
-func (db *DB) HasPendingOrRunning(taskID int64, templateID string) (bool, error) {
+func (db *DB) HasActiveAction(taskID int64, templateID string) (bool, error) {
 	var count int
 	err := db.QueryRow(
-		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND template_id = ? AND status IN ('pending', 'running')",
+		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND template_id = ? AND status IN ('pending', 'running', 'waiting_human')",
 		taskID, templateID,
 	).Scan(&count)
 	if err != nil {

@@ -184,6 +184,34 @@ func TestTriggerOnDone_DuplicateSkipped(t *testing.T) {
 	}
 }
 
+func TestTriggerOnDone_WaitingHumanSkipped(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	tqDir := t.TempDir()
+	templatesDir := filepath.Join(tqDir, "templates")
+	os.MkdirAll(templatesDir, 0o755)
+
+	writeOnDoneTemplate(t, templatesDir, "check-pr", true, "review")
+	writeOnDoneTemplate(t, templatesDir, "review", true, "")
+
+	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
+	d.InsertAction("review", &taskID, "{}", "waiting_human", 0, "on_done")
+
+	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", 0, "test")
+	action, _ := d.GetAction(actionID)
+
+	err := TriggerOnDone(d, templatesDir, action, `{"ok":true}`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	actions, _ := d.ListActions("", nil)
+	if len(actions) != 2 {
+		t.Errorf("expected 2 actions (waiting_human blocks creation), got %d", len(actions))
+	}
+}
+
 func TestTriggerOnDone_TargetTemplateNotFound(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

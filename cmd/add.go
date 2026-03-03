@@ -15,6 +15,7 @@ var (
 	addPriority int
 	addSource   string
 	addStatus   string
+	addForce    bool
 )
 
 var addCmd = &cobra.Command{
@@ -38,12 +39,14 @@ var addCmd = &cobra.Command{
 		if addTask > 0 {
 			taskIDPtr = &addTask
 
-			dup, err := database.HasPendingOrRunning(addTask, addTemplate)
-			if err != nil {
-				return fmt.Errorf("check duplicates: %w", err)
-			}
-			if dup {
-				fmt.Fprintf(cmd.OutOrStdout(), "warning: pending/running action already exists for task %d template %s\n", addTask, addTemplate)
+			if !addForce {
+				dup, err := database.HasActiveAction(addTask, addTemplate)
+				if err != nil {
+					return fmt.Errorf("check duplicates: %w", err)
+				}
+				if dup {
+					return fmt.Errorf("blocked: active action already exists for task %d template %s (use --force to override)", addTask, addTemplate)
+				}
 			}
 		}
 
@@ -63,6 +66,7 @@ func init() {
 	addCmd.Flags().IntVar(&addPriority, "priority", 0, "Priority")
 	addCmd.Flags().StringVar(&addSource, "source", "human", "Source")
 	addCmd.Flags().StringVar(&addStatus, "status", "", "Override status (pending|done|running|failed|waiting_human)")
+	addCmd.Flags().BoolVar(&addForce, "force", false, "Skip duplicate check")
 	addCmd.MarkFlagRequired("template")
 	actionCmd.AddCommand(addCmd)
 }

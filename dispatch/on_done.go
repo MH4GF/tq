@@ -28,12 +28,12 @@ func TriggerOnDone(database *db.DB, templatesDir string, action *db.Action, resu
 	taskID := action.TaskID.Int64
 	onDoneTemplateID := tmpl.Config.OnDone
 
-	has, err := database.HasPendingOrRunning(taskID, onDoneTemplateID)
+	has, err := database.HasActiveAction(taskID, onDoneTemplateID)
 	if err != nil {
 		return fmt.Errorf("check duplicate: %w", err)
 	}
 	if has {
-		slog.Info("on_done skipped: pending/running action exists", "action_id", action.ID, "on_done", onDoneTemplateID)
+		slog.Info("on_done skipped: active action exists", "action_id", action.ID, "on_done", onDoneTemplateID)
 		return nil
 	}
 

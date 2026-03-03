@@ -123,7 +123,7 @@ func processClassifyResult(cmd *cobra.Command, notificationJSON, resultJSON stri
 	}
 
 	for _, a := range result.Actions {
-		dup, err := database.HasPendingOrRunning(taskID, a.TemplateID)
+		dup, err := database.HasActiveAction(taskID, a.TemplateID)
 		if err != nil {
 			return fmt.Errorf("check duplicates: %w", err)
 		}

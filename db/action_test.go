@@ -52,14 +52,14 @@ func TestInsertAction_NilTaskID(t *testing.T) {
 	}
 }
 
-func TestHasPendingOrRunning(t *testing.T) {
+func TestHasActiveAction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "", "{}")
 	d.InsertAction("review-pr", &taskID, "{}", "pending", 0, "auto")
 
-	has, err := d.HasPendingOrRunning(taskID, "review-pr")
+	has, err := d.HasActiveAction(taskID, "review-pr")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,12 +67,44 @@ func TestHasPendingOrRunning(t *testing.T) {
 		t.Error("expected true for pending action")
 	}
 
-	has, err = d.HasPendingOrRunning(taskID, "deploy")
+	has, err = d.HasActiveAction(taskID, "deploy")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if has {
 		t.Error("expected false for non-existent template")
+	}
+}
+
+func TestHasActiveAction_WaitingHuman(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}")
+	d.InsertAction("implement", &taskID, "{}", "waiting_human", 0, "auto")
+
+	has, err := d.HasActiveAction(taskID, "implement")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !has {
+		t.Error("expected true for waiting_human action")
+	}
+}
+
+func TestHasActiveAction_DoneNotActive(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}")
+	d.InsertAction("implement", &taskID, "{}", "done", 0, "auto")
+
+	has, err := d.HasActiveAction(taskID, "implement")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if has {
+		t.Error("expected false for done action")
 	}
 }
 
