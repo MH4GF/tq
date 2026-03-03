@@ -165,7 +165,7 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 		for _, pt := range m.trees {
 			m.expanded[fmt.Sprintf("p:%d", pt.project.ID)] = true
 			for _, tn := range pt.tasks {
-				m.expanded[fmt.Sprintf("t:%d", tn.task.ID)] = true
+				m.expanded[fmt.Sprintf("t:%d", tn.task.ID)] = tn.task.Status != "done"
 			}
 		}
 		m.buildLines()
