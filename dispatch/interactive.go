@@ -9,7 +9,7 @@ import (
 	tmpl "github.com/MH4GF/tq/template"
 )
 
-// InteractiveWorker opens a tmux window and launches `claude --worktree` via send-keys.
+// InteractiveWorker opens a tmux window and launches `claude` via send-keys.
 // The session reports back via `tq action done`.
 type InteractiveWorker struct {
 	Runner CommandRunner
@@ -34,7 +34,7 @@ func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg tmpl
 	}
 
 	// 2. Send claude command text
-	claudeCmd := fmt.Sprintf("TQ_DIR=%s claude --worktree \"$(cat %s)\"", w.TQDir, promptFile)
+	claudeCmd := fmt.Sprintf("TQ_DIR=%s claude \"$(cat %s)\"", w.TQDir, promptFile)
 	out, err = w.Runner.Run(ctx, "tmux", []string{
 		"send-keys", "-t", fmt.Sprintf("main:%s", windowName), claudeCmd,
 	}, workDir, nil)

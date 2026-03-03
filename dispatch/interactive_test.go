@@ -77,8 +77,11 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 	if !strings.Contains(argsStr, "main:tq-action-42") {
 		t.Errorf("call[1] args = %v, want to contain main:tq-action-42", c.args)
 	}
-	if !strings.Contains(argsStr, "claude --worktree") {
-		t.Errorf("call[1] args = %v, want to contain 'claude --worktree'", c.args)
+	if !strings.Contains(argsStr, "claude") {
+		t.Errorf("call[1] args = %v, want to contain 'claude'", c.args)
+	}
+	if strings.Contains(argsStr, "--worktree") {
+		t.Errorf("call[1] args = %v, must NOT contain --worktree", c.args)
 	}
 	if !strings.Contains(argsStr, "TQ_DIR=/tmp/tq") {
 		t.Errorf("call[1] args = %v, want to contain TQ_DIR=/tmp/tq", c.args)
