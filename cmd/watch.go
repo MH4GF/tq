@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 
 	"github.com/MH4GF/tq/source"
@@ -51,7 +52,7 @@ var watchCmd = &cobra.Command{
 				continue
 			}
 
-			if err := classifyNotification(cmd, string(notifJSON)); err != nil {
+			if err := classifyNotification(cmd.OutOrStdout(), string(notifJSON)); err != nil {
 				slog.Error("classify notification", "error", err, "title", n.Metadata["title"])
 				failed++
 				continue
@@ -72,6 +73,6 @@ var watchCmd = &cobra.Command{
 	},
 }
 
-func classifyNotification(cmd *cobra.Command, notificationJSON string) error {
-	return runClassify(cmd, notificationJSON)
+func classifyNotification(w io.Writer, notificationJSON string) error {
+	return runClassify(w, notificationJSON)
 }

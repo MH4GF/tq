@@ -43,11 +43,11 @@ var classifyCmd = &cobra.Command{
 			notificationJSON = string(data)
 		}
 
-		return runClassify(cmd, notificationJSON)
+		return runClassify(cmd.OutOrStdout(), notificationJSON)
 	},
 }
 
-func runClassify(cmd *cobra.Command, notificationJSON string) error {
+func runClassify(w io.Writer, notificationJSON string) error {
 	templatesDir := filepath.Join(tqDirResolved, "templates")
 	tmpl, err := template.Load(templatesDir, "classify")
 	if err != nil {
@@ -83,14 +83,14 @@ func runClassify(cmd *cobra.Command, notificationJSON string) error {
 		return fmt.Errorf("classify execution: %w", err)
 	}
 
-	if err := processClassifyResult(cmd, notificationJSON, result); err != nil {
+	if err := processClassifyResult(w, notificationJSON, result); err != nil {
 		recordClassifyFailure(notificationJSON, result, err.Error())
 		return err
 	}
 	return nil
 }
 
-func processClassifyResult(cmd *cobra.Command, notificationJSON, resultJSON string) error {
+func processClassifyResult(w io.Writer, notificationJSON, resultJSON string) error {
 	var result ClassifyResult
 	if err := json.Unmarshal([]byte(resultJSON), &result); err != nil {
 		return fmt.Errorf("parse classify result: %w", err)
@@ -105,7 +105,7 @@ func processClassifyResult(cmd *cobra.Command, notificationJSON, resultJSON stri
 			return fmt.Errorf("task #%d not found: %w", result.Task.ID, err)
 		}
 		taskID = result.Task.ID
-		fmt.Fprintf(cmd.OutOrStdout(), "linked to existing task #%d\n", taskID)
+		fmt.Fprintf(w, "linked to existing task #%d\n", taskID)
 	} else {
 		if result.Task.ProjectName == "" {
 			return fmt.Errorf("classify result has empty project_name for new task")
@@ -119,7 +119,7 @@ func processClassifyResult(cmd *cobra.Command, notificationJSON, resultJSON stri
 		if errInsert != nil {
 			return fmt.Errorf("insert task: %w", errInsert)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "task #%d created (project: %s)\n", taskID, project.Name)
+		fmt.Fprintf(w, "task #%d created (project: %s)\n", taskID, project.Name)
 	}
 
 	for _, a := range result.Actions {
@@ -128,7 +128,7 @@ func processClassifyResult(cmd *cobra.Command, notificationJSON, resultJSON stri
 			return fmt.Errorf("check duplicates: %w", err)
 		}
 		if dup {
-			fmt.Fprintf(cmd.OutOrStdout(), "skipped duplicate action: %s for task #%d\n", a.TemplateID, taskID)
+			fmt.Fprintf(w, "skipped duplicate action: %s for task #%d\n", a.TemplateID, taskID)
 			continue
 		}
 
@@ -143,7 +143,7 @@ func processClassifyResult(cmd *cobra.Command, notificationJSON, resultJSON stri
 		if err != nil {
 			return fmt.Errorf("insert action: %w", err)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "action #%d created (%s, status: %s)\n", id, a.TemplateID, status)
+		fmt.Fprintf(w, "action #%d created (%s, status: %s)\n", id, a.TemplateID, status)
 	}
 
 	return nil

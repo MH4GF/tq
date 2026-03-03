@@ -39,7 +39,7 @@ func TriggerOnDone(database *db.DB, templatesDir string, action *db.Action, resu
 
 	targetTmpl, err := template.Load(templatesDir, onDoneTemplateID)
 	if err != nil {
-		fmt.Printf("warning: on_done template %q not found\n", onDoneTemplateID)
+		slog.Warn("on_done template not found", "template", onDoneTemplateID)
 		return fmt.Errorf("load target template %q: %w", onDoneTemplateID, err)
 	}
 
