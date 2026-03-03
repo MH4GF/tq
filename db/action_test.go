@@ -2,8 +2,10 @@ package db_test
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -285,6 +287,67 @@ func TestResetToPending(t *testing.T) {
 	}
 	if a.StartedAt.Valid {
 		t.Error("started_at should be NULL after reset")
+	}
+}
+
+func TestAction_MatchesDate(t *testing.T) {
+	tests := []struct {
+		name string
+		a    db.Action
+		date string
+		want bool
+	}{
+		{
+			name: "match by created_at",
+			a:    db.Action{CreatedAt: "2026-01-15 10:00:00"},
+			date: "2026-01-15",
+			want: true,
+		},
+		{
+			name: "match by started_at",
+			a: db.Action{
+				CreatedAt: "2026-01-01 00:00:00",
+				StartedAt: sql.NullString{String: "2026-02-20 09:00:00", Valid: true},
+			},
+			date: "2026-02-20",
+			want: true,
+		},
+		{
+			name: "match by completed_at",
+			a: db.Action{
+				CreatedAt:   "2026-01-01 00:00:00",
+				CompletedAt: sql.NullString{String: "2026-03-01 18:00:00", Valid: true},
+			},
+			date: "2026-03-01",
+			want: true,
+		},
+		{
+			name: "no match",
+			a:    db.Action{CreatedAt: "2026-01-01 00:00:00"},
+			date: "2026-12-25",
+			want: false,
+		},
+		{
+			name: "null started_at and completed_at",
+			a:    db.Action{CreatedAt: "2026-01-15 10:00:00"},
+			date: "2026-01-15",
+			want: true,
+		},
+		{
+			name: "empty date matches all",
+			a:    db.Action{CreatedAt: "2026-01-15 10:00:00"},
+			date: "",
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.a.MatchesDate(tt.date)
+			if got != tt.want {
+				t.Errorf("MatchesDate(%q) = %v, want %v", tt.date, got, tt.want)
+			}
+		})
 	}
 }
 

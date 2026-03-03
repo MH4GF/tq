@@ -69,7 +69,7 @@ func TestGenerate_WithData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := Generate(d)
+	result, err := Generate(d, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestGenerate_Empty(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	result, err := Generate(d)
+	result, err := Generate(d, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestGenerate_EmptyProject(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := Generate(d)
+	result, err := Generate(d, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestGenerate_MultipleProjects(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := Generate(d)
+	result, err := Generate(d, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,6 +199,106 @@ func TestGenerate_MultipleProjects(t *testing.T) {
 	}
 	if !strings.Contains(result, "Task B") {
 		t.Error("expected Task B")
+	}
+}
+
+func TestGenerate_DateFilter(t *testing.T) {
+	tests := []struct {
+		name       string
+		dateFilter string
+		updateSQL  string
+		wantTask   bool
+	}{
+		{
+			name:       "match by created_at",
+			dateFilter: "2026-01-15",
+			updateSQL:  "UPDATE actions SET created_at = '2026-01-15 10:00:00'",
+			wantTask:   true,
+		},
+		{
+			name:       "match by started_at",
+			dateFilter: "2026-02-20",
+			updateSQL:  "UPDATE actions SET created_at = '2026-01-01 00:00:00', started_at = '2026-02-20 09:00:00'",
+			wantTask:   true,
+		},
+		{
+			name:       "match by completed_at",
+			dateFilter: "2026-03-01",
+			updateSQL:  "UPDATE actions SET created_at = '2026-01-01 00:00:00', completed_at = '2026-03-01 18:00:00'",
+			wantTask:   true,
+		},
+		{
+			name:       "no match",
+			dateFilter: "2026-12-25",
+			updateSQL:  "UPDATE actions SET created_at = '2026-01-01 00:00:00'",
+			wantTask:   false,
+		},
+		{
+			name:       "empty filter shows all",
+			dateFilter: "",
+			updateSQL:  "",
+			wantTask:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+
+			p, err := d.GetProjectByName("immedio")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			taskID, err := d.InsertTask(p.ID, "Test task", "", "{}")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := d.InsertAction("review-pr", &taskID, "{}", "pending", 0, "auto"); err != nil {
+				t.Fatal(err)
+			}
+
+			if tt.updateSQL != "" {
+				if _, err := d.Exec(tt.updateSQL); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			result, err := Generate(d, tt.dateFilter)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			hasTask := strings.Contains(result, "Test task")
+			if hasTask != tt.wantTask {
+				t.Errorf("wantTask=%v, got result:\n%s", tt.wantTask, result)
+			}
+		})
+	}
+}
+
+func TestGenerate_DateFilter_TaskWithNoActions(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	p, err := d.GetProjectByName("immedio")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := d.InsertTask(p.ID, "Task without actions", "", "{}"); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Generate(d, "2026-01-15")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Contains(result, "Task without actions") {
+		t.Errorf("task with no actions should be excluded when date filter is set, got:\n%s", result)
 	}
 }
 
