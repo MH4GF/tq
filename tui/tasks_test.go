@@ -11,7 +11,7 @@ func TestTasksModel_Empty(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := NewTasksModel(d)
+	m := NewTasksModel(d, "")
 	view := m.View()
 	if !contains(view, "No tasks") {
 		t.Errorf("empty view should show 'No tasks', got %q", view)
@@ -26,7 +26,7 @@ func TestTasksModel_LoadAndExpand(t *testing.T) {
 	d.InsertAction("check-pr", &taskID, "{}", "pending", 5, "auto")
 	d.InsertAction("fix-ci", &taskID, "{}", "running", 3, "auto")
 
-	m := NewTasksModel(d)
+	m := NewTasksModel(d, "")
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
@@ -55,7 +55,7 @@ func TestTasksModel_Navigation(t *testing.T) {
 	taskID2, _ := d.InsertTask(2, "Task B", "", "{}")
 	d.InsertAction("b", &taskID2, "{}", "pending", 0, "auto")
 
-	m := NewTasksModel(d)
+	m := NewTasksModel(d, "")
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
@@ -94,7 +94,7 @@ func TestTasksModel_CollapseExpand(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "Task", "", "{}")
 	d.InsertAction("a", &taskID, "{}", "pending", 0, "auto")
 
-	m := NewTasksModel(d)
+	m := NewTasksModel(d, "")
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
@@ -121,7 +121,7 @@ func TestTasksModel_Reload(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := NewTasksModel(d)
+	m := NewTasksModel(d, "")
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
@@ -148,7 +148,7 @@ func TestTasksModel_CreateTask(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := NewTasksModel(d)
+	m := NewTasksModel(d, "")
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
@@ -200,7 +200,7 @@ func TestTasksModel_CreateTaskCancel(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := NewTasksModel(d)
+	m := NewTasksModel(d, "")
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
@@ -219,7 +219,7 @@ func TestTasksModel_ChangeStatus(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "Fix bug", "", "{}")
 	d.InsertAction("check", &taskID, "{}", "pending", 0, "auto")
 
-	m := NewTasksModel(d)
+	m := NewTasksModel(d, "")
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
@@ -284,7 +284,7 @@ func TestTasksModel_ChangeStatusCancel(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "Fix bug", "", "{}")
 	d.InsertAction("check", &taskID, "{}", "pending", 0, "auto")
 
-	m := NewTasksModel(d)
+	m := NewTasksModel(d, "")
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
@@ -310,7 +310,7 @@ func TestTasksModel_ChangeStatusNoTask(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "Fix bug", "", "{}")
 	d.InsertAction("check", &taskID, "{}", "pending", 0, "auto")
 
-	m := NewTasksModel(d)
+	m := NewTasksModel(d, "")
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
@@ -321,11 +321,60 @@ func TestTasksModel_ChangeStatusNoTask(t *testing.T) {
 	}
 }
 
+func TestTasksModel_DateFilter(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID1, _ := d.InsertTask(1, "Today task", "", "{}")
+	d.InsertAction("today-action", &taskID1, "{}", "pending", 0, "auto")
+
+	taskID2, _ := d.InsertTask(1, "Old task", "", "{}")
+	d.InsertAction("old-action", &taskID2, "{}", "pending", 0, "auto")
+
+	// Set old-action's created_at to a different date
+	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE template_id = 'old-action'")
+
+	// Get today's date from the first action
+	actions, _ := d.ListActions("", nil)
+	var todayDate string
+	for _, a := range actions {
+		if a.TemplateID == "today-action" {
+			todayDate = a.CreatedAt[:10]
+			break
+		}
+	}
+
+	m := NewTasksModel(d, todayDate)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	view := m.View()
+	if !contains(view, "Today task") {
+		t.Errorf("view should contain 'Today task', got %q", view)
+	}
+	if contains(view, "Old task") {
+		t.Errorf("view should not contain 'Old task', got %q", view)
+	}
+
+	// Without filter, both should appear
+	m2 := NewTasksModel(d, "")
+	msg2 := m2.Init()()
+	m2, _ = m2.Update(msg2)
+
+	view2 := m2.View()
+	if !contains(view2, "Today task") {
+		t.Errorf("unfiltered view should contain 'Today task', got %q", view2)
+	}
+	if !contains(view2, "Old task") {
+		t.Errorf("unfiltered view should contain 'Old task', got %q", view2)
+	}
+}
+
 func TestTasksModel_SetSize(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := NewTasksModel(d)
+	m := NewTasksModel(d, "")
 	m = m.SetSize(100, 50)
 
 	if m.width != 100 || m.height != 50 {

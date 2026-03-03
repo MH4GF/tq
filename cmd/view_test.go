@@ -91,7 +91,7 @@ func TestView_Inject(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"view", "--inject", "--date", "2026-02-27"})
+	root.SetArgs([]string{"view", "--inject", "--all", "--date", "2026-02-27"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)

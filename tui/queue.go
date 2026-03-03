@@ -11,16 +11,17 @@ import (
 )
 
 type QueueModel struct {
-	actions  []db.Action
-	cursor   int
-	width    int
-	height   int
-	database *db.DB
-	message  string
+	actions    []db.Action
+	cursor     int
+	width      int
+	height     int
+	database   *db.DB
+	message    string
+	dateFilter string
 }
 
-func NewQueueModel(database *db.DB) QueueModel {
-	return QueueModel{database: database}
+func NewQueueModel(database *db.DB, dateFilter string) QueueModel {
+	return QueueModel{database: database, dateFilter: dateFilter}
 }
 
 type actionsLoadedMsg struct {
@@ -38,7 +39,7 @@ func (m QueueModel) loadActions() tea.Cmd {
 		if err != nil {
 			return actionsLoadedMsg{}
 		}
-		return actionsLoadedMsg{actions: actions}
+		return actionsLoadedMsg{actions: db.FilterByDate(actions, m.dateFilter)}
 	}
 }
 

@@ -49,11 +49,12 @@ type backgroundStatusMsg struct {
 }
 
 func New(database *db.DB, tqDir string, backgrounds ...BackgroundFunc) Model {
-	tasks := NewTasksModel(database)
+	today := time.Now().Format("2006-01-02")
+	tasks := NewTasksModel(database, today)
 	tasks.SetTQDir(tqDir)
 	return Model{
 		activeTab:   tabQueue,
-		queue:       NewQueueModel(database),
+		queue:       NewQueueModel(database, today),
 		tasks:       tasks,
 		backgrounds: backgrounds,
 	}
