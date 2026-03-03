@@ -19,6 +19,7 @@ type Config struct {
 	Timeout      int    `yaml:"timeout"`
 	MaxRetries   int    `yaml:"max_retries"`
 	OnDone       string `yaml:"on_done"`
+	JSONSchema   string `yaml:"json_schema"`
 }
 
 type Template struct {
