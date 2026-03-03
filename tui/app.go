@@ -33,6 +33,8 @@ type Model struct {
 	cancel      context.CancelFunc
 	backgrounds []BackgroundFunc
 	statusLine  string
+	logCh       <-chan LogEntry
+	logs        []LogEntry
 }
 
 type tickMsg time.Time
@@ -48,7 +50,7 @@ type backgroundStatusMsg struct {
 	err  error
 }
 
-func New(database *db.DB, tqDir string, backgrounds ...BackgroundFunc) Model {
+func New(database *db.DB, tqDir string, logCh <-chan LogEntry, backgrounds ...BackgroundFunc) Model {
 	today := time.Now().Format("2006-01-02")
 	tasks := NewTasksModel(database, today)
 	tasks.SetTQDir(tqDir)
@@ -57,6 +59,7 @@ func New(database *db.DB, tqDir string, backgrounds ...BackgroundFunc) Model {
 		queue:       NewQueueModel(database, today),
 		tasks:       tasks,
 		backgrounds: backgrounds,
+		logCh:       logCh,
 	}
 }
 
@@ -65,6 +68,10 @@ func (m Model) Init() tea.Cmd {
 	m.cancel = cancel
 
 	cmds := []tea.Cmd{m.queue.Init(), m.tasks.Init(), doTick()}
+
+	if m.logCh != nil {
+		cmds = append(cmds, waitForLog(m.logCh))
+	}
 
 	for _, bg := range m.backgrounds {
 		bg := bg
@@ -82,13 +89,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		contentHeight := msg.Height - 4
+		contentHeight := msg.Height - 14
 		m.queue = m.queue.SetSize(msg.Width, contentHeight)
 		m.tasks = m.tasks.SetSize(msg.Width, contentHeight)
 		return m, nil
 
 	case tickMsg:
 		return m, tea.Batch(m.queue.loadActions(), m.tasks.loadTasks(), doTick())
+
+	case logMsg:
+		m.logs = append(m.logs, LogEntry(msg))
+		if len(m.logs) > 100 {
+			m.logs = m.logs[len(m.logs)-100:]
+		}
+		return m, waitForLog(m.logCh)
 
 	case backgroundStatusMsg:
 		if msg.err != nil && msg.err != context.Canceled {
@@ -174,6 +188,7 @@ func (m Model) View() string {
 	}
 
 	b.WriteString("\n")
+	b.WriteString(m.renderActivity())
 	if m.statusLine != "" {
 		b.WriteString(styleWaitingHuman.Render(m.statusLine) + "\n")
 	}
@@ -221,6 +236,25 @@ func (m Model) renderHelp() string {
 	default:
 		return styleHelp.Render("j/k: navigate  enter: expand  s: status  c: create task  n: new action  v: view result  tab: switch  r: reload  q: quit")
 	}
+}
+
+func (m Model) renderActivity() string {
+	var b strings.Builder
+	b.WriteString(styleMuted.Render("── Activity ──────────────────────") + "\n")
+
+	start := 0
+	if len(m.logs) > 9 {
+		start = len(m.logs) - 9
+	}
+	shown := m.logs[start:]
+	for _, e := range shown {
+		ts := e.Time.Format("15:04")
+		b.WriteString(styleMuted.Render("  "+ts+" ") + e.Message + "\n")
+	}
+	for i := len(shown); i < 9; i++ {
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 func (m Model) ActiveTab() tab {

@@ -2,8 +2,9 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log/slog"
 	"time"
 
@@ -24,6 +25,15 @@ var uiCmd = &cobra.Command{
 	Use:   "ui",
 	Short: "Launch interactive TUI with ralph loop and watch",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		logCh := make(chan tui.LogEntry, 100)
+
+		prevLogger := slog.Default()
+		handler := &tui.TUILogHandler{Ch: logCh, Level: slog.LevelInfo}
+		slog.SetDefault(slog.New(handler))
+		defer slog.SetDefault(prevLogger)
+
+		classifyWriter := &tui.LogWriter{Ch: logCh}
+
 		ralphBg := func(ctx context.Context) error {
 			cfg := dispatch.RalphConfig{
 				TQDir:          tqDirResolved,
@@ -55,14 +65,14 @@ var uiCmd = &cobra.Command{
 				case <-ctx.Done():
 					return ctx.Err()
 				case <-ticker.C:
-					if err := runWatch(ctx); err != nil {
+					if err := runWatch(ctx, classifyWriter); err != nil {
 						slog.Error("watch error", "error", err)
 					}
 				}
 			}
 		}
 
-		m := tui.New(database, tqDirResolved, ralphBg, watchBg)
+		m := tui.New(database, tqDirResolved, logCh, ralphBg, watchBg)
 		p := tea.NewProgram(m, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("tui: %w", err)
@@ -71,7 +81,7 @@ var uiCmd = &cobra.Command{
 	},
 }
 
-func runWatch(ctx context.Context) error {
+func runWatch(ctx context.Context, classifyWriter io.Writer) error {
 	src, err := ghsource.NewGitHubSource()
 	if err != nil {
 		return fmt.Errorf("create source: %w", err)
@@ -87,7 +97,7 @@ func runWatch(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
-		if err := runClassify(classifyCmd, string(notifBytes)); err != nil {
+		if err := runClassify(classifyWriter, string(notifBytes)); err != nil {
 			slog.Error("classify", "error", err)
 			continue
 		}
