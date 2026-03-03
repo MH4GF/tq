@@ -535,6 +535,27 @@ func (m *TasksModel) buildLines() {
 	}
 }
 
+func (m TasksModel) visibleRange() visibleRange {
+	maxVisible := m.height - 2
+	if maxVisible <= 0 {
+		maxVisible = 20
+	}
+	total := len(m.lines)
+	if total <= maxVisible {
+		return visibleRange{0, total}
+	}
+	start := m.cursor - maxVisible/2
+	if start < 0 {
+		start = 0
+	}
+	end := start + maxVisible
+	if end > total {
+		end = total
+		start = end - maxVisible
+	}
+	return visibleRange{start, end}
+}
+
 func (m TasksModel) View() string {
 	switch m.mode {
 	case modePickTemplate:
@@ -558,7 +579,9 @@ func (m TasksModel) View() string {
 	}
 
 	var b strings.Builder
-	for i, line := range m.lines {
+	visible := m.visibleRange()
+	for i := visible.start; i < visible.end; i++ {
+		line := m.lines[i]
 		prefix := "  "
 		if i == m.cursor {
 			prefix = "> "

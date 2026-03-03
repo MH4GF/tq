@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -475,6 +476,83 @@ func TestTasksModel_DetailViewOnProjectLineNoOp(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
 	if m.mode != modeNormal {
 		t.Errorf("v on project line should be no-op, mode = %d", m.mode)
+	}
+}
+
+func TestTasksModel_VisibleRange_AllVisible(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "", "{}")
+	d.InsertAction("a", &taskID, "{}", "pending", 0, "auto")
+
+	m := NewTasksModel(d, "")
+	m = m.SetSize(80, 40) // height 40 → maxVisible=38, plenty of room
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	vr := m.visibleRange()
+	if vr.start != 0 || vr.end != len(m.lines) {
+		t.Errorf("visibleRange = {%d, %d}, want {0, %d}", vr.start, vr.end, len(m.lines))
+	}
+}
+
+func TestTasksModel_VisibleRange_Scroll(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// Create enough lines to exceed viewport: 1 project + 30 tasks + 30 actions = 61 lines
+	for i := 0; i < 30; i++ {
+		taskID, _ := d.InsertTask(1, fmt.Sprintf("Task %d", i), "", "{}")
+		d.InsertAction("a", &taskID, "{}", "pending", 0, "auto")
+	}
+
+	m := NewTasksModel(d, "")
+	m = m.SetSize(80, 12) // height 12 → maxVisible=10
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	if len(m.lines) <= 10 {
+		t.Fatalf("need more than 10 lines for scroll test, got %d", len(m.lines))
+	}
+
+	// Cursor at 0: start should be 0
+	vr := m.visibleRange()
+	if vr.start != 0 {
+		t.Errorf("cursor=0: start = %d, want 0", vr.start)
+	}
+	if vr.end-vr.start != 10 {
+		t.Errorf("cursor=0: window size = %d, want 10", vr.end-vr.start)
+	}
+
+	// Move cursor to middle
+	for i := 0; i < 20; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	}
+	if m.cursor != 20 {
+		t.Fatalf("cursor = %d, want 20", m.cursor)
+	}
+
+	vr = m.visibleRange()
+	if vr.start > m.cursor || vr.end <= m.cursor {
+		t.Errorf("cursor=%d not in visible range {%d, %d}", m.cursor, vr.start, vr.end)
+	}
+
+	// Move cursor to end
+	for i := 0; i < len(m.lines); i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	}
+	lastIdx := len(m.lines) - 1
+	if m.cursor != lastIdx {
+		t.Fatalf("cursor = %d, want %d", m.cursor, lastIdx)
+	}
+
+	vr = m.visibleRange()
+	if vr.end != len(m.lines) {
+		t.Errorf("cursor at end: end = %d, want %d", vr.end, len(m.lines))
+	}
+	if vr.end-vr.start != 10 {
+		t.Errorf("cursor at end: window size = %d, want 10", vr.end-vr.start)
 	}
 }
 
