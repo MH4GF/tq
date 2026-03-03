@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/MH4GF/tq/db"
 )
 
@@ -33,6 +34,7 @@ const (
 	modeInputTitle
 	modeInputURL
 	modePickStatus
+	modeViewDetail
 )
 
 type TasksModel struct {
@@ -61,6 +63,10 @@ type TasksModel struct {
 	// Status change state
 	statuses     []string
 	statusCursor int
+
+	// Detail view state
+	detailAction *db.Action
+	detailScroll int
 }
 
 type treeLine struct {
@@ -68,6 +74,7 @@ type treeLine struct {
 	key       string
 	expandKey string
 	taskID    int64
+	action    *db.Action
 }
 
 type tasksLoadedMsg struct {
@@ -188,6 +195,8 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 			return m.updateInputURL(msg)
 		case modePickStatus:
 			return m.updatePickStatus(msg)
+		case modeViewDetail:
+			return m.updateViewDetail(msg)
 		default:
 			return m.updateNormal(msg)
 		}
@@ -251,6 +260,14 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 			m.statuses = filtered
 			m.statusCursor = 0
 			m.mode = modePickStatus
+		}
+	case key.Matches(msg, key.NewBinding(key.WithKeys("v"))):
+		if m.cursor >= 0 && m.cursor < len(m.lines) {
+			if a := m.lines[m.cursor].action; a != nil && a.Result.Valid && a.Result.String != "" {
+				m.detailAction = a
+				m.detailScroll = 0
+				m.mode = modeViewDetail
+			}
 		}
 	case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
 		return m, m.loadTasks()
@@ -384,6 +401,22 @@ func (m TasksModel) updatePickStatus(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 	return m, nil
 }
 
+func (m TasksModel) updateViewDetail(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
+	switch {
+	case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "q"))):
+		m.detailAction = nil
+		m.detailScroll = 0
+		m.mode = modeNormal
+	case key.Matches(msg, key.NewBinding(key.WithKeys("j", "down"))):
+		m.detailScroll++
+	case key.Matches(msg, key.NewBinding(key.WithKeys("k", "up"))):
+		if m.detailScroll > 0 {
+			m.detailScroll--
+		}
+	}
+	return m, nil
+}
+
 func (m TasksModel) updateTaskStatus(taskID int64, status string) tea.Cmd {
 	return func() tea.Msg {
 		if err := m.database.UpdateTask(taskID, status); err != nil {
@@ -475,6 +508,7 @@ func (m *TasksModel) buildLines() {
 			}
 
 			for _, a := range tn.actions {
+				a := a
 				icon := StatusIcon(a.Status)
 				ast := StatusStyle(a.Status)
 				m.lines = append(m.lines, treeLine{
@@ -486,6 +520,7 @@ func (m *TasksModel) buildLines() {
 					),
 					key:    fmt.Sprintf("a:%d", a.ID),
 					taskID: tn.task.ID,
+					action: &a,
 				})
 			}
 		}
@@ -504,6 +539,10 @@ func (m TasksModel) View() string {
 		return m.viewInputTaskField()
 	case modePickStatus:
 		return m.viewPickStatus()
+	case modeViewDetail:
+		if m.detailAction != nil {
+			return RenderDetailView(m.detailAction, m.detailScroll, m.width, m.height)
+		}
 	}
 
 	if len(m.lines) == 0 {
@@ -516,7 +555,24 @@ func (m TasksModel) View() string {
 		if i == m.cursor {
 			prefix = "> "
 		}
-		b.WriteString(prefix + line.text + "\n")
+		rendered := prefix + line.text
+
+		if i == m.cursor && line.action != nil && line.action.Result.Valid && line.action.Result.String != "" {
+			label := "result"
+			if line.action.Status == "waiting_human" {
+				label = "reason"
+			}
+			rst := StatusStyle(line.action.Status)
+			lineWidth := lipgloss.Width(rendered)
+			pad := 2
+			labelLen := len(label) + 2
+			remaining := m.width - lineWidth - pad - labelLen
+			if remaining > 10 {
+				rendered += "  " + rst.Render(label+": "+truncateResult(line.action.Result.String, remaining))
+			}
+		}
+
+		b.WriteString(rendered + "\n")
 	}
 
 	if m.message != "" {
