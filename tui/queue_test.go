@@ -11,7 +11,7 @@ func TestQueueModel_Empty(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := NewQueueModel(d)
+	m := NewQueueModel(d, "")
 	view := m.View()
 	if !contains(view, "No actions") {
 		t.Errorf("empty view should show 'No actions', got %q", view)
@@ -26,7 +26,7 @@ func TestQueueModel_LoadActions(t *testing.T) {
 	d.InsertAction("check-pr", &taskID, "{}", "pending", 5, "auto")
 	d.InsertAction("fix-ci", &taskID, "{}", "running", 3, "auto")
 
-	m := NewQueueModel(d)
+	m := NewQueueModel(d, "")
 
 	// Simulate load
 	cmd := m.Init()
@@ -50,7 +50,7 @@ func TestQueueModel_Navigation(t *testing.T) {
 	d.InsertAction("b", nil, "{}", "pending", 0, "auto")
 	d.InsertAction("c", nil, "{}", "pending", 0, "auto")
 
-	m := NewQueueModel(d)
+	m := NewQueueModel(d, "")
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
@@ -93,7 +93,7 @@ func TestQueueModel_Reload(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := NewQueueModel(d)
+	m := NewQueueModel(d, "")
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
@@ -123,7 +123,7 @@ func TestQueueModel_StatusIcons(t *testing.T) {
 	d.InsertAction("pending-action", nil, "{}", "pending", 0, "auto")
 	d.InsertAction("running-action", nil, "{}", "running", 0, "auto")
 
-	m := NewQueueModel(d)
+	m := NewQueueModel(d, "")
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
@@ -136,6 +136,53 @@ func TestQueueModel_StatusIcons(t *testing.T) {
 	}
 }
 
+func TestQueueModel_DateFilter(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	d.InsertAction("today-action", &taskID, "{}", "pending", 0, "auto")
+	d.InsertAction("old-action", &taskID, "{}", "pending", 0, "auto")
+
+	// Set old-action's created_at to a different date
+	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE template_id = 'old-action'")
+
+	// Get today's date from the first action
+	actions, _ := d.ListActions("", nil)
+	var todayDate string
+	for _, a := range actions {
+		if a.TemplateID == "today-action" {
+			todayDate = a.CreatedAt[:10]
+			break
+		}
+	}
+
+	m := NewQueueModel(d, todayDate)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	if len(m.actions) != 1 {
+		t.Errorf("filtered actions = %d, want 1", len(m.actions))
+	}
+
+	view := m.View()
+	if !contains(view, "today-action") {
+		t.Errorf("view should contain 'today-action', got %q", view)
+	}
+	if contains(view, "old-action") {
+		t.Errorf("view should not contain 'old-action', got %q", view)
+	}
+
+	// Without filter, both should appear
+	m2 := NewQueueModel(d, "")
+	msg2 := m2.Init()()
+	m2, _ = m2.Update(msg2)
+
+	if len(m2.actions) != 2 {
+		t.Errorf("unfiltered actions = %d, want 2", len(m2.actions))
+	}
+}
+
 func TestQueueModel_InlineResult(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -144,7 +191,7 @@ func TestQueueModel_InlineResult(t *testing.T) {
 	id, _ := d.InsertAction("check-pr", &taskID, "{}", "running", 0, "auto")
 	d.MarkDone(id, "all checks passed")
 
-	m := NewQueueModel(d)
+	m := NewQueueModel(d, "")
 	m = m.SetSize(120, 40)
 	msg := m.Init()()
 	m, _ = m.Update(msg)
@@ -162,7 +209,7 @@ func TestQueueModel_InlineResultFailed(t *testing.T) {
 	id, _ := d.InsertAction("deploy", nil, "{}", "running", 0, "auto")
 	d.MarkFailed(id, "timeout error")
 
-	m := NewQueueModel(d)
+	m := NewQueueModel(d, "")
 	m = m.SetSize(120, 40)
 	msg := m.Init()()
 	m, _ = m.Update(msg)
@@ -180,7 +227,7 @@ func TestQueueModel_InlineResultWaitingHuman(t *testing.T) {
 	id, _ := d.InsertAction("deploy", nil, "{}", "running", 0, "auto")
 	d.MarkWaitingHuman(id, "needs approval")
 
-	m := NewQueueModel(d)
+	m := NewQueueModel(d, "")
 	m = m.SetSize(120, 40)
 	msg := m.Init()()
 	m, _ = m.Update(msg)
@@ -198,7 +245,7 @@ func TestQueueModel_DetailView(t *testing.T) {
 	id, _ := d.InsertAction("check", nil, "{}", "running", 0, "auto")
 	d.MarkDone(id, "detailed result\nline 2\nline 3")
 
-	m := NewQueueModel(d)
+	m := NewQueueModel(d, "")
 	m = m.SetSize(120, 40)
 	msg := m.Init()()
 	m, _ = m.Update(msg)
@@ -234,7 +281,7 @@ func TestQueueModel_DetailViewNoResult(t *testing.T) {
 
 	d.InsertAction("check", nil, "{}", "pending", 0, "auto")
 
-	m := NewQueueModel(d)
+	m := NewQueueModel(d, "")
 	m = m.SetSize(120, 40)
 	msg := m.Init()()
 	m, _ = m.Update(msg)
@@ -253,7 +300,7 @@ func TestQueueModel_DetailViewScroll(t *testing.T) {
 	id, _ := d.InsertAction("check", nil, "{}", "running", 0, "auto")
 	d.MarkDone(id, "line1\nline2\nline3")
 
-	m := NewQueueModel(d)
+	m := NewQueueModel(d, "")
 	m = m.SetSize(120, 40)
 	msg := m.Init()()
 	m, _ = m.Update(msg)
@@ -286,7 +333,7 @@ func TestQueueModel_SetSize(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := NewQueueModel(d)
+	m := NewQueueModel(d, "")
 	m = m.SetSize(100, 50)
 
 	if m.width != 100 || m.height != 50 {

@@ -110,6 +110,20 @@ func TestViewContainsTabs(t *testing.T) {
 	}
 }
 
+func TestApp_DateFilterDefault(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := New(d, "")
+
+	if m.queue.dateFilter == "" {
+		t.Error("initial queue dateFilter should be today's date, got empty")
+	}
+	if m.tasks.dateFilter == "" {
+		t.Error("initial tasks dateFilter should be today's date, got empty")
+	}
+}
+
 func TestHelpText(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

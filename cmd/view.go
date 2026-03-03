@@ -13,13 +13,21 @@ import (
 var (
 	viewDate   string
 	viewInject bool
+	viewAll    bool
 )
 
 var viewCmd = &cobra.Command{
 	Use:   "view",
 	Short: "View tasks and actions as markdown",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		content, err := view.Generate(database)
+		dateFilter := time.Now().Format("2006-01-02")
+		if viewAll {
+			dateFilter = ""
+		} else if viewDate != "" {
+			dateFilter = viewDate
+		}
+
+		content, err := view.Generate(database, dateFilter)
 		if err != nil {
 			return fmt.Errorf("generate view: %w", err)
 		}
@@ -57,4 +65,5 @@ var viewCmd = &cobra.Command{
 func init() {
 	viewCmd.Flags().StringVar(&viewDate, "date", "", "Date (YYYY-MM-DD), defaults to today")
 	viewCmd.Flags().BoolVar(&viewInject, "inject", false, "Inject into daily note file")
+	viewCmd.Flags().BoolVar(&viewAll, "all", false, "Show all tasks (no date filter)")
 }

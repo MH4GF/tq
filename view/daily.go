@@ -21,7 +21,8 @@ type ProjectView struct {
 }
 
 // Generate produces markdown from the DB for all projects with active tasks.
-func Generate(database *db.DB) (string, error) {
+// If dateFilter is non-empty, only actions matching that date prefix are included.
+func Generate(database *db.DB, dateFilter string) (string, error) {
 	projects, err := database.ListProjects()
 	if err != nil {
 		return "", fmt.Errorf("list projects: %w", err)
@@ -29,7 +30,7 @@ func Generate(database *db.DB) (string, error) {
 
 	var sections []string
 	for _, p := range projects {
-		section, err := generateProjectSection(database, p)
+		section, err := generateProjectSection(database, p, dateFilter)
 		if err != nil {
 			return "", err
 		}
@@ -44,7 +45,7 @@ func Generate(database *db.DB) (string, error) {
 	return strings.Join(sections, "\n"), nil
 }
 
-func generateProjectSection(database *db.DB, project db.Project) (string, error) {
+func generateProjectSection(database *db.DB, project db.Project, dateFilter string) (string, error) {
 	tasks, err := database.ListTasksByProject(project.ID)
 	if err != nil {
 		return "", fmt.Errorf("list tasks for %s: %w", project.Name, err)
@@ -67,6 +68,7 @@ func generateProjectSection(database *db.DB, project db.Project) (string, error)
 		{"Blocked", "blocked"},
 	}
 
+	hasContent := false
 	for _, sg := range statusGroups {
 		var matching []db.Task
 		for _, t := range tasks {
@@ -77,20 +79,32 @@ func generateProjectSection(database *db.DB, project db.Project) (string, error)
 		if len(matching) == 0 {
 			continue
 		}
-		buf.WriteString(fmt.Sprintf("#### %s\n", sg.label))
-		for _, t := range matching {
-			line := fmt.Sprintf("- #%d %s", t.ID, t.Title)
-			if t.URL != "" {
-				line += fmt.Sprintf(" [link](%s)", t.URL)
-			}
 
+		var groupBuf strings.Builder
+		groupBuf.WriteString(fmt.Sprintf("#### %s\n", sg.label))
+		groupHasTasks := false
+
+		for _, t := range matching {
 			taskID := t.ID
 			actions, err := database.ListActions("", &taskID)
 			if err != nil {
 				return "", fmt.Errorf("list actions for task %d: %w", t.ID, err)
 			}
 
-			buf.WriteString(line + "\n")
+			if dateFilter != "" {
+				actions = db.FilterByDate(actions, dateFilter)
+				if len(actions) == 0 {
+					continue
+				}
+			}
+
+			line := fmt.Sprintf("- #%d %s", t.ID, t.Title)
+			if t.URL != "" {
+				line += fmt.Sprintf(" [link](%s)", t.URL)
+			}
+
+			groupBuf.WriteString(line + "\n")
+			groupHasTasks = true
 			for _, a := range actions {
 				checkbox := " "
 				if a.Status == "done" {
@@ -113,11 +127,19 @@ func generateProjectSection(database *db.DB, project db.Project) (string, error)
 						}
 					}
 				}
-				buf.WriteString(actionLine + "\n")
+				groupBuf.WriteString(actionLine + "\n")
 			}
+		}
+
+		if groupHasTasks {
+			buf.WriteString(groupBuf.String())
+			hasContent = true
 		}
 	}
 
+	if !hasContent {
+		return "", nil
+	}
 	return buf.String(), nil
 }
 

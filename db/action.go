@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
 
 type Action struct {
@@ -19,6 +20,32 @@ type Action struct {
 	CreatedAt   string
 	StartedAt   sql.NullString
 	CompletedAt sql.NullString
+}
+
+func (a Action) MatchesDate(date string) bool {
+	if strings.HasPrefix(a.CreatedAt, date) {
+		return true
+	}
+	if a.StartedAt.Valid && strings.HasPrefix(a.StartedAt.String, date) {
+		return true
+	}
+	if a.CompletedAt.Valid && strings.HasPrefix(a.CompletedAt.String, date) {
+		return true
+	}
+	return false
+}
+
+func FilterByDate(actions []Action, date string) []Action {
+	if date == "" {
+		return actions
+	}
+	var filtered []Action
+	for _, a := range actions {
+		if a.MatchesDate(date) {
+			filtered = append(filtered, a)
+		}
+	}
+	return filtered
 }
 
 func (db *DB) InsertAction(templateID string, taskID *int64, metadata string, status string, priority int, source string) (int64, error) {

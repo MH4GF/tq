@@ -17,12 +17,13 @@ type QueueModel struct {
 	height       int
 	database     *db.DB
 	message      string
+	dateFilter   string
 	detailAction *db.Action
 	detailScroll int
 }
 
-func NewQueueModel(database *db.DB) QueueModel {
-	return QueueModel{database: database}
+func NewQueueModel(database *db.DB, dateFilter string) QueueModel {
+	return QueueModel{database: database, dateFilter: dateFilter}
 }
 
 type actionsLoadedMsg struct {
@@ -40,7 +41,7 @@ func (m QueueModel) loadActions() tea.Cmd {
 		if err != nil {
 			return actionsLoadedMsg{}
 		}
-		return actionsLoadedMsg{actions: actions}
+		return actionsLoadedMsg{actions: db.FilterByDate(actions, m.dateFilter)}
 	}
 }
 

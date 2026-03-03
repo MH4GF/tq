@@ -38,15 +38,16 @@ const (
 )
 
 type TasksModel struct {
-	trees    []projectTree
-	cursor   int
-	expanded map[string]bool
-	lines    []treeLine
-	width    int
-	height   int
-	database *db.DB
-	tqDir    string
-	message  string
+	trees      []projectTree
+	cursor     int
+	expanded   map[string]bool
+	lines      []treeLine
+	width      int
+	height     int
+	database   *db.DB
+	tqDir      string
+	message    string
+	dateFilter string
 
 	// Add action state
 	mode           tasksMode
@@ -98,16 +99,17 @@ type taskUpdatedMsg struct {
 	status string
 }
 
-func NewTasksModel(database *db.DB) TasksModel {
+func NewTasksModel(database *db.DB, dateFilter string) TasksModel {
 	ti := textinput.New()
 	ti.Placeholder = "instruction を入力..."
 	ti.CharLimit = 500
 	ti.Width = 60
 
 	return TasksModel{
-		database:  database,
-		expanded:  make(map[string]bool),
-		textInput: ti,
+		database:   database,
+		expanded:   make(map[string]bool),
+		textInput:  ti,
+		dateFilter: dateFilter,
 	}
 }
 
@@ -135,6 +137,12 @@ func (m TasksModel) loadTasks() tea.Cmd {
 				actions, err := m.database.ListActions("", &taskID)
 				if err != nil {
 					continue
+				}
+				if m.dateFilter != "" {
+					actions = db.FilterByDate(actions, m.dateFilter)
+					if len(actions) == 0 {
+						continue
+					}
 				}
 				nodes = append(nodes, taskNode{task: t, actions: actions})
 			}
