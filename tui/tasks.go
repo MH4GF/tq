@@ -140,7 +140,7 @@ func (m TasksModel) loadTasks() tea.Cmd {
 				}
 				if m.dateFilter != "" {
 					actions = db.FilterByDate(actions, m.dateFilter)
-					if len(actions) == 0 {
+					if len(actions) == 0 && t.Status == "done" {
 						continue
 					}
 				}

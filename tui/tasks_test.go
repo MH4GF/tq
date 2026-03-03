@@ -331,6 +331,7 @@ func TestTasksModel_DateFilter(t *testing.T) {
 
 	taskID2, _ := d.InsertTask(1, "Old task", "", "{}")
 	d.InsertAction("old-action", &taskID2, "{}", "pending", 0, "auto")
+	d.UpdateTask(taskID2, "done")
 
 	// Set old-action's created_at to a different date
 	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE template_id = 'old-action'")
@@ -368,6 +369,25 @@ func TestTasksModel_DateFilter(t *testing.T) {
 	}
 	if !contains(view2, "Old task") {
 		t.Errorf("unfiltered view should contain 'Old task', got %q", view2)
+	}
+}
+
+func TestTasksModel_DateFilter_NonDoneTaskShown(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// Open task with action on a different date
+	taskID, _ := d.InsertTask(1, "Open no-match task", "", "{}")
+	d.InsertAction("old-action", &taskID, "{}", "pending", 0, "auto")
+	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE template_id = 'old-action'")
+
+	m := NewTasksModel(d, "2026-03-03")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	view := m.View()
+	if !contains(view, "Open no-match task") {
+		t.Errorf("view should contain non-done task even with no matching actions, got %q", view)
 	}
 }
 
