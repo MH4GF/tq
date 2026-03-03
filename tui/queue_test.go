@@ -136,6 +136,152 @@ func TestQueueModel_StatusIcons(t *testing.T) {
 	}
 }
 
+func TestQueueModel_InlineResult(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	id, _ := d.InsertAction("check-pr", &taskID, "{}", "running", 0, "auto")
+	d.MarkDone(id, "all checks passed")
+
+	m := NewQueueModel(d)
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	view := m.View()
+	if !contains(view, "result: all checks passed") {
+		t.Errorf("view should contain inline result, got %q", view)
+	}
+}
+
+func TestQueueModel_InlineResultFailed(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	id, _ := d.InsertAction("deploy", nil, "{}", "running", 0, "auto")
+	d.MarkFailed(id, "timeout error")
+
+	m := NewQueueModel(d)
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	view := m.View()
+	if !contains(view, "result: timeout error") {
+		t.Errorf("view should contain inline result for failed action, got %q", view)
+	}
+}
+
+func TestQueueModel_InlineResultWaitingHuman(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	id, _ := d.InsertAction("deploy", nil, "{}", "running", 0, "auto")
+	d.MarkWaitingHuman(id, "needs approval")
+
+	m := NewQueueModel(d)
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	view := m.View()
+	if !contains(view, "reason: needs approval") {
+		t.Errorf("view should contain 'reason:' for waiting_human, got %q", view)
+	}
+}
+
+func TestQueueModel_DetailView(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	id, _ := d.InsertAction("check", nil, "{}", "running", 0, "auto")
+	d.MarkDone(id, "detailed result\nline 2\nline 3")
+
+	m := NewQueueModel(d)
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	if m.InDetailView() {
+		t.Error("should not be in detail view initially")
+	}
+
+	// Press v to enter detail view
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if !m.InDetailView() {
+		t.Error("should be in detail view after pressing v")
+	}
+
+	view := m.View()
+	if !contains(view, "Action Detail") {
+		t.Errorf("detail view should contain header, got %q", view)
+	}
+	if !contains(view, "detailed result") {
+		t.Errorf("detail view should contain result text, got %q", view)
+	}
+
+	// Press esc to exit
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.InDetailView() {
+		t.Error("should exit detail view after pressing esc")
+	}
+}
+
+func TestQueueModel_DetailViewNoResult(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	d.InsertAction("check", nil, "{}", "pending", 0, "auto")
+
+	m := NewQueueModel(d)
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Press v on action with no result - should be no-op
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if m.InDetailView() {
+		t.Error("v should be no-op when action has no result")
+	}
+}
+
+func TestQueueModel_DetailViewScroll(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	id, _ := d.InsertAction("check", nil, "{}", "running", 0, "auto")
+	d.MarkDone(id, "line1\nline2\nline3")
+
+	m := NewQueueModel(d)
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if m.detailScroll != 0 {
+		t.Errorf("initial scroll = %d, want 0", m.detailScroll)
+	}
+
+	// Scroll down
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.detailScroll != 1 {
+		t.Errorf("after j, scroll = %d, want 1", m.detailScroll)
+	}
+
+	// Scroll up
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	if m.detailScroll != 0 {
+		t.Errorf("after k, scroll = %d, want 0", m.detailScroll)
+	}
+
+	// Can't go below 0
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	if m.detailScroll != 0 {
+		t.Errorf("scroll should not go below 0, got %d", m.detailScroll)
+	}
+}
+
 func TestQueueModel_SetSize(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

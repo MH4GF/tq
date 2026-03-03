@@ -321,6 +321,114 @@ func TestTasksModel_ChangeStatusNoTask(t *testing.T) {
 	}
 }
 
+func TestTasksModel_InlineResult(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	id, _ := d.InsertAction("check", &taskID, "{}", "running", 0, "auto")
+	d.MarkDone(id, "all passed")
+
+	m := NewTasksModel(d)
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Navigate to the action line (project=0, task=1, action=2)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+
+	view := m.View()
+	if !contains(view, "result: all passed") {
+		t.Errorf("view should contain inline result, got %q", view)
+	}
+}
+
+func TestTasksModel_DetailView(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	id, _ := d.InsertAction("check", &taskID, "{}", "running", 0, "auto")
+	d.MarkDone(id, "detailed output\nline 2")
+
+	m := NewTasksModel(d)
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Navigate to the action line
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+
+	if m.mode != modeNormal {
+		t.Fatalf("mode = %d, want modeNormal", m.mode)
+	}
+
+	// Press v to enter detail view
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if m.mode != modeViewDetail {
+		t.Fatalf("mode = %d, want modeViewDetail", m.mode)
+	}
+
+	view := m.View()
+	if !contains(view, "Action Detail") {
+		t.Errorf("detail view should contain header, got %q", view)
+	}
+	if !contains(view, "detailed output") {
+		t.Errorf("detail view should contain result, got %q", view)
+	}
+
+	// Press esc to return
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.mode != modeNormal {
+		t.Errorf("mode = %d, want modeNormal after esc", m.mode)
+	}
+}
+
+func TestTasksModel_DetailViewNoResultNoOp(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	d.InsertAction("check", &taskID, "{}", "pending", 0, "auto")
+
+	m := NewTasksModel(d)
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Navigate to action line
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+
+	// Press v - should be no-op (no result)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if m.mode != modeNormal {
+		t.Errorf("v on action with no result should be no-op, mode = %d", m.mode)
+	}
+}
+
+func TestTasksModel_DetailViewOnProjectLineNoOp(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	id, _ := d.InsertAction("check", &taskID, "{}", "running", 0, "auto")
+	d.MarkDone(id, "some result")
+
+	m := NewTasksModel(d)
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Cursor at 0 = project line (no action)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if m.mode != modeNormal {
+		t.Errorf("v on project line should be no-op, mode = %d", m.mode)
+	}
+}
+
 func TestTasksModel_SetSize(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

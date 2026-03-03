@@ -96,6 +96,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// When queue tab is in detail view, delegate all keys to it
+		if m.activeTab == tabQueue && m.queue.InDetailView() {
+			var cmd tea.Cmd
+			m.queue, cmd = m.queue.Update(msg)
+			return m, cmd
+		}
 		// When tasks tab is in a sub-mode, delegate all keys to it
 		if m.activeTab == tabTasks && m.tasks.Mode() != modeNormal {
 			var cmd tea.Cmd
@@ -198,18 +204,22 @@ func (m Model) renderTabs() string {
 }
 
 func (m Model) renderHelp() string {
-	help := "j/k: navigate  a: approve  x: reject  tab: switch  r: reload  q: quit"
-	if m.activeTab == tabTasks {
-		switch m.tasks.Mode() {
-		case modePickTemplate, modePickProject, modePickStatus:
-			help = "j/k: select  enter: confirm  esc: cancel"
-		case modeInputInstruction, modeInputTitle, modeInputURL:
-			help = "enter: confirm  esc: cancel"
-		default:
-			help = "j/k: navigate  enter: expand  s: status  c: create task  n: new action  tab: switch  r: reload  q: quit"
+	if m.activeTab == tabQueue {
+		if m.queue.InDetailView() {
+			return styleHelp.Render("j/k: scroll  q/esc: back")
 		}
+		return styleHelp.Render("j/k: navigate  a: approve  x: reject  v: view result  tab: switch  r: reload  q: quit")
 	}
-	return styleHelp.Render(help)
+	switch m.tasks.Mode() {
+	case modePickTemplate, modePickProject, modePickStatus:
+		return styleHelp.Render("j/k: select  enter: confirm  esc: cancel")
+	case modeInputInstruction, modeInputTitle, modeInputURL:
+		return styleHelp.Render("enter: confirm  esc: cancel")
+	case modeViewDetail:
+		return styleHelp.Render("j/k: scroll  q/esc: back")
+	default:
+		return styleHelp.Render("j/k: navigate  enter: expand  s: status  c: create task  n: new action  v: view result  tab: switch  r: reload  q: quit")
+	}
 }
 
 func (m Model) ActiveTab() tab {

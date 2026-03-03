@@ -11,12 +11,14 @@ import (
 )
 
 type QueueModel struct {
-	actions  []db.Action
-	cursor   int
-	width    int
-	height   int
-	database *db.DB
-	message  string
+	actions      []db.Action
+	cursor       int
+	width        int
+	height       int
+	database     *db.DB
+	message      string
+	detailAction *db.Action
+	detailScroll int
 }
 
 func NewQueueModel(database *db.DB) QueueModel {
@@ -53,6 +55,10 @@ func (m QueueModel) selectedAction() *db.Action {
 	return nil
 }
 
+func (m QueueModel) InDetailView() bool {
+	return m.detailAction != nil
+}
+
 func (m QueueModel) Update(msg tea.Msg) (QueueModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case actionsLoadedMsg:
@@ -64,6 +70,9 @@ func (m QueueModel) Update(msg tea.Msg) (QueueModel, tea.Cmd) {
 		m.message = fmt.Sprintf("action #%d %s", msg.id, msg.action)
 		return m, m.loadActions()
 	case tea.KeyMsg:
+		if m.detailAction != nil {
+			return m.updateDetailView(msg), nil
+		}
 		m.message = ""
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("j", "down"))):
@@ -84,9 +93,29 @@ func (m QueueModel) Update(msg tea.Msg) (QueueModel, tea.Cmd) {
 			if a := m.selectedAction(); a != nil && a.Status == "waiting_human" {
 				return m, m.rejectAction(a.ID)
 			}
+		case key.Matches(msg, key.NewBinding(key.WithKeys("v"))):
+			if a := m.selectedAction(); a != nil && a.Result.Valid && a.Result.String != "" {
+				m.detailAction = a
+				m.detailScroll = 0
+			}
 		}
 	}
 	return m, nil
+}
+
+func (m QueueModel) updateDetailView(msg tea.KeyMsg) QueueModel {
+	switch {
+	case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "q"))):
+		m.detailAction = nil
+		m.detailScroll = 0
+	case key.Matches(msg, key.NewBinding(key.WithKeys("j", "down"))):
+		m.detailScroll++
+	case key.Matches(msg, key.NewBinding(key.WithKeys("k", "up"))):
+		if m.detailScroll > 0 {
+			m.detailScroll--
+		}
+	}
+	return m
 }
 
 func (m QueueModel) approveAction(id int64) tea.Cmd {
@@ -108,6 +137,10 @@ func (m QueueModel) rejectAction(id int64) tea.Cmd {
 }
 
 func (m QueueModel) View() string {
+	if m.detailAction != nil {
+		return RenderDetailView(m.detailAction, m.detailScroll, m.width, m.height)
+	}
+
 	if len(m.actions) == 0 {
 		return styleMuted.Render("  No actions in queue")
 	}
@@ -146,13 +179,23 @@ func (m QueueModel) View() string {
 		if i == m.cursor {
 			line = lipgloss.NewStyle().Bold(true).Render(line)
 		}
-		b.WriteString(line + "\n")
 
-		// Show result/reason for selected waiting_human action
-		if i == m.cursor && a.Status == "waiting_human" && a.Result.Valid && a.Result.String != "" {
-			reason := fmt.Sprintf("    %s", styleWaitingHuman.Render("reason: "+a.Result.String))
-			b.WriteString(reason + "\n")
+		if i == m.cursor && a.Result.Valid && a.Result.String != "" {
+			label := "result"
+			if a.Status == "waiting_human" {
+				label = "reason"
+			}
+			rst := StatusStyle(a.Status)
+			lineWidth := lipgloss.Width(line)
+			pad := 2
+			labelLen := len(label) + 2 // "label: "
+			remaining := m.width - lineWidth - pad - labelLen
+			if remaining > 10 {
+				line += "  " + rst.Render(label+": "+truncateResult(a.Result.String, remaining))
+			}
 		}
+
+		b.WriteString(line + "\n")
 	}
 
 	if m.message != "" {
