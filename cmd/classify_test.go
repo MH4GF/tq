@@ -27,6 +27,8 @@ description: classify
 auto: true
 interactive: false
 timeout: 10
+json_schema: |
+  {"type":"object","properties":{"task":{"type":"object","properties":{"id":{"type":"integer"},"project_name":{"type":"string"},"title":{"type":"string"},"url":{"type":"string"}},"required":["id","project_name","title","url"]},"actions":{"type":"array","items":{"type":"object","properties":{"template_id":{"type":"string"},"priority":{"type":"integer"}},"required":["template_id","priority"]}}},"required":["task","actions"]}
 ---
 Classify: {{index .Action.Meta "notification"}}
 Tasks: {{index .Action.Meta "existing_tasks"}}
