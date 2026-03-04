@@ -105,8 +105,8 @@ tq action create --template fix-ci --task 1 --meta '{"pr_url":"https://..."}'
 classify テンプレートがタスクを生成・更新する際に使う。
 
 ```bash
-tq task create --project hearable --title "CI修正" --url "https://..."
-tq task update --id 3 --status done
+tq task create "CI修正" --project hearable --url "https://..."
+tq task update 3 --status done
 ```
 
 ### tq project create / list / delete — プロジェクト管理
