@@ -205,7 +205,7 @@ func (db *DB) CountRunningInteractive() (int, error) {
 
 func (db *DB) ResetToPending(id int64) error {
 	_, err := db.Exec(
-		"UPDATE actions SET status = 'pending', started_at = NULL WHERE id = ?",
+		"UPDATE actions SET status = 'pending', started_at = NULL, session_id = NULL, tmux_pane = NULL WHERE id = ?",
 		id,
 	)
 	return err

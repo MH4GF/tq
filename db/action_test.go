@@ -309,6 +309,8 @@ func TestResetToPending(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	id, _ := d.InsertAction("a", nil, "{}", "running", 0, "auto")
+	d.Exec("UPDATE actions SET session_id = 'sess-1', tmux_pane = 'tq-action-1' WHERE id = ?", id)
+
 	if err := d.ResetToPending(id); err != nil {
 		t.Fatal(err)
 	}
@@ -319,6 +321,12 @@ func TestResetToPending(t *testing.T) {
 	}
 	if a.StartedAt.Valid {
 		t.Error("started_at should be NULL after reset")
+	}
+	if a.SessionID.Valid {
+		t.Error("session_id should be NULL after reset")
+	}
+	if a.TmuxPane.Valid {
+		t.Error("tmux_pane should be NULL after reset")
 	}
 }
 
