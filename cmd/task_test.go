@@ -199,6 +199,112 @@ func TestTaskList_Empty(t *testing.T) {
 	}
 }
 
+func TestTaskUpdate_ProjectOnly(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "task to move", "", "{}")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "update", "--id", "1", "--project", "hearable"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !contains(out, "project: hearable") {
+		t.Errorf("output = %q, want to contain 'project: hearable'", out)
+	}
+
+	task, err := d.GetTask(1)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if task.ProjectID != 2 {
+		t.Errorf("project_id = %d, want 2", task.ProjectID)
+	}
+}
+
+func TestTaskUpdate_StatusAndProject(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "task to update", "", "{}")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "update", "--id", "1", "--status", "done", "--project", "hearable"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !contains(out, "project: hearable") {
+		t.Errorf("output = %q, want to contain 'project: hearable'", out)
+	}
+	if !contains(out, "status: done") {
+		t.Errorf("output = %q, want to contain 'status: done'", out)
+	}
+
+	task, err := d.GetTask(1)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if task.ProjectID != 2 {
+		t.Errorf("project_id = %d, want 2", task.ProjectID)
+	}
+	if task.Status != "done" {
+		t.Errorf("status = %q, want %q", task.Status, "done")
+	}
+}
+
+func TestTaskUpdate_UnknownProject(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "task", "", "{}")
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"task", "update", "--id", "1", "--project", "nonexistent"})
+
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected error for unknown project")
+	}
+}
+
+func TestTaskUpdate_NeitherStatusNorProject(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "task", "", "{}")
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"task", "update", "--id", "1"})
+
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected error when neither --status nor --project is given")
+	}
+}
+
 func contains(s, substr string) bool {
 	return bytes.Contains([]byte(s), []byte(substr))
 }

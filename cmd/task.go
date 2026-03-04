@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -68,20 +69,46 @@ var taskListCmd = &cobra.Command{
 }
 
 var (
-	taskUpdateID     int64
-	taskUpdateStatus string
+	taskUpdateID      int64
+	taskUpdateStatus  string
+	taskUpdateProject string
 )
 
 var taskUpdateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Update a task's status",
+	Short: "Update a task",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := database.UpdateTask(taskUpdateID, taskUpdateStatus); err != nil {
-			return fmt.Errorf("update task: %w", err)
+		if taskUpdateStatus == "" && taskUpdateProject == "" {
+			return fmt.Errorf("at least one of --status or --project is required")
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "task #%d updated (status: %s)\n", taskUpdateID, taskUpdateStatus)
+
+		var updates []string
+
+		if taskUpdateProject != "" {
+			project, err := database.GetProjectByName(taskUpdateProject)
+			if err != nil {
+				return fmt.Errorf("project %q not found: %w", taskUpdateProject, err)
+			}
+			if err := database.UpdateTaskProject(taskUpdateID, project.ID); err != nil {
+				return fmt.Errorf("update task project: %w", err)
+			}
+			updates = append(updates, fmt.Sprintf("project: %s", project.Name))
+		}
+
+		if taskUpdateStatus != "" {
+			if err := database.UpdateTask(taskUpdateID, taskUpdateStatus); err != nil {
+				return fmt.Errorf("update task: %w", err)
+			}
+			updates = append(updates, fmt.Sprintf("status: %s", taskUpdateStatus))
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "task #%d updated (%s)\n", taskUpdateID, joinUpdates(updates))
 		return nil
 	},
+}
+
+func joinUpdates(updates []string) string {
+	return strings.Join(updates, ", ")
 }
 
 func init() {
@@ -94,8 +121,8 @@ func init() {
 
 	taskUpdateCmd.Flags().Int64Var(&taskUpdateID, "id", 0, "Task ID (required)")
 	taskUpdateCmd.Flags().StringVar(&taskUpdateStatus, "status", "", "New status (open|review|done|blocked|archived)")
+	taskUpdateCmd.Flags().StringVar(&taskUpdateProject, "project", "", "Project name")
 	taskUpdateCmd.MarkFlagRequired("id")
-	taskUpdateCmd.MarkFlagRequired("status")
 
 	taskListCmd.Flags().StringVar(&taskListProject, "project", "", "Filter by project name")
 	taskListCmd.Flags().StringVar(&taskListStatus, "status", "", "Filter by status")

@@ -56,6 +56,31 @@ func TestUpdateTask(t *testing.T) {
 	}
 }
 
+func TestUpdateTaskProject(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	id, err := d.InsertTask(1, "task to move", "", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.UpdateTaskProject(id, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	task, err := d.GetTask(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.ProjectID != 2 {
+		t.Errorf("expected project_id 2, got %d", task.ProjectID)
+	}
+	if !task.UpdatedAt.Valid {
+		t.Error("expected updated_at to be set")
+	}
+}
+
 func TestGetTask_NotFound(t *testing.T) {
 	d := testutil.NewTestDB(t)
 

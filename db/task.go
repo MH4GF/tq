@@ -45,6 +45,14 @@ func (db *DB) UpdateTask(id int64, status string) error {
 	return err
 }
 
+func (db *DB) UpdateTaskProject(id int64, projectID int64) error {
+	_, err := db.Exec(
+		"UPDATE tasks SET project_id = ?, updated_at = datetime('now') WHERE id = ?",
+		projectID, id,
+	)
+	return err
+}
+
 func (db *DB) GetTask(id int64) (*Task, error) {
 	row := db.QueryRow("SELECT id, project_id, title, url, metadata, status, created_at, updated_at FROM tasks WHERE id = ?", id)
 	t := &Task{}
