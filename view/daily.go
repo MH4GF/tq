@@ -92,9 +92,13 @@ func generateProjectSection(database *db.DB, project db.Project, dateFilter stri
 			}
 
 			if dateFilter != "" {
-				actions = db.FilterByDate(actions, dateFilter)
-				if len(actions) == 0 && t.Status == "done" {
-					continue
+				if t.Status == "done" {
+					actions = db.FilterByDate(actions, dateFilter)
+					if len(actions) == 0 && !t.MatchesDate(dateFilter) {
+						continue
+					}
+				} else {
+					actions = db.FilterForOpenTask(actions, dateFilter)
 				}
 			}
 

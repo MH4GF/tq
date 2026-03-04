@@ -333,8 +333,9 @@ func TestTasksModel_DateFilter(t *testing.T) {
 	d.InsertAction("old-action", &taskID2, "{}", "pending", 0, "auto")
 	d.UpdateTask(taskID2, "done")
 
-	// Set old-action's created_at to a different date
+	// Set old-action and old task dates to a different date
 	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE template_id = 'old-action'")
+	d.Exec(fmt.Sprintf("UPDATE tasks SET created_at = '2025-01-01 00:00:00', updated_at = '2025-01-01 00:00:00' WHERE id = %d", taskID2))
 
 	// Get today's date from the first action
 	actions, _ := d.ListActions("", nil)

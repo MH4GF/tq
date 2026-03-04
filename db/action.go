@@ -35,6 +35,21 @@ func (a Action) MatchesDate(date string) bool {
 	return false
 }
 
+func FilterForOpenTask(actions []Action, date string) []Action {
+	if date == "" {
+		return actions
+	}
+	var filtered []Action
+	for _, a := range actions {
+		if a.Status == "pending" || a.Status == "running" || a.Status == "waiting_human" {
+			filtered = append(filtered, a)
+		} else if a.MatchesDate(date) {
+			filtered = append(filtered, a)
+		}
+	}
+	return filtered
+}
+
 func FilterByDate(actions []Action, date string) []Action {
 	if date == "" {
 		return actions

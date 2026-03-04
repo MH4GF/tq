@@ -325,6 +325,10 @@ func TestGenerate_DateFilter_DoneTaskExcluded(t *testing.T) {
 	if _, err := d.Exec("UPDATE actions SET created_at = '2026-01-01 00:00:00'"); err != nil {
 		t.Fatal(err)
 	}
+	// Task itself also has old dates
+	if _, err := d.Exec("UPDATE tasks SET created_at = '2026-01-01 00:00:00', updated_at = '2026-01-01 00:00:00'"); err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := Generate(d, "2026-12-25")
 	if err != nil {
@@ -332,7 +336,137 @@ func TestGenerate_DateFilter_DoneTaskExcluded(t *testing.T) {
 	}
 
 	if strings.Contains(result, "Done task no match") {
-		t.Errorf("done task with no matching actions should be excluded, got:\n%s", result)
+		t.Errorf("done task with no matching actions and no matching task dates should be excluded, got:\n%s", result)
+	}
+}
+
+func TestGenerate_DateFilter_DoneTaskShownByTaskDate(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	p, err := d.GetProjectByName("immedio")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	taskID, err := d.InsertTask(p.ID, "Done today no actions", "", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.UpdateTask(taskID, "done"); err != nil {
+		t.Fatal(err)
+	}
+	// updated_at is set to now by UpdateTask, set it to our target date
+	if _, err := d.Exec(fmt.Sprintf("UPDATE tasks SET updated_at = '2026-03-04 15:00:00' WHERE id = %d", taskID)); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Generate(d, "2026-03-04")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(result, "Done today no actions") {
+		t.Errorf("done task updated today should be shown even with 0 matching actions, got:\n%s", result)
+	}
+}
+
+func TestGenerate_DateFilter_OpenTaskShowsActiveActions(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	p, err := d.GetProjectByName("immedio")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	taskID, err := d.InsertTask(p.ID, "Open task with old actions", "", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// pending action with old date
+	if _, err := d.InsertAction("review-pr", &taskID, "{}", "pending", 0, "auto"); err != nil {
+		t.Fatal(err)
+	}
+	// running action with old date
+	if _, err := d.InsertAction("run-tests", &taskID, "{}", "running", 0, "auto"); err != nil {
+		t.Fatal(err)
+	}
+	// waiting_human action with old date
+	if _, err := d.InsertAction("approve", &taskID, "{}", "waiting_human", 0, "auto"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set all actions to old date
+	if _, err := d.Exec("UPDATE actions SET created_at = '2026-01-01 00:00:00'"); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Generate(d, "2026-12-25")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(result, "Open task with old actions") {
+		t.Errorf("open task should be shown, got:\n%s", result)
+	}
+	if !strings.Contains(result, "review-pr") {
+		t.Errorf("pending action should be shown regardless of date, got:\n%s", result)
+	}
+	if !strings.Contains(result, "run-tests") {
+		t.Errorf("running action should be shown regardless of date, got:\n%s", result)
+	}
+	if !strings.Contains(result, "approve") {
+		t.Errorf("waiting_human action should be shown regardless of date, got:\n%s", result)
+	}
+}
+
+func TestGenerate_DateFilter_OpenTaskFiltersDoneActions(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	p, err := d.GetProjectByName("immedio")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	taskID, err := d.InsertTask(p.ID, "Open task mixed actions", "", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// pending action (should always show)
+	if _, err := d.InsertAction("deploy", &taskID, "{}", "pending", 0, "auto"); err != nil {
+		t.Fatal(err)
+	}
+	// done action with old date (should be filtered out)
+	doneID, err := d.InsertAction("review-pr", &taskID, "{}", "done", 0, "auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.MarkDone(doneID, "ok"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set all actions to old date
+	if _, err := d.Exec("UPDATE actions SET created_at = '2026-01-01 00:00:00', completed_at = CASE WHEN completed_at IS NOT NULL THEN '2026-01-01 12:00:00' ELSE NULL END"); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Generate(d, "2026-12-25")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(result, "Open task mixed actions") {
+		t.Errorf("open task should be shown, got:\n%s", result)
+	}
+	if !strings.Contains(result, "deploy") {
+		t.Errorf("pending action should be shown, got:\n%s", result)
+	}
+	if strings.Contains(result, "review-pr") {
+		t.Errorf("done action with non-matching date should be filtered out, got:\n%s", result)
 	}
 }
 

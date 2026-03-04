@@ -1,6 +1,9 @@
 package db
 
-import "database/sql"
+import (
+	"database/sql"
+	"strings"
+)
 
 type Task struct {
 	ID        int64
@@ -11,6 +14,16 @@ type Task struct {
 	Status    string
 	CreatedAt string
 	UpdatedAt sql.NullString
+}
+
+func (t Task) MatchesDate(date string) bool {
+	if strings.HasPrefix(t.CreatedAt, date) {
+		return true
+	}
+	if t.UpdatedAt.Valid && strings.HasPrefix(t.UpdatedAt.String, date) {
+		return true
+	}
+	return false
 }
 
 func (db *DB) InsertTask(projectID int64, title, url, metadata string) (int64, error) {

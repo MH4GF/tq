@@ -383,6 +383,53 @@ func TestAction_MatchesDate(t *testing.T) {
 	}
 }
 
+func TestFilterForOpenTask(t *testing.T) {
+	actions := []db.Action{
+		{ID: 1, Status: "pending", CreatedAt: "2026-01-01 00:00:00"},
+		{ID: 2, Status: "running", CreatedAt: "2026-01-01 00:00:00"},
+		{ID: 3, Status: "waiting_human", CreatedAt: "2026-01-01 00:00:00"},
+		{ID: 4, Status: "done", CreatedAt: "2026-01-01 00:00:00", CompletedAt: sql.NullString{String: "2026-03-04 10:00:00", Valid: true}},
+		{ID: 5, Status: "failed", CreatedAt: "2026-01-01 00:00:00", CompletedAt: sql.NullString{String: "2026-01-01 12:00:00", Valid: true}},
+		{ID: 6, Status: "done", CreatedAt: "2026-03-04 09:00:00"},
+	}
+
+	filtered := db.FilterForOpenTask(actions, "2026-03-04")
+
+	ids := make(map[int64]bool)
+	for _, a := range filtered {
+		ids[a.ID] = true
+	}
+
+	// pending/running/waiting_human always included
+	for _, id := range []int64{1, 2, 3} {
+		if !ids[id] {
+			t.Errorf("expected action %d (non-terminal) to be included", id)
+		}
+	}
+	// done matching date
+	if !ids[4] {
+		t.Error("expected action 4 (done, date match) to be included")
+	}
+	// done matching by created_at
+	if !ids[6] {
+		t.Error("expected action 6 (done, created_at match) to be included")
+	}
+	// failed not matching date
+	if ids[5] {
+		t.Error("expected action 5 (failed, no date match) to be excluded")
+	}
+}
+
+func TestFilterForOpenTask_EmptyDate(t *testing.T) {
+	actions := []db.Action{
+		{ID: 1, Status: "done", CreatedAt: "2026-01-01 00:00:00"},
+	}
+	filtered := db.FilterForOpenTask(actions, "")
+	if len(filtered) != 1 {
+		t.Errorf("expected all actions returned for empty date, got %d", len(filtered))
+	}
+}
+
 func TestGetAction_NotFound(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

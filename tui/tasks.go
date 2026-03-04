@@ -139,9 +139,13 @@ func (m TasksModel) loadTasks() tea.Cmd {
 					continue
 				}
 				if m.dateFilter != "" {
-					actions = db.FilterByDate(actions, m.dateFilter)
-					if len(actions) == 0 && t.Status == "done" {
-						continue
+					if t.Status == "done" {
+						actions = db.FilterByDate(actions, m.dateFilter)
+						if len(actions) == 0 && !t.MatchesDate(m.dateFilter) {
+							continue
+						}
+					} else {
+						actions = db.FilterForOpenTask(actions, m.dateFilter)
 					}
 				}
 				nodes = append(nodes, taskNode{task: t, actions: actions})
