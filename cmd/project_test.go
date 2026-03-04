@@ -147,7 +147,7 @@ func TestProjectDelete(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"project", "delete", "--id", "1"})
+	root.SetArgs([]string{"project", "delete", "1"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -172,7 +172,7 @@ func TestProjectDelete_NotFound(t *testing.T) {
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"project", "delete", "--id", "999"})
+	root.SetArgs([]string{"project", "delete", "999"})
 
 	if err := root.Execute(); err == nil {
 		t.Fatal("expected error for non-existent project")

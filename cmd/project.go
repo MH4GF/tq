@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strconv"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -56,9 +57,15 @@ var projectListCmd = &cobra.Command{
 var projectDeleteID int64
 
 var projectDeleteCmd = &cobra.Command{
-	Use:   "delete",
+	Use:   "delete <ID>",
 	Short: "Delete a project",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		var err error
+		projectDeleteID, err = strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid project ID: %w", err)
+		}
 		if err := database.DeleteProject(projectDeleteID); err != nil {
 			return fmt.Errorf("delete project: %w", err)
 		}
@@ -73,9 +80,6 @@ func init() {
 	projectCreateCmd.Flags().StringVar(&projectCreateMeta, "metadata", "{}", "Metadata JSON")
 	projectCreateCmd.MarkFlagRequired("name")
 	projectCreateCmd.MarkFlagRequired("work-dir")
-
-	projectDeleteCmd.Flags().Int64Var(&projectDeleteID, "id", 0, "Project ID (required)")
-	projectDeleteCmd.MarkFlagRequired("id")
 
 	projectCmd.AddCommand(projectCreateCmd)
 	projectCmd.AddCommand(projectListCmd)

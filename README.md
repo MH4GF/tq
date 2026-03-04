@@ -97,7 +97,7 @@ tq --dir {{.TQDir}} action done {{.Action.ID}} '{"result":"<要約>"}'
 classify テンプレートが通知からアクションを生成する際に使う。
 
 ```bash
-tq action create --template fix-ci --task 1 --meta '{"pr_url":"https://..."}'
+tq action create fix-ci --task 1 --meta '{"pr_url":"https://..."}'
 ```
 
 ### tq task create / update — タスク操作
@@ -114,7 +114,7 @@ tq task update 3 --status done
 ```bash
 tq project create --name hearable --work-dir ~/ghq/github.com/thehearableapp/hearable-app --metadata '{"gh_owner":"thehearableapp","repos":["thehearableapp/hearable-app"]}'
 tq project list
-tq project delete --id 3
+tq project delete 3
 ```
 
 ### その他
@@ -126,7 +126,7 @@ tq action reject <id>            # waiting_human → failed
 tq task list                     # タスク一覧
 tq project list                  # プロジェクト一覧
 tq project create ...            # プロジェクト作成
-tq project delete --id <id>      # プロジェクト削除
+tq project delete <id>           # プロジェクト削除
 tq status                        # キュー集計
 tq dispatch                      # 1アクション処理
 tq run                           # Ralph Loop（継続 dispatch）

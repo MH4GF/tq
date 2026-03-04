@@ -19,9 +19,11 @@ var (
 )
 
 var addCmd = &cobra.Command{
-	Use:   "create",
+	Use:   "create <TEMPLATE>",
 	Short: "Create an action",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		addTemplate = args[0]
 		status := addStatus
 		if status == "" {
 			templatesDir := filepath.Join(tqDirResolved, "templates")
@@ -60,13 +62,11 @@ var addCmd = &cobra.Command{
 }
 
 func init() {
-	addCmd.Flags().StringVar(&addTemplate, "template", "", "Template ID (required)")
 	addCmd.Flags().Int64Var(&addTask, "task", 0, "Task ID")
 	addCmd.Flags().StringVar(&addMeta, "meta", "{}", "Metadata JSON")
 	addCmd.Flags().IntVar(&addPriority, "priority", 0, "Priority")
 	addCmd.Flags().StringVar(&addSource, "source", "human", "Source")
 	addCmd.Flags().StringVar(&addStatus, "status", "", "Override status (pending|done|running|failed|waiting_human)")
 	addCmd.Flags().BoolVar(&addForce, "force", false, "Skip duplicate check")
-	addCmd.MarkFlagRequired("template")
 	actionCmd.AddCommand(addCmd)
 }

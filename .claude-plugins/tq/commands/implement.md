@@ -51,7 +51,7 @@ allowed-tools:
 ### 4. アクション作成
 
 ```bash
-tq --dir "$TQ_DIR" action create --template implement --task <task_id> --meta '{"instruction":"<構造化されたプロンプト>"}' --source human --status pending
+tq --dir "$TQ_DIR" action create implement --task <task_id> --meta '{"instruction":"<構造化されたプロンプト>"}' --source human --status pending
 ```
 
 - `--task <task_id>` は task_id が特定できた場合のみ付与する

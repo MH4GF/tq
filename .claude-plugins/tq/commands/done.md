@@ -22,7 +22,7 @@ tqアクションの完了報告を行う。セッション中の作業内容を
 いずれでも特定できない場合、初回プロンプトから task_id と template を読み取り、アクションを作成してその ID を使用する:
 
 ```bash
-tq --dir "$TQ_DIR" action create --task <task_id> --template <template> --source human --status running
+tq --dir "$TQ_DIR" action create <template> --task <task_id> --source human --status running
 ```
 
 初回プロンプトに task_id や template の情報もない場合は、「action_id を特定できませんでした。`/tq:done <action_id>` の形式で指定してください。」と伝えて終了する。

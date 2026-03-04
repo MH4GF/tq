@@ -40,7 +40,7 @@ Review this PR.
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "--template", "review-pr", "--task", "1", "--priority", "5"})
+	root.SetArgs([]string{"action", "create", "review-pr", "--task", "1", "--priority", "5"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -90,7 +90,7 @@ Manual only.
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "--template", "manual-task", "--task", "1"})
+	root.SetArgs([]string{"action", "create", "manual-task", "--task", "1"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -124,7 +124,7 @@ Review.
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "--template", "review-pr", "--task", "1"})
+	root.SetArgs([]string{"action", "create", "review-pr", "--task", "1"})
 
 	err := root.Execute()
 	if err == nil {
@@ -160,7 +160,7 @@ Implement.
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "--template", "implement", "--task", "1"})
+	root.SetArgs([]string{"action", "create", "implement", "--task", "1"})
 
 	err := root.Execute()
 	if err == nil {
@@ -193,7 +193,7 @@ Review.
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "--template", "review-pr", "--task", "1", "--force"})
+	root.SetArgs([]string{"action", "create", "review-pr", "--task", "1", "--force"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -214,9 +214,9 @@ func TestAdd_MissingTemplate(t *testing.T) {
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"action", "create", "--task", "1"})
+	root.SetArgs([]string{"action", "create"})
 
 	if err := root.Execute(); err == nil {
-		t.Fatal("expected error for missing --template flag")
+		t.Fatal("expected error for missing template argument")
 	}
 }
