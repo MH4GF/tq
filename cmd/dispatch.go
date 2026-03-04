@@ -33,6 +33,26 @@ func SetWorkerFactory(f func(string) dispatch.Worker) {
 	activeWorkerFactory = f
 }
 
+var defaultInteractiveWorkerFactory = func(tqDir string) dispatch.Worker {
+	return &dispatch.InteractiveWorker{
+		Runner: &dispatch.ExecRunner{},
+		TQDir:  tqDir,
+	}
+}
+
+var activeInteractiveWorkerFactory func(string) dispatch.Worker
+
+func getInteractiveWorkerFactory() func(string) dispatch.Worker {
+	if activeInteractiveWorkerFactory != nil {
+		return activeInteractiveWorkerFactory
+	}
+	return defaultInteractiveWorkerFactory
+}
+
+func SetInteractiveWorkerFactory(f func(string) dispatch.Worker) {
+	activeInteractiveWorkerFactory = f
+}
+
 var dispatchCmd = &cobra.Command{
 	Use:   "dispatch",
 	Short: "Dispatch next pending action",
@@ -55,12 +75,6 @@ var dispatchCmd = &cobra.Command{
 			return fmt.Errorf("load template: %w", err)
 		}
 
-		if tmpl.Config.Interactive {
-			_ = database.MarkWaitingHuman(action.ID, "interactive not supported yet")
-			fmt.Fprintf(cmd.OutOrStdout(), "action #%d: interactive not supported yet, marked waiting_human\n", action.ID)
-			return nil
-		}
-
 		promptData, err := buildPromptData(action)
 		if err != nil {
 			_ = database.MarkFailed(action.ID, fmt.Sprintf("build prompt data: %v", err))
@@ -76,6 +90,18 @@ var dispatchCmd = &cobra.Command{
 		workDir := tqDirResolved
 		if promptData.Project.WorkDir != "" {
 			workDir = promptData.Project.WorkDir
+		}
+
+		if tmpl.Config.Interactive {
+			worker := getInteractiveWorkerFactory()(tqDirResolved)
+			result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID)
+			if err != nil {
+				_ = database.MarkFailed(action.ID, err.Error())
+				fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", action.ID, err)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched interactively: %s\n", action.ID, result)
+			return nil
 		}
 
 		worker := getWorkerFactory()(tqDirResolved)

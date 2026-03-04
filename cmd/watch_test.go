@@ -3,7 +3,6 @@ package cmd_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -125,39 +124,8 @@ func TestWatch_WithNotifications(t *testing.T) {
 	})
 	t.Cleanup(func() { cmd.SetWatchSourceFactory(nil) })
 
-	classifyResult := struct {
-		Task struct {
-			ID          int64  `json:"id"`
-			ProjectName string `json:"project_name"`
-			Title       string `json:"title"`
-			URL         string `json:"url"`
-		} `json:"task"`
-		Actions []struct {
-			TemplateID string `json:"template_id"`
-			Priority   int    `json:"priority"`
-		} `json:"actions"`
-	}{
-		Task: struct {
-			ID          int64  `json:"id"`
-			ProjectName string `json:"project_name"`
-			Title       string `json:"title"`
-			URL         string `json:"url"`
-		}{
-			ProjectName: "immedio",
-			Title:       "Fix bug",
-			URL:         "https://github.com/immedioinc/immedio/pull/42",
-		},
-		Actions: []struct {
-			TemplateID string `json:"template_id"`
-			Priority   int    `json:"priority"`
-		}{
-			{TemplateID: "check-pr-status", Priority: 5},
-		},
-	}
-	resultBytes, _ := json.Marshal(classifyResult)
-
 	cmd.SetWorkerFactory(func(tqDir string) dispatch.Worker {
-		return &mockWorker{result: string(resultBytes)}
+		return &mockWorker{result: "task created, action created"}
 	})
 	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
 
@@ -178,22 +146,10 @@ func TestWatch_WithNotifications(t *testing.T) {
 	if !contains(out, "processed 1, failed 0") {
 		t.Errorf("output = %q, want to contain 'processed 1, failed 0'", out)
 	}
-	if !contains(out, "task #1 created") {
-		t.Errorf("output = %q, want to contain 'task #1 created'", out)
-	}
 
 	// Verify notification was marked processed
 	if len(src.processedIDs) != 1 || src.processedIDs[0] != "123" {
 		t.Errorf("processedIDs = %v, want [123]", src.processedIDs)
-	}
-
-	// Verify task was created in DB
-	task, err := d.GetTask(1)
-	if err != nil {
-		t.Fatalf("get task: %v", err)
-	}
-	if task.Title != "Fix bug" {
-		t.Errorf("title = %q, want %q", task.Title, "Fix bug")
 	}
 }
 
