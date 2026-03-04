@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -21,9 +22,11 @@ var (
 )
 
 var taskCreateCmd = &cobra.Command{
-	Use:   "create",
+	Use:   "create <TITLE>",
 	Short: "Create a new task",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		taskTitle = args[0]
 		project, err := database.GetProjectByName(taskProject)
 		if err != nil {
 			return fmt.Errorf("project %q not found: %w", taskProject, err)
@@ -75,9 +78,15 @@ var (
 )
 
 var taskUpdateCmd = &cobra.Command{
-	Use:   "update",
+	Use:   "update <ID>",
 	Short: "Update a task",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		var err error
+		taskUpdateID, err = strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid task ID: %w", err)
+		}
 		if taskUpdateStatus == "" && taskUpdateProject == "" {
 			return fmt.Errorf("at least one of --status or --project is required")
 		}
@@ -113,16 +122,12 @@ func joinUpdates(updates []string) string {
 
 func init() {
 	taskCreateCmd.Flags().StringVar(&taskProject, "project", "", "Project name (required)")
-	taskCreateCmd.Flags().StringVar(&taskTitle, "title", "", "Task title (required)")
 	taskCreateCmd.Flags().StringVar(&taskURL, "url", "", "Related URL")
 	taskCreateCmd.Flags().StringVar(&taskMeta, "meta", "{}", "Metadata JSON")
 	taskCreateCmd.MarkFlagRequired("project")
-	taskCreateCmd.MarkFlagRequired("title")
 
-	taskUpdateCmd.Flags().Int64Var(&taskUpdateID, "id", 0, "Task ID (required)")
 	taskUpdateCmd.Flags().StringVar(&taskUpdateStatus, "status", "", "New status (open|review|done|blocked|archived)")
 	taskUpdateCmd.Flags().StringVar(&taskUpdateProject, "project", "", "Project name")
-	taskUpdateCmd.MarkFlagRequired("id")
 
 	taskListCmd.Flags().StringVar(&taskListProject, "project", "", "Filter by project name")
 	taskListCmd.Flags().StringVar(&taskListStatus, "status", "", "Filter by status")

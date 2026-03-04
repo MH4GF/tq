@@ -18,7 +18,7 @@ func TestTaskCreate(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"task", "create", "--project", "immedio", "--title", "test task", "--url", "https://example.com"})
+	root.SetArgs([]string{"task", "create", "test task", "--project", "immedio", "--url", "https://example.com"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -53,7 +53,7 @@ func TestTaskCreate_MissingProject(t *testing.T) {
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "create", "--title", "test"})
+	root.SetArgs([]string{"task", "create", "test"})
 
 	if err := root.Execute(); err == nil {
 		t.Fatal("expected error for missing --project flag")
@@ -69,7 +69,7 @@ func TestTaskCreate_UnknownProject(t *testing.T) {
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "create", "--project", "nonexistent", "--title", "test"})
+	root.SetArgs([]string{"task", "create", "test", "--project", "nonexistent"})
 
 	if err := root.Execute(); err == nil {
 		t.Fatal("expected error for unknown project")
@@ -88,7 +88,7 @@ func TestTaskCreate_MissingTitle(t *testing.T) {
 	root.SetArgs([]string{"task", "create", "--project", "immedio"})
 
 	if err := root.Execute(); err == nil {
-		t.Fatal("expected error for missing --title flag")
+		t.Fatal("expected error for missing title argument")
 	}
 }
 
@@ -211,7 +211,7 @@ func TestTaskUpdate_ProjectOnly(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"task", "update", "--id", "1", "--project", "hearable"})
+	root.SetArgs([]string{"task", "update", "1", "--project", "hearable"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -243,7 +243,7 @@ func TestTaskUpdate_StatusAndProject(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"task", "update", "--id", "1", "--status", "done", "--project", "hearable"})
+	root.SetArgs([]string{"task", "update", "1", "--status", "done", "--project", "hearable"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -280,7 +280,7 @@ func TestTaskUpdate_UnknownProject(t *testing.T) {
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "update", "--id", "1", "--project", "nonexistent"})
+	root.SetArgs([]string{"task", "update", "1", "--project", "nonexistent"})
 
 	if err := root.Execute(); err == nil {
 		t.Fatal("expected error for unknown project")
@@ -298,7 +298,7 @@ func TestTaskUpdate_NeitherStatusNorProject(t *testing.T) {
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "update", "--id", "1"})
+	root.SetArgs([]string{"task", "update", "1"})
 
 	if err := root.Execute(); err == nil {
 		t.Fatal("expected error when neither --status nor --project is given")
