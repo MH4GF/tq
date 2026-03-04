@@ -17,7 +17,7 @@ func TestProjectCreate(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"project", "create", "--name", "myapp", "--work-dir", "/tmp/myapp", "--metadata", `{"key":"val"}`})
+	root.SetArgs([]string{"project", "create", "myapp", "/tmp/myapp", "--metadata", `{"key":"val"}`})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -40,7 +40,7 @@ func TestProjectCreate(t *testing.T) {
 	}
 }
 
-func TestProjectCreate_MissingName(t *testing.T) {
+func TestProjectCreate_MissingArgs(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	cmd.SetDB(d)
 	cmd.ResetForTest()
@@ -48,25 +48,10 @@ func TestProjectCreate_MissingName(t *testing.T) {
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"project", "create", "--work-dir", "/tmp"})
+	root.SetArgs([]string{"project", "create", "myapp"})
 
 	if err := root.Execute(); err == nil {
-		t.Fatal("expected error for missing --name flag")
-	}
-}
-
-func TestProjectCreate_MissingWorkDir(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"project", "create", "--name", "myapp"})
-
-	if err := root.Execute(); err == nil {
-		t.Fatal("expected error for missing --work-dir flag")
+		t.Fatal("expected error for missing positional arguments")
 	}
 }
 
@@ -80,7 +65,7 @@ func TestProjectCreate_DuplicateName(t *testing.T) {
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"project", "create", "--name", "dup", "--work-dir", "/tmp/dup2"})
+	root.SetArgs([]string{"project", "create", "dup", "/tmp/dup2"})
 
 	if err := root.Execute(); err == nil {
 		t.Fatal("expected error for duplicate project name")

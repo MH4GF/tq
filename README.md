@@ -15,7 +15,7 @@ cd tq && go install .
 初回セットアップ時にプロジェクトを登録する:
 
 ```bash
-tq project create --name myapp --work-dir ~/ghq/github.com/org/myapp --metadata '{"gh_owner":"org","repos":["org/myapp"]}'
+tq project create myapp ~/ghq/github.com/org/myapp --metadata '{"gh_owner":"org","repos":["org/myapp"]}'
 ```
 
 登録済みプロジェクトの確認:
@@ -112,7 +112,7 @@ tq task update 3 --status done
 ### tq project create / list / delete — プロジェクト管理
 
 ```bash
-tq project create --name hearable --work-dir ~/ghq/github.com/thehearableapp/hearable-app --metadata '{"gh_owner":"thehearableapp","repos":["thehearableapp/hearable-app"]}'
+tq project create hearable ~/ghq/github.com/thehearableapp/hearable-app --metadata '{"gh_owner":"thehearableapp","repos":["thehearableapp/hearable-app"]}'
 tq project list
 tq project delete 3
 ```
@@ -125,7 +125,7 @@ tq action reset <id>             # failed/waiting_human → pending
 tq action reject <id>            # waiting_human → failed
 tq task list                     # タスク一覧
 tq project list                  # プロジェクト一覧
-tq project create ...            # プロジェクト作成
+tq project create <name> <work-dir>  # プロジェクト作成
 tq project delete <id>           # プロジェクト削除
 tq status                        # キュー集計
 tq dispatch                      # 1アクション処理

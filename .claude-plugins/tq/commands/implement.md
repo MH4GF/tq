@@ -7,7 +7,7 @@ allowed-tools:
 
 # tq action create (implement)
 
-ユーザーの実装指示を構造化されたプロンプトとして整理し、`tq action create --template implement` で worker が自動ピックアップする pending アクションを作成する。
+ユーザーの実装指示を構造化されたプロンプトとして整理し、`tq action create implement` で worker が自動ピックアップする pending アクションを作成する。
 
 ## 手順
 

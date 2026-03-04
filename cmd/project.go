@@ -20,9 +20,12 @@ var (
 )
 
 var projectCreateCmd = &cobra.Command{
-	Use:   "create",
+	Use:   "create <NAME> <WORK_DIR>",
 	Short: "Create a new project",
+	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		projectCreateName = args[0]
+		projectCreateWorkDir = args[1]
 		id, err := database.InsertProject(projectCreateName, projectCreateWorkDir, projectCreateMeta)
 		if err != nil {
 			return fmt.Errorf("insert project: %w", err)
@@ -75,11 +78,7 @@ var projectDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	projectCreateCmd.Flags().StringVar(&projectCreateName, "name", "", "Project name (required)")
-	projectCreateCmd.Flags().StringVar(&projectCreateWorkDir, "work-dir", "", "Working directory (required)")
 	projectCreateCmd.Flags().StringVar(&projectCreateMeta, "metadata", "{}", "Metadata JSON")
-	projectCreateCmd.MarkFlagRequired("name")
-	projectCreateCmd.MarkFlagRequired("work-dir")
 
 	projectCmd.AddCommand(projectCreateCmd)
 	projectCmd.AddCommand(projectListCmd)
