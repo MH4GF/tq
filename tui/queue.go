@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -94,6 +95,10 @@ func (m QueueModel) Update(msg tea.Msg) (QueueModel, tea.Cmd) {
 			if a := m.selectedAction(); a != nil && a.Status == "waiting_human" {
 				return m, m.rejectAction(a.ID)
 			}
+		case key.Matches(msg, key.NewBinding(key.WithKeys("o"))):
+			if a := m.selectedAction(); a != nil && a.SessionID.Valid {
+				return m, m.attachAction(a)
+			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("v"))):
 			if a := m.selectedAction(); a != nil && a.Result.Valid && a.Result.String != "" {
 				m.detailAction = a
@@ -125,6 +130,16 @@ func (m QueueModel) resetAction(id int64) tea.Cmd {
 			return actionUpdatedMsg{id: id, action: "reset failed"}
 		}
 		return actionUpdatedMsg{id: id, action: "reset → pending"}
+	}
+}
+
+func (m QueueModel) attachAction(a *db.Action) tea.Cmd {
+	return func() tea.Msg {
+		target := fmt.Sprintf("%s:%s", a.SessionID.String, a.TmuxPane.String)
+		if err := exec.Command("tmux", "select-window", "-t", target).Run(); err != nil {
+			return actionUpdatedMsg{id: a.ID, action: fmt.Sprintf("attach failed: %v", err)}
+		}
+		return nil
 	}
 }
 

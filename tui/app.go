@@ -224,7 +224,7 @@ func (m Model) renderHelp() string {
 		if m.queue.InDetailView() {
 			return styleHelp.Render("j/k: scroll  q/esc: back")
 		}
-		return styleHelp.Render("j/k: navigate  a: reset  x: reject  v: view result  tab: switch  r: reload  q: quit")
+		return styleHelp.Render("j/k: navigate  a: reset  x: reject  o: attach  v: view result  tab: switch  r: reload  q: quit")
 	}
 	switch m.tasks.Mode() {
 	case modePickTemplate, modePickProject, modePickStatus:
