@@ -85,6 +85,9 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 	if !strings.Contains(argsStr, "TQ_DIR=/tmp/tq") {
 		t.Errorf("call[1] args = %v, want to contain TQ_DIR=/tmp/tq", c.args)
 	}
+	if !strings.Contains(argsStr, "TQ_ACTION_ID=42") {
+		t.Errorf("call[1] args = %v, want to contain TQ_ACTION_ID=42", c.args)
+	}
 	if strings.Contains(argsStr, "--tmux") {
 		t.Errorf("call[1] args = %v, must NOT contain --tmux", c.args)
 	}

@@ -75,6 +75,17 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 	if !foundTQDir {
 		t.Errorf("env missing TQ_DIR=/tmp/tq, got %v", mock.GotEnv)
 	}
+
+	foundActionID := false
+	for _, e := range mock.GotEnv {
+		if e == "TQ_ACTION_ID=1" {
+			foundActionID = true
+			break
+		}
+	}
+	if !foundActionID {
+		t.Errorf("env missing TQ_ACTION_ID=1, got %v", mock.GotEnv)
+	}
 }
 
 func TestNonInteractiveWorker_Execute_Error(t *testing.T) {

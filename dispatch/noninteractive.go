@@ -27,7 +27,7 @@ func (w *NonInteractiveWorker) Execute(ctx context.Context, prompt string, cfg t
 		args = append(args, "--json-schema", strings.TrimSpace(cfg.JSONSchema))
 	}
 	args = append(args, "--allowedTools", cfg.AllowedTools)
-	env := []string{"TQ_DIR=" + w.TQDir}
+	env := []string{"TQ_DIR=" + w.TQDir, fmt.Sprintf("TQ_ACTION_ID=%d", actionID)}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(cfg.Timeout)*time.Second)
 	defer cancel()
