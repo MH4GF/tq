@@ -23,6 +23,11 @@ var addCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		addTemplate = args[0]
+
+		if addTask <= 0 {
+			return fmt.Errorf("--task flag is required")
+		}
+
 		status := addStatus
 		if status == "" {
 			templatesDir := filepath.Join(tqDirResolved, "templates")
@@ -36,18 +41,15 @@ var addCmd = &cobra.Command{
 			}
 		}
 
-		var taskIDPtr *int64
-		if addTask > 0 {
-			taskIDPtr = &addTask
+		taskIDPtr := &addTask
 
-			if !addForce {
-				dup, err := database.HasActiveAction(addTask, addTemplate)
-				if err != nil {
-					return fmt.Errorf("check duplicates: %w", err)
-				}
-				if dup {
-					return fmt.Errorf("blocked: active action already exists for task %d template %s (use --force to override)", addTask, addTemplate)
-				}
+		if !addForce {
+			dup, err := database.HasActiveAction(addTask, addTemplate)
+			if err != nil {
+				return fmt.Errorf("check duplicates: %w", err)
+			}
+			if dup {
+				return fmt.Errorf("blocked: active action already exists for task %d template %s (use --force to override)", addTask, addTemplate)
 			}
 		}
 

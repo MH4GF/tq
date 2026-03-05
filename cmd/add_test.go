@@ -202,6 +202,36 @@ Review.
 	}
 }
 
+func TestAdd_MissingTask(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	tqDir := t.TempDir()
+	cmd.SetTQDir(tqDir)
+	writeTestTemplate(t, tqDir, "review-pr", `---
+description: Review PR
+auto: true
+---
+Review.
+`)
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"action", "create", "review-pr"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error for missing --task flag")
+	}
+	if !contains(err.Error(), "--task flag is required") {
+		t.Errorf("error = %q, want to contain '--task flag is required'", err.Error())
+	}
+}
+
 func TestAdd_MissingTemplate(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

@@ -104,6 +104,7 @@ func ResetForTest() {
 
 func resetFlagsRecursive(c *cobra.Command) {
 	c.Flags().VisitAll(func(f *pflag.Flag) {
+		_ = f.Value.Set(f.DefValue)
 		f.Changed = false
 	})
 	for _, sub := range c.Commands() {
