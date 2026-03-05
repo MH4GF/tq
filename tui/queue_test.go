@@ -268,10 +268,10 @@ func TestQueueModel_DetailView(t *testing.T) {
 		t.Errorf("detail view should contain result text, got %q", view)
 	}
 
-	// Press esc to exit
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	// Press q to exit
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	if m.InDetailView() {
-		t.Error("should exit detail view after pressing esc")
+		t.Error("should exit detail view after pressing q")
 	}
 }
 
@@ -326,6 +326,31 @@ func TestQueueModel_DetailViewScroll(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 	if m.detailScroll != 0 {
 		t.Errorf("scroll should not go below 0, got %d", m.detailScroll)
+	}
+}
+
+func TestQueueModel_DetailViewEscIgnored(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	id, _ := d.InsertAction("check", nil, "{}", "running", "auto")
+	d.MarkDone(id, "some result")
+
+	m := NewQueueModel(d, "")
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Enter detail view
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if !m.InDetailView() {
+		t.Fatal("should be in detail view")
+	}
+
+	// Press esc — should be ignored
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if !m.InDetailView() {
+		t.Error("esc should be ignored in detail view")
 	}
 }
 

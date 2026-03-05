@@ -11,7 +11,7 @@ func TestNew(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, "", nil)
+	m := New(d, nil)
 	if m.ActiveTab() != tabQueue {
 		t.Errorf("initial tab = %d, want tabQueue(0)", m.ActiveTab())
 	}
@@ -24,7 +24,7 @@ func TestTabSwitch(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, "", nil)
+	m := New(d, nil)
 
 	// Tab key switches
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
@@ -57,7 +57,7 @@ func TestQuit(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, "", nil)
+	m := New(d, nil)
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	m = updated.(Model)
 
@@ -76,7 +76,7 @@ func TestWindowResize(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, "", nil)
+	m := New(d, nil)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updated.(Model)
 
@@ -89,7 +89,7 @@ func TestInit(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, "", nil)
+	m := New(d, nil)
 	cmd := m.Init()
 	if cmd == nil {
 		t.Error("Init should return a batch command")
@@ -100,7 +100,7 @@ func TestViewContainsTabs(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, "", nil)
+	m := New(d, nil)
 	view := m.View()
 	if !contains(view, "Queue") {
 		t.Errorf("view should contain 'Queue', got %q", view)
@@ -114,7 +114,7 @@ func TestApp_DateFilterDefault(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, "", nil)
+	m := New(d, nil)
 
 	if m.queue.dateFilter == "" {
 		t.Error("initial queue dateFilter should be today's date, got empty")
@@ -128,7 +128,7 @@ func TestHelpText(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, "", nil)
+	m := New(d, nil)
 
 	// Queue tab help
 	view := m.View()

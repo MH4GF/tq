@@ -72,7 +72,7 @@ var uiCmd = &cobra.Command{
 			}
 		}
 
-		m := tui.New(database, tqDirResolved, logCh, ralphBg, watchBg)
+		m := tui.New(database, logCh, ralphBg, watchBg)
 		p := tea.NewProgram(m, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("tui: %w", err)

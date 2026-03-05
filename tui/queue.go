@@ -87,14 +87,6 @@ func (m QueueModel) Update(msg tea.Msg) (QueueModel, tea.Cmd) {
 			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
 			return m, m.loadActions()
-		case key.Matches(msg, key.NewBinding(key.WithKeys("a"))):
-			if a := m.selectedAction(); a != nil && (a.Status == "waiting_human" || a.Status == "failed") {
-				return m, m.resetAction(a.ID)
-			}
-		case key.Matches(msg, key.NewBinding(key.WithKeys("x"))):
-			if a := m.selectedAction(); a != nil && a.Status == "waiting_human" {
-				return m, m.rejectAction(a.ID)
-			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("o"))):
 			if a := m.selectedAction(); a != nil && a.SessionID.Valid {
 				return m, m.attachAction(a)
@@ -111,7 +103,7 @@ func (m QueueModel) Update(msg tea.Msg) (QueueModel, tea.Cmd) {
 
 func (m QueueModel) updateDetailView(msg tea.KeyMsg) QueueModel {
 	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "q"))):
+	case key.Matches(msg, key.NewBinding(key.WithKeys("q"))):
 		m.detailAction = nil
 		m.detailScroll = 0
 	case key.Matches(msg, key.NewBinding(key.WithKeys("j", "down"))):
@@ -124,15 +116,6 @@ func (m QueueModel) updateDetailView(msg tea.KeyMsg) QueueModel {
 	return m
 }
 
-func (m QueueModel) resetAction(id int64) tea.Cmd {
-	return func() tea.Msg {
-		if err := m.database.ResetToPending(id); err != nil {
-			return actionUpdatedMsg{id: id, action: "reset failed"}
-		}
-		return actionUpdatedMsg{id: id, action: "reset → pending"}
-	}
-}
-
 func (m QueueModel) attachAction(a *db.Action) tea.Cmd {
 	return func() tea.Msg {
 		target := fmt.Sprintf("%s:%s", a.SessionID.String, a.TmuxPane.String)
@@ -140,15 +123,6 @@ func (m QueueModel) attachAction(a *db.Action) tea.Cmd {
 			return actionUpdatedMsg{id: a.ID, action: fmt.Sprintf("attach failed: %v", err)}
 		}
 		return nil
-	}
-}
-
-func (m QueueModel) rejectAction(id int64) tea.Cmd {
-	return func() tea.Msg {
-		if err := m.database.MarkFailed(id, "rejected by human"); err != nil {
-			return actionUpdatedMsg{id: id, action: "reject failed"}
-		}
-		return actionUpdatedMsg{id: id, action: "rejected → failed"}
 	}
 }
 

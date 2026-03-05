@@ -50,14 +50,12 @@ type backgroundStatusMsg struct {
 	err  error
 }
 
-func New(database *db.DB, tqDir string, logCh <-chan LogEntry, backgrounds ...BackgroundFunc) Model {
+func New(database *db.DB, logCh <-chan LogEntry, backgrounds ...BackgroundFunc) Model {
 	today := time.Now().Format("2006-01-02")
-	tasks := NewTasksModel(database, today)
-	tasks.SetTQDir(tqDir)
 	return Model{
 		activeTab:   tabQueue,
 		queue:       NewQueueModel(database, today),
-		tasks:       tasks,
+		tasks:       NewTasksModel(database, today),
 		backgrounds: backgrounds,
 		logCh:       logCh,
 	}
@@ -153,7 +151,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.queue, cmd = m.queue.Update(msg)
 		return m, cmd
-	case tasksLoadedMsg, actionCreatedMsg, taskCreatedMsg, taskUpdatedMsg:
+	case tasksLoadedMsg:
 		var cmd tea.Cmd
 		m.tasks, cmd = m.tasks.Update(msg)
 		return m, cmd
@@ -222,19 +220,15 @@ func (m Model) renderTabs() string {
 func (m Model) renderHelp() string {
 	if m.activeTab == tabQueue {
 		if m.queue.InDetailView() {
-			return styleHelp.Render("j/k: scroll  q/esc: back")
+			return styleHelp.Render("j/k: scroll  q: back")
 		}
-		return styleHelp.Render("j/k: navigate  a: reset  x: reject  o: attach  v: view result  tab: switch  r: reload  q: quit")
+		return styleHelp.Render("j/k: navigate  o: attach  v: view result  tab: switch  r: reload  q: quit")
 	}
 	switch m.tasks.Mode() {
-	case modePickTemplate, modePickProject, modePickStatus:
-		return styleHelp.Render("j/k: select  enter: confirm  esc: cancel")
-	case modeInputInstruction, modeInputTitle, modeInputURL:
-		return styleHelp.Render("enter: confirm  esc: cancel")
 	case modeViewDetail:
-		return styleHelp.Render("j/k: scroll  q/esc: back")
+		return styleHelp.Render("j/k: scroll  q: back")
 	default:
-		return styleHelp.Render("j/k: navigate  enter: expand  s: status  c: create task  n: new action  v: view result  tab: switch  r: reload  q: quit")
+		return styleHelp.Render("j/k: navigate  enter: expand  v: view result  tab: switch  r: reload  q: quit")
 	}
 }
 

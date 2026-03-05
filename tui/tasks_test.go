@@ -145,183 +145,6 @@ func TestTasksModel_Reload(t *testing.T) {
 	}
 }
 
-func TestTasksModel_CreateTask(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	m := NewTasksModel(d, "")
-	msg := m.Init()()
-	m, _ = m.Update(msg)
-
-	// Press 'c' to start task creation
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if m.mode != modePickProject {
-		t.Fatalf("mode = %d, want modePickProject(%d)", m.mode, modePickProject)
-	}
-
-	view := m.View()
-	if !contains(view, "select project") {
-		t.Errorf("view should show project selection, got %q", view)
-	}
-
-	// Select first project (enter)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.mode != modeInputTitle {
-		t.Fatalf("mode = %d, want modeInputTitle(%d)", m.mode, modeInputTitle)
-	}
-
-	// Type title
-	for _, r := range "Test Task" {
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-	}
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.mode != modeInputURL {
-		t.Fatalf("mode = %d, want modeInputURL(%d)", m.mode, modeInputURL)
-	}
-
-	// Skip URL (empty enter)
-	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.mode != modeNormal {
-		t.Fatalf("mode = %d, want modeNormal(%d)", m.mode, modeNormal)
-	}
-	if cmd == nil {
-		t.Fatal("expected createTask cmd")
-	}
-
-	// Execute the cmd
-	result := cmd()
-	m, _ = m.Update(result)
-
-	if !contains(m.message, "task #") {
-		t.Errorf("message = %q, want to contain 'task #'", m.message)
-	}
-}
-
-func TestTasksModel_CreateTaskCancel(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	m := NewTasksModel(d, "")
-	msg := m.Init()()
-	m, _ = m.Update(msg)
-
-	// Press 'c' then esc
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if m.mode != modeNormal {
-		t.Errorf("mode = %d, want modeNormal after esc", m.mode)
-	}
-}
-
-func TestTasksModel_ChangeStatus(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Fix bug", "", "{}")
-	d.InsertAction("check", &taskID, "{}", "pending", "auto")
-
-	m := NewTasksModel(d, "")
-	msg := m.Init()()
-	m, _ = m.Update(msg)
-
-	// Navigate to task line (cursor 0 = project, cursor 1 = task)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-
-	// Press 's' to open status picker
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
-	if m.mode != modePickStatus {
-		t.Fatalf("mode = %d, want modePickStatus(%d)", m.mode, modePickStatus)
-	}
-
-	// Current status is "open", so it should not be in the list
-	for _, s := range m.statuses {
-		if s == "open" {
-			t.Error("statuses should not contain current status 'open'")
-		}
-	}
-
-	// Select "done" — navigate to it
-	doneIdx := -1
-	for i, s := range m.statuses {
-		if s == "done" {
-			doneIdx = i
-			break
-		}
-	}
-	if doneIdx < 0 {
-		t.Fatal("'done' not found in statuses")
-	}
-	for i := 0; i < doneIdx; i++ {
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	}
-
-	// Confirm
-	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd == nil {
-		t.Fatal("expected updateTaskStatus cmd")
-	}
-
-	result := cmd()
-	m, _ = m.Update(result)
-
-	if !contains(m.message, "done") {
-		t.Errorf("message = %q, want to contain 'done'", m.message)
-	}
-
-	// Verify DB was updated
-	task, err := d.GetTask(taskID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if task.Status != "done" {
-		t.Errorf("task status = %q, want 'done'", task.Status)
-	}
-}
-
-func TestTasksModel_ChangeStatusCancel(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Fix bug", "", "{}")
-	d.InsertAction("check", &taskID, "{}", "pending", "auto")
-
-	m := NewTasksModel(d, "")
-	msg := m.Init()()
-	m, _ = m.Update(msg)
-
-	// Navigate to task line
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-
-	// Press 's' then esc
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
-	if m.mode != modePickStatus {
-		t.Fatalf("mode = %d, want modePickStatus", m.mode)
-	}
-
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if m.mode != modeNormal {
-		t.Errorf("mode = %d, want modeNormal after esc", m.mode)
-	}
-}
-
-func TestTasksModel_ChangeStatusNoTask(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Fix bug", "", "{}")
-	d.InsertAction("check", &taskID, "{}", "pending", "auto")
-
-	m := NewTasksModel(d, "")
-	msg := m.Init()()
-	m, _ = m.Update(msg)
-
-	// Cursor at 0 = project line (no taskID)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
-	if m.mode != modeNormal {
-		t.Errorf("mode = %d, want modeNormal (s on project line should be no-op)", m.mode)
-	}
-}
-
 func TestTasksModel_DateFilter(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -505,10 +328,10 @@ func TestTasksModel_DetailView(t *testing.T) {
 		t.Errorf("detail view should contain result, got %q", view)
 	}
 
-	// Press esc to return
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	// Press q to return
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	if m.mode != modeNormal {
-		t.Errorf("mode = %d, want modeNormal after esc", m.mode)
+		t.Errorf("mode = %d, want modeNormal after q", m.mode)
 	}
 }
 
@@ -629,6 +452,36 @@ func TestTasksModel_VisibleRange_Scroll(t *testing.T) {
 	}
 	if vr.end-vr.start != 10 {
 		t.Errorf("cursor at end: window size = %d, want 10", vr.end-vr.start)
+	}
+}
+
+func TestTasksModel_DetailViewEscIgnored(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	id, _ := d.InsertAction("check", &taskID, "{}", "running", "auto")
+	d.MarkDone(id, "some result")
+
+	m := NewTasksModel(d, "")
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Navigate to action line
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+
+	// Enter detail view
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if m.mode != modeViewDetail {
+		t.Fatal("should be in detail view")
+	}
+
+	// Press esc — should be ignored
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.mode != modeViewDetail {
+		t.Error("esc should be ignored in detail view")
 	}
 }
 
