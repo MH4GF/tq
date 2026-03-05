@@ -71,10 +71,8 @@ func init() {
 	rootCmd.AddCommand(actionCmd)
 	rootCmd.AddCommand(dispatchCmd)
 	rootCmd.AddCommand(classifyCmd)
-	rootCmd.AddCommand(viewCmd)
 	rootCmd.AddCommand(watchCmd)
 	rootCmd.AddCommand(runCmd)
-	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(uiCmd)
 	rootCmd.AddCommand(projectCmd)
 }
