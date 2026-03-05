@@ -470,6 +470,103 @@ func TestGenerate_DateFilter_OpenTaskFiltersDoneActions(t *testing.T) {
 	}
 }
 
+func TestGenerate_ArchivedTaskShownInOutput(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	p, err := d.GetProjectByName("immedio")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	taskID, err := d.InsertTask(p.ID, "Archived task", "", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.UpdateTask(taskID, "archived"); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Generate(d, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(result, "#### Archived") {
+		t.Errorf("expected '#### Archived' section, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Archived task") {
+		t.Errorf("expected archived task in output, got:\n%s", result)
+	}
+}
+
+func TestGenerate_DateFilter_ArchivedTaskExcluded(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	p, err := d.GetProjectByName("immedio")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	taskID, err := d.InsertTask(p.ID, "Old archived task", "", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.UpdateTask(taskID, "archived"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := d.InsertAction("cleanup", &taskID, "{}", "pending", "auto"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec("UPDATE actions SET created_at = '2026-01-01 00:00:00'"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec("UPDATE tasks SET created_at = '2026-01-01 00:00:00', updated_at = '2026-01-01 00:00:00'"); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Generate(d, "2026-12-25")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Contains(result, "Old archived task") {
+		t.Errorf("archived task with old dates should be excluded, got:\n%s", result)
+	}
+}
+
+func TestGenerate_DateFilter_ArchivedTaskShownByTaskDate(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	p, err := d.GetProjectByName("immedio")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	taskID, err := d.InsertTask(p.ID, "Archived today", "", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.UpdateTask(taskID, "archived"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(fmt.Sprintf("UPDATE tasks SET updated_at = '2026-03-04 15:00:00' WHERE id = %d", taskID)); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Generate(d, "2026-03-04")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(result, "Archived today") {
+		t.Errorf("archived task updated today should be shown, got:\n%s", result)
+	}
+}
+
 func TestInject(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "daily.md")

@@ -62,6 +62,7 @@ func generateProjectSection(database *db.DB, project db.Project, dateFilter stri
 		status string
 	}{
 		{"Done", "done"},
+		{"Archived", "archived"},
 		{"In Review", "review"},
 		{"In Progress", "open"},
 		{"Ready", "ready"},
@@ -92,7 +93,7 @@ func generateProjectSection(database *db.DB, project db.Project, dateFilter stri
 			}
 
 			if dateFilter != "" {
-				if t.Status == "done" {
+				if t.Status == "done" || t.Status == "archived" {
 					actions = db.FilterByDate(actions, dateFilter)
 					if len(actions) == 0 && !t.MatchesDate(dateFilter) {
 						continue

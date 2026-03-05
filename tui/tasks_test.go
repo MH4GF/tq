@@ -392,6 +392,61 @@ func TestTasksModel_DateFilter_NonDoneTaskShown(t *testing.T) {
 	}
 }
 
+func TestTasksModel_DateFilter_ArchivedTaskFiltered(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// Archived task with old dates — should be filtered out
+	taskID, _ := d.InsertTask(1, "Old archived", "", "{}")
+	d.InsertAction("old-action", &taskID, "{}", "pending", "auto")
+	d.UpdateTask(taskID, "archived")
+	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE template_id = 'old-action'")
+	d.Exec(fmt.Sprintf("UPDATE tasks SET created_at = '2025-01-01 00:00:00', updated_at = '2025-01-01 00:00:00' WHERE id = %d", taskID))
+
+	// Open task — should always appear
+	taskID2, _ := d.InsertTask(1, "Open task", "", "{}")
+	d.InsertAction("open-action", &taskID2, "{}", "pending", "auto")
+
+	actions, _ := d.ListActions("", nil)
+	var todayDate string
+	for _, a := range actions {
+		if a.TemplateID == "open-action" {
+			todayDate = a.CreatedAt[:10]
+			break
+		}
+	}
+
+	m := NewTasksModel(d, todayDate)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	view := m.View()
+	if contains(view, "Old archived") {
+		t.Errorf("archived task with old date should be filtered out, got %q", view)
+	}
+	if !contains(view, "Open task") {
+		t.Errorf("open task should be visible, got %q", view)
+	}
+}
+
+func TestTasksModel_ArchivedTaskCollapsed(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Archived task", "", "{}")
+	d.InsertAction("check", &taskID, "{}", "pending", "auto")
+	d.UpdateTask(taskID, "archived")
+
+	m := NewTasksModel(d, "")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Archived task should be collapsed: project + task = 2 lines (action hidden)
+	if len(m.lines) != 2 {
+		t.Errorf("lines = %d, want 2 (archived task should be collapsed)", len(m.lines))
+	}
+}
+
 func TestTasksModel_InlineResult(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

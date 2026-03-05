@@ -139,7 +139,7 @@ func (m TasksModel) loadTasks() tea.Cmd {
 					continue
 				}
 				if m.dateFilter != "" {
-					if t.Status == "done" {
+					if t.Status == "done" || t.Status == "archived" {
 						actions = db.FilterByDate(actions, m.dateFilter)
 						if len(actions) == 0 && !t.MatchesDate(m.dateFilter) {
 							continue
@@ -169,7 +169,7 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 		for _, pt := range m.trees {
 			m.expanded[fmt.Sprintf("p:%d", pt.project.ID)] = true
 			for _, tn := range pt.tasks {
-				m.expanded[fmt.Sprintf("t:%d", tn.task.ID)] = tn.task.Status != "done"
+				m.expanded[fmt.Sprintf("t:%d", tn.task.ID)] = tn.task.Status != "done" && tn.task.Status != "archived"
 			}
 		}
 		m.buildLines()
