@@ -40,6 +40,7 @@ var uiCmd = &cobra.Command{
 				DB:             database,
 				MaxInteractive: uiMaxInteractive,
 				PollInterval:   uiPollInterval,
+				TmuxChecker:    &dispatch.ExecTmuxChecker{Runner: &dispatch.ExecRunner{}},
 				NonInteractiveFunc: func(tqDir string) dispatch.Worker {
 					return &dispatch.NonInteractiveWorker{
 						Runner: &dispatch.ExecRunner{},

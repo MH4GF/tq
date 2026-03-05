@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -278,6 +279,137 @@ func TestRalphLoop_OnDoneTriggersFollowUp(t *testing.T) {
 	}
 	if review.Source != "on_done" {
 		t.Errorf("follow-up source = %q, want on_done", review.Source)
+	}
+}
+
+type mockTmuxChecker struct {
+	windows []string
+	err     error
+}
+
+func (m *mockTmuxChecker) ListWindows(ctx context.Context, session string) ([]string, error) {
+	return m.windows, m.err
+}
+
+func TestReapStaleActions_DetectsStale(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
+	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
+
+	checker := &mockTmuxChecker{windows: []string{"zsh", "other-window"}}
+
+	cfg := RalphConfig{
+		DB:               d,
+		TmuxChecker:      checker,
+		StaleGracePeriod: 30 * time.Second,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != "failed" {
+		t.Errorf("action status = %q, want failed", action.Status)
+	}
+	if !action.Result.Valid || !strings.Contains(action.Result.String, "stale") {
+		t.Errorf("expected result containing 'stale', got %v", action.Result)
+	}
+}
+
+func TestReapStaleActions_SkipsLiveWindows(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
+	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
+
+	checker := &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}}
+
+	cfg := RalphConfig{
+		DB:               d,
+		TmuxChecker:      checker,
+		StaleGracePeriod: 30 * time.Second,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != "running" {
+		t.Errorf("action status = %q, want running", action.Status)
+	}
+}
+
+func TestReapStaleActions_GracePeriod(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
+	// started_at is now (within grace period)
+	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now') WHERE id = 1")
+
+	checker := &mockTmuxChecker{windows: []string{"zsh"}}
+
+	cfg := RalphConfig{
+		DB:               d,
+		TmuxChecker:      checker,
+		StaleGracePeriod: 30 * time.Second,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != "running" {
+		t.Errorf("action status = %q, want running (within grace period)", action.Status)
+	}
+}
+
+func TestReapStaleActions_TmuxError(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
+	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
+
+	checker := &mockTmuxChecker{err: fmt.Errorf("tmux not available")}
+
+	cfg := RalphConfig{
+		DB:               d,
+		TmuxChecker:      checker,
+		StaleGracePeriod: 30 * time.Second,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != "running" {
+		t.Errorf("action status = %q, want running (tmux error should skip)", action.Status)
+	}
+}
+
+func TestReapStaleActions_NilChecker(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
+	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1' WHERE id = 1")
+
+	cfg := RalphConfig{
+		DB:          d,
+		TmuxChecker: nil,
+	}
+
+	// Should not panic
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != "running" {
+		t.Errorf("action status = %q, want running (nil checker should no-op)", action.Status)
 	}
 }
 

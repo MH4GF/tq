@@ -194,6 +194,26 @@ func (db *DB) CountByStatus() (map[string]int, error) {
 	return counts, rows.Err()
 }
 
+func (db *DB) ListRunningInteractive() ([]Action, error) {
+	rows, err := db.Query(
+		"SELECT id, template_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE status = 'running' AND session_id IS NOT NULL ORDER BY id",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var actions []Action
+	for rows.Next() {
+		var a Action
+		if err := rows.Scan(&a.ID, &a.TemplateID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt); err != nil {
+			return nil, err
+		}
+		actions = append(actions, a)
+	}
+	return actions, rows.Err()
+}
+
 func (db *DB) CountRunningInteractive() (int, error) {
 	var count int
 	err := db.QueryRow(

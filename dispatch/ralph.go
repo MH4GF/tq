@@ -7,11 +7,38 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/template"
 )
+
+// TmuxChecker checks for the existence of tmux windows.
+type TmuxChecker interface {
+	ListWindows(ctx context.Context, session string) ([]string, error)
+}
+
+// ExecTmuxChecker implements TmuxChecker using real tmux commands.
+type ExecTmuxChecker struct {
+	Runner CommandRunner
+}
+
+func (c *ExecTmuxChecker) ListWindows(ctx context.Context, session string) ([]string, error) {
+	out, err := c.Runner.Run(ctx, "tmux", []string{
+		"list-windows", "-t", session, "-F", "#{window_name}",
+	}, "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("tmux list-windows: %w (output: %s)", err, string(out))
+	}
+	var names []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line != "" {
+			names = append(names, line)
+		}
+	}
+	return names, nil
+}
 
 // RalphConfig configures the Ralph Loop.
 type RalphConfig struct {
@@ -21,6 +48,8 @@ type RalphConfig struct {
 	PollInterval       time.Duration
 	NonInteractiveFunc func(tqDir string) Worker
 	InteractiveFunc    func(tqDir string) Worker
+	TmuxChecker        TmuxChecker
+	StaleGracePeriod   time.Duration
 }
 
 // RalphLoop continuously dispatches pending actions.
@@ -32,6 +61,9 @@ func RalphLoop(ctx context.Context, cfg RalphConfig) error {
 	if cfg.PollInterval <= 0 {
 		cfg.PollInterval = 10 * time.Second
 	}
+	if cfg.StaleGracePeriod <= 0 {
+		cfg.StaleGracePeriod = 30 * time.Second
+	}
 
 	slog.Info("ralph loop started", "max_interactive", cfg.MaxInteractive, "poll_interval", cfg.PollInterval)
 
@@ -42,6 +74,8 @@ func RalphLoop(ctx context.Context, cfg RalphConfig) error {
 			return ctx.Err()
 		default:
 		}
+
+		reapStaleActions(ctx, cfg)
 
 		dispatched, err := dispatchOne(ctx, cfg)
 		if err != nil {
@@ -55,6 +89,54 @@ func RalphLoop(ctx context.Context, cfg RalphConfig) error {
 			case <-time.After(cfg.PollInterval):
 			}
 		}
+	}
+}
+
+func reapStaleActions(ctx context.Context, cfg RalphConfig) {
+	if cfg.TmuxChecker == nil {
+		return
+	}
+
+	actions, err := cfg.DB.ListRunningInteractive()
+	if err != nil {
+		slog.Error("list running interactive for stale check", "error", err)
+		return
+	}
+	if len(actions) == 0 {
+		return
+	}
+
+	windows, err := cfg.TmuxChecker.ListWindows(ctx, "main")
+	if err != nil {
+		slog.Warn("tmux list-windows failed, skipping stale check", "error", err)
+		return
+	}
+
+	windowSet := make(map[string]struct{}, len(windows))
+	for _, w := range windows {
+		windowSet[w] = struct{}{}
+	}
+
+	now := time.Now()
+	for _, a := range actions {
+		if a.StartedAt.Valid {
+			started, err := time.Parse("2006-01-02 15:04:05", a.StartedAt.String)
+			if err == nil && now.Sub(started) < cfg.StaleGracePeriod {
+				continue
+			}
+		}
+
+		windowName := fmt.Sprintf("tq-action-%d", a.ID)
+		if _, exists := windowSet[windowName]; exists {
+			continue
+		}
+
+		result := fmt.Sprintf("stale: tmux window %q no longer exists", windowName)
+		if err := cfg.DB.MarkFailed(a.ID, result); err != nil {
+			slog.Error("mark stale action failed", "action_id", a.ID, "error", err)
+			continue
+		}
+		slog.Warn("reaped stale action", "action_id", a.ID, "window", windowName)
 	}
 }
 

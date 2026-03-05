@@ -284,6 +284,38 @@ func TestCountByStatus(t *testing.T) {
 	}
 }
 
+func TestListRunningInteractive(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// running with session_id → should be returned
+	d.InsertAction("a", nil, "{}", "running", "auto")
+	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1' WHERE id = 1")
+
+	// running without session_id → should NOT be returned
+	d.InsertAction("b", nil, "{}", "running", "auto")
+
+	// pending → should NOT be returned
+	d.InsertAction("c", nil, "{}", "pending", "auto")
+
+	// done → should NOT be returned
+	d.InsertAction("d", nil, "{}", "done", "auto")
+
+	actions, err := d.ListRunningInteractive()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if actions[0].TemplateID != "a" {
+		t.Errorf("expected template_id 'a', got %s", actions[0].TemplateID)
+	}
+	if !actions[0].SessionID.Valid || actions[0].SessionID.String != "main" {
+		t.Errorf("expected session_id 'main', got %v", actions[0].SessionID)
+	}
+}
+
 func TestCountRunningInteractive(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
