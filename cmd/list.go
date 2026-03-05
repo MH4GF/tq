@@ -3,15 +3,15 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"text/tabwriter"
+	"path/filepath"
 
+	"github.com/MH4GF/tq/template"
 	"github.com/spf13/cobra"
 )
 
 var (
 	listStatus string
 	listTask   int64
-	listJSON   bool
 )
 
 var listCmd = &cobra.Command{
@@ -33,73 +33,61 @@ var listCmd = &cobra.Command{
 			return nil
 		}
 
-		if listJSON {
-			rows := make([]map[string]any, len(actions))
-			for i, a := range actions {
-				row := map[string]any{
-					"id":          a.ID,
-					"template_id": a.TemplateID,
-					"metadata":    a.Metadata,
-					"status":      a.Status,
-						"source":      a.Source,
-					"created_at":  a.CreatedAt,
-				}
-				if a.TaskID.Valid {
-					row["task_id"] = a.TaskID.Int64
-				} else {
-					row["task_id"] = nil
-				}
-				if a.Result.Valid {
-					row["result"] = a.Result.String
-				} else {
-					row["result"] = nil
-				}
-				if a.SessionID.Valid {
-					row["session_id"] = a.SessionID.String
-				} else {
-					row["session_id"] = nil
-				}
-				if a.StartedAt.Valid {
-					row["started_at"] = a.StartedAt.String
-				} else {
-					row["started_at"] = nil
-				}
-				if a.CompletedAt.Valid {
-					row["completed_at"] = a.CompletedAt.String
-				} else {
-					row["completed_at"] = nil
-				}
-				rows[i] = row
-			}
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			enc.SetIndent("", "  ")
-			return enc.Encode(rows)
-		}
+		templatesDir := filepath.Join(tqDirResolved, "templates")
 
-		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tTemplate\tTask\tStatus\tResult")
-		for _, a := range actions {
-			taskStr := "-"
+		rows := make([]map[string]any, len(actions))
+		for i, a := range actions {
+			row := map[string]any{
+				"id":          a.ID,
+				"template_id": a.TemplateID,
+				"metadata":    a.Metadata,
+				"status":      a.Status,
+				"source":      a.Source,
+				"created_at":  a.CreatedAt,
+			}
 			if a.TaskID.Valid {
-				taskStr = fmt.Sprintf("%d", a.TaskID.Int64)
+				row["task_id"] = a.TaskID.Int64
+			} else {
+				row["task_id"] = nil
 			}
-			result := "-"
-			if a.Result.Valid && a.Result.String != "" {
-				result = a.Result.String
-				if len(result) > 60 {
-					result = result[:57] + "..."
-				}
+			if a.Result.Valid {
+				row["result"] = a.Result.String
+			} else {
+				row["result"] = nil
 			}
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n",
-				a.ID, a.TemplateID, taskStr, a.Status, result)
+			if a.SessionID.Valid {
+				row["session_id"] = a.SessionID.String
+			} else {
+				row["session_id"] = nil
+			}
+			if a.StartedAt.Valid {
+				row["started_at"] = a.StartedAt.String
+			} else {
+				row["started_at"] = nil
+			}
+			if a.CompletedAt.Valid {
+				row["completed_at"] = a.CompletedAt.String
+			} else {
+				row["completed_at"] = nil
+			}
+
+			tmpl, err := template.Load(templatesDir, a.TemplateID)
+			if err == nil {
+				row["max_retries"] = tmpl.Config.MaxRetries
+			} else {
+				row["max_retries"] = nil
+			}
+
+			rows[i] = row
 		}
-		return w.Flush()
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(rows)
 	},
 }
 
 func init() {
 	listCmd.Flags().StringVar(&listStatus, "status", "", "Filter by status")
 	listCmd.Flags().Int64Var(&listTask, "task", 0, "Filter by task ID")
-	listCmd.Flags().BoolVar(&listJSON, "json", false, "Output as JSON")
 	actionCmd.AddCommand(listCmd)
 }

@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
@@ -111,12 +112,103 @@ func TestTaskList(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	out := buf.String()
-	if !contains(out, "task A") {
-		t.Errorf("output should contain 'task A', got %q", out)
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
 	}
-	if !contains(out, "task B") {
-		t.Errorf("output should contain 'task B', got %q", out)
+
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	if rows[0]["title"] != "task A" {
+		t.Errorf("first row title = %v, want %q", rows[0]["title"], "task A")
+	}
+	if rows[1]["title"] != "task B" {
+		t.Errorf("second row title = %v, want %q", rows[1]["title"], "task B")
+	}
+}
+
+func TestTaskList_JSON(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "test task", "https://example.com", `{"key":"value"}`)
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "list"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
+	}
+
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+
+	row := rows[0]
+	if row["id"] != float64(1) {
+		t.Errorf("id = %v, want 1", row["id"])
+	}
+	if row["project_id"] != float64(1) {
+		t.Errorf("project_id = %v, want 1", row["project_id"])
+	}
+	if row["title"] != "test task" {
+		t.Errorf("title = %v, want %q", row["title"], "test task")
+	}
+	if row["url"] != "https://example.com" {
+		t.Errorf("url = %v, want %q", row["url"], "https://example.com")
+	}
+	if row["metadata"] != `{"key":"value"}` {
+		t.Errorf("metadata = %v, want %q", row["metadata"], `{"key":"value"}`)
+	}
+	if row["status"] != "open" {
+		t.Errorf("status = %v, want %q", row["status"], "open")
+	}
+	if row["created_at"] == nil {
+		t.Error("created_at should not be null")
+	}
+}
+
+func TestTaskList_JSON_NullFields(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "new task", "", "{}")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "list"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
+	}
+
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+
+	row := rows[0]
+	if row["updated_at"] != nil {
+		t.Errorf("updated_at should be null for new task, got %v", row["updated_at"])
 	}
 }
 
@@ -140,12 +232,16 @@ func TestTaskList_StatusFilter(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	out := buf.String()
-	if !contains(out, "open task") {
-		t.Errorf("output should contain 'open task', got %q", out)
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
 	}
-	if contains(out, "done task") {
-		t.Errorf("output should not contain 'done task', got %q", out)
+
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0]["title"] != "open task" {
+		t.Errorf("title = %v, want %q", rows[0]["title"], "open task")
 	}
 }
 
@@ -168,12 +264,16 @@ func TestTaskList_ProjectFilter(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	out := buf.String()
-	if !contains(out, "immedio task") {
-		t.Errorf("output should contain 'immedio task', got %q", out)
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
 	}
-	if contains(out, "hearable task") {
-		t.Errorf("output should not contain 'hearable task', got %q", out)
+
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0]["title"] != "immedio task" {
+		t.Errorf("title = %v, want %q", rows[0]["title"], "immedio task")
 	}
 }
 

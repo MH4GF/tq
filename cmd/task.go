@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 )
@@ -58,16 +58,27 @@ var taskListCmd = &cobra.Command{
 			return nil
 		}
 
-		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tProject\tStatus\tTitle\tURL")
-		for _, t := range tasks {
-			url := "-"
-			if t.URL != "" {
-				url = t.URL
+		rows := make([]map[string]any, len(tasks))
+		for i, t := range tasks {
+			row := map[string]any{
+				"id":         t.ID,
+				"project_id": t.ProjectID,
+				"title":      t.Title,
+				"url":        t.URL,
+				"metadata":   t.Metadata,
+				"status":     t.Status,
+				"created_at": t.CreatedAt,
 			}
-			fmt.Fprintf(w, "%d\t%d\t%s\t%s\t%s\n", t.ID, t.ProjectID, t.Status, t.Title, url)
+			if t.UpdatedAt.Valid {
+				row["updated_at"] = t.UpdatedAt.String
+			} else {
+				row["updated_at"] = nil
+			}
+			rows[i] = row
 		}
-		return w.Flush()
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(rows)
 	},
 }
 

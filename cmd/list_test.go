@@ -3,6 +3,8 @@ package cmd_test
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
@@ -29,12 +31,19 @@ func TestList(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	out := buf.String()
-	if !contains(out, "review-pr") {
-		t.Errorf("output should contain 'review-pr', got %q", out)
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
 	}
-	if !contains(out, "deploy") {
-		t.Errorf("output should contain 'deploy', got %q", out)
+
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	if rows[0]["template_id"] != "review-pr" {
+		t.Errorf("first row template_id = %v, want %q", rows[0]["template_id"], "review-pr")
+	}
+	if rows[1]["template_id"] != "deploy" {
+		t.Errorf("second row template_id = %v, want %q", rows[1]["template_id"], "deploy")
 	}
 }
 
@@ -57,13 +66,16 @@ func TestList_StatusFilter(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	out := buf.String()
-	if !contains(out, "pending") {
-		t.Errorf("output should contain 'pending', got %q", out)
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
 	}
-	// "running" should only appear in header, not as a data row for template "b"
-	if contains(out, "\tb\t") {
-		t.Errorf("output should not contain template 'b' row, got %q", out)
+
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0]["template_id"] != "a" {
+		t.Errorf("template_id = %v, want %q", rows[0]["template_id"], "a")
 	}
 }
 
@@ -88,9 +100,16 @@ func TestList_TaskFilter(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	out := buf.String()
-	if !contains(out, "a") {
-		t.Errorf("output should contain template 'a', got %q", out)
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
+	}
+
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0]["template_id"] != "a" {
+		t.Errorf("template_id = %v, want %q", rows[0]["template_id"], "a")
 	}
 }
 
@@ -132,7 +151,7 @@ func TestList_JSON(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "list", "--task", "1", "--status", "done", "--json"})
+	root.SetArgs([]string{"action", "list", "--task", "1", "--status", "done"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -178,7 +197,7 @@ func TestList_JSON_NullFields(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "list", "--status", "pending", "--task", "0", "--json"})
+	root.SetArgs([]string{"action", "list", "--status", "pending", "--task", "0"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -209,5 +228,53 @@ func TestList_JSON_NullFields(t *testing.T) {
 	}
 	if row["completed_at"] != nil {
 		t.Errorf("completed_at should be null, got %v", row["completed_at"])
+	}
+	if row["max_retries"] != nil {
+		t.Errorf("max_retries should be null when template not found, got %v", row["max_retries"])
+	}
+}
+
+func TestList_JSON_MaxRetries(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	tmpDir := t.TempDir()
+	cmd.SetTQDir(tmpDir)
+
+	templatesDir := filepath.Join(tmpDir, "templates")
+	if err := os.MkdirAll(templatesDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	templateContent := "---\ndescription: test\nauto: true\nmax_retries: 3\n---\ntest body\n"
+	if err := os.WriteFile(filepath.Join(templatesDir, "review-pr.md"), []byte(templateContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	d.InsertAction("review-pr", nil, "{}", "pending", "auto")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"action", "list"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
+	}
+
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+
+	row := rows[0]
+	if row["max_retries"] != float64(3) {
+		t.Errorf("max_retries = %v, want 3", row["max_retries"])
 	}
 }
