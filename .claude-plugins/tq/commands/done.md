@@ -18,12 +18,12 @@ tqアクションの完了報告を行う。セッション中の作業内容を
 1. `$ARGUMENTS` の先頭が数値であればそれを使用する
 2. 環境変数 `TQ_ACTION_ID` が設定されていればそれを使用する
 3. 初回プロンプト（セッション冒頭のユーザーメッセージ）に含まれる `tq action done <数字>` パターンから抽出する
-4. `TQ_DIR` 配下の DB から running アクションを検索する: `tq --dir "$TQ_DIR" action list --status running`
+4. DB から running アクションを検索する: `tq action list --status running`
 
 いずれでも特定できない場合、初回プロンプトから task_id と template を読み取り、アクションを作成してその ID を使用する:
 
 ```bash
-tq --dir "$TQ_DIR" action create <template> --task <task_id> --source human --status running
+tq action create <template> --task <task_id> --source human --status running
 ```
 
 初回プロンプトに task_id や template の情報もない場合は、「action_id を特定できませんでした。`/tq:done <action_id>` の形式で指定してください。」と伝えて終了する。
@@ -54,7 +54,7 @@ tq --dir "$TQ_DIR" action create <template> --task <task_id> --source human --st
 ### 3. tq action done 実行
 
 ```bash
-tq --dir "$TQ_DIR" action done <action_id> '<summary>'
+tq action done <action_id> '<summary>'
 ```
 
 成功したら「action #<action_id> を完了としてマークしました。」と報告する。

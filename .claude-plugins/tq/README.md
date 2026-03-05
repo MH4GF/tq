@@ -22,7 +22,7 @@ claude plugin install tq@tq-marketplace
 
 tq アクションを完了としてマークし、作業結果を報告する。
 
-tq の interactive worker 経由で起動された Claude Code セッションで使用する。`TQ_DIR` 環境変数が設定されている必要がある。
+tq の interactive worker 経由で起動された Claude Code セッションで使用する。
 
 ```
 /tq:done           # action_id を自動検出、サマリーを自動生成

@@ -27,7 +27,8 @@ testutil/        → テスト用ヘルパー（インメモリDB）
 
 ## データディレクトリ
 
-ランタイムデータ（`tq.db`, `templates/`）は別ディレクトリに配置。`--dir` フラグまたは `TQ_DIR` 環境変数で指定。
+- DB: `~/.config/tq/tq.db`（固定）
+- テンプレート: プロジェクトの `{workDir}/tq/templates/` → `~/.config/tq/templates/` の順で解決
 
 ## スタイル
 

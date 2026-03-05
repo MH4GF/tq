@@ -53,7 +53,7 @@ tq action create implement --task <task_id> --meta "$(cat /tmp/tq-meta-<task_id>
 `approve` は `waiting_human` のみ対応。`failed` のリセットは直接 DB 操作:
 
 ```bash
-sqlite3 <tq_dir>/tq.db "UPDATE actions SET status = 'pending', result = '' WHERE id = <action_id>;"
+sqlite3 ~/.config/tq/tq.db "UPDATE actions SET status = 'pending', result = '' WHERE id = <action_id>;"
 ```
 
 ## アクション結果の確認
@@ -61,5 +61,5 @@ sqlite3 <tq_dir>/tq.db "UPDATE actions SET status = 'pending', result = '' WHERE
 result が長い場合は DB から直接取得:
 
 ```bash
-sqlite3 <tq_dir>/tq.db "SELECT result FROM actions WHERE id = <action_id>;"
+sqlite3 ~/.config/tq/tq.db "SELECT result FROM actions WHERE id = <action_id>;"
 ```

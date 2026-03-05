@@ -22,7 +22,7 @@ allowed-tools:
 
 ### 2. task_id の特定
 
-セッションの会話内容から関連するタスクを推測し、`tq --dir "$TQ_DIR" task list --status open` で既存タスクを検索する。関連タスクが見つからなければ新規タスクを作成して紐付ける。
+セッションの会話内容から関連するタスクを推測し、`tq task list --status open` で既存タスクを検索する。関連タスクが見つからなければ新規タスクを作成して紐付ける。
 
 ### 3. プロンプト構成
 
@@ -51,7 +51,7 @@ allowed-tools:
 ### 4. アクション作成
 
 ```bash
-tq --dir "$TQ_DIR" action create implement --task <task_id> --meta '{"instruction":"<構造化されたプロンプト>"}' --source human --status pending
+tq action create implement --task <task_id> --meta '{"instruction":"<構造化されたプロンプト>"}' --source human --status pending
 ```
 
 - `--task <task_id>` は task_id が特定できた場合のみ付与する
