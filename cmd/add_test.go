@@ -26,7 +26,7 @@ func TestAdd(t *testing.T) {
 	cmd.ResetForTest()
 
 	tqDir := t.TempDir()
-	cmd.SetTQDir(tqDir)
+	cmd.SetConfigDir(tqDir)
 	writeTestTemplate(t, tqDir, "review-pr", `---
 description: Review PR
 ---
@@ -72,7 +72,7 @@ func TestAdd_DuplicateBlocked(t *testing.T) {
 	cmd.ResetForTest()
 
 	tqDir := t.TempDir()
-	cmd.SetTQDir(tqDir)
+	cmd.SetConfigDir(tqDir)
 	writeTestTemplate(t, tqDir, "review-pr", `---
 description: Review PR
 ---
@@ -107,7 +107,7 @@ func TestAdd_DuplicateWaitingHumanBlocked(t *testing.T) {
 	cmd.ResetForTest()
 
 	tqDir := t.TempDir()
-	cmd.SetTQDir(tqDir)
+	cmd.SetConfigDir(tqDir)
 	writeTestTemplate(t, tqDir, "implement", `---
 description: Implement
 ---
@@ -139,7 +139,7 @@ func TestAdd_DuplicateForce(t *testing.T) {
 	cmd.ResetForTest()
 
 	tqDir := t.TempDir()
-	cmd.SetTQDir(tqDir)
+	cmd.SetConfigDir(tqDir)
 	writeTestTemplate(t, tqDir, "review-pr", `---
 description: Review PR
 ---
@@ -172,7 +172,7 @@ func TestAdd_MissingTask(t *testing.T) {
 	cmd.ResetForTest()
 
 	tqDir := t.TempDir()
-	cmd.SetTQDir(tqDir)
+	cmd.SetConfigDir(tqDir)
 	writeTestTemplate(t, tqDir, "review-pr", `---
 description: Review PR
 ---

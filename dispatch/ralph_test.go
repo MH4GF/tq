@@ -80,14 +80,14 @@ func TestRalphLoop_ProcessesAndStops(t *testing.T) {
 	defer cancel()
 
 	cfg := RalphConfig{
-		TQDir:          tqDir,
+		UserConfigDir:          tqDir,
 		DB:             d,
 		MaxInteractive: 3,
 		PollInterval:   50 * time.Millisecond,
-		NonInteractiveFunc: func(tqDir string) Worker {
+		NonInteractiveFunc: func() Worker {
 			return worker
 		},
-		InteractiveFunc: func(tqDir string) Worker {
+		InteractiveFunc: func() Worker {
 			return worker
 		},
 	}
@@ -126,14 +126,14 @@ func TestRalphLoop_InteractiveLimitEnforced(t *testing.T) {
 	defer cancel()
 
 	cfg := RalphConfig{
-		TQDir:          tqDir,
+		UserConfigDir:          tqDir,
 		DB:             d,
 		MaxInteractive: 1,
 		PollInterval:   50 * time.Millisecond,
-		NonInteractiveFunc: func(tqDir string) Worker {
+		NonInteractiveFunc: func() Worker {
 			return &countingWorker{result: `{"ok":true}`}
 		},
-		InteractiveFunc: func(tqDir string) Worker {
+		InteractiveFunc: func() Worker {
 			return interactiveWorker
 		},
 	}
@@ -160,14 +160,14 @@ func TestRalphLoop_FailureEscalation(t *testing.T) {
 	defer cancel()
 
 	cfg := RalphConfig{
-		TQDir:          tqDir,
+		UserConfigDir:          tqDir,
 		DB:             d,
 		MaxInteractive: 3,
 		PollInterval:   50 * time.Millisecond,
-		NonInteractiveFunc: func(tqDir string) Worker {
+		NonInteractiveFunc: func() Worker {
 			return worker
 		},
-		InteractiveFunc: func(tqDir string) Worker {
+		InteractiveFunc: func() Worker {
 			return worker
 		},
 	}
@@ -200,14 +200,14 @@ func TestRalphLoop_OnDoneTriggersFollowUp(t *testing.T) {
 	defer cancel()
 
 	cfg := RalphConfig{
-		TQDir:          tqDir,
+		UserConfigDir:          tqDir,
 		DB:             d,
 		MaxInteractive: 3,
 		PollInterval:   50 * time.Millisecond,
-		NonInteractiveFunc: func(tqDir string) Worker {
+		NonInteractiveFunc: func() Worker {
 			return worker
 		},
-		InteractiveFunc: func(tqDir string) Worker {
+		InteractiveFunc: func() Worker {
 			return worker
 		},
 	}
@@ -376,13 +376,13 @@ func TestDispatchOne_NoPending(t *testing.T) {
 	tqDir := setupTemplatesDir(t)
 
 	cfg := RalphConfig{
-		TQDir:        tqDir,
+		UserConfigDir:        tqDir,
 		DB:           d,
 		PollInterval: 50 * time.Millisecond,
-		NonInteractiveFunc: func(tqDir string) Worker {
+		NonInteractiveFunc: func() Worker {
 			return &countingWorker{}
 		},
-		InteractiveFunc: func(tqDir string) Worker {
+		InteractiveFunc: func() Worker {
 			return &countingWorker{}
 		},
 	}

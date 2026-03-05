@@ -36,7 +36,6 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 	runner := &mockRunner{output: []byte("ok"), failAt: -1}
 	w := &InteractiveWorker{
 		Runner: runner,
-		TQDir:  "/tmp/tq",
 	}
 
 	cfg := tmpl.Config{}
@@ -82,8 +81,8 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 	if strings.Contains(argsStr, "--worktree") {
 		t.Errorf("call[1] args = %v, must NOT contain --worktree", c.args)
 	}
-	if !strings.Contains(argsStr, "TQ_DIR=/tmp/tq") {
-		t.Errorf("call[1] args = %v, want to contain TQ_DIR=/tmp/tq", c.args)
+	if strings.Contains(argsStr, "TQ_DIR") {
+		t.Errorf("call[1] args = %v, must NOT contain TQ_DIR", c.args)
 	}
 	if !strings.Contains(argsStr, "TQ_ACTION_ID=42") {
 		t.Errorf("call[1] args = %v, want to contain TQ_ACTION_ID=42", c.args)
@@ -109,7 +108,6 @@ func TestInteractiveWorker_NewWindowError(t *testing.T) {
 	runner := &mockRunner{err: context.DeadlineExceeded, failAt: 0}
 	w := &InteractiveWorker{
 		Runner: runner,
-		TQDir:  "/tmp/tq",
 	}
 
 	cfg := tmpl.Config{}
@@ -126,7 +124,6 @@ func TestInteractiveWorker_SendKeysError(t *testing.T) {
 	runner := &mockRunner{err: context.DeadlineExceeded, failAt: 1}
 	w := &InteractiveWorker{
 		Runner: runner,
-		TQDir:  "/tmp/tq",
 	}
 
 	cfg := tmpl.Config{}
@@ -143,7 +140,6 @@ func TestInteractiveWorker_SingleQuoteEscape(t *testing.T) {
 	runner := &mockRunner{output: []byte("ok"), failAt: -1}
 	w := &InteractiveWorker{
 		Runner: runner,
-		TQDir:  "/tmp/tq",
 	}
 
 	cfg := tmpl.Config{}

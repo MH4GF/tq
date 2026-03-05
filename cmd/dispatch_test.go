@@ -27,7 +27,7 @@ func TestDispatch_NoPending(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
 	cmd.ResetForTest()
-	cmd.SetTQDir(t.TempDir())
+	cmd.SetConfigDir(t.TempDir())
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -52,7 +52,7 @@ func TestDispatch_Success(t *testing.T) {
 	cmd.ResetForTest()
 
 	tqDir := t.TempDir()
-	cmd.SetTQDir(tqDir)
+	cmd.SetConfigDir(tqDir)
 
 	templatesDir := filepath.Join(tqDir, "templates")
 	os.MkdirAll(templatesDir, 0755)
@@ -66,7 +66,7 @@ Review PR for {{.Task.Title}}.
 	taskID, _ := d.InsertTask(1, "Fix bug", "https://github.com/test/1", "{}")
 	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
 
-	cmd.SetWorkerFactory(func(tqDir string) dispatch.Worker {
+	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{result: `{"review":"approved"}`}
 	})
 	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
@@ -105,7 +105,7 @@ func TestDispatch_WorkerError(t *testing.T) {
 	cmd.ResetForTest()
 
 	tqDir := t.TempDir()
-	cmd.SetTQDir(tqDir)
+	cmd.SetConfigDir(tqDir)
 
 	templatesDir := filepath.Join(tqDir, "templates")
 	os.MkdirAll(templatesDir, 0755)
@@ -118,7 +118,7 @@ Do something.
 
 	d.InsertAction("test", nil, "{}", "pending", "auto")
 
-	cmd.SetWorkerFactory(func(tqDir string) dispatch.Worker {
+	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{err: context.DeadlineExceeded}
 	})
 	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })

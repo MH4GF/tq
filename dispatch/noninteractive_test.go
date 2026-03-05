@@ -31,7 +31,7 @@ func (m *MockRunner) Run(ctx context.Context, name string, args []string, dir st
 
 func TestNonInteractiveWorker_Execute(t *testing.T) {
 	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"success","result":"{\"result\":\"ok\"}","cost_usd":0.01}`)}
-	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
+	w := &NonInteractiveWorker{Runner: mock}
 
 	cfg := tmpl.Config{}
 
@@ -62,17 +62,6 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 		t.Errorf("dir = %q, want %q", mock.GotDir, "/work")
 	}
 
-	foundTQDir := false
-	for _, e := range mock.GotEnv {
-		if e == "TQ_DIR=/tmp/tq" {
-			foundTQDir = true
-			break
-		}
-	}
-	if !foundTQDir {
-		t.Errorf("env missing TQ_DIR=/tmp/tq, got %v", mock.GotEnv)
-	}
-
 	foundActionID := false
 	for _, e := range mock.GotEnv {
 		if e == "TQ_ACTION_ID=1" {
@@ -87,7 +76,7 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 
 func TestNonInteractiveWorker_Execute_Error(t *testing.T) {
 	mock := &MockRunner{Err: errors.New("command failed")}
-	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
+	w := &NonInteractiveWorker{Runner: mock}
 
 	cfg := tmpl.Config{}
 
@@ -102,7 +91,7 @@ func TestNonInteractiveWorker_Execute_Error(t *testing.T) {
 
 func TestNonInteractiveWorker_Execute_Timeout(t *testing.T) {
 	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"success","result":"ok"}`)}
-	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
+	w := &NonInteractiveWorker{Runner: mock}
 
 	cfg := tmpl.Config{}
 
@@ -127,7 +116,7 @@ func TestNonInteractiveWorker_Execute_Output(t *testing.T) {
 	want := `{"status":"success","data":[1,2,3]}`
 	wrapperJSON := `{"type":"result","subtype":"success","result":"{\"status\":\"success\",\"data\":[1,2,3]}"}`
 	mock := &MockRunner{Output: []byte(wrapperJSON)}
-	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
+	w := &NonInteractiveWorker{Runner: mock}
 
 	cfg := tmpl.Config{}
 
@@ -142,7 +131,7 @@ func TestNonInteractiveWorker_Execute_Output(t *testing.T) {
 
 func TestNonInteractiveWorker_Execute_ErrorSubtype(t *testing.T) {
 	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"error","result":"model refused"}`)}
-	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
+	w := &NonInteractiveWorker{Runner: mock}
 
 	cfg := tmpl.Config{}
 
@@ -157,7 +146,7 @@ func TestNonInteractiveWorker_Execute_ErrorSubtype(t *testing.T) {
 
 func TestNonInteractiveWorker_Execute_MalformedJSON(t *testing.T) {
 	mock := &MockRunner{Output: []byte(`not json at all`)}
-	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
+	w := &NonInteractiveWorker{Runner: mock}
 
 	cfg := tmpl.Config{}
 

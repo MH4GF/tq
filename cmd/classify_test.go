@@ -17,7 +17,7 @@ import (
 func setupClassifyEnv(t *testing.T) (string, *bytes.Buffer) {
 	t.Helper()
 	tqDir := t.TempDir()
-	cmd.SetTQDir(tqDir)
+	cmd.SetConfigDir(tqDir)
 
 	templatesDir := filepath.Join(tqDir, "templates")
 	os.MkdirAll(templatesDir, 0755)
@@ -39,7 +39,7 @@ Tasks: {{index .Action.Meta "existing_tasks"}}
 func setupInteractiveClassifyEnv(t *testing.T) (string, *bytes.Buffer) {
 	t.Helper()
 	tqDir := t.TempDir()
-	cmd.SetTQDir(tqDir)
+	cmd.SetConfigDir(tqDir)
 
 	templatesDir := filepath.Join(tqDir, "templates")
 	os.MkdirAll(templatesDir, 0755)
@@ -65,7 +65,7 @@ func TestClassify_Success(t *testing.T) {
 	cmd.ResetForTest()
 	setupClassifyEnv(t)
 
-	cmd.SetWorkerFactory(func(tqDir string) dispatch.Worker {
+	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{result: "task created, action created"}
 	})
 	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
@@ -94,7 +94,7 @@ func TestClassify_Interactive(t *testing.T) {
 	setupInteractiveClassifyEnv(t)
 
 	var usedInteractive bool
-	cmd.SetInteractiveWorkerFactory(func(tqDir string) dispatch.Worker {
+	cmd.SetInteractiveWorkerFactory(func() dispatch.Worker {
 		usedInteractive = true
 		return &mockWorker{result: "interactive:classify"}
 	})
@@ -127,7 +127,7 @@ func TestClassify_InteractiveError(t *testing.T) {
 	cmd.ResetForTest()
 	setupInteractiveClassifyEnv(t)
 
-	cmd.SetInteractiveWorkerFactory(func(tqDir string) dispatch.Worker {
+	cmd.SetInteractiveWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{err: fmt.Errorf("tmux not found")}
 	})
 	t.Cleanup(func() { cmd.SetInteractiveWorkerFactory(nil) })
@@ -163,7 +163,7 @@ func TestClassify_ExecutionFailure(t *testing.T) {
 	cmd.ResetForTest()
 	setupClassifyEnv(t)
 
-	cmd.SetWorkerFactory(func(tqDir string) dispatch.Worker {
+	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{err: fmt.Errorf("LLM timeout")}
 	})
 	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
@@ -205,7 +205,7 @@ func TestClassify_FailureWithContextDeadline(t *testing.T) {
 	cmd.ResetForTest()
 	setupClassifyEnv(t)
 
-	cmd.SetWorkerFactory(func(tqDir string) dispatch.Worker {
+	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{err: context.DeadlineExceeded}
 	})
 	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })

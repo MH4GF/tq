@@ -104,7 +104,7 @@ func TestDone_TriggersOnDone(t *testing.T) {
 		os.WriteFile(filepath.Join(templatesDir, tc.name+".md"), []byte(content), 0o644)
 	}
 
-	cmd.SetTQDir(tqDir)
+	cmd.SetConfigDir(tqDir)
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
 	d.InsertAction("check-pr", &taskID, "{}", "running", "test")

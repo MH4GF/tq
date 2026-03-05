@@ -38,7 +38,7 @@ func (m *mockSource) MarkProcessed(ctx context.Context, n source.Notification) e
 func setupWatchEnv(t *testing.T) string {
 	t.Helper()
 	tqDir := t.TempDir()
-	cmd.SetTQDir(tqDir)
+	cmd.SetConfigDir(tqDir)
 
 	templatesDir := filepath.Join(tqDir, "templates")
 	os.MkdirAll(templatesDir, 0755)
@@ -124,7 +124,7 @@ func TestWatch_WithNotifications(t *testing.T) {
 	})
 	t.Cleanup(func() { cmd.SetWatchSourceFactory(nil) })
 
-	cmd.SetWorkerFactory(func(tqDir string) dispatch.Worker {
+	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{result: "task created, action created"}
 	})
 	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
@@ -236,7 +236,7 @@ func TestWatch_AllClassifyFail(t *testing.T) {
 	})
 	t.Cleanup(func() { cmd.SetWatchSourceFactory(nil) })
 
-	cmd.SetWorkerFactory(func(tqDir string) dispatch.Worker {
+	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{err: fmt.Errorf("classify failed")}
 	})
 	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
