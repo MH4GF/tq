@@ -3,9 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 
-	"github.com/MH4GF/tq/template"
 	"github.com/spf13/cobra"
 )
 
@@ -32,8 +30,6 @@ var listCmd = &cobra.Command{
 			fmt.Fprintln(cmd.OutOrStdout(), "no actions found")
 			return nil
 		}
-
-		templatesDir := filepath.Join(tqDirResolved, "templates")
 
 		rows := make([]map[string]any, len(actions))
 		for i, a := range actions {
@@ -69,13 +65,6 @@ var listCmd = &cobra.Command{
 				row["completed_at"] = a.CompletedAt.String
 			} else {
 				row["completed_at"] = nil
-			}
-
-			tmpl, err := template.Load(templatesDir, a.TemplateID)
-			if err == nil {
-				row["max_retries"] = tmpl.Config.MaxRetries
-			} else {
-				row["max_retries"] = nil
 			}
 
 			rows[i] = row

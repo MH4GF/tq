@@ -17,11 +17,8 @@ func TestLoad_AllFields(t *testing.T) {
 	dir := t.TempDir()
 	writeTemplate(t, dir, "full", `---
 description: Full template
-auto: true
 interactive: true
-allowed_tools: Bash,Read
-timeout: 60
-max_retries: 3
+on_done: review
 ---
 Body content here.
 `)
@@ -37,20 +34,11 @@ Body content here.
 	if tmpl.Config.Description != "Full template" {
 		t.Errorf("Description = %q, want %q", tmpl.Config.Description, "Full template")
 	}
-	if tmpl.Config.Auto != true {
-		t.Errorf("Auto = %v, want true", tmpl.Config.Auto)
-	}
 	if tmpl.Config.Interactive != true {
 		t.Errorf("Interactive = %v, want true", tmpl.Config.Interactive)
 	}
-	if tmpl.Config.AllowedTools != "Bash,Read" {
-		t.Errorf("AllowedTools = %q, want %q", tmpl.Config.AllowedTools, "Bash,Read")
-	}
-	if tmpl.Config.Timeout != 60 {
-		t.Errorf("Timeout = %d, want 60", tmpl.Config.Timeout)
-	}
-	if tmpl.Config.MaxRetries != 3 {
-		t.Errorf("MaxRetries = %d, want 3", tmpl.Config.MaxRetries)
+	if tmpl.Config.OnDone != "review" {
+		t.Errorf("OnDone = %q, want %q", tmpl.Config.OnDone, "review")
 	}
 	if tmpl.Body != "Body content here." {
 		t.Errorf("Body = %q, want %q", tmpl.Body, "Body content here.")
@@ -70,39 +58,11 @@ Hello.
 		t.Fatal(err)
 	}
 
-	if tmpl.Config.Auto != true {
-		t.Errorf("Auto = %v, want true (default)", tmpl.Config.Auto)
-	}
-	if tmpl.Config.AllowedTools != "Bash,Read,Edit,Grep,Glob" {
-		t.Errorf("AllowedTools = %q, want default", tmpl.Config.AllowedTools)
-	}
-	if tmpl.Config.Timeout != 300 {
-		t.Errorf("Timeout = %d, want 300 (default)", tmpl.Config.Timeout)
-	}
 	if tmpl.Config.Interactive != false {
 		t.Errorf("Interactive = %v, want false", tmpl.Config.Interactive)
 	}
-	if tmpl.Config.MaxRetries != 0 {
-		t.Errorf("MaxRetries = %d, want 0", tmpl.Config.MaxRetries)
-	}
-}
-
-func TestLoad_AutoFalse(t *testing.T) {
-	dir := t.TempDir()
-	writeTemplate(t, dir, "noauto", `---
-description: No auto
-auto: false
----
-Manual only.
-`)
-
-	tmpl, err := Load(dir, "noauto")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if tmpl.Config.Auto != false {
-		t.Errorf("Auto = %v, want false (explicitly set)", tmpl.Config.Auto)
+	if tmpl.Config.OnDone != "" {
+		t.Errorf("OnDone = %q, want empty", tmpl.Config.OnDone)
 	}
 }
 

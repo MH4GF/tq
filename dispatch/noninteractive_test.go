@@ -33,10 +33,7 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"success","result":"{\"result\":\"ok\"}","cost_usd":0.01}`)}
 	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
 
-	cfg := tmpl.Config{
-		AllowedTools: "Bash,Read",
-		Timeout:      60,
-	}
+	cfg := tmpl.Config{}
 
 	result, err := w.Execute(context.Background(), "do something", cfg, "/work", 1)
 	if err != nil {
@@ -51,7 +48,7 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 		t.Errorf("name = %q, want %q", mock.GotName, "claude")
 	}
 
-	wantArgs := []string{"-p", "do something", "--output-format", "json", "--allowedTools", "Bash,Read"}
+	wantArgs := []string{"-p", "do something", "--output-format", "json"}
 	if len(mock.GotArgs) != len(wantArgs) {
 		t.Fatalf("args len = %d, want %d", len(mock.GotArgs), len(wantArgs))
 	}
@@ -92,7 +89,7 @@ func TestNonInteractiveWorker_Execute_Error(t *testing.T) {
 	mock := &MockRunner{Err: errors.New("command failed")}
 	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
 
-	cfg := tmpl.Config{AllowedTools: "Bash", Timeout: 60}
+	cfg := tmpl.Config{}
 
 	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1)
 	if err == nil {
@@ -107,7 +104,7 @@ func TestNonInteractiveWorker_Execute_Timeout(t *testing.T) {
 	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"success","result":"ok"}`)}
 	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
 
-	cfg := tmpl.Config{AllowedTools: "Bash", Timeout: 30}
+	cfg := tmpl.Config{}
 
 	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1)
 	if err != nil {
@@ -119,7 +116,7 @@ func TestNonInteractiveWorker_Execute_Timeout(t *testing.T) {
 		t.Fatal("context has no deadline")
 	}
 
-	expected := time.Now().Add(30 * time.Second)
+	expected := time.Now().Add(defaultTimeout * time.Second)
 	diff := deadline.Sub(expected)
 	if diff < -2*time.Second || diff > 2*time.Second {
 		t.Errorf("deadline diff from expected = %v, want within 2s", diff)
@@ -132,7 +129,7 @@ func TestNonInteractiveWorker_Execute_Output(t *testing.T) {
 	mock := &MockRunner{Output: []byte(wrapperJSON)}
 	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
 
-	cfg := tmpl.Config{AllowedTools: "Bash,Read,Edit", Timeout: 120}
+	cfg := tmpl.Config{}
 
 	got, err := w.Execute(context.Background(), "process data", cfg, "/projects/app", 42)
 	if err != nil {
@@ -147,7 +144,7 @@ func TestNonInteractiveWorker_Execute_ErrorSubtype(t *testing.T) {
 	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"error","result":"model refused"}`)}
 	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
 
-	cfg := tmpl.Config{AllowedTools: "Bash", Timeout: 60}
+	cfg := tmpl.Config{}
 
 	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1)
 	if err == nil {
@@ -162,7 +159,7 @@ func TestNonInteractiveWorker_Execute_MalformedJSON(t *testing.T) {
 	mock := &MockRunner{Output: []byte(`not json at all`)}
 	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
 
-	cfg := tmpl.Config{AllowedTools: "Bash", Timeout: 60}
+	cfg := tmpl.Config{}
 
 	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1)
 	if err == nil {
@@ -170,111 +167,5 @@ func TestNonInteractiveWorker_Execute_MalformedJSON(t *testing.T) {
 	}
 	if got := err.Error(); !strings.Contains(got, "failed to parse claude JSON output") {
 		t.Errorf("error = %q, want it to contain %q", got, "failed to parse claude JSON output")
-	}
-}
-
-func TestNonInteractiveWorker_Execute_JSONSchema(t *testing.T) {
-	envelope := `{"type":"result","subtype":"success","result":"some text","structured_output":{"task":{"id":0,"project_name":"works","title":"Test","url":"https://example.com"},"actions":[{"template_id":"check-pr-status"}]}}`
-	mock := &MockRunner{Output: []byte(envelope)}
-	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
-
-	schema := `{"type":"object","properties":{"task":{"type":"object"}}}`
-	cfg := tmpl.Config{
-		AllowedTools: "Bash,Read",
-		Timeout:      60,
-		JSONSchema:   schema,
-	}
-
-	result, err := w.Execute(context.Background(), "classify", cfg, "/work", 1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if !strings.Contains(result, `"project_name":"works"`) {
-		t.Errorf("result = %q, want to contain structured_output content", result)
-	}
-
-	// Verify --json-schema is in args
-	foundSchema := false
-	for i, a := range mock.GotArgs {
-		if a == "--json-schema" {
-			foundSchema = true
-			if i+1 >= len(mock.GotArgs) {
-				t.Fatal("--json-schema flag has no value")
-			}
-			if mock.GotArgs[i+1] != schema {
-				t.Errorf("json-schema value = %q, want %q", mock.GotArgs[i+1], schema)
-			}
-			break
-		}
-	}
-	if !foundSchema {
-		t.Errorf("args missing --json-schema, got %v", mock.GotArgs)
-	}
-}
-
-func TestNonInteractiveWorker_Execute_JSONSchema_TrimSpace(t *testing.T) {
-	envelope := `{"type":"result","subtype":"success","result":"ok","structured_output":{"key":"value"}}`
-	mock := &MockRunner{Output: []byte(envelope)}
-	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
-
-	cfg := tmpl.Config{
-		AllowedTools: "Bash",
-		Timeout:      60,
-		JSONSchema:   "{\"type\":\"object\"}\n",
-	}
-
-	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	for i, a := range mock.GotArgs {
-		if a == "--json-schema" {
-			if mock.GotArgs[i+1] != `{"type":"object"}` {
-				t.Errorf("json-schema value = %q, want trimmed", mock.GotArgs[i+1])
-			}
-			break
-		}
-	}
-}
-
-func TestNonInteractiveWorker_Execute_JSONSchema_MissingStructuredOutput(t *testing.T) {
-	envelope := `{"type":"result","subtype":"success","result":"some text"}`
-	mock := &MockRunner{Output: []byte(envelope)}
-	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
-
-	cfg := tmpl.Config{
-		AllowedTools: "Bash",
-		Timeout:      60,
-		JSONSchema:   `{"type":"object"}`,
-	}
-
-	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), "missing structured_output") {
-		t.Errorf("error = %q, want to contain 'missing structured_output'", err.Error())
-	}
-}
-
-func TestNonInteractiveWorker_Execute_JSONSchema_ErrorSubtype(t *testing.T) {
-	envelope := `{"type":"result","subtype":"error","result":"model refused"}`
-	mock := &MockRunner{Output: []byte(envelope)}
-	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
-
-	cfg := tmpl.Config{
-		AllowedTools: "Bash",
-		Timeout:      60,
-		JSONSchema:   `{"type":"object"}`,
-	}
-
-	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), `subtype "error"`) {
-		t.Errorf("error = %q, want to contain subtype error", err.Error())
 	}
 }

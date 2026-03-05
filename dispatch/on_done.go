@@ -37,16 +37,12 @@ func TriggerOnDone(database *db.DB, templatesDir string, action *db.Action, resu
 		return nil
 	}
 
-	targetTmpl, err := template.Load(templatesDir, onDoneTemplateID)
-	if err != nil {
+	if _, err := template.Load(templatesDir, onDoneTemplateID); err != nil {
 		slog.Warn("on_done template not found", "template", onDoneTemplateID)
 		return fmt.Errorf("load target template %q: %w", onDoneTemplateID, err)
 	}
 
-	status := "waiting_human"
-	if targetTmpl.Config.Auto {
-		status = "pending"
-	}
+	status := "pending"
 
 	meta := map[string]any{
 		"triggered_by_action_id": action.ID,

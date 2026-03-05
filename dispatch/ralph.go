@@ -156,12 +156,6 @@ func dispatchOne(ctx context.Context, cfg RalphConfig) (bool, error) {
 		return true, fmt.Errorf("load template %q: %w", action.TemplateID, err)
 	}
 
-	if !tmpl.Config.Auto {
-		_ = cfg.DB.MarkWaitingHuman(action.ID, "auto=false, requires human approval")
-		slog.Info("action requires human approval", "action_id", action.ID, "template", action.TemplateID)
-		return true, nil
-	}
-
 	promptData, err := buildPromptDataFromDB(cfg.DB, action, cfg.TQDir)
 	if err != nil {
 		_ = cfg.DB.MarkFailed(action.ID, fmt.Sprintf("build prompt data: %v", err))
@@ -199,7 +193,7 @@ func dispatchInteractive(ctx context.Context, cfg RalphConfig, action *db.Action
 	worker := cfg.InteractiveFunc(cfg.TQDir)
 	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID)
 	if err != nil {
-		handleFailure(cfg, action, tmplCfg, err)
+		handleFailure(cfg, action, err)
 		return true, nil
 	}
 
@@ -216,7 +210,7 @@ func dispatchNonInteractive(ctx context.Context, cfg RalphConfig, action *db.Act
 	worker := cfg.NonInteractiveFunc(cfg.TQDir)
 	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID)
 	if err != nil {
-		handleFailure(cfg, action, tmplCfg, err)
+		handleFailure(cfg, action, err)
 		return true, nil
 	}
 
@@ -233,12 +227,7 @@ func dispatchNonInteractive(ctx context.Context, cfg RalphConfig, action *db.Act
 	return true, nil
 }
 
-func handleFailure(cfg RalphConfig, action *db.Action, tmplCfg template.Config, execErr error) {
-	if tmplCfg.MaxRetries > 0 {
-		_ = cfg.DB.ResetToPending(action.ID)
-		slog.Warn("action failed, retrying", "action_id", action.ID, "error", execErr)
-		return
-	}
+func handleFailure(cfg RalphConfig, action *db.Action, execErr error) {
 	_ = cfg.DB.MarkWaitingHuman(action.ID, execErr.Error())
 	slog.Error("action failed, escalating to human", "action_id", action.ID, "error", execErr)
 }

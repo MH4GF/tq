@@ -29,7 +29,6 @@ func TestAdd(t *testing.T) {
 	cmd.SetTQDir(tqDir)
 	writeTestTemplate(t, tqDir, "review-pr", `---
 description: Review PR
-auto: true
 ---
 Review this PR.
 `)
@@ -66,39 +65,6 @@ Review this PR.
 	}
 }
 
-func TestAdd_AutoFalse(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	tqDir := t.TempDir()
-	cmd.SetTQDir(tqDir)
-	writeTestTemplate(t, tqDir, "manual-task", `---
-description: Manual task
-auto: false
----
-Manual only.
-`)
-
-	d.InsertTask(1, "test task", "", "{}")
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "manual-task", "--task", "1"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	out := buf.String()
-	if !contains(out, "status: waiting_human") {
-		t.Errorf("output = %q, want to contain 'status: waiting_human'", out)
-	}
-}
-
 func TestAdd_DuplicateBlocked(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -109,7 +75,6 @@ func TestAdd_DuplicateBlocked(t *testing.T) {
 	cmd.SetTQDir(tqDir)
 	writeTestTemplate(t, tqDir, "review-pr", `---
 description: Review PR
-auto: true
 ---
 Review.
 `)
@@ -145,7 +110,6 @@ func TestAdd_DuplicateWaitingHumanBlocked(t *testing.T) {
 	cmd.SetTQDir(tqDir)
 	writeTestTemplate(t, tqDir, "implement", `---
 description: Implement
-auto: true
 ---
 Implement.
 `)
@@ -178,7 +142,6 @@ func TestAdd_DuplicateForce(t *testing.T) {
 	cmd.SetTQDir(tqDir)
 	writeTestTemplate(t, tqDir, "review-pr", `---
 description: Review PR
-auto: true
 ---
 Review.
 `)
@@ -212,7 +175,6 @@ func TestAdd_MissingTask(t *testing.T) {
 	cmd.SetTQDir(tqDir)
 	writeTestTemplate(t, tqDir, "review-pr", `---
 description: Review PR
-auto: true
 ---
 Review.
 `)

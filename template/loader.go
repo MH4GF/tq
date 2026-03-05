@@ -12,14 +12,9 @@ import (
 )
 
 type Config struct {
-	Description  string `yaml:"description"`
-	Auto         bool   `yaml:"auto"`
-	Interactive  bool   `yaml:"interactive"`
-	AllowedTools string `yaml:"allowed_tools"`
-	Timeout      int    `yaml:"timeout"`
-	MaxRetries   int    `yaml:"max_retries"`
-	OnDone       string `yaml:"on_done"`
-	JSONSchema   string `yaml:"json_schema"`
+	Description string `yaml:"description"`
+	Interactive bool   `yaml:"interactive"`
+	OnDone      string `yaml:"on_done"`
 }
 
 type Template struct {
@@ -74,11 +69,7 @@ func Load(templatesDir, templateID string) (*Template, error) {
 	frontmatter := []byte(strings.TrimSpace(parts[1]))
 	body := strings.TrimSpace(parts[2])
 
-	cfg := Config{
-		Auto:         true,
-		AllowedTools: "Bash,Read,Edit,Grep,Glob",
-		Timeout:      300,
-	}
+	var cfg Config
 	if err := yaml.Unmarshal(frontmatter, &cfg); err != nil {
 		return nil, fmt.Errorf("template %q: invalid YAML: %w", templateID, err)
 	}

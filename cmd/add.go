@@ -2,9 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"path/filepath"
 
-	"github.com/MH4GF/tq/template"
 	"github.com/spf13/cobra"
 )
 
@@ -30,15 +28,7 @@ var addCmd = &cobra.Command{
 
 		status := addStatus
 		if status == "" {
-			templatesDir := filepath.Join(tqDirResolved, "templates")
-			tmpl, err := template.Load(templatesDir, addTemplate)
-			if err != nil {
-				return fmt.Errorf("load template: %w", err)
-			}
 			status = "pending"
-			if !tmpl.Config.Auto {
-				status = "waiting_human"
-			}
 		}
 
 		taskIDPtr := &addTask

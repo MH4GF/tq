@@ -30,20 +30,20 @@ func setupTemplatesDir(t *testing.T) string {
 	templatesDir := filepath.Join(tqDir, "templates")
 	os.MkdirAll(templatesDir, 0o755)
 
-	writeTestTemplate(t, templatesDir, "check-pr-status", false, 0)
-	writeTestTemplate(t, templatesDir, "fix-conflict", true, 0)
-	writeTestTemplate(t, templatesDir, "respond-review", true, 0)
-	writeTestTemplate(t, templatesDir, "fix-ci", true, 1)
-	writeTestTemplate(t, templatesDir, "merge-pr", true, 0)
+	writeTestTemplate(t, templatesDir, "check-pr-status", false)
+	writeTestTemplate(t, templatesDir, "fix-conflict", true)
+	writeTestTemplate(t, templatesDir, "respond-review", true)
+	writeTestTemplate(t, templatesDir, "fix-ci", true)
+	writeTestTemplate(t, templatesDir, "merge-pr", true)
 	return tqDir
 }
 
-func writeTestTemplate(t *testing.T, dir, name string, interactive bool, maxRetries int) {
+func writeTestTemplate(t *testing.T, dir, name string, interactive bool) {
 	t.Helper()
-	writeTestTemplateWithOnDone(t, dir, name, interactive, maxRetries, "")
+	writeTestTemplateWithOnDone(t, dir, name, interactive, "")
 }
 
-func writeTestTemplateWithOnDone(t *testing.T, dir, name string, interactive bool, maxRetries int, onDone string) {
+func writeTestTemplateWithOnDone(t *testing.T, dir, name string, interactive bool, onDone string) {
 	t.Helper()
 	interactiveStr := "false"
 	if interactive {
@@ -57,13 +57,10 @@ func writeTestTemplateWithOnDone(t *testing.T, dir, name string, interactive boo
 
 	content := fmt.Sprintf(`---
 description: %s
-auto: true
 interactive: %s
-timeout: 10
-max_retries: %d
 %s---
 Do %s for {{.Task.Title}}.
-`, name, interactiveStr, maxRetries, onDoneLine, name)
+`, name, interactiveStr, onDoneLine, name)
 
 	os.WriteFile(filepath.Join(dir, name+".md"), []byte(content), 0o644)
 }
@@ -178,49 +175,8 @@ func TestRalphLoop_FailureEscalation(t *testing.T) {
 	_ = RalphLoop(ctx, cfg)
 
 	action, _ := d.GetAction(1)
-	// check-pr-status has max_retries=0, should escalate to waiting_human
 	if action.Status != "waiting_human" {
 		t.Errorf("action status = %q, want waiting_human", action.Status)
-	}
-}
-
-func TestRalphLoop_RetryOnFailure(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
-	// fix-ci has max_retries=1 and interactive=true
-	d.InsertAction("fix-ci", &taskID, "{}", "pending", "test")
-
-	tqDir := setupTemplatesDir(t)
-
-	callCount := 0
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
-	cfg := RalphConfig{
-		TQDir:          tqDir,
-		DB:             d,
-		MaxInteractive: 3,
-		PollInterval:   50 * time.Millisecond,
-		NonInteractiveFunc: func(tqDir string) Worker {
-			return &countingWorker{result: `{"ok":true}`}
-		},
-		InteractiveFunc: func(tqDir string) Worker {
-			callCount++
-			if callCount == 1 {
-				return &countingWorker{err: context.DeadlineExceeded}
-			}
-			return &countingWorker{result: "interactive:done"}
-		},
-	}
-
-	_ = RalphLoop(ctx, cfg)
-
-	// fix-ci has max_retries=1, first failure resets to pending, then retried
-	if callCount < 2 {
-		t.Errorf("interactive worker called %d times, want >= 2 (retry)", callCount)
 	}
 }
 
@@ -232,8 +188,8 @@ func TestRalphLoop_OnDoneTriggersFollowUp(t *testing.T) {
 	templatesDir := filepath.Join(tqDir, "templates")
 	os.MkdirAll(templatesDir, 0o755)
 
-	writeTestTemplateWithOnDone(t, templatesDir, "check-pr", false, 0, "review")
-	writeTestTemplate(t, templatesDir, "review", false, 0)
+	writeTestTemplateWithOnDone(t, templatesDir, "check-pr", false, "review")
+	writeTestTemplate(t, templatesDir, "review", false)
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
 	d.InsertAction("check-pr", &taskID, "{}", "pending", "test")
