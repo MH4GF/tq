@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/MH4GF/tq/dispatch"
@@ -35,7 +34,7 @@ var classifyCmd = &cobra.Command{
 }
 
 func runClassify(w io.Writer, notificationJSON string) error {
-	templatesDir := filepath.Join(tqDirResolved, "templates")
+	templatesDir := resolveTemplatesDir("")
 	tmpl, err := template.Load(templatesDir, "classify")
 	if err != nil {
 		recordClassifyFailure(notificationJSON, fmt.Sprintf("load classify template: %v", err))
@@ -65,11 +64,11 @@ func runClassify(w io.Writer, notificationJSON string) error {
 	ctx := context.Background()
 	var worker dispatch.Worker
 	if tmpl.Config.Interactive {
-		worker = getInteractiveWorkerFactory()(tqDirResolved)
+		worker = getInteractiveWorkerFactory()()
 	} else {
-		worker = getWorkerFactory()(tqDirResolved)
+		worker = getWorkerFactory()()
 	}
-	result, err := worker.Execute(ctx, prompt, tmpl.Config, tqDirResolved, 0)
+	result, err := worker.Execute(ctx, prompt, tmpl.Config, ".", 0)
 	if err != nil {
 		recordClassifyFailure(notificationJSON, fmt.Sprintf("classify execution: %v", err))
 		return fmt.Errorf("classify execution: %w", err)

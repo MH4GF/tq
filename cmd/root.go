@@ -3,9 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/MH4GF/tq/db"
 	"github.com/spf13/cobra"
@@ -13,10 +11,9 @@ import (
 )
 
 var (
-	flagDir       string
-	database      *db.DB
-	tqDirResolved string
-	dbInjected    bool
+	database         *db.DB
+	dbInjected       bool
+	configDirOverride string
 )
 
 var rootCmd = &cobra.Command{
@@ -26,13 +23,11 @@ var rootCmd = &cobra.Command{
 		if database != nil {
 			return nil
 		}
-		dir := resolveTQDir()
-		if dir == "" {
-			return fmt.Errorf("cannot resolve TQ_DIR: use --dir, TQ_DIR env, or run inside a git repo")
+		dir, err := configDir()
+		if err != nil {
+			return err
 		}
-		tqDirResolved = dir
 		dbPath := filepath.Join(dir, "tq.db")
-		var err error
 		database, err = db.Open(dbPath)
 		if err != nil {
 			return fmt.Errorf("open db: %w", err)
@@ -50,23 +45,23 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func resolveTQDir() string {
-	if flagDir != "" {
-		return flagDir
+func configDir() (string, error) {
+	if configDirOverride != "" {
+		return configDirOverride, nil
 	}
-	if dir := os.Getenv("TQ_DIR"); dir != "" {
-		return dir
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("user home dir: %w", err)
 	}
-	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
-	if err == nil {
-		return filepath.Join(strings.TrimSpace(string(out)), "tq")
+	dir := filepath.Join(home, ".config", "tq")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("create config dir: %w", err)
 	}
-	return ""
+	return dir, nil
 }
 
 func init() {
 	rootCmd.Version = buildVersion()
-	rootCmd.PersistentFlags().StringVar(&flagDir, "dir", "", "TQ directory path")
 	rootCmd.AddCommand(taskCmd)
 	rootCmd.AddCommand(actionCmd)
 	dispatchCmd.Hidden = true
@@ -94,8 +89,8 @@ func SetDB(d *db.DB) {
 	dbInjected = true
 }
 
-func SetTQDir(dir string) {
-	tqDirResolved = dir
+func SetConfigDir(dir string) {
+	configDirOverride = dir
 }
 
 func ResetForTest() {

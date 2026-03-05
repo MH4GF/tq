@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 
 	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/dispatch"
@@ -13,43 +12,41 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var defaultWorkerFactory = func(tqDir string) dispatch.Worker {
+var defaultWorkerFactory = func() dispatch.Worker {
 	return &dispatch.NonInteractiveWorker{
 		Runner: &dispatch.ExecRunner{},
-		TQDir:  tqDir,
 	}
 }
 
-var activeWorkerFactory func(string) dispatch.Worker
+var activeWorkerFactory func() dispatch.Worker
 
-func getWorkerFactory() func(string) dispatch.Worker {
+func getWorkerFactory() func() dispatch.Worker {
 	if activeWorkerFactory != nil {
 		return activeWorkerFactory
 	}
 	return defaultWorkerFactory
 }
 
-func SetWorkerFactory(f func(string) dispatch.Worker) {
+func SetWorkerFactory(f func() dispatch.Worker) {
 	activeWorkerFactory = f
 }
 
-var defaultInteractiveWorkerFactory = func(tqDir string) dispatch.Worker {
+var defaultInteractiveWorkerFactory = func() dispatch.Worker {
 	return &dispatch.InteractiveWorker{
 		Runner: &dispatch.ExecRunner{},
-		TQDir:  tqDir,
 	}
 }
 
-var activeInteractiveWorkerFactory func(string) dispatch.Worker
+var activeInteractiveWorkerFactory func() dispatch.Worker
 
-func getInteractiveWorkerFactory() func(string) dispatch.Worker {
+func getInteractiveWorkerFactory() func() dispatch.Worker {
 	if activeInteractiveWorkerFactory != nil {
 		return activeInteractiveWorkerFactory
 	}
 	return defaultInteractiveWorkerFactory
 }
 
-func SetInteractiveWorkerFactory(f func(string) dispatch.Worker) {
+func SetInteractiveWorkerFactory(f func() dispatch.Worker) {
 	activeInteractiveWorkerFactory = f
 }
 
@@ -68,17 +65,17 @@ var dispatchCmd = &cobra.Command{
 			return nil
 		}
 
-		templatesDir := filepath.Join(tqDirResolved, "templates")
-		tmpl, err := template.Load(templatesDir, action.TemplateID)
-		if err != nil {
-			_ = database.MarkFailed(action.ID, fmt.Sprintf("template load error: %v", err))
-			return fmt.Errorf("load template: %w", err)
-		}
-
 		promptData, err := buildPromptData(action)
 		if err != nil {
 			_ = database.MarkFailed(action.ID, fmt.Sprintf("build prompt data: %v", err))
 			return fmt.Errorf("build prompt data: %w", err)
+		}
+
+		templatesDir := resolveTemplatesDir(promptData.Project.WorkDir)
+		tmpl, err := template.Load(templatesDir, action.TemplateID)
+		if err != nil {
+			_ = database.MarkFailed(action.ID, fmt.Sprintf("template load error: %v", err))
+			return fmt.Errorf("load template: %w", err)
 		}
 
 		prompt, err := tmpl.Render(promptData)
@@ -87,13 +84,13 @@ var dispatchCmd = &cobra.Command{
 			return fmt.Errorf("render template: %w", err)
 		}
 
-		workDir := tqDirResolved
+		workDir := "."
 		if promptData.Project.WorkDir != "" {
 			workDir = promptData.Project.WorkDir
 		}
 
 		if tmpl.Config.Interactive {
-			worker := getInteractiveWorkerFactory()(tqDirResolved)
+			worker := getInteractiveWorkerFactory()()
 			result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID)
 			if err != nil {
 				_ = database.MarkFailed(action.ID, err.Error())
@@ -104,7 +101,7 @@ var dispatchCmd = &cobra.Command{
 			return nil
 		}
 
-		worker := getWorkerFactory()(tqDirResolved)
+		worker := getWorkerFactory()()
 		result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID)
 		if err != nil {
 			_ = database.MarkFailed(action.ID, err.Error())

@@ -34,23 +34,26 @@ var uiCmd = &cobra.Command{
 
 		classifyWriter := &tui.LogWriter{Ch: logCh}
 
+		cfgDir, err := configDir()
+		if err != nil {
+			return err
+		}
+
 		ralphBg := func(ctx context.Context) error {
 			cfg := dispatch.RalphConfig{
-				TQDir:          tqDirResolved,
+				UserConfigDir:  cfgDir,
 				DB:             database,
 				MaxInteractive: uiMaxInteractive,
 				PollInterval:   uiPollInterval,
 				TmuxChecker:    &dispatch.ExecTmuxChecker{Runner: &dispatch.ExecRunner{}},
-				NonInteractiveFunc: func(tqDir string) dispatch.Worker {
+				NonInteractiveFunc: func() dispatch.Worker {
 					return &dispatch.NonInteractiveWorker{
 						Runner: &dispatch.ExecRunner{},
-						TQDir:  tqDir,
 					}
 				},
-				InteractiveFunc: func(tqDir string) dispatch.Worker {
+				InteractiveFunc: func() dispatch.Worker {
 					return &dispatch.InteractiveWorker{
 						Runner: &dispatch.ExecRunner{},
-						TQDir:  tqDir,
 					}
 				},
 			}

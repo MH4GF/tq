@@ -13,7 +13,6 @@ import (
 // The session reports back via `tq action done`.
 type InteractiveWorker struct {
 	Runner CommandRunner
-	TQDir  string
 }
 
 func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg tmpl.Config, workDir string, actionID int64) (string, error) {
@@ -29,7 +28,7 @@ func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg tmpl
 
 	// 2. Send claude command text
 	escapedPrompt := strings.ReplaceAll(prompt, "'", "'\\''")
-	claudeCmd := fmt.Sprintf("TQ_DIR=%s TQ_ACTION_ID=%d claude '%s'", w.TQDir, actionID, escapedPrompt)
+	claudeCmd := fmt.Sprintf("TQ_ACTION_ID=%d claude '%s'", actionID, escapedPrompt)
 	out, err = w.Runner.Run(ctx, "tmux", []string{
 		"send-keys", "-t", fmt.Sprintf("main:%s", windowName), claudeCmd,
 	}, workDir, nil)

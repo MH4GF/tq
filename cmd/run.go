@@ -25,26 +25,29 @@ var runCmd = &cobra.Command{
 
 		fmt.Fprintf(cmd.OutOrStdout(), "starting ralph loop (max_interactive=%d, poll=%s)\n", runMaxInteractive, runPollInterval)
 
+		cfgDir, err := configDir()
+		if err != nil {
+			return err
+		}
+
 		cfg := dispatch.RalphConfig{
-			TQDir:          tqDirResolved,
+			UserConfigDir:  cfgDir,
 			DB:             database,
 			MaxInteractive: runMaxInteractive,
 			PollInterval:   runPollInterval,
-			NonInteractiveFunc: func(tqDir string) dispatch.Worker {
+			NonInteractiveFunc: func() dispatch.Worker {
 				return &dispatch.NonInteractiveWorker{
 					Runner: &dispatch.ExecRunner{},
-					TQDir:  tqDir,
 				}
 			},
-			InteractiveFunc: func(tqDir string) dispatch.Worker {
+			InteractiveFunc: func() dispatch.Worker {
 				return &dispatch.InteractiveWorker{
 					Runner: &dispatch.ExecRunner{},
-					TQDir:  tqDir,
 				}
 			},
 		}
 
-		err := dispatch.RalphLoop(ctx, cfg)
+		err = dispatch.RalphLoop(ctx, cfg)
 		if err != nil && err != context.Canceled {
 			return err
 		}

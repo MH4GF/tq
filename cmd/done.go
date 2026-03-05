@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"strconv"
 
 	"github.com/MH4GF/tq/dispatch"
@@ -38,7 +37,8 @@ var doneCmd = &cobra.Command{
 			return fmt.Errorf("mark done: %w", err)
 		}
 
-		templatesDir := filepath.Join(tqDirResolved, "templates")
+		projectWorkDir := getProjectWorkDir(action)
+		templatesDir := resolveTemplatesDir(projectWorkDir)
 		if err := dispatch.TriggerOnDone(database, templatesDir, action, result); err != nil {
 			slog.Warn("on_done trigger failed", "action_id", id, "error", err)
 		}

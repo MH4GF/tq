@@ -19,12 +19,11 @@ type claudeJSONOutput struct {
 // NonInteractiveWorker runs `claude -p` for non-interactive actions.
 type NonInteractiveWorker struct {
 	Runner CommandRunner
-	TQDir  string
 }
 
 func (w *NonInteractiveWorker) Execute(ctx context.Context, prompt string, cfg tmpl.Config, workDir string, actionID int64) (string, error) {
 	args := []string{"-p", prompt, "--output-format", "json"}
-	env := []string{"TQ_DIR=" + w.TQDir, fmt.Sprintf("TQ_ACTION_ID=%d", actionID)}
+	env := []string{fmt.Sprintf("TQ_ACTION_ID=%d", actionID)}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, defaultTimeout*time.Second)
 	defer cancel()

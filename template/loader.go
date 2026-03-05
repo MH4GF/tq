@@ -27,7 +27,6 @@ type PromptData struct {
 	Task    TaskData
 	Project ProjectData
 	Action  ActionData
-	TQDir   string
 }
 
 type TaskData struct {
