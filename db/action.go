@@ -210,6 +210,14 @@ func (db *DB) ResetToPending(id int64) error {
 	return err
 }
 
+func (db *DB) SetSessionInfo(id int64, sessionID, tmuxPane string) error {
+	_, err := db.Exec(
+		"UPDATE actions SET session_id = ?, tmux_pane = ? WHERE id = ?",
+		sessionID, tmuxPane, id,
+	)
+	return err
+}
+
 func (db *DB) GetAction(id int64) (*Action, error) {
 	a := &Action{}
 	err := db.QueryRow(

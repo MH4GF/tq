@@ -121,6 +121,11 @@ func dispatchInteractive(ctx context.Context, cfg RalphConfig, action *db.Action
 		return true, nil
 	}
 
+	windowName := fmt.Sprintf("tq-action-%d", action.ID)
+	if err := cfg.DB.SetSessionInfo(action.ID, "main", windowName); err != nil {
+		slog.Warn("failed to save session info", "action_id", action.ID, "error", err)
+	}
+
 	slog.Info("interactive action dispatched", "action_id", action.ID, "result", result)
 	return true, nil
 }

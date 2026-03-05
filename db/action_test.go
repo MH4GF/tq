@@ -327,6 +327,25 @@ func TestResetToPending(t *testing.T) {
 	}
 }
 
+func TestSetSessionInfo(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	id, _ := d.InsertAction("test", nil, "{}", "running", "auto")
+
+	if err := d.SetSessionInfo(id, "main", "tq-action-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	a, _ := d.GetAction(id)
+	if !a.SessionID.Valid || a.SessionID.String != "main" {
+		t.Errorf("session_id = %v, want 'main'", a.SessionID)
+	}
+	if !a.TmuxPane.Valid || a.TmuxPane.String != "tq-action-1" {
+		t.Errorf("tmux_pane = %v, want 'tq-action-1'", a.TmuxPane)
+	}
+}
+
 func TestAction_MatchesDate(t *testing.T) {
 	tests := []struct {
 		name string
