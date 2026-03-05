@@ -54,7 +54,6 @@ type ActionData struct {
 	ID         int64
 	TemplateID string
 	Status     string
-	Priority   int
 	Source     string
 	Meta       map[string]any
 }

@@ -12,7 +12,6 @@ var (
 	addTemplate string
 	addTask     int64
 	addMeta     string
-	addPriority int
 	addSource   string
 	addStatus   string
 	addForce    bool
@@ -52,7 +51,7 @@ var addCmd = &cobra.Command{
 			}
 		}
 
-		id, err := database.InsertAction(addTemplate, taskIDPtr, addMeta, status, addPriority, addSource)
+		id, err := database.InsertAction(addTemplate, taskIDPtr, addMeta, status, addSource)
 		if err != nil {
 			return fmt.Errorf("insert action: %w", err)
 		}
@@ -64,7 +63,6 @@ var addCmd = &cobra.Command{
 func init() {
 	addCmd.Flags().Int64Var(&addTask, "task", 0, "Task ID")
 	addCmd.Flags().StringVar(&addMeta, "meta", "{}", "Metadata JSON")
-	addCmd.Flags().IntVar(&addPriority, "priority", 0, "Priority")
 	addCmd.Flags().StringVar(&addSource, "source", "human", "Source")
 	addCmd.Flags().StringVar(&addStatus, "status", "", "Override status (pending|done|running|failed|waiting_human)")
 	addCmd.Flags().BoolVar(&addForce, "force", false, "Skip duplicate check")

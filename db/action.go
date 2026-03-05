@@ -12,7 +12,6 @@ type Action struct {
 	TaskID      sql.NullInt64
 	Metadata    string
 	Status      string
-	Priority    int
 	Result      sql.NullString
 	SessionID   sql.NullString
 	TmuxPane    sql.NullString
@@ -63,14 +62,14 @@ func FilterByDate(actions []Action, date string) []Action {
 	return filtered
 }
 
-func (db *DB) InsertAction(templateID string, taskID *int64, metadata string, status string, priority int, source string) (int64, error) {
+func (db *DB) InsertAction(templateID string, taskID *int64, metadata string, status string, source string) (int64, error) {
 	var tid sql.NullInt64
 	if taskID != nil {
 		tid = sql.NullInt64{Int64: *taskID, Valid: true}
 	}
 	res, err := db.Exec(
-		"INSERT INTO actions (template_id, task_id, metadata, status, priority, source) VALUES (?, ?, ?, ?, ?, ?)",
-		templateID, tid, metadata, status, priority, source,
+		"INSERT INTO actions (template_id, task_id, metadata, status, source) VALUES (?, ?, ?, ?, ?)",
+		templateID, tid, metadata, status, source,
 	)
 	if err != nil {
 		return 0, err
@@ -99,8 +98,8 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 
 	a := &Action{}
 	err = tx.QueryRowContext(ctx,
-		"SELECT id, template_id, task_id, metadata, status, priority, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE status = 'pending' ORDER BY priority DESC, id ASC LIMIT 1",
-	).Scan(&a.ID, &a.TemplateID, &a.TaskID, &a.Metadata, &a.Status, &a.Priority, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt)
+		"SELECT id, template_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE status = 'pending' ORDER BY id ASC LIMIT 1",
+	).Scan(&a.ID, &a.TemplateID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -146,7 +145,7 @@ func (db *DB) MarkWaitingHuman(id int64, result string) error {
 }
 
 func (db *DB) ListActions(status string, taskID *int64) ([]Action, error) {
-	query := "SELECT id, template_id, task_id, metadata, status, priority, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE 1=1"
+	query := "SELECT id, template_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE 1=1"
 	var args []any
 
 	if status != "" {
@@ -168,7 +167,7 @@ func (db *DB) ListActions(status string, taskID *int64) ([]Action, error) {
 	var actions []Action
 	for rows.Next() {
 		var a Action
-		if err := rows.Scan(&a.ID, &a.TemplateID, &a.TaskID, &a.Metadata, &a.Status, &a.Priority, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.TemplateID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt); err != nil {
 			return nil, err
 		}
 		actions = append(actions, a)
@@ -214,9 +213,9 @@ func (db *DB) ResetToPending(id int64) error {
 func (db *DB) GetAction(id int64) (*Action, error) {
 	a := &Action{}
 	err := db.QueryRow(
-		"SELECT id, template_id, task_id, metadata, status, priority, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE id = ?",
+		"SELECT id, template_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE id = ?",
 		id,
-	).Scan(&a.ID, &a.TemplateID, &a.TaskID, &a.Metadata, &a.Status, &a.Priority, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt)
+	).Scan(&a.ID, &a.TemplateID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt)
 	if err != nil {
 		return nil, err
 	}

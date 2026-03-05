@@ -41,8 +41,7 @@ var listCmd = &cobra.Command{
 					"template_id": a.TemplateID,
 					"metadata":    a.Metadata,
 					"status":      a.Status,
-					"priority":    a.Priority,
-					"source":      a.Source,
+						"source":      a.Source,
 					"created_at":  a.CreatedAt,
 				}
 				if a.TaskID.Valid {
@@ -78,7 +77,7 @@ var listCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tTemplate\tTask\tStatus\tPriority\tResult")
+		fmt.Fprintln(w, "ID\tTemplate\tTask\tStatus\tResult")
 		for _, a := range actions {
 			taskStr := "-"
 			if a.TaskID.Valid {
@@ -91,8 +90,8 @@ var listCmd = &cobra.Command{
 					result = result[:57] + "..."
 				}
 			}
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%d\t%s\n",
-				a.ID, a.TemplateID, taskStr, a.Status, a.Priority, result)
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n",
+				a.ID, a.TemplateID, taskStr, a.Status, result)
 		}
 		return w.Flush()
 	},

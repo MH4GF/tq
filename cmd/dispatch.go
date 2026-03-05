@@ -138,7 +138,6 @@ func buildPromptData(action *db.Action) (template.PromptData, error) {
 		ID:         action.ID,
 		TemplateID: action.TemplateID,
 		Status:     action.Status,
-		Priority:   action.Priority,
 		Source:     action.Source,
 		Meta:       actionMeta,
 	}

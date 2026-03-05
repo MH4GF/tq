@@ -163,7 +163,7 @@ func TestNonInteractiveWorker_Execute_MalformedJSON(t *testing.T) {
 }
 
 func TestNonInteractiveWorker_Execute_JSONSchema(t *testing.T) {
-	envelope := `{"type":"result","subtype":"success","result":"some text","structured_output":{"task":{"id":0,"project_name":"works","title":"Test","url":"https://example.com"},"actions":[{"template_id":"check-pr-status","priority":5}]}}`
+	envelope := `{"type":"result","subtype":"success","result":"some text","structured_output":{"task":{"id":0,"project_name":"works","title":"Test","url":"https://example.com"},"actions":[{"template_id":"check-pr-status"}]}}`
 	mock := &MockRunner{Output: []byte(envelope)}
 	w := &NonInteractiveWorker{Runner: mock, TQDir: "/tmp/tq"}
 

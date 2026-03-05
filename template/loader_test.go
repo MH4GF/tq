@@ -135,7 +135,7 @@ func TestRender_AllVariables(t *testing.T) {
 		ID: "test",
 		Body: `Task: {{.Task.ID}} {{.Task.Title}} {{.Task.URL}} {{.Task.Status}}
 Project: {{.Project.ID}} {{.Project.Name}} {{.Project.WorkDir}}
-Action: {{.Action.ID}} {{.Action.TemplateID}} {{.Action.Status}} {{.Action.Priority}} {{.Action.Source}}
+Action: {{.Action.ID}} {{.Action.TemplateID}} {{.Action.Status}} {{.Action.Source}}
 TaskMeta: {{index .Task.Meta "key"}}
 ProjectMeta: {{index .Project.Meta "key"}}
 ActionMeta: {{index .Action.Meta "key"}}`,
@@ -159,7 +159,6 @@ ActionMeta: {{index .Action.Meta "key"}}`,
 			ID:         3,
 			TemplateID: "implement",
 			Status:     "pending",
-			Priority:   10,
 			Source:      "github",
 			Meta:       map[string]any{"key": "aval"},
 		},
@@ -172,7 +171,7 @@ ActionMeta: {{index .Action.Meta "key"}}`,
 
 	expected := `Task: 1 Test Task https://example.com/1 open
 Project: 2 MyProject /tmp/proj
-Action: 3 implement pending 10 github
+Action: 3 implement pending github
 TaskMeta: tval
 ProjectMeta: pval
 ActionMeta: aval`

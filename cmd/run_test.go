@@ -16,9 +16,9 @@ func TestStatus(t *testing.T) {
 	cmd.SetTQDir(t.TempDir())
 
 	taskID, _ := d.InsertTask(1, "Task 1", "", "{}")
-	d.InsertAction("check-pr", &taskID, "{}", "pending", 0, "test")
-	d.InsertAction("fix-ci", &taskID, "{}", "running", 0, "test")
-	d.InsertAction("merge", &taskID, "{}", "done", 0, "test")
+	d.InsertAction("check-pr", &taskID, "{}", "pending", "test")
+	d.InsertAction("fix-ci", &taskID, "{}", "running", "test")
+	d.InsertAction("merge", &taskID, "{}", "done", "test")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)

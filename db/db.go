@@ -31,8 +31,48 @@ func Open(dsn string) (*DB, error) {
 }
 
 func (db *DB) Migrate() error {
-	_, err := db.Exec(schemaSQL)
-	return err
+	if _, err := db.Exec(schemaSQL); err != nil {
+		return err
+	}
+
+	// Drop priority column from existing DBs (idempotent)
+	rows, err := db.Query("PRAGMA table_info(actions)")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	hasPriority := false
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var dfltValue *string
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dfltValue, &pk); err != nil {
+			return err
+		}
+		if name == "priority" {
+			hasPriority = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	if hasPriority {
+		if _, err := db.Exec("DROP INDEX IF EXISTS idx_actions_dispatch"); err != nil {
+			return err
+		}
+		if _, err := db.Exec("ALTER TABLE actions DROP COLUMN priority"); err != nil {
+			return err
+		}
+		if _, err := db.Exec("CREATE INDEX IF NOT EXISTS idx_actions_dispatch ON actions(status, id ASC)"); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (db *DB) Close() error {

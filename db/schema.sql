@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS actions (
   task_id      INTEGER REFERENCES tasks(id),
   metadata     TEXT NOT NULL DEFAULT '{}',
   status       TEXT DEFAULT 'pending',
-  priority     INTEGER DEFAULT 0,
   result       TEXT,
   session_id   TEXT,
   tmux_pane    TEXT,
@@ -33,5 +32,5 @@ CREATE TABLE IF NOT EXISTS actions (
   completed_at TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_actions_dispatch ON actions(status, priority DESC, id ASC);
+CREATE INDEX IF NOT EXISTS idx_actions_dispatch ON actions(status, id ASC);
 CREATE INDEX IF NOT EXISTS idx_actions_task ON actions(task_id, id ASC);

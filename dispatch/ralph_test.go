@@ -72,7 +72,7 @@ func TestRalphLoop_ProcessesAndStops(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	d.InsertAction("check-pr-status", &taskID, "{}", "pending", 0, "test")
+	d.InsertAction("check-pr-status", &taskID, "{}", "pending", "test")
 
 	tqDir := setupTemplatesDir(t)
 
@@ -114,12 +114,12 @@ func TestRalphLoop_InteractiveLimitEnforced(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
-	d.InsertAction("fix-conflict", &taskID, "{}", "pending", 0, "test")
+	d.InsertAction("fix-conflict", &taskID, "{}", "pending", "test")
 
 	tqDir := setupTemplatesDir(t)
 
 	// Simulate an already-running interactive session
-	d.InsertAction("respond-review", &taskID, "{}", "running", 0, "test")
+	d.InsertAction("respond-review", &taskID, "{}", "running", "test")
 	d.Exec("UPDATE actions SET session_id = 'session-1' WHERE id = 2")
 
 	interactiveWorker := &countingWorker{result: "interactive:session=test"}
@@ -152,7 +152,7 @@ func TestRalphLoop_FailureEscalation(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
-	d.InsertAction("check-pr-status", &taskID, "{}", "pending", 0, "test")
+	d.InsertAction("check-pr-status", &taskID, "{}", "pending", "test")
 
 	tqDir := setupTemplatesDir(t)
 
@@ -189,7 +189,7 @@ func TestRalphLoop_RetryOnFailure(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
 	// fix-ci has max_retries=1 and interactive=true
-	d.InsertAction("fix-ci", &taskID, "{}", "pending", 0, "test")
+	d.InsertAction("fix-ci", &taskID, "{}", "pending", "test")
 
 	tqDir := setupTemplatesDir(t)
 
@@ -235,7 +235,7 @@ func TestRalphLoop_OnDoneTriggersFollowUp(t *testing.T) {
 	writeTestTemplate(t, templatesDir, "review", false, 0)
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	d.InsertAction("check-pr", &taskID, "{}", "pending", 0, "test")
+	d.InsertAction("check-pr", &taskID, "{}", "pending", "test")
 
 	worker := &countingWorker{result: `{"status":"merged"}`}
 

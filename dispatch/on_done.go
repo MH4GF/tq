@@ -57,7 +57,7 @@ func TriggerOnDone(database *db.DB, templatesDir string, action *db.Action, resu
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	_, err = database.InsertAction(onDoneTemplateID, &taskID, string(metaJSON), status, 0, "on_done")
+	_, err = database.InsertAction(onDoneTemplateID, &taskID, string(metaJSON), status, "on_done")
 	if err != nil {
 		return fmt.Errorf("insert on_done action: %w", err)
 	}

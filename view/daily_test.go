@@ -40,7 +40,7 @@ func TestGenerate_WithData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actionID1, err := d.InsertAction("review-pr", &openTaskID, "{}", "done", 0, "auto")
+	actionID1, err := d.InsertAction("review-pr", &openTaskID, "{}", "done", "auto")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,15 +48,15 @@ func TestGenerate_WithData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := d.InsertAction("run-tests", &openTaskID, "{}", "running", 0, "auto"); err != nil {
+	if _, err := d.InsertAction("run-tests", &openTaskID, "{}", "running", "auto"); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := d.InsertAction("deploy", &openTaskID, "{}", "pending", 0, "auto"); err != nil {
+	if _, err := d.InsertAction("deploy", &openTaskID, "{}", "pending", "auto"); err != nil {
 		t.Fatal(err)
 	}
 
-	failedActionID, err := d.InsertAction("lint", &blockedTaskID, "{}", "failed", 0, "auto")
+	failedActionID, err := d.InsertAction("lint", &blockedTaskID, "{}", "failed", "auto")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestGenerate_WithData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = d.InsertAction("approve", &blockedTaskID, "{}", "waiting_human", 0, "auto")
+	_, err = d.InsertAction("approve", &blockedTaskID, "{}", "waiting_human", "auto")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +256,7 @@ func TestGenerate_DateFilter(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if _, err := d.InsertAction("review-pr", &taskID, "{}", "pending", 0, "auto"); err != nil {
+			if _, err := d.InsertAction("review-pr", &taskID, "{}", "pending", "auto"); err != nil {
 				t.Fatal(err)
 			}
 
@@ -319,7 +319,7 @@ func TestGenerate_DateFilter_DoneTaskExcluded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := d.InsertAction("review-pr", &taskID, "{}", "pending", 0, "auto"); err != nil {
+	if _, err := d.InsertAction("review-pr", &taskID, "{}", "pending", "auto"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.Exec("UPDATE actions SET created_at = '2026-01-01 00:00:00'"); err != nil {
@@ -386,15 +386,15 @@ func TestGenerate_DateFilter_OpenTaskShowsActiveActions(t *testing.T) {
 	}
 
 	// pending action with old date
-	if _, err := d.InsertAction("review-pr", &taskID, "{}", "pending", 0, "auto"); err != nil {
+	if _, err := d.InsertAction("review-pr", &taskID, "{}", "pending", "auto"); err != nil {
 		t.Fatal(err)
 	}
 	// running action with old date
-	if _, err := d.InsertAction("run-tests", &taskID, "{}", "running", 0, "auto"); err != nil {
+	if _, err := d.InsertAction("run-tests", &taskID, "{}", "running", "auto"); err != nil {
 		t.Fatal(err)
 	}
 	// waiting_human action with old date
-	if _, err := d.InsertAction("approve", &taskID, "{}", "waiting_human", 0, "auto"); err != nil {
+	if _, err := d.InsertAction("approve", &taskID, "{}", "waiting_human", "auto"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -437,11 +437,11 @@ func TestGenerate_DateFilter_OpenTaskFiltersDoneActions(t *testing.T) {
 	}
 
 	// pending action (should always show)
-	if _, err := d.InsertAction("deploy", &taskID, "{}", "pending", 0, "auto"); err != nil {
+	if _, err := d.InsertAction("deploy", &taskID, "{}", "pending", "auto"); err != nil {
 		t.Fatal(err)
 	}
 	// done action with old date (should be filtered out)
-	doneID, err := d.InsertAction("review-pr", &taskID, "{}", "done", 0, "auto")
+	doneID, err := d.InsertAction("review-pr", &taskID, "{}", "done", "auto")
 	if err != nil {
 		t.Fatal(err)
 	}

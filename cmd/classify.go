@@ -92,7 +92,7 @@ func recordClassifyFailure(notificationJSON, errMsg string) {
 			meta = string(b)
 		}
 	}
-	id, err := database.InsertAction("classify", nil, meta, "failed", 0, "classify")
+	id, err := database.InsertAction("classify", nil, meta, "failed", "classify")
 	if err != nil {
 		return
 	}

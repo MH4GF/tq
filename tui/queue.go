@@ -147,7 +147,7 @@ func (m QueueModel) View() string {
 	}
 
 	var b strings.Builder
-	header := fmt.Sprintf("  %-4s %-6s %-20s %-14s %-8s %s", "ID", "Status", "Template", "Source", "Pri", "Task")
+	header := fmt.Sprintf("  %-4s %-6s %-20s %-14s %s", "ID", "Status", "Template", "Source", "Task")
 	b.WriteString(styleMuted.Render(header) + "\n")
 	b.WriteString(styleMuted.Render(strings.Repeat("─", min(m.width, 80))) + "\n")
 
@@ -167,13 +167,12 @@ func (m QueueModel) View() string {
 			taskStr = fmt.Sprintf("#%d", a.TaskID.Int64)
 		}
 
-		line := fmt.Sprintf("%s%s %-4d %-14s %-20s %-8d %s",
+		line := fmt.Sprintf("%s%s %-4d %-14s %-20s %s",
 			prefix,
 			st.Render(icon),
 			a.ID,
 			st.Render(fmt.Sprintf("%-14s", a.Status)),
 			a.TemplateID,
-			a.Priority,
 			taskStr,
 		)
 

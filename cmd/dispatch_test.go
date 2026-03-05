@@ -64,7 +64,7 @@ Review PR for {{.Task.Title}}.
 `), 0644)
 
 	taskID, _ := d.InsertTask(1, "Fix bug", "https://github.com/test/1", "{}")
-	d.InsertAction("review-pr", &taskID, "{}", "pending", 0, "auto")
+	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
 
 	cmd.SetWorkerFactory(func(tqDir string) dispatch.Worker {
 		return &mockWorker{result: `{"review":"approved"}`}
@@ -116,7 +116,7 @@ auto: true
 Do something.
 `), 0644)
 
-	d.InsertAction("test", nil, "{}", "pending", 0, "auto")
+	d.InsertAction("test", nil, "{}", "pending", "auto")
 
 	cmd.SetWorkerFactory(func(tqDir string) dispatch.Worker {
 		return &mockWorker{err: context.DeadlineExceeded}

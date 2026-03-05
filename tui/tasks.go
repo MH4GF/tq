@@ -450,7 +450,7 @@ func (m TasksModel) createTask(projectID int64, projectName, title, url string) 
 
 func (m TasksModel) createAction(taskID int64, templateID, meta string) tea.Cmd {
 	return func() tea.Msg {
-		id, err := m.database.InsertAction(templateID, &taskID, meta, "pending", 0, "human")
+		id, err := m.database.InsertAction(templateID, &taskID, meta, "pending", "human")
 		if err != nil {
 			return actionCreatedMsg{}
 		}
@@ -524,11 +524,10 @@ func (m *TasksModel) buildLines() {
 				icon := StatusIcon(a.Status)
 				ast := StatusStyle(a.Status)
 				m.lines = append(m.lines, treeLine{
-					text: fmt.Sprintf("      %s %s %s (pri:%d)",
+					text: fmt.Sprintf("      %s %s %s",
 						ast.Render(icon),
 						ast.Render(fmt.Sprintf("%-14s", a.Status)),
 						a.TemplateID,
-						a.Priority,
 					),
 					key:    fmt.Sprintf("a:%d", a.ID),
 					taskID: tn.task.ID,

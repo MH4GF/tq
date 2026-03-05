@@ -170,7 +170,6 @@ func buildPromptDataFromDB(database *db.DB, action *db.Action, tqDir string) (te
 		ID:         action.ID,
 		TemplateID: action.TemplateID,
 		Status:     action.Status,
-		Priority:   action.Priority,
 		Source:     action.Source,
 		Meta:       actionMeta,
 	}

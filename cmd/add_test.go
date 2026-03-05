@@ -40,7 +40,7 @@ Review this PR.
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "review-pr", "--task", "1", "--priority", "5"})
+	root.SetArgs([]string{"action", "create", "review-pr", "--task", "1"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -63,9 +63,6 @@ Review this PR.
 	}
 	if !a.TaskID.Valid || a.TaskID.Int64 != taskID {
 		t.Errorf("task_id = %v, want %d", a.TaskID, taskID)
-	}
-	if a.Priority != 5 {
-		t.Errorf("priority = %d, want 5", a.Priority)
 	}
 }
 
@@ -118,7 +115,7 @@ Review.
 `)
 
 	taskID, _ := d.InsertTask(1, "test task", "", "{}")
-	d.InsertAction("review-pr", &taskID, "{}", "pending", 0, "auto")
+	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -154,7 +151,7 @@ Implement.
 `)
 
 	taskID, _ := d.InsertTask(1, "test task", "", "{}")
-	d.InsertAction("implement", &taskID, "{}", "waiting_human", 0, "auto")
+	d.InsertAction("implement", &taskID, "{}", "waiting_human", "auto")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -187,7 +184,7 @@ Review.
 `)
 
 	taskID, _ := d.InsertTask(1, "test task", "", "{}")
-	d.InsertAction("review-pr", &taskID, "{}", "pending", 0, "auto")
+	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)

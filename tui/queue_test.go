@@ -23,8 +23,8 @@ func TestQueueModel_LoadActions(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
-	d.InsertAction("check-pr", &taskID, "{}", "pending", 5, "auto")
-	d.InsertAction("fix-ci", &taskID, "{}", "running", 3, "auto")
+	d.InsertAction("check-pr", &taskID, "{}", "pending", "auto")
+	d.InsertAction("fix-ci", &taskID, "{}", "running", "auto")
 
 	m := NewQueueModel(d, "")
 
@@ -46,9 +46,9 @@ func TestQueueModel_Navigation(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	d.InsertAction("a", nil, "{}", "pending", 0, "auto")
-	d.InsertAction("b", nil, "{}", "pending", 0, "auto")
-	d.InsertAction("c", nil, "{}", "pending", 0, "auto")
+	d.InsertAction("a", nil, "{}", "pending", "auto")
+	d.InsertAction("b", nil, "{}", "pending", "auto")
+	d.InsertAction("c", nil, "{}", "pending", "auto")
 
 	m := NewQueueModel(d, "")
 	msg := m.Init()()
@@ -102,7 +102,7 @@ func TestQueueModel_Reload(t *testing.T) {
 	}
 
 	// Insert after initial load
-	d.InsertAction("new-one", nil, "{}", "pending", 0, "auto")
+	d.InsertAction("new-one", nil, "{}", "pending", "auto")
 
 	// Reload
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
@@ -120,8 +120,8 @@ func TestQueueModel_StatusIcons(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	d.InsertAction("pending-action", nil, "{}", "pending", 0, "auto")
-	d.InsertAction("running-action", nil, "{}", "running", 0, "auto")
+	d.InsertAction("pending-action", nil, "{}", "pending", "auto")
+	d.InsertAction("running-action", nil, "{}", "running", "auto")
 
 	m := NewQueueModel(d, "")
 	msg := m.Init()()
@@ -141,8 +141,8 @@ func TestQueueModel_DateFilter(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
-	d.InsertAction("today-action", &taskID, "{}", "pending", 0, "auto")
-	d.InsertAction("old-action", &taskID, "{}", "pending", 0, "auto")
+	d.InsertAction("today-action", &taskID, "{}", "pending", "auto")
+	d.InsertAction("old-action", &taskID, "{}", "pending", "auto")
 
 	// Set old-action's created_at to a different date
 	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE template_id = 'old-action'")
@@ -188,7 +188,7 @@ func TestQueueModel_InlineResult(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
-	id, _ := d.InsertAction("check-pr", &taskID, "{}", "running", 0, "auto")
+	id, _ := d.InsertAction("check-pr", &taskID, "{}", "running", "auto")
 	d.MarkDone(id, "all checks passed")
 
 	m := NewQueueModel(d, "")
@@ -206,7 +206,7 @@ func TestQueueModel_InlineResultFailed(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, _ := d.InsertAction("deploy", nil, "{}", "running", 0, "auto")
+	id, _ := d.InsertAction("deploy", nil, "{}", "running", "auto")
 	d.MarkFailed(id, "timeout error")
 
 	m := NewQueueModel(d, "")
@@ -224,7 +224,7 @@ func TestQueueModel_InlineResultWaitingHuman(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, _ := d.InsertAction("deploy", nil, "{}", "running", 0, "auto")
+	id, _ := d.InsertAction("deploy", nil, "{}", "running", "auto")
 	d.MarkWaitingHuman(id, "needs approval")
 
 	m := NewQueueModel(d, "")
@@ -242,7 +242,7 @@ func TestQueueModel_DetailView(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, _ := d.InsertAction("check", nil, "{}", "running", 0, "auto")
+	id, _ := d.InsertAction("check", nil, "{}", "running", "auto")
 	d.MarkDone(id, "detailed result\nline 2\nline 3")
 
 	m := NewQueueModel(d, "")
@@ -279,7 +279,7 @@ func TestQueueModel_DetailViewNoResult(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	d.InsertAction("check", nil, "{}", "pending", 0, "auto")
+	d.InsertAction("check", nil, "{}", "pending", "auto")
 
 	m := NewQueueModel(d, "")
 	m = m.SetSize(120, 40)
@@ -297,7 +297,7 @@ func TestQueueModel_DetailViewScroll(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, _ := d.InsertAction("check", nil, "{}", "running", 0, "auto")
+	id, _ := d.InsertAction("check", nil, "{}", "running", "auto")
 	d.MarkDone(id, "line1\nline2\nline3")
 
 	m := NewQueueModel(d, "")

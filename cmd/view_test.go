@@ -18,7 +18,7 @@ func TestView_Print(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "fix login bug", "https://example.com/pr/1", "{}")
-	d.InsertAction("review-pr", &taskID, "{}", "pending", 5, "auto")
+	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -71,7 +71,7 @@ func TestView_Inject(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "fix login bug", "", "{}")
-	d.InsertAction("review-pr", &taskID, "{}", "pending", 5, "auto")
+	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
 
 	tmpDir := t.TempDir()
 	cmd.SetTQDir(filepath.Join(tmpDir, "tq"))

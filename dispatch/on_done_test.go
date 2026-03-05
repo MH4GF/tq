@@ -35,7 +35,7 @@ func TestTriggerOnDone_NoOnDone(t *testing.T) {
 	writeOnDoneTemplate(t, templatesDir, "check-pr", true, "")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", 0, "test")
+	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action, _ := d.GetAction(actionID)
 
 	err := TriggerOnDone(d, templatesDir, action, `{"ok":true}`)
@@ -60,7 +60,7 @@ func TestTriggerOnDone_NoTaskID(t *testing.T) {
 	writeOnDoneTemplate(t, templatesDir, "check-pr", true, "review")
 	writeOnDoneTemplate(t, templatesDir, "review", true, "")
 
-	actionID, _ := d.InsertAction("check-pr", nil, "{}", "done", 0, "test")
+	actionID, _ := d.InsertAction("check-pr", nil, "{}", "done", "test")
 	action, _ := d.GetAction(actionID)
 
 	err := TriggerOnDone(d, templatesDir, action, `{"ok":true}`)
@@ -86,7 +86,7 @@ func TestTriggerOnDone_AutoTarget(t *testing.T) {
 	writeOnDoneTemplate(t, templatesDir, "review", true, "")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", 0, "test")
+	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action, _ := d.GetAction(actionID)
 
 	result := `{"status":"merged"}`
@@ -138,7 +138,7 @@ func TestTriggerOnDone_NonAutoTarget(t *testing.T) {
 	writeOnDoneTemplate(t, templatesDir, "review", false, "")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", 0, "test")
+	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action, _ := d.GetAction(actionID)
 
 	err := TriggerOnDone(d, templatesDir, action, `{"ok":true}`)
@@ -168,9 +168,9 @@ func TestTriggerOnDone_DuplicateSkipped(t *testing.T) {
 	writeOnDoneTemplate(t, templatesDir, "review", true, "")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	d.InsertAction("review", &taskID, "{}", "pending", 0, "on_done")
+	d.InsertAction("review", &taskID, "{}", "pending", "on_done")
 
-	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", 0, "test")
+	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action, _ := d.GetAction(actionID)
 
 	err := TriggerOnDone(d, templatesDir, action, `{"ok":true}`)
@@ -196,9 +196,9 @@ func TestTriggerOnDone_WaitingHumanSkipped(t *testing.T) {
 	writeOnDoneTemplate(t, templatesDir, "review", true, "")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	d.InsertAction("review", &taskID, "{}", "waiting_human", 0, "on_done")
+	d.InsertAction("review", &taskID, "{}", "waiting_human", "on_done")
 
-	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", 0, "test")
+	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action, _ := d.GetAction(actionID)
 
 	err := TriggerOnDone(d, templatesDir, action, `{"ok":true}`)
@@ -223,7 +223,7 @@ func TestTriggerOnDone_TargetTemplateNotFound(t *testing.T) {
 	writeOnDoneTemplate(t, templatesDir, "check-pr", true, "nonexistent")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", 0, "test")
+	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action := &db.Action{
 		ID:         actionID,
 		TemplateID: "check-pr",
