@@ -26,7 +26,7 @@ tq project list
 
 ## 人間向け: TUI (`tq ui`)
 
-人間はTUIで操作する。`tq ui` が唯一のエントリポイント。
+人間はTUIで状況を監視する。TUIは読み取り専用で、書き込み操作は Claude Code に指示して CLI 経由で行う。
 
 ```bash
 tq ui
@@ -36,27 +36,10 @@ tq ui
 - **Ralph Loop**: pending アクションを検出して自動ディスパッチ
 - **Watch**: GitHub通知を取得して task/action を自動生成
 
-### タスクを作る
-
-Tasks タブ (`2`) → `c` → プロジェクト選択 → タイトル入力 → URL入力(任意)
-
-### アクションを追加する
-
-Tasks タブでタスクにカーソル → `n` → テンプレート選択 → (implement の場合) instruction 入力
-
-追加されたアクションは Ralph Loop が自動で拾って実行する。
-
 ### 実行状況を確認する
 
 - **Queue タブ** (`1`): アクション一覧。ステータス・結果を確認
 - **Tasks タブ** (`2`): Project → Task → Actions のツリービュー
-
-### 人間の判断が必要な時
-
-worker が失敗すると `waiting_human` になる。Queue タブで:
-- 該当アクションにカーソルを合わせると失敗理由が表示される
-- `a`: reset（pending に戻してリトライ。`failed` にも使える）
-- `x`: reject（failed にして終了）
 
 ### キーバインド
 
@@ -64,21 +47,11 @@ worker が失敗すると `waiting_human` になる。Queue タブで:
 |------|-----------|-----------|
 | `j`/`k` | カーソル移動 | カーソル移動 |
 | `enter` | — | 展開/折りたたみ |
-| `a` | reset | — |
-| `x` | reject | — |
-| `s` | — | ステータス変更 |
-| `c` | — | タスク作成 |
-| `n` | — | アクション追加 |
+| `o` | tmux attach | — |
+| `v` | 結果表示 | 結果表示 |
 | `r` | 再読込 | 再読込 |
 | `tab` / `1` / `2` | タブ切替 | タブ切替 |
 | `q` | 終了 | 終了 |
-
-### デイリーノートに反映する
-
-```bash
-tq view                  # markdown プレビュー
-tq view --inject         # デイリーノートに書き込み
-```
 
 ## AI向け: CLI
 
@@ -120,17 +93,10 @@ tq project delete 3
 ### その他
 
 ```bash
-tq action list                   # アクション一覧
+tq action list                   # アクション一覧（JSON）
 tq action reset <id>             # failed/waiting_human → pending
 tq action reject <id>            # waiting_human → failed
-tq task list                     # タスク一覧
-tq project list                  # プロジェクト一覧
-tq project create <name> <work-dir>  # プロジェクト作成
-tq project delete <id>           # プロジェクト削除
-tq status                        # キュー集計
-tq dispatch                      # 1アクション処理
-tq run                           # Ralph Loop（継続 dispatch）
-tq watch                         # GitHub通知取得 → classify
+tq task list                     # タスク一覧（JSON）
 ```
 
 ## アーキテクチャ
@@ -140,6 +106,18 @@ tq watch                         # GitHub通知取得 → classify
 - **SQLite が SSOT** — デイリーノートはビュー（読み取り専用）
 - **Ralph Loop** — 1アクション処理 → セッション終了、コンテキスト常にフレッシュ
 - **AI は手足のみ** — オーケストレーションは Go、AI は `claude` ワーカー
+- **TUI は読み取り専用** — 人間は TUI で状況を監視する。操作は Claude Code に自然言語で指示し、CLI 経由で実行される
+
+### 内部コマンド
+
+TUI やシステムが内部的に使用するコマンド。直接実行する必要はない。
+
+```bash
+tq dispatch                      # 1アクション処理（Ralph Loop の単位）
+tq run                           # Ralph Loop 起動（TUI が内部で使用）
+tq watch                         # GitHub 通知取得 → classify（TUI が内部で使用）
+tq classify [NOTIFICATION_JSON]  # 通知を task/action に分類（watch が使用）
+```
 
 ### Action 状態遷移
 
