@@ -108,17 +108,6 @@ tq task list                     # タスク一覧（JSON）
 - **AI は手足のみ** — オーケストレーションは Go、AI は `claude` ワーカー
 - **TUI は読み取り専用** — 人間は TUI で状況を監視する。操作は Claude Code に自然言語で指示し、CLI 経由で実行される
 
-### 内部コマンド
-
-TUI やシステムが内部的に使用するコマンド。直接実行する必要はない。
-
-```bash
-tq dispatch                      # 1アクション処理（Ralph Loop の単位）
-tq run                           # Ralph Loop 起動（TUI が内部で使用）
-tq watch                         # GitHub 通知取得 → classify（TUI が内部で使用）
-tq classify [NOTIFICATION_JSON]  # 通知を task/action に分類（watch が使用）
-```
-
 ### Action 状態遷移
 
 ```

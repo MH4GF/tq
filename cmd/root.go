@@ -69,6 +69,10 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&flagDir, "dir", "", "TQ directory path")
 	rootCmd.AddCommand(taskCmd)
 	rootCmd.AddCommand(actionCmd)
+	dispatchCmd.Hidden = true
+	classifyCmd.Hidden = true
+	watchCmd.Hidden = true
+	runCmd.Hidden = true
 	rootCmd.AddCommand(dispatchCmd)
 	rootCmd.AddCommand(classifyCmd)
 	rootCmd.AddCommand(watchCmd)
