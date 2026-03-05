@@ -631,6 +631,62 @@ func TestClaimPending_NotPending(t *testing.T) {
 	}
 }
 
+func TestUpdateActionStatus(t *testing.T) {
+	tests := []struct {
+		name    string
+		to      string
+		wantErr bool
+	}{
+		{"to pending", "pending", false},
+		{"to running", "running", false},
+		{"to failed", "failed", false},
+		{"to waiting_human", "waiting_human", false},
+		{"to done rejected", "done", true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+
+			id, _ := d.InsertAction("test", nil, "{}", "running", "auto")
+			err := d.UpdateActionStatus(id, tc.to)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			a, _ := d.GetAction(id)
+			if a.Status != tc.to {
+				t.Errorf("status = %q, want %q", a.Status, tc.to)
+			}
+
+			switch tc.to {
+			case "pending":
+				if a.StartedAt.Valid {
+					t.Error("started_at should be NULL after setting to pending")
+				}
+				if a.CompletedAt.Valid {
+					t.Error("completed_at should be NULL after setting to pending")
+				}
+			case "running":
+				if !a.StartedAt.Valid {
+					t.Error("started_at should be set for running")
+				}
+			case "failed":
+				if !a.CompletedAt.Valid {
+					t.Error("completed_at should be set for failed")
+				}
+			}
+		})
+	}
+}
+
 func TestGetAction_NotFound(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

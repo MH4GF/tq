@@ -267,6 +267,37 @@ func (db *DB) CountRunningInteractive() (int, error) {
 	return count, err
 }
 
+func (db *DB) UpdateActionStatus(id int64, status string) error {
+	switch status {
+	case "pending":
+		_, err := db.Exec(
+			"UPDATE actions SET status = 'pending', started_at = NULL, completed_at = NULL WHERE id = ?",
+			id,
+		)
+		return err
+	case "running":
+		_, err := db.Exec(
+			"UPDATE actions SET status = 'running', started_at = datetime('now') WHERE id = ?",
+			id,
+		)
+		return err
+	case "failed":
+		_, err := db.Exec(
+			"UPDATE actions SET status = 'failed', completed_at = datetime('now') WHERE id = ?",
+			id,
+		)
+		return err
+	case "waiting_human":
+		_, err := db.Exec(
+			"UPDATE actions SET status = 'waiting_human' WHERE id = ?",
+			id,
+		)
+		return err
+	default:
+		return fmt.Errorf("unsupported status: %q (use 'tq action done' for done)", status)
+	}
+}
+
 func (db *DB) ResetToPending(id int64) error {
 	_, err := db.Exec(
 		"UPDATE actions SET status = 'pending', started_at = NULL, session_id = NULL, tmux_pane = NULL WHERE id = ?",

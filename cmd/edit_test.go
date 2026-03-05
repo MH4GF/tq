@@ -8,18 +8,21 @@ import (
 	"github.com/MH4GF/tq/testutil"
 )
 
-func TestReset(t *testing.T) {
+func TestActionEdit(t *testing.T) {
 	tests := []struct {
-		name      string
-		status    string
-		wantOut   string
-		wantErr   bool
+		name    string
+		from    string
+		to      string
+		wantOut string
+		wantErr bool
 	}{
-		{"failed to pending", "failed", "action #1 reset to pending", false},
-		{"waiting_human to pending", "waiting_human", "action #1 reset to pending", false},
-		{"done is rejected", "done", "", true},
-		{"running to pending", "running", "action #1 reset to pending", false},
-		{"pending is rejected", "pending", "", true},
+		{"failed to pending", "failed", "pending", "action #1 updated (status: pending)", false},
+		{"waiting_human to failed", "waiting_human", "failed", "action #1 updated (status: failed)", false},
+		{"running to failed", "running", "failed", "action #1 updated (status: failed)", false},
+		{"running to pending", "running", "pending", "action #1 updated (status: pending)", false},
+		{"done to pending", "done", "pending", "action #1 updated (status: pending)", false},
+		{"pending to waiting_human", "pending", "waiting_human", "action #1 updated (status: waiting_human)", false},
+		{"to done is rejected", "running", "done", "", true},
 	}
 
 	for _, tc := range tests {
@@ -29,13 +32,13 @@ func TestReset(t *testing.T) {
 			cmd.SetDB(d)
 			cmd.ResetForTest()
 
-			d.InsertAction("test", nil, "{}", tc.status, "human")
+			d.InsertAction("test", nil, "{}", tc.from, "human")
 
 			root := cmd.GetRootCmd()
 			buf := new(bytes.Buffer)
 			root.SetOut(buf)
 			root.SetErr(buf)
-			root.SetArgs([]string{"action", "reset", "1"})
+			root.SetArgs([]string{"action", "edit", "1", "--status", tc.to})
 
 			err := root.Execute()
 			if tc.wantErr {
@@ -57,14 +60,14 @@ func TestReset(t *testing.T) {
 			if err != nil {
 				t.Fatalf("get action: %v", err)
 			}
-			if a.Status != "pending" {
-				t.Errorf("status = %q, want %q", a.Status, "pending")
+			if a.Status != tc.to {
+				t.Errorf("status = %q, want %q", a.Status, tc.to)
 			}
 		})
 	}
 }
 
-func TestReset_InvalidID(t *testing.T) {
+func TestActionEdit_InvalidID(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
@@ -73,7 +76,7 @@ func TestReset_InvalidID(t *testing.T) {
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"action", "reset", "999"})
+	root.SetArgs([]string{"action", "edit", "999", "--status", "pending"})
 
 	if err := root.Execute(); err == nil {
 		t.Fatal("expected error for non-existent action ID")
