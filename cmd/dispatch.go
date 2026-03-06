@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/dispatch"
@@ -70,18 +71,33 @@ func SetRemoteWorkerFactory(f func() dispatch.Worker) {
 }
 
 var dispatchCmd = &cobra.Command{
-	Use:   "dispatch",
+	Use:   "dispatch [action_id]",
 	Short: "Dispatch next pending action",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
-		action, err := database.NextPending(ctx)
-		if err != nil {
-			return fmt.Errorf("next pending: %w", err)
-		}
-		if action == nil {
-			fmt.Fprintln(cmd.OutOrStdout(), "no pending actions")
-			return nil
+		var action *db.Action
+		var err error
+
+		if len(args) == 1 {
+			id, parseErr := strconv.ParseInt(args[0], 10, 64)
+			if parseErr != nil {
+				return fmt.Errorf("invalid action ID %q: %w", args[0], parseErr)
+			}
+			action, err = database.ClaimPending(ctx, id)
+			if err != nil {
+				return err
+			}
+		} else {
+			action, err = database.NextPending(ctx)
+			if err != nil {
+				return fmt.Errorf("next pending: %w", err)
+			}
+			if action == nil {
+				fmt.Fprintln(cmd.OutOrStdout(), "no pending actions")
+				return nil
+			}
 		}
 
 		promptData, err := buildPromptData(action)

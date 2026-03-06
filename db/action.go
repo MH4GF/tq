@@ -122,6 +122,42 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 	return a, nil
 }
 
+func (db *DB) ClaimPending(ctx context.Context, id int64) (*Action, error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	a := &Action{}
+	err = tx.QueryRowContext(ctx,
+		"SELECT id, prompt_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE id = ?",
+		id,
+	).Scan(&a.ID, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("action #%d not found", id)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if a.Status != "pending" {
+		return nil, fmt.Errorf("action #%d is not pending (current: %s)", id, a.Status)
+	}
+
+	_, err = tx.ExecContext(ctx, "UPDATE actions SET status = 'running', started_at = datetime('now') WHERE id = ?", id)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	a.Status = "running"
+	return a, nil
+}
+
 func (db *DB) MarkDone(id int64, result string) error {
 	_, err := db.Exec(
 		"UPDATE actions SET status = 'done', result = ?, completed_at = datetime('now') WHERE id = ?",

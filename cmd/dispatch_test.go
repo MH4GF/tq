@@ -98,6 +98,83 @@ Review PR for {{.Task.Title}}.
 	}
 }
 
+func TestDispatch_WithActionID(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	tqDir := t.TempDir()
+	cmd.SetConfigDir(tqDir)
+
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0755)
+	os.WriteFile(filepath.Join(promptsDir, "review-pr.md"), []byte(`---
+description: Review PR
+mode: noninteractive
+---
+Review PR for {{.Task.Title}}.
+`), 0644)
+
+	taskID, _ := d.InsertTask(1, "Fix bug", "https://github.com/test/1", "{}")
+	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
+	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
+
+	cmd.SetWorkerFactory(func() dispatch.Worker {
+		return &mockWorker{result: `{"review":"approved"}`}
+	})
+	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"dispatch", "2"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !contains(out, "action #2 done") {
+		t.Errorf("output = %q, want to contain 'action #2 done'", out)
+	}
+
+	// action 2 should be done
+	a2, _ := d.GetAction(2)
+	if a2.Status != "done" {
+		t.Errorf("action 2 status = %q, want done", a2.Status)
+	}
+
+	// action 1 should still be pending
+	a1, _ := d.GetAction(1)
+	if a1.Status != "pending" {
+		t.Errorf("action 1 status = %q, want pending", a1.Status)
+	}
+}
+
+func TestDispatch_WithInvalidActionID(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+	cmd.SetConfigDir(t.TempDir())
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"dispatch", "999"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error for non-existent action ID")
+	}
+	if !contains(err.Error(), "not found") {
+		t.Errorf("error = %q, want to contain 'not found'", err)
+	}
+}
+
 func TestDispatch_WorkerError(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

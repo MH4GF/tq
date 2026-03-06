@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 
 	"github.com/MH4GF/tq/db"
@@ -483,6 +484,81 @@ func TestFilterForOpenTask_EmptyDate(t *testing.T) {
 	filtered := db.FilterForOpenTask(actions, "")
 	if len(filtered) != 1 {
 		t.Errorf("expected all actions returned for empty date, got %d", len(filtered))
+	}
+}
+
+func TestClaimPending(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	d.InsertAction("first", nil, "{}", "pending", "auto")
+	d.InsertAction("second", nil, "{}", "pending", "auto")
+
+	ctx := context.Background()
+
+	a, err := d.ClaimPending(ctx, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.PromptID != "second" {
+		t.Errorf("expected second, got %s", a.PromptID)
+	}
+	if a.Status != "running" {
+		t.Errorf("expected status running, got %s", a.Status)
+	}
+
+	fetched, _ := d.GetAction(2)
+	if fetched.Status != "running" {
+		t.Errorf("expected persisted status running, got %s", fetched.Status)
+	}
+
+	// first should still be pending
+	first, _ := d.GetAction(1)
+	if first.Status != "pending" {
+		t.Errorf("expected first to remain pending, got %s", first.Status)
+	}
+}
+
+func TestClaimPending_NotFound(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	_, err := d.ClaimPending(context.Background(), 999)
+	if err == nil {
+		t.Fatal("expected error for non-existent action")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error = %q, want to contain 'not found'", err)
+	}
+}
+
+func TestClaimPending_NotPending(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	tests := []struct {
+		name   string
+		status string
+	}{
+		{"running", "running"},
+		{"done", "done"},
+		{"failed", "failed"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id, _ := d.InsertAction("test-"+tt.status, nil, "{}", tt.status, "auto")
+			_, err := d.ClaimPending(context.Background(), id)
+			if err == nil {
+				t.Fatal("expected error for non-pending action")
+			}
+			if !strings.Contains(err.Error(), "not pending") {
+				t.Errorf("error = %q, want to contain 'not pending'", err)
+			}
+			if !strings.Contains(err.Error(), tt.status) {
+				t.Errorf("error = %q, want to contain status %q", err, tt.status)
+			}
+		})
 	}
 }
 
