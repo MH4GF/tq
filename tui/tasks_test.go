@@ -485,6 +485,40 @@ func TestTasksModel_DetailViewEscIgnored(t *testing.T) {
 	}
 }
 
+func TestTasksModel_SortOrder(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// Create tasks in order: open(1), archived(2), done(3)
+	d.InsertTask(1, "TaskA-open", "", "{}")
+	taskID2, _ := d.InsertTask(1, "TaskB-archived", "", "{}")
+	d.UpdateTask(taskID2, "archived")
+	taskID3, _ := d.InsertTask(1, "TaskC-done", "", "{}")
+	d.UpdateTask(taskID3, "done")
+
+	m := NewTasksModel(d, "")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Expected sort: done(3) → open(1) → archived(2)
+	if len(m.trees) != 1 {
+		t.Fatalf("trees = %d, want 1", len(m.trees))
+	}
+	tasks := m.trees[0].tasks
+	if len(tasks) != 3 {
+		t.Fatalf("tasks = %d, want 3", len(tasks))
+	}
+	if tasks[0].task.Status != "done" {
+		t.Errorf("tasks[0].status = %q, want done", tasks[0].task.Status)
+	}
+	if tasks[1].task.Status != "open" {
+		t.Errorf("tasks[1].status = %q, want open", tasks[1].task.Status)
+	}
+	if tasks[2].task.Status != "archived" {
+		t.Errorf("tasks[2].status = %q, want archived", tasks[2].task.Status)
+	}
+}
+
 func TestTasksModel_SetSize(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

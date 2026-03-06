@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -97,6 +98,9 @@ func (m TasksModel) loadTasks() tea.Cmd {
 				}
 				nodes = append(nodes, taskNode{task: t, actions: actions})
 			}
+			sort.SliceStable(nodes, func(i, j int) bool {
+				return taskStatusOrder(nodes[i].task.Status) < taskStatusOrder(nodes[j].task.Status)
+			})
 			if len(nodes) > 0 {
 				trees = append(trees, projectTree{project: p, tasks: nodes})
 			}
@@ -303,6 +307,19 @@ func (m TasksModel) View() string {
 	}
 
 	return b.String()
+}
+
+func taskStatusOrder(status string) int {
+	switch status {
+	case "done":
+		return 1
+	case "open":
+		return 2
+	case "archived":
+		return 3
+	default:
+		return 2
+	}
 }
 
 func (m TasksModel) SetSize(w, h int) TasksModel {
