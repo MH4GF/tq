@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/dispatch"
-	"github.com/MH4GF/tq/template"
+	"github.com/MH4GF/tq/prompt"
 	"github.com/spf13/cobra"
 )
 
@@ -50,19 +51,53 @@ func SetInteractiveWorkerFactory(f func() dispatch.Worker) {
 	activeInteractiveWorkerFactory = f
 }
 
+var defaultRemoteWorkerFactory = func() dispatch.Worker {
+	return &dispatch.RemoteWorker{
+		Runner: &dispatch.ExecRunner{},
+	}
+}
+
+var activeRemoteWorkerFactory func() dispatch.Worker
+
+func getRemoteWorkerFactory() func() dispatch.Worker {
+	if activeRemoteWorkerFactory != nil {
+		return activeRemoteWorkerFactory
+	}
+	return defaultRemoteWorkerFactory
+}
+
+func SetRemoteWorkerFactory(f func() dispatch.Worker) {
+	activeRemoteWorkerFactory = f
+}
+
 var dispatchCmd = &cobra.Command{
-	Use:   "dispatch",
+	Use:   "dispatch [action_id]",
 	Short: "Dispatch next pending action",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
-		action, err := database.NextPending(ctx)
-		if err != nil {
-			return fmt.Errorf("next pending: %w", err)
-		}
-		if action == nil {
-			fmt.Fprintln(cmd.OutOrStdout(), "no pending actions")
-			return nil
+		var action *db.Action
+		var err error
+
+		if len(args) == 1 {
+			id, parseErr := strconv.ParseInt(args[0], 10, 64)
+			if parseErr != nil {
+				return fmt.Errorf("invalid action ID %q: %w", args[0], parseErr)
+			}
+			action, err = database.ClaimPending(ctx, id)
+			if err != nil {
+				return err
+			}
+		} else {
+			action, err = database.NextPending(ctx)
+			if err != nil {
+				return fmt.Errorf("next pending: %w", err)
+			}
+			if action == nil {
+				fmt.Fprintln(cmd.OutOrStdout(), "no pending actions")
+				return nil
+			}
 		}
 
 		promptData, err := buildPromptData(action)
@@ -71,17 +106,17 @@ var dispatchCmd = &cobra.Command{
 			return fmt.Errorf("build prompt data: %w", err)
 		}
 
-		templatesDir := resolveTemplatesDir(promptData.Project.WorkDir)
-		tmpl, err := template.Load(templatesDir, action.TemplateID)
+		promptsDir := resolvePromptsDir()
+		tmpl, err := prompt.Load(promptsDir, action.PromptID)
 		if err != nil {
-			_ = database.MarkFailed(action.ID, fmt.Sprintf("template load error: %v", err))
-			return fmt.Errorf("load template: %w", err)
+			_ = database.MarkFailed(action.ID, fmt.Sprintf("prompt load error: %v", err))
+			return fmt.Errorf("load prompt: %w", err)
 		}
 
 		prompt, err := tmpl.Render(promptData)
 		if err != nil {
 			_ = database.MarkFailed(action.ID, fmt.Sprintf("render error: %v", err))
-			return fmt.Errorf("render template: %w", err)
+			return fmt.Errorf("render prompt: %w", err)
 		}
 
 		workDir := "."
@@ -89,7 +124,24 @@ var dispatchCmd = &cobra.Command{
 			workDir = promptData.Project.WorkDir
 		}
 
-		if tmpl.Config.Interactive {
+		if tmpl.Config.IsRemote() {
+			worker := getRemoteWorkerFactory()()
+			result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID)
+			if err != nil {
+				_ = database.MarkFailed(action.ID, err.Error())
+				fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", action.ID, err)
+				return nil
+			}
+			if err := database.MergeActionMetadata(action.ID, map[string]any{
+				"remote_session": result,
+			}); err != nil {
+				slog.Warn("failed to save remote session info", "action_id", action.ID, "error", err)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched remotely: %s\n", action.ID, result)
+			return nil
+		}
+
+		if tmpl.Config.IsInteractive() {
 			worker := getInteractiveWorkerFactory()()
 			result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID)
 			if err != nil {
@@ -113,7 +165,7 @@ var dispatchCmd = &cobra.Command{
 			return fmt.Errorf("mark done: %w", err)
 		}
 
-		if err := dispatch.TriggerOnDone(database, templatesDir, action, result); err != nil {
+		if err := dispatch.TriggerOnDone(database, promptsDir, action, result); err != nil {
 			slog.Warn("on_done trigger failed", "action_id", action.ID, "error", err)
 		}
 
@@ -122,8 +174,8 @@ var dispatchCmd = &cobra.Command{
 	},
 }
 
-func buildPromptData(action *db.Action) (template.PromptData, error) {
-	var data template.PromptData
+func buildPromptData(action *db.Action) (prompt.PromptData, error) {
+	var data prompt.PromptData
 
 	actionMeta := make(map[string]any)
 	if action.Metadata != "" && action.Metadata != "{}" {
@@ -131,9 +183,9 @@ func buildPromptData(action *db.Action) (template.PromptData, error) {
 			return data, fmt.Errorf("parse action metadata: %w", err)
 		}
 	}
-	data.Action = template.ActionData{
+	data.Action = prompt.ActionData{
 		ID:         action.ID,
-		TemplateID: action.TemplateID,
+		PromptID: action.PromptID,
 		Status:     action.Status,
 		Source:     action.Source,
 		Meta:       actionMeta,
@@ -150,7 +202,7 @@ func buildPromptData(action *db.Action) (template.PromptData, error) {
 				return data, fmt.Errorf("parse task metadata: %w", err)
 			}
 		}
-		data.Task = template.TaskData{
+		data.Task = prompt.TaskData{
 			ID:     task.ID,
 			Title:  task.Title,
 			URL:    task.URL,
@@ -168,7 +220,7 @@ func buildPromptData(action *db.Action) (template.PromptData, error) {
 				return data, fmt.Errorf("parse project metadata: %w", err)
 			}
 		}
-		data.Project = template.ProjectData{
+		data.Project = prompt.ProjectData{
 			ID:      project.ID,
 			Name:    project.Name,
 			WorkDir: project.WorkDir,

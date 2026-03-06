@@ -49,9 +49,13 @@ var projectListCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tName\tWorkDir\tMetadata")
+		fmt.Fprintln(w, "ID\tName\tDispatch\tWorkDir\tMetadata")
 		for _, p := range projects {
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", p.ID, p.Name, p.WorkDir, p.Metadata)
+			dispatch := "enabled"
+			if !p.DispatchEnabled {
+				dispatch = "disabled"
+			}
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", p.ID, p.Name, dispatch, p.WorkDir, p.Metadata)
 		}
 		return w.Flush()
 	},
@@ -77,10 +81,48 @@ var projectDeleteCmd = &cobra.Command{
 	},
 }
 
+var projectEditDispatchEnabled string
+
+var projectEditCmd = &cobra.Command{
+	Use:   "edit <ID>",
+	Short: "Edit a project",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid project ID: %w", err)
+		}
+
+		p, err := database.GetProjectByID(id)
+		if err != nil {
+			return fmt.Errorf("get project: %w", err)
+		}
+
+		if projectEditDispatchEnabled != "" {
+			enabled, err := strconv.ParseBool(projectEditDispatchEnabled)
+			if err != nil {
+				return fmt.Errorf("invalid --dispatch-enabled value: %w", err)
+			}
+			if err := database.SetDispatchEnabled(id, enabled); err != nil {
+				return fmt.Errorf("set dispatch_enabled: %w", err)
+			}
+			state := "enabled"
+			if !enabled {
+				state = "disabled"
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%s: dispatch %s\n", p.Name, state)
+		}
+
+		return nil
+	},
+}
+
 func init() {
 	projectCreateCmd.Flags().StringVar(&projectCreateMeta, "metadata", "{}", "Metadata JSON")
+	projectEditCmd.Flags().StringVar(&projectEditDispatchEnabled, "dispatch-enabled", "", "Enable or disable dispatch (true/false)")
 
 	projectCmd.AddCommand(projectCreateCmd)
 	projectCmd.AddCommand(projectListCmd)
 	projectCmd.AddCommand(projectDeleteCmd)
+	projectCmd.AddCommand(projectEditCmd)
 }

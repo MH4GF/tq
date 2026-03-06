@@ -9,7 +9,7 @@ tq action list --task <task_id>
 tq action list --status <pending|running|done|failed|waiting_human>
 
 # アクション作成
-tq action create <template_id> --task <task_id>
+tq action create <prompt_id> --task <task_id>
 tq action create implement --task <task_id> --meta '<json>' --source human
 
 # アクション完了
@@ -22,9 +22,9 @@ tq action approve <action_id>
 tq action reject <action_id>
 ```
 
-## テンプレート一覧
+## プロンプト一覧
 
-| テンプレート | 用途 | interactive |
+| プロンプト | 用途 | interactive |
 |-------------|------|-------------|
 | `implement` | 汎用実装タスク | yes |
 | `self-review` | PR セルフレビュー | yes |
@@ -32,7 +32,7 @@ tq action reject <action_id>
 | `fix-ci` | CI 失敗修正 | yes |
 | `fix-conflict` | コンフリクト解消 | yes |
 | `merge-pr` | PR マージ | yes |
-| `classify` | 通知分類（内部用） | no |
+| `classify-gh-notification` | GitHub通知分類（内部用） | no |
 | `classify-next-action` | 完了後の次アクション判断（内部用） | no |
 
 ## implement アクションの作成

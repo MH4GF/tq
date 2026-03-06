@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -36,6 +37,7 @@ type treeLine struct {
 	key       string
 	expandKey string
 	taskID    int64
+	projectID int64
 }
 
 type tasksLoadedMsg struct {
@@ -89,9 +91,10 @@ func (m TasksModel) loadTasks() tea.Cmd {
 				}
 				nodes = append(nodes, taskNode{task: t, actions: actions})
 			}
-			if len(nodes) > 0 {
-				trees = append(trees, projectTree{project: p, tasks: nodes})
-			}
+			sort.SliceStable(nodes, func(i, j int) bool {
+				return taskStatusOrder(nodes[i].task.Status) < taskStatusOrder(nodes[j].task.Status)
+			})
+			trees = append(trees, projectTree{project: p, tasks: nodes})
 		}
 		return tasksLoadedMsg{trees: trees}
 	}
@@ -153,6 +156,17 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 				}
 			}
 		}
+	case key.Matches(msg, key.NewBinding(key.WithKeys("f"))):
+		if m.cursor >= 0 && m.cursor < len(m.lines) {
+			if pid := m.lines[m.cursor].projectID; pid > 0 && m.lines[m.cursor].taskID == 0 {
+				for _, pt := range m.trees {
+					if pt.project.ID == pid {
+						_ = m.database.SetDispatchEnabled(pid, !pt.project.DispatchEnabled)
+						return m, m.loadTasks()
+					}
+				}
+			}
+		}
 	case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
 		return m, m.loadTasks()
 	}
@@ -167,10 +181,15 @@ func (m *TasksModel) buildLines() {
 		if m.expanded[projKey] {
 			arrow = "▾"
 		}
+		projLabel := styleProject.Render(pt.project.Name)
+		if !pt.project.DispatchEnabled {
+			projLabel = styleMuted.Render("⊘ " + pt.project.Name)
+		}
 		m.lines = append(m.lines, treeLine{
-			text:      fmt.Sprintf("%s %s", arrow, styleProject.Render(pt.project.Name)),
+			text:      fmt.Sprintf("%s %s", arrow, projLabel),
 			key:       projKey,
 			expandKey: projKey,
+			projectID: pt.project.ID,
 		})
 
 		if !m.expanded[projKey] {
@@ -232,6 +251,19 @@ func (m TasksModel) View() string {
 	}
 
 	return b.String()
+}
+
+func taskStatusOrder(status string) int {
+	switch status {
+	case "done":
+		return 1
+	case "open":
+		return 2
+	case "archived":
+		return 3
+	default:
+		return 2
+	}
 }
 
 func (m TasksModel) SetSize(w, h int) TasksModel {

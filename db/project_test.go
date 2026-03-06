@@ -97,3 +97,95 @@ func TestDeleteProject_NotFound(t *testing.T) {
 		t.Error("expected error for non-existent project")
 	}
 }
+
+func TestProject_DispatchEnabledDefault(t *testing.T) {
+	d := testutil.NewTestDB(t)
+
+	id, err := d.InsertProject("test", "/tmp/test", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := d.GetProjectByID(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.DispatchEnabled {
+		t.Error("expected dispatch_enabled to default to true")
+	}
+}
+
+func TestSetDispatchEnabled(t *testing.T) {
+	d := testutil.NewTestDB(t)
+
+	id, err := d.InsertProject("test", "/tmp/test", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.SetDispatchEnabled(id, false); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := d.GetProjectByID(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.DispatchEnabled {
+		t.Error("expected dispatch_enabled to be false")
+	}
+
+	if err := d.SetDispatchEnabled(id, true); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err = d.GetProjectByID(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.DispatchEnabled {
+		t.Error("expected dispatch_enabled to be true")
+	}
+}
+
+func TestSetDispatchEnabled_NotFound(t *testing.T) {
+	d := testutil.NewTestDB(t)
+
+	err := d.SetDispatchEnabled(999, false)
+	if err == nil {
+		t.Error("expected error for non-existent project")
+	}
+}
+
+func TestSetAllDispatchEnabled(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	if err := d.SetAllDispatchEnabled(false); err != nil {
+		t.Fatal(err)
+	}
+
+	projects, err := d.ListProjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range projects {
+		if p.DispatchEnabled {
+			t.Errorf("project %s should be disabled", p.Name)
+		}
+	}
+
+	if err := d.SetAllDispatchEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+
+	projects, err = d.ListProjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range projects {
+		if !p.DispatchEnabled {
+			t.Errorf("project %s should be enabled", p.Name)
+		}
+	}
+}

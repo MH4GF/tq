@@ -37,11 +37,11 @@ func TestList(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
-	if rows[0]["template_id"] != "review-pr" {
-		t.Errorf("first row template_id = %v, want %q", rows[0]["template_id"], "review-pr")
+	if rows[0]["prompt_id"] != "review-pr" {
+		t.Errorf("first row prompt_id = %v, want %q", rows[0]["prompt_id"], "review-pr")
 	}
-	if rows[1]["template_id"] != "deploy" {
-		t.Errorf("second row template_id = %v, want %q", rows[1]["template_id"], "deploy")
+	if rows[1]["prompt_id"] != "deploy" {
+		t.Errorf("second row prompt_id = %v, want %q", rows[1]["prompt_id"], "deploy")
 	}
 }
 
@@ -72,8 +72,8 @@ func TestList_StatusFilter(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
-	if rows[0]["template_id"] != "a" {
-		t.Errorf("template_id = %v, want %q", rows[0]["template_id"], "a")
+	if rows[0]["prompt_id"] != "a" {
+		t.Errorf("prompt_id = %v, want %q", rows[0]["prompt_id"], "a")
 	}
 }
 
@@ -106,8 +106,8 @@ func TestList_TaskFilter(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
-	if rows[0]["template_id"] != "a" {
-		t.Errorf("template_id = %v, want %q", rows[0]["template_id"], "a")
+	if rows[0]["prompt_id"] != "a" {
+		t.Errorf("prompt_id = %v, want %q", rows[0]["prompt_id"], "a")
 	}
 }
 
@@ -166,8 +166,8 @@ func TestList_JSON(t *testing.T) {
 
 	row := rows[0]
 
-	if row["template_id"] != "review-pr" {
-		t.Errorf("template_id = %v, want %q", row["template_id"], "review-pr")
+	if row["prompt_id"] != "review-pr" {
+		t.Errorf("prompt_id = %v, want %q", row["prompt_id"], "review-pr")
 	}
 	if row["result"] != longResult {
 		t.Errorf("result should contain full text including newlines, got %v", row["result"])

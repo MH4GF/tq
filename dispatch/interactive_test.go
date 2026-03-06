@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tmpl "github.com/MH4GF/tq/template"
+	"github.com/MH4GF/tq/prompt"
 )
 
 type mockCall struct {
@@ -38,7 +38,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 		Runner: runner,
 	}
 
-	cfg := tmpl.Config{}
+	cfg := prompt.Config{}
 
 	result, err := w.Execute(context.Background(), "Fix the bug", cfg, "/work/dir", 42)
 	if err != nil {
@@ -110,7 +110,7 @@ func TestInteractiveWorker_NewWindowError(t *testing.T) {
 		Runner: runner,
 	}
 
-	cfg := tmpl.Config{}
+	cfg := prompt.Config{}
 	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1)
 	if err == nil {
 		t.Fatal("expected error")
@@ -126,7 +126,7 @@ func TestInteractiveWorker_SendKeysError(t *testing.T) {
 		Runner: runner,
 	}
 
-	cfg := tmpl.Config{}
+	cfg := prompt.Config{}
 	_, err := w.Execute(context.Background(), "test", cfg, "/work", 2)
 	if err == nil {
 		t.Fatal("expected error")
@@ -142,7 +142,7 @@ func TestInteractiveWorker_SingleQuoteEscape(t *testing.T) {
 		Runner: runner,
 	}
 
-	cfg := tmpl.Config{}
+	cfg := prompt.Config{}
 	_, err := w.Execute(context.Background(), "it's a test", cfg, "/work/dir", 99)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)

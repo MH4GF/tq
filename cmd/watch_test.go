@@ -40,20 +40,18 @@ func setupWatchEnv(t *testing.T) string {
 	tqDir := t.TempDir()
 	cmd.SetConfigDir(tqDir)
 
-	templatesDir := filepath.Join(tqDir, "templates")
-	os.MkdirAll(templatesDir, 0755)
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0755)
 
-	os.WriteFile(filepath.Join(templatesDir, "classify.md"), []byte(`---
-description: classify
-auto: true
-interactive: false
-timeout: 10
+	os.WriteFile(filepath.Join(promptsDir, "classify-gh-notification.md"), []byte(`---
+description: classify-gh-notification
+mode: noninteractive
 ---
 Classify: {{index .Action.Meta "notification"}}
 Tasks: {{index .Action.Meta "existing_tasks"}}
 `), 0644)
 
-	os.WriteFile(filepath.Join(templatesDir, "check-pr-status.md"), []byte(`---
+	os.WriteFile(filepath.Join(promptsDir, "check-pr-status.md"), []byte(`---
 description: PR check
 auto: true
 ---

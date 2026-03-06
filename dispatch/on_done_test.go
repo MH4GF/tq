@@ -28,16 +28,16 @@ func TestTriggerOnDone_NoOnDone(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	tqDir := t.TempDir()
-	templatesDir := filepath.Join(tqDir, "templates")
-	os.MkdirAll(templatesDir, 0o755)
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0o755)
 
-	writeOnDoneTemplate(t, templatesDir, "check-pr", "")
+	writeOnDoneTemplate(t, promptsDir, "check-pr", "")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
 	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action, _ := d.GetAction(actionID)
 
-	err := TriggerOnDone(d, templatesDir, action, `{"ok":true}`)
+	err := TriggerOnDone(d, promptsDir, action, `{"ok":true}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,16 +53,16 @@ func TestTriggerOnDone_NoTaskID(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	tqDir := t.TempDir()
-	templatesDir := filepath.Join(tqDir, "templates")
-	os.MkdirAll(templatesDir, 0o755)
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0o755)
 
-	writeOnDoneTemplate(t, templatesDir, "check-pr", "review")
-	writeOnDoneTemplate(t, templatesDir, "review", "")
+	writeOnDoneTemplate(t, promptsDir, "check-pr", "review")
+	writeOnDoneTemplate(t, promptsDir, "review", "")
 
 	actionID, _ := d.InsertAction("check-pr", nil, "{}", "done", "test")
 	action, _ := d.GetAction(actionID)
 
-	err := TriggerOnDone(d, templatesDir, action, `{"ok":true}`)
+	err := TriggerOnDone(d, promptsDir, action, `{"ok":true}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,18 +78,18 @@ func TestTriggerOnDone_AutoTarget(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	tqDir := t.TempDir()
-	templatesDir := filepath.Join(tqDir, "templates")
-	os.MkdirAll(templatesDir, 0o755)
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0o755)
 
-	writeOnDoneTemplate(t, templatesDir, "check-pr", "review")
-	writeOnDoneTemplate(t, templatesDir, "review", "")
+	writeOnDoneTemplate(t, promptsDir, "check-pr", "review")
+	writeOnDoneTemplate(t, promptsDir, "review", "")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
 	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action, _ := d.GetAction(actionID)
 
 	result := `{"status":"merged"}`
-	err := TriggerOnDone(d, templatesDir, action, result)
+	err := TriggerOnDone(d, promptsDir, action, result)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -100,8 +100,8 @@ func TestTriggerOnDone_AutoTarget(t *testing.T) {
 	}
 
 	followUp := actions[1]
-	if followUp.TemplateID != "review" {
-		t.Errorf("template_id = %q, want %q", followUp.TemplateID, "review")
+	if followUp.PromptID != "review" {
+		t.Errorf("template_id = %q, want %q", followUp.PromptID, "review")
 	}
 	if followUp.Status != "pending" {
 		t.Errorf("status = %q, want %q", followUp.Status, "pending")
@@ -130,11 +130,11 @@ func TestTriggerOnDone_DuplicateSkipped(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	tqDir := t.TempDir()
-	templatesDir := filepath.Join(tqDir, "templates")
-	os.MkdirAll(templatesDir, 0o755)
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0o755)
 
-	writeOnDoneTemplate(t, templatesDir, "check-pr", "review")
-	writeOnDoneTemplate(t, templatesDir, "review", "")
+	writeOnDoneTemplate(t, promptsDir, "check-pr", "review")
+	writeOnDoneTemplate(t, promptsDir, "review", "")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
 	d.InsertAction("review", &taskID, "{}", "pending", "on_done")
@@ -142,7 +142,7 @@ func TestTriggerOnDone_DuplicateSkipped(t *testing.T) {
 	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action, _ := d.GetAction(actionID)
 
-	err := TriggerOnDone(d, templatesDir, action, `{"ok":true}`)
+	err := TriggerOnDone(d, promptsDir, action, `{"ok":true}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -158,11 +158,11 @@ func TestTriggerOnDone_WaitingHumanSkipped(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	tqDir := t.TempDir()
-	templatesDir := filepath.Join(tqDir, "templates")
-	os.MkdirAll(templatesDir, 0o755)
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0o755)
 
-	writeOnDoneTemplate(t, templatesDir, "check-pr", "review")
-	writeOnDoneTemplate(t, templatesDir, "review", "")
+	writeOnDoneTemplate(t, promptsDir, "check-pr", "review")
+	writeOnDoneTemplate(t, promptsDir, "review", "")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
 	d.InsertAction("review", &taskID, "{}", "waiting_human", "on_done")
@@ -170,7 +170,7 @@ func TestTriggerOnDone_WaitingHumanSkipped(t *testing.T) {
 	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action, _ := d.GetAction(actionID)
 
-	err := TriggerOnDone(d, templatesDir, action, `{"ok":true}`)
+	err := TriggerOnDone(d, promptsDir, action, `{"ok":true}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -186,20 +186,20 @@ func TestTriggerOnDone_TargetTemplateNotFound(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	tqDir := t.TempDir()
-	templatesDir := filepath.Join(tqDir, "templates")
-	os.MkdirAll(templatesDir, 0o755)
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0o755)
 
-	writeOnDoneTemplate(t, templatesDir, "check-pr", "nonexistent")
+	writeOnDoneTemplate(t, promptsDir, "check-pr", "nonexistent")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
 	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action := &db.Action{
 		ID:         actionID,
-		TemplateID: "check-pr",
+		PromptID: "check-pr",
 		TaskID:     sql.NullInt64{Int64: taskID, Valid: true},
 	}
 
-	err := TriggerOnDone(d, templatesDir, action, `{"ok":true}`)
+	err := TriggerOnDone(d, promptsDir, action, `{"ok":true}`)
 	if err == nil {
 		t.Fatal("expected error for missing target template")
 	}

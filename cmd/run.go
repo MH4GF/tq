@@ -45,6 +45,11 @@ var runCmd = &cobra.Command{
 					Runner: &dispatch.ExecRunner{},
 				}
 			},
+			RemoteFunc: func() dispatch.Worker {
+				return &dispatch.RemoteWorker{
+					Runner: &dispatch.ExecRunner{},
+				}
+			},
 		}
 
 		err = dispatch.RalphLoop(ctx, cfg)

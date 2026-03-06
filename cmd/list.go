@@ -35,7 +35,7 @@ var listCmd = &cobra.Command{
 		for i, a := range actions {
 			row := map[string]any{
 				"id":          a.ID,
-				"template_id": a.TemplateID,
+				"prompt_id": a.PromptID,
 				"metadata":    a.Metadata,
 				"status":      a.Status,
 				"source":      a.Source,

@@ -234,7 +234,7 @@ func (m Model) renderHelp() string {
 		}
 		return styleHelp.Render("j/k: navigate  o: attach  v: view result  r: reload  q/esc: back")
 	default:
-		return styleHelp.Render("j/k: navigate  enter: select/expand  r: reload  q: quit")
+		return styleHelp.Render("j/k: navigate  enter: select/expand  f: toggle focus  r: reload  q: quit")
 	}
 }
 

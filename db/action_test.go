@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 
 	"github.com/MH4GF/tq/db"
@@ -26,8 +27,8 @@ func TestInsertAction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.TemplateID != "review-pr" {
-		t.Errorf("expected template_id 'review-pr', got %s", a.TemplateID)
+	if a.PromptID != "review-pr" {
+		t.Errorf("expected prompt_id 'review-pr', got %s", a.PromptID)
 	}
 }
 
@@ -122,8 +123,8 @@ func TestNextPending(t *testing.T) {
 	if a == nil {
 		t.Fatal("expected action, got nil")
 	}
-	if a.TemplateID != "first" {
-		t.Errorf("expected first (lowest ID), got %s", a.TemplateID)
+	if a.PromptID != "first" {
+		t.Errorf("expected first (lowest ID), got %s", a.PromptID)
 	}
 	if a.Status != "running" {
 		t.Errorf("expected status running, got %s", a.Status)
@@ -140,8 +141,77 @@ func TestNextPending(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a2.TemplateID != "second" {
-		t.Errorf("expected second, got %s", a2.TemplateID)
+	if a2.PromptID != "second" {
+		t.Errorf("expected second, got %s", a2.PromptID)
+	}
+}
+
+func TestNextPending_SkipsDisabledProject(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// Disable project 1 (immedio)
+	d.SetDispatchEnabled(1, false)
+
+	taskID, _ := d.InsertTask(1, "disabled task", "", "{}")
+	d.InsertAction("disabled-action", &taskID, "{}", "pending", "auto")
+
+	taskID2, _ := d.InsertTask(2, "enabled task", "", "{}")
+	d.InsertAction("enabled-action", &taskID2, "{}", "pending", "auto")
+
+	ctx := context.Background()
+	a, err := d.NextPending(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == nil {
+		t.Fatal("expected action, got nil")
+	}
+	if a.PromptID != "enabled-action" {
+		t.Errorf("expected enabled-action, got %s", a.PromptID)
+	}
+}
+
+func TestNextPending_IncludesNullTaskID(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// Disable all projects
+	d.SetAllDispatchEnabled(false)
+
+	// Action with no task (task_id IS NULL) should still be dispatched
+	d.InsertAction("standalone", nil, "{}", "pending", "auto")
+
+	ctx := context.Background()
+	a, err := d.NextPending(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == nil {
+		t.Fatal("expected action, got nil")
+	}
+	if a.PromptID != "standalone" {
+		t.Errorf("expected standalone, got %s", a.PromptID)
+	}
+}
+
+func TestNextPending_AllDisabled(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// Disable all projects
+	d.SetAllDispatchEnabled(false)
+
+	taskID, _ := d.InsertTask(1, "disabled task", "", "{}")
+	d.InsertAction("disabled-action", &taskID, "{}", "pending", "auto")
+
+	ctx := context.Background()
+	a, err := d.NextPending(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a != nil {
+		t.Errorf("expected nil when all projects disabled, got action %s", a.PromptID)
 	}
 }
 
@@ -308,8 +378,8 @@ func TestListRunningInteractive(t *testing.T) {
 	if len(actions) != 1 {
 		t.Fatalf("expected 1 action, got %d", len(actions))
 	}
-	if actions[0].TemplateID != "a" {
-		t.Errorf("expected template_id 'a', got %s", actions[0].TemplateID)
+	if actions[0].PromptID != "a" {
+		t.Errorf("expected prompt_id 'a', got %s", actions[0].PromptID)
 	}
 	if !actions[0].SessionID.Valid || actions[0].SessionID.String != "main" {
 		t.Errorf("expected session_id 'main', got %v", actions[0].SessionID)
@@ -483,6 +553,81 @@ func TestFilterForOpenTask_EmptyDate(t *testing.T) {
 	filtered := db.FilterForOpenTask(actions, "")
 	if len(filtered) != 1 {
 		t.Errorf("expected all actions returned for empty date, got %d", len(filtered))
+	}
+}
+
+func TestClaimPending(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	d.InsertAction("first", nil, "{}", "pending", "auto")
+	d.InsertAction("second", nil, "{}", "pending", "auto")
+
+	ctx := context.Background()
+
+	a, err := d.ClaimPending(ctx, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.PromptID != "second" {
+		t.Errorf("expected second, got %s", a.PromptID)
+	}
+	if a.Status != "running" {
+		t.Errorf("expected status running, got %s", a.Status)
+	}
+
+	fetched, _ := d.GetAction(2)
+	if fetched.Status != "running" {
+		t.Errorf("expected persisted status running, got %s", fetched.Status)
+	}
+
+	// first should still be pending
+	first, _ := d.GetAction(1)
+	if first.Status != "pending" {
+		t.Errorf("expected first to remain pending, got %s", first.Status)
+	}
+}
+
+func TestClaimPending_NotFound(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	_, err := d.ClaimPending(context.Background(), 999)
+	if err == nil {
+		t.Fatal("expected error for non-existent action")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error = %q, want to contain 'not found'", err)
+	}
+}
+
+func TestClaimPending_NotPending(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	tests := []struct {
+		name   string
+		status string
+	}{
+		{"running", "running"},
+		{"done", "done"},
+		{"failed", "failed"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id, _ := d.InsertAction("test-"+tt.status, nil, "{}", tt.status, "auto")
+			_, err := d.ClaimPending(context.Background(), id)
+			if err == nil {
+				t.Fatal("expected error for non-pending action")
+			}
+			if !strings.Contains(err.Error(), "not pending") {
+				t.Errorf("error = %q, want to contain 'not pending'", err)
+			}
+			if !strings.Contains(err.Error(), tt.status) {
+				t.Errorf("error = %q, want to contain status %q", err, tt.status)
+			}
+		})
 	}
 }
 

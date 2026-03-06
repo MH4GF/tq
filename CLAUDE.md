@@ -21,14 +21,14 @@ dispatch/        → アクションディスパッチ（interactive/noninteract
 tui/             → Bubble Tea TUI（queue タブ, tasks タブ）
 view/            → デイリーノート出力
 source/github/   → GitHub通知・PR取得
-template/        → テンプレートローダー（frontmatter + Go template）
+prompt/          → プロンプトローダー（frontmatter + Go template）
 testutil/        → テスト用ヘルパー（インメモリDB）
 ```
 
 ## データディレクトリ
 
 - DB: `~/.config/tq/tq.db`（固定）
-- テンプレート: プロジェクトの `{workDir}/tq/templates/` → `~/.config/tq/templates/` の順で解決
+- プロンプト: `~/.config/tq/prompts/`
 
 ## スタイル
 

@@ -1,9 +1,10 @@
 CREATE TABLE IF NOT EXISTS projects (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  name       TEXT NOT NULL UNIQUE,
-  work_dir   TEXT NOT NULL,
-  metadata   TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  name              TEXT NOT NULL UNIQUE,
+  work_dir          TEXT NOT NULL,
+  metadata          TEXT NOT NULL DEFAULT '{}',
+  dispatch_enabled  INTEGER NOT NULL DEFAULT 1,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
@@ -19,7 +20,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 CREATE TABLE IF NOT EXISTS actions (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  template_id  TEXT NOT NULL,
+  prompt_id    TEXT NOT NULL,
   task_id      INTEGER REFERENCES tasks(id),
   metadata     TEXT NOT NULL DEFAULT '{}',
   status       TEXT DEFAULT 'pending',

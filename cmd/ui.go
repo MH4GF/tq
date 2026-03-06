@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"regexp"
+	"strconv"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,7 +34,7 @@ var uiCmd = &cobra.Command{
 		slog.SetDefault(slog.New(handler))
 		defer slog.SetDefault(prevLogger)
 
-		classifyWriter := &tui.LogWriter{Ch: logCh}
+		notificationWriter := &tui.LogWriter{Ch: logCh}
 
 		cfgDir, err := configDir()
 		if err != nil {
@@ -56,6 +58,11 @@ var uiCmd = &cobra.Command{
 						Runner: &dispatch.ExecRunner{},
 					}
 				},
+				RemoteFunc: func() dispatch.Worker {
+					return &dispatch.RemoteWorker{
+						Runner: &dispatch.ExecRunner{},
+					}
+				},
 			}
 			return dispatch.RalphLoop(ctx, cfg)
 		}
@@ -69,7 +76,7 @@ var uiCmd = &cobra.Command{
 				case <-ctx.Done():
 					return ctx.Err()
 				case <-ticker.C:
-					if err := runWatch(ctx, classifyWriter); err != nil {
+					if err := runWatch(ctx, notificationWriter); err != nil {
 						slog.Error("watch error", "error", err)
 					}
 				}
@@ -85,7 +92,7 @@ var uiCmd = &cobra.Command{
 	},
 }
 
-func runWatch(ctx context.Context, classifyWriter io.Writer) error {
+func runWatch(ctx context.Context, notificationWriter io.Writer) error {
 	src, err := ghsource.NewGitHubSource()
 	if err != nil {
 		return fmt.Errorf("create source: %w", err)
@@ -96,18 +103,74 @@ func runWatch(ctx context.Context, classifyWriter io.Writer) error {
 		return fmt.Errorf("fetch: %w", err)
 	}
 
+	promptsDir := resolvePromptsDir()
+
 	for _, n := range notifications {
 		notifBytes, err := json.Marshal(n.Metadata)
 		if err != nil {
 			continue
 		}
-		if err := runClassify(classifyWriter, string(notifBytes)); err != nil {
-			slog.Error("classify", "error", err)
+
+		if tryCompleteRemoteAction(n.Metadata, promptsDir) {
+			_ = src.MarkProcessed(ctx, n)
+			continue
+		}
+
+		if err := runClassifyGhNotification(notificationWriter, string(notifBytes)); err != nil {
+			slog.Error("classify-gh-notification", "error", err)
 			continue
 		}
 		_ = src.MarkProcessed(ctx, n)
 	}
 	return nil
+}
+
+var remoteActionBranchRe = regexp.MustCompile(`^tq-(\d+)-`)
+
+func tryCompleteRemoteAction(metadata map[string]any, promptsDir string) bool {
+	subjectType, _ := metadata["subject_type"].(string)
+	if subjectType != "PullRequest" {
+		return false
+	}
+
+	headBranch, _ := metadata["head_branch"].(string)
+	if headBranch == "" {
+		return false
+	}
+
+	matches := remoteActionBranchRe.FindStringSubmatch(headBranch)
+	if matches == nil {
+		return false
+	}
+
+	actionID, err := strconv.ParseInt(matches[1], 10, 64)
+	if err != nil {
+		return false
+	}
+
+	action, err := database.GetAction(actionID)
+	if err != nil {
+		slog.Warn("remote action lookup failed", "action_id", actionID, "error", err)
+		return false
+	}
+	if action.Status != "running" {
+		return false
+	}
+
+	prURL, _ := metadata["url"].(string)
+	result := fmt.Sprintf("remote:pr=%s", prURL)
+
+	if err := database.MarkDone(actionID, result); err != nil {
+		slog.Error("mark remote action done", "action_id", actionID, "error", err)
+		return false
+	}
+
+	if err := dispatch.TriggerOnDone(database, promptsDir, action, result); err != nil {
+		slog.Warn("on_done trigger failed for remote action", "action_id", actionID, "error", err)
+	}
+
+	slog.Info("remote action completed via PR", "action_id", actionID, "branch", headBranch, "pr", prURL)
+	return true
 }
 
 func init() {
