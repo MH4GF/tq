@@ -32,7 +32,7 @@ tq action reject <action_id>
 | `fix-ci` | CI 失敗修正 | yes |
 | `fix-conflict` | コンフリクト解消 | yes |
 | `merge-pr` | PR マージ | yes |
-| `classify` | 通知分類（内部用） | no |
+| `classify-gh-notification` | GitHub通知分類（内部用） | no |
 | `classify-next-action` | 完了後の次アクション判断（内部用） | no |
 
 ## implement アクションの作成

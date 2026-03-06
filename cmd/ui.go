@@ -34,7 +34,7 @@ var uiCmd = &cobra.Command{
 		slog.SetDefault(slog.New(handler))
 		defer slog.SetDefault(prevLogger)
 
-		classifyWriter := &tui.LogWriter{Ch: logCh}
+		notificationWriter := &tui.LogWriter{Ch: logCh}
 
 		cfgDir, err := configDir()
 		if err != nil {
@@ -76,7 +76,7 @@ var uiCmd = &cobra.Command{
 				case <-ctx.Done():
 					return ctx.Err()
 				case <-ticker.C:
-					if err := runWatch(ctx, classifyWriter); err != nil {
+					if err := runWatch(ctx, notificationWriter); err != nil {
 						slog.Error("watch error", "error", err)
 					}
 				}
@@ -92,7 +92,7 @@ var uiCmd = &cobra.Command{
 	},
 }
 
-func runWatch(ctx context.Context, classifyWriter io.Writer) error {
+func runWatch(ctx context.Context, notificationWriter io.Writer) error {
 	src, err := ghsource.NewGitHubSource()
 	if err != nil {
 		return fmt.Errorf("create source: %w", err)
@@ -116,8 +116,8 @@ func runWatch(ctx context.Context, classifyWriter io.Writer) error {
 			continue
 		}
 
-		if err := runClassify(classifyWriter, string(notifBytes)); err != nil {
-			slog.Error("classify", "error", err)
+		if err := runClassifyGhNotification(notificationWriter, string(notifBytes)); err != nil {
+			slog.Error("classify-gh-notification", "error", err)
 			continue
 		}
 		_ = src.MarkProcessed(ctx, n)

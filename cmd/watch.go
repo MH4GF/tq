@@ -27,7 +27,7 @@ func SetWatchSourceFactory(f func() (source.Source, error)) {
 
 var watchCmd = &cobra.Command{
 	Use:   "watch",
-	Short: "Fetch GitHub notifications and classify them",
+	Short: "Fetch GitHub notifications and classify GitHub notifications",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
@@ -52,8 +52,8 @@ var watchCmd = &cobra.Command{
 				continue
 			}
 
-			if err := classifyNotification(cmd.OutOrStdout(), string(notifJSON)); err != nil {
-				slog.Error("classify notification", "error", err, "title", n.Metadata["title"])
+			if err := classifyGhNotification(cmd.OutOrStdout(), string(notifJSON)); err != nil {
+				slog.Error("classify-gh-notification", "error", err, "title", n.Metadata["title"])
 				failed++
 				continue
 			}
@@ -67,12 +67,12 @@ var watchCmd = &cobra.Command{
 		fmt.Fprintf(cmd.OutOrStdout(), "processed %d, failed %d\n", processed, failed)
 
 		if len(notifications) > 0 && failed == len(notifications) {
-			return fmt.Errorf("all %d notifications failed to classify", failed)
+			return fmt.Errorf("all %d notifications failed to classify-gh-notification", failed)
 		}
 		return nil
 	},
 }
 
-func classifyNotification(w io.Writer, notificationJSON string) error {
-	return runClassify(w, notificationJSON)
+func classifyGhNotification(w io.Writer, notificationJSON string) error {
+	return runClassifyGhNotification(w, notificationJSON)
 }

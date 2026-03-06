@@ -67,7 +67,7 @@ tq action done {{.Action.ID}} '{"result":"<要約>"}'
 
 ### tq action create — アクション作成
 
-classify プロンプトが通知からアクションを生成する際に使う。
+classify-gh-notification プロンプトが通知からアクションを生成する際に使う。
 
 ```bash
 tq action create fix-ci --task 1 --meta '{"pr_url":"https://..."}'

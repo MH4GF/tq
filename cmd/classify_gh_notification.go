@@ -13,9 +13,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var classifyCmd = &cobra.Command{
-	Use:   "classify [NOTIFICATION_JSON]",
-	Short: "Classify a notification into task + actions",
+var classifyGhNotificationCmd = &cobra.Command{
+	Use:   "classify-gh-notification [NOTIFICATION_JSON]",
+	Short: "Classify a GitHub notification into task + actions",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var notificationJSON string
@@ -29,21 +29,21 @@ var classifyCmd = &cobra.Command{
 			notificationJSON = string(data)
 		}
 
-		return runClassify(cmd.OutOrStdout(), notificationJSON)
+		return runClassifyGhNotification(cmd.OutOrStdout(), notificationJSON)
 	},
 }
 
-func runClassify(w io.Writer, notificationJSON string) error {
+func runClassifyGhNotification(w io.Writer, notificationJSON string) error {
 	promptsDir := resolvePromptsDir()
-	tmpl, err := prompt.Load(promptsDir, "classify")
+	tmpl, err := prompt.Load(promptsDir, "classify-gh-notification")
 	if err != nil {
-		recordClassifyFailure(notificationJSON, fmt.Sprintf("load classify prompt: %v", err))
-		return fmt.Errorf("load classify prompt: %w", err)
+		recordClassifyGhNotificationFailure(notificationJSON, fmt.Sprintf("load classify-gh-notification prompt: %v", err))
+		return fmt.Errorf("load classify-gh-notification prompt: %w", err)
 	}
 
 	existingTasks, err := buildExistingTasksList()
 	if err != nil {
-		recordClassifyFailure(notificationJSON, fmt.Sprintf("build tasks list: %v", err))
+		recordClassifyGhNotificationFailure(notificationJSON, fmt.Sprintf("build tasks list: %v", err))
 		return fmt.Errorf("build tasks list: %w", err)
 	}
 
@@ -57,7 +57,7 @@ func runClassify(w io.Writer, notificationJSON string) error {
 	}
 	prompt, err := tmpl.Render(promptData)
 	if err != nil {
-		recordClassifyFailure(notificationJSON, fmt.Sprintf("render prompt: %v", err))
+		recordClassifyGhNotificationFailure(notificationJSON, fmt.Sprintf("render prompt: %v", err))
 		return fmt.Errorf("render prompt: %w", err)
 	}
 
@@ -70,15 +70,15 @@ func runClassify(w io.Writer, notificationJSON string) error {
 	}
 	result, err := worker.Execute(ctx, prompt, tmpl.Config, ".", 0)
 	if err != nil {
-		recordClassifyFailure(notificationJSON, fmt.Sprintf("classify execution: %v", err))
-		return fmt.Errorf("classify execution: %w", err)
+		recordClassifyGhNotificationFailure(notificationJSON, fmt.Sprintf("classify-gh-notification execution: %v", err))
+		return fmt.Errorf("classify-gh-notification execution: %w", err)
 	}
 
 	fmt.Fprintln(w, result)
 	return nil
 }
 
-func recordClassifyFailure(notificationJSON, errMsg string) {
+func recordClassifyGhNotificationFailure(notificationJSON, errMsg string) {
 	meta := "{}"
 	if notificationJSON != "" {
 		m := map[string]any{}
@@ -91,7 +91,7 @@ func recordClassifyFailure(notificationJSON, errMsg string) {
 			meta = string(b)
 		}
 	}
-	id, err := database.InsertAction("classify", nil, meta, "failed", "classify")
+	id, err := database.InsertAction("classify-gh-notification", nil, meta, "failed", "classify-gh-notification")
 	if err != nil {
 		return
 	}

@@ -43,8 +43,8 @@ func setupWatchEnv(t *testing.T) string {
 	promptsDir := filepath.Join(tqDir, "prompts")
 	os.MkdirAll(promptsDir, 0755)
 
-	os.WriteFile(filepath.Join(promptsDir, "classify.md"), []byte(`---
-description: classify
+	os.WriteFile(filepath.Join(promptsDir, "classify-gh-notification.md"), []byte(`---
+description: classify-gh-notification
 mode: noninteractive
 ---
 Classify: {{index .Action.Meta "notification"}}

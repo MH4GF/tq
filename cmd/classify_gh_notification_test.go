@@ -14,7 +14,7 @@ import (
 	"github.com/MH4GF/tq/testutil"
 )
 
-func setupClassifyEnv(t *testing.T) (string, *bytes.Buffer) {
+func setupClassifyGhNotificationEnv(t *testing.T) (string, *bytes.Buffer) {
 	t.Helper()
 	tqDir := t.TempDir()
 	cmd.SetConfigDir(tqDir)
@@ -22,8 +22,8 @@ func setupClassifyEnv(t *testing.T) (string, *bytes.Buffer) {
 	promptsDir := filepath.Join(tqDir, "prompts")
 	os.MkdirAll(promptsDir, 0755)
 
-	os.WriteFile(filepath.Join(promptsDir, "classify.md"), []byte(`---
-description: classify
+	os.WriteFile(filepath.Join(promptsDir, "classify-gh-notification.md"), []byte(`---
+description: classify-gh-notification
 mode: noninteractive
 ---
 Classify: {{index .Action.Meta "notification"}}
@@ -34,7 +34,7 @@ Tasks: {{index .Action.Meta "existing_tasks"}}
 	return tqDir, buf
 }
 
-func setupInteractiveClassifyEnv(t *testing.T) (string, *bytes.Buffer) {
+func setupInteractiveClassifyGhNotificationEnv(t *testing.T) (string, *bytes.Buffer) {
 	t.Helper()
 	tqDir := t.TempDir()
 	cmd.SetConfigDir(tqDir)
@@ -42,8 +42,8 @@ func setupInteractiveClassifyEnv(t *testing.T) (string, *bytes.Buffer) {
 	promptsDir := filepath.Join(tqDir, "prompts")
 	os.MkdirAll(promptsDir, 0755)
 
-	os.WriteFile(filepath.Join(promptsDir, "classify.md"), []byte(`---
-description: classify
+	os.WriteFile(filepath.Join(promptsDir, "classify-gh-notification.md"), []byte(`---
+description: classify-gh-notification
 mode: interactive
 ---
 Classify: {{index .Action.Meta "notification"}}
@@ -54,12 +54,12 @@ Tasks: {{index .Action.Meta "existing_tasks"}}
 	return tqDir, buf
 }
 
-func TestClassify_Success(t *testing.T) {
+func TestClassifyGhNotification_Success(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
 	cmd.ResetForTest()
-	setupClassifyEnv(t)
+	setupClassifyGhNotificationEnv(t)
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{result: "task created, action created"}
@@ -70,7 +70,7 @@ func TestClassify_Success(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"classify", `{"type":"pull_request","action":"opened"}`})
+	root.SetArgs([]string{"classify-gh-notification", `{"type":"pull_request","action":"opened"}`})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -82,12 +82,12 @@ func TestClassify_Success(t *testing.T) {
 	}
 }
 
-func TestClassify_Interactive(t *testing.T) {
+func TestClassifyGhNotification_Interactive(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
 	cmd.ResetForTest()
-	setupInteractiveClassifyEnv(t)
+	setupInteractiveClassifyGhNotificationEnv(t)
 
 	var usedInteractive bool
 	cmd.SetInteractiveWorkerFactory(func() dispatch.Worker {
@@ -100,7 +100,7 @@ func TestClassify_Interactive(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"classify", `{"type":"review"}`})
+	root.SetArgs([]string{"classify-gh-notification", `{"type":"review"}`})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -116,12 +116,12 @@ func TestClassify_Interactive(t *testing.T) {
 	}
 }
 
-func TestClassify_InteractiveError(t *testing.T) {
+func TestClassifyGhNotification_InteractiveError(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
 	cmd.ResetForTest()
-	setupInteractiveClassifyEnv(t)
+	setupInteractiveClassifyGhNotificationEnv(t)
 
 	cmd.SetInteractiveWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{err: fmt.Errorf("tmux not found")}
@@ -132,7 +132,7 @@ func TestClassify_InteractiveError(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"classify", `{"type":"push"}`})
+	root.SetArgs([]string{"classify-gh-notification", `{"type":"push"}`})
 
 	err := root.Execute()
 	if err == nil {
@@ -144,20 +144,20 @@ func TestClassify_InteractiveError(t *testing.T) {
 		t.Fatalf("failed action count = %d, want 1", len(actions))
 	}
 	action := actions[0]
-	if action.PromptID != "classify" {
-		t.Errorf("template_id = %q, want %q", action.PromptID, "classify")
+	if action.PromptID != "classify-gh-notification" {
+		t.Errorf("template_id = %q, want %q", action.PromptID, "classify-gh-notification")
 	}
 	if !action.Result.Valid || !contains(action.Result.String, "tmux not found") {
 		t.Errorf("result = %v, want to contain 'tmux not found'", action.Result)
 	}
 }
 
-func TestClassify_ExecutionFailure(t *testing.T) {
+func TestClassifyGhNotification_ExecutionFailure(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
 	cmd.ResetForTest()
-	setupClassifyEnv(t)
+	setupClassifyGhNotificationEnv(t)
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{err: fmt.Errorf("LLM timeout")}
@@ -168,7 +168,7 @@ func TestClassify_ExecutionFailure(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"classify", `{"type":"push"}`})
+	root.SetArgs([]string{"classify-gh-notification", `{"type":"push"}`})
 
 	err := root.Execute()
 	if err == nil {
@@ -180,11 +180,11 @@ func TestClassify_ExecutionFailure(t *testing.T) {
 		t.Fatalf("failed action count = %d, want 1", len(actions))
 	}
 	action := actions[0]
-	if action.PromptID != "classify" {
-		t.Errorf("template_id = %q, want %q", action.PromptID, "classify")
+	if action.PromptID != "classify-gh-notification" {
+		t.Errorf("template_id = %q, want %q", action.PromptID, "classify-gh-notification")
 	}
-	if action.Source != "classify" {
-		t.Errorf("source = %q, want %q", action.Source, "classify")
+	if action.Source != "classify-gh-notification" {
+		t.Errorf("source = %q, want %q", action.Source, "classify-gh-notification")
 	}
 	if !action.Result.Valid || !contains(action.Result.String, "LLM timeout") {
 		t.Errorf("result = %v, want to contain 'LLM timeout'", action.Result)
@@ -194,12 +194,12 @@ func TestClassify_ExecutionFailure(t *testing.T) {
 	}
 }
 
-func TestClassify_FailureWithContextDeadline(t *testing.T) {
+func TestClassifyGhNotification_FailureWithContextDeadline(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
 	cmd.ResetForTest()
-	setupClassifyEnv(t)
+	setupClassifyGhNotificationEnv(t)
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{err: context.DeadlineExceeded}
@@ -210,7 +210,7 @@ func TestClassify_FailureWithContextDeadline(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"classify", `{"type":"review","repo":"test/repo"}`})
+	root.SetArgs([]string{"classify-gh-notification", `{"type":"review","repo":"test/repo"}`})
 
 	err := root.Execute()
 	if err == nil {

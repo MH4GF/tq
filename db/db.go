@@ -103,6 +103,10 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	// Rename classify → classify-gh-notification in prompt_id and source (idempotent)
+	db.Exec(`UPDATE actions SET prompt_id = 'classify-gh-notification' WHERE prompt_id = 'classify'`)
+	db.Exec(`UPDATE actions SET source = 'classify-gh-notification' WHERE source = 'classify'`)
+
 	return nil
 }
 
