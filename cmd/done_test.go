@@ -93,15 +93,15 @@ func TestDone_TriggersOnDone(t *testing.T) {
 	cmd.ResetForTest()
 
 	tqDir := t.TempDir()
-	templatesDir := filepath.Join(tqDir, "templates")
-	os.MkdirAll(templatesDir, 0o755)
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0o755)
 
 	for _, tc := range []struct{ name string; auto bool; onDone string }{
 		{"check-pr", true, "review"},
 		{"review", true, ""},
 	} {
 		content := fmt.Sprintf("---\ndescription: %s\nauto: %v\non_done: %s\n---\nDo %s.\n", tc.name, tc.auto, tc.onDone, tc.name)
-		os.WriteFile(filepath.Join(templatesDir, tc.name+".md"), []byte(content), 0o644)
+		os.WriteFile(filepath.Join(promptsDir, tc.name+".md"), []byte(content), 0o644)
 	}
 
 	cmd.SetConfigDir(tqDir)
@@ -125,8 +125,8 @@ func TestDone_TriggersOnDone(t *testing.T) {
 	}
 
 	followUp := actions[1]
-	if followUp.TemplateID != "review" {
-		t.Errorf("template_id = %q, want review", followUp.TemplateID)
+	if followUp.PromptID != "review" {
+		t.Errorf("template_id = %q, want review", followUp.PromptID)
 	}
 	if followUp.Status != "pending" {
 		t.Errorf("status = %q, want pending", followUp.Status)

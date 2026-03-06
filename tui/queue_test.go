@@ -145,13 +145,13 @@ func TestQueueModel_DateFilter(t *testing.T) {
 	d.InsertAction("old-action", &taskID, "{}", "pending", "auto")
 
 	// Set old-action's created_at to a different date
-	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE template_id = 'old-action'")
+	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE prompt_id = 'old-action'")
 
 	// Get today's date from the first action
 	actions, _ := d.ListActions("", nil)
 	var todayDate string
 	for _, a := range actions {
-		if a.TemplateID == "today-action" {
+		if a.PromptID == "today-action" {
 			todayDate = a.CreatedAt[:10]
 			break
 		}

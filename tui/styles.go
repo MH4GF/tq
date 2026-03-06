@@ -66,7 +66,7 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 	st := StatusStyle(a.Status)
 	b.WriteString(fmt.Sprintf("  ID:        %d\n", a.ID))
 	b.WriteString(fmt.Sprintf("  Status:    %s\n", st.Render(a.Status)))
-	b.WriteString(fmt.Sprintf("  Template:  %s\n", a.TemplateID))
+	b.WriteString(fmt.Sprintf("  Prompt:    %s\n", a.PromptID))
 	if a.TaskID.Valid {
 		b.WriteString(fmt.Sprintf("  Task:      #%d\n", a.TaskID.Int64))
 	}

@@ -19,14 +19,12 @@ func setupClassifyEnv(t *testing.T) (string, *bytes.Buffer) {
 	tqDir := t.TempDir()
 	cmd.SetConfigDir(tqDir)
 
-	templatesDir := filepath.Join(tqDir, "templates")
-	os.MkdirAll(templatesDir, 0755)
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0755)
 
-	os.WriteFile(filepath.Join(templatesDir, "classify.md"), []byte(`---
+	os.WriteFile(filepath.Join(promptsDir, "classify.md"), []byte(`---
 description: classify
-auto: true
-interactive: false
-timeout: 10
+mode: noninteractive
 ---
 Classify: {{index .Action.Meta "notification"}}
 Tasks: {{index .Action.Meta "existing_tasks"}}
@@ -41,14 +39,12 @@ func setupInteractiveClassifyEnv(t *testing.T) (string, *bytes.Buffer) {
 	tqDir := t.TempDir()
 	cmd.SetConfigDir(tqDir)
 
-	templatesDir := filepath.Join(tqDir, "templates")
-	os.MkdirAll(templatesDir, 0755)
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0755)
 
-	os.WriteFile(filepath.Join(templatesDir, "classify.md"), []byte(`---
+	os.WriteFile(filepath.Join(promptsDir, "classify.md"), []byte(`---
 description: classify
-auto: true
-interactive: true
-timeout: 10
+mode: interactive
 ---
 Classify: {{index .Action.Meta "notification"}}
 Tasks: {{index .Action.Meta "existing_tasks"}}
@@ -148,8 +144,8 @@ func TestClassify_InteractiveError(t *testing.T) {
 		t.Fatalf("failed action count = %d, want 1", len(actions))
 	}
 	action := actions[0]
-	if action.TemplateID != "classify" {
-		t.Errorf("template_id = %q, want %q", action.TemplateID, "classify")
+	if action.PromptID != "classify" {
+		t.Errorf("template_id = %q, want %q", action.PromptID, "classify")
 	}
 	if !action.Result.Valid || !contains(action.Result.String, "tmux not found") {
 		t.Errorf("result = %v, want to contain 'tmux not found'", action.Result)
@@ -184,8 +180,8 @@ func TestClassify_ExecutionFailure(t *testing.T) {
 		t.Fatalf("failed action count = %d, want 1", len(actions))
 	}
 	action := actions[0]
-	if action.TemplateID != "classify" {
-		t.Errorf("template_id = %q, want %q", action.TemplateID, "classify")
+	if action.PromptID != "classify" {
+		t.Errorf("template_id = %q, want %q", action.PromptID, "classify")
 	}
 	if action.Source != "classify" {
 		t.Errorf("source = %q, want %q", action.Source, "classify")

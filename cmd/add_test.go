@@ -10,11 +10,11 @@ import (
 	"github.com/MH4GF/tq/testutil"
 )
 
-func writeTestTemplate(t *testing.T, dir, name, content string) {
+func writeTestPrompt(t *testing.T, dir, name, content string) {
 	t.Helper()
-	templatesDir := filepath.Join(dir, "templates")
-	os.MkdirAll(templatesDir, 0755)
-	if err := os.WriteFile(filepath.Join(templatesDir, name+".md"), []byte(content), 0644); err != nil {
+	promptsDir := filepath.Join(dir, "prompts")
+	os.MkdirAll(promptsDir, 0755)
+	if err := os.WriteFile(filepath.Join(promptsDir, name+".md"), []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -27,7 +27,7 @@ func TestAdd(t *testing.T) {
 
 	tqDir := t.TempDir()
 	cmd.SetConfigDir(tqDir)
-	writeTestTemplate(t, tqDir, "review-pr", `---
+	writeTestPrompt(t, tqDir, "review-pr", `---
 description: Review PR
 ---
 Review this PR.
@@ -57,8 +57,8 @@ Review this PR.
 	if err != nil {
 		t.Fatalf("get action: %v", err)
 	}
-	if a.TemplateID != "review-pr" {
-		t.Errorf("template_id = %q, want %q", a.TemplateID, "review-pr")
+	if a.PromptID != "review-pr" {
+		t.Errorf("prompt_id = %q, want %q", a.PromptID, "review-pr")
 	}
 	if !a.TaskID.Valid || a.TaskID.Int64 != taskID {
 		t.Errorf("task_id = %v, want %d", a.TaskID, taskID)
@@ -73,7 +73,7 @@ func TestAdd_DuplicateBlocked(t *testing.T) {
 
 	tqDir := t.TempDir()
 	cmd.SetConfigDir(tqDir)
-	writeTestTemplate(t, tqDir, "review-pr", `---
+	writeTestPrompt(t, tqDir, "review-pr", `---
 description: Review PR
 ---
 Review.
@@ -108,7 +108,7 @@ func TestAdd_DuplicateWaitingHumanBlocked(t *testing.T) {
 
 	tqDir := t.TempDir()
 	cmd.SetConfigDir(tqDir)
-	writeTestTemplate(t, tqDir, "implement", `---
+	writeTestPrompt(t, tqDir, "implement", `---
 description: Implement
 ---
 Implement.
@@ -140,7 +140,7 @@ func TestAdd_DuplicateForce(t *testing.T) {
 
 	tqDir := t.TempDir()
 	cmd.SetConfigDir(tqDir)
-	writeTestTemplate(t, tqDir, "review-pr", `---
+	writeTestPrompt(t, tqDir, "review-pr", `---
 description: Review PR
 ---
 Review.
@@ -173,7 +173,7 @@ func TestAdd_MissingTask(t *testing.T) {
 
 	tqDir := t.TempDir()
 	cmd.SetConfigDir(tqDir)
-	writeTestTemplate(t, tqDir, "review-pr", `---
+	writeTestPrompt(t, tqDir, "review-pr", `---
 description: Review PR
 ---
 Review.
@@ -206,6 +206,6 @@ func TestAdd_MissingTemplate(t *testing.T) {
 	root.SetArgs([]string{"action", "create"})
 
 	if err := root.Execute(); err == nil {
-		t.Fatal("expected error for missing template argument")
+		t.Fatal("expected error for missing prompt argument")
 	}
 }

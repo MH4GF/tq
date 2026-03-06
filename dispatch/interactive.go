@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	tmpl "github.com/MH4GF/tq/template"
+	"github.com/MH4GF/tq/prompt"
 )
 
 // InteractiveWorker opens a tmux window and launches `claude` via send-keys.
@@ -15,7 +15,7 @@ type InteractiveWorker struct {
 	Runner CommandRunner
 }
 
-func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg tmpl.Config, workDir string, actionID int64) (string, error) {
+func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64) (string, error) {
 	windowName := fmt.Sprintf("tq-action-%d", actionID)
 
 	// 1. Create tmux window

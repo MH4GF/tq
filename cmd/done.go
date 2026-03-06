@@ -37,9 +37,8 @@ var doneCmd = &cobra.Command{
 			return fmt.Errorf("mark done: %w", err)
 		}
 
-		projectWorkDir := getProjectWorkDir(action)
-		templatesDir := resolveTemplatesDir(projectWorkDir)
-		if err := dispatch.TriggerOnDone(database, templatesDir, action, result); err != nil {
+		promptsDir := resolvePromptsDir()
+		if err := dispatch.TriggerOnDone(database, promptsDir, action, result); err != nil {
 			slog.Warn("on_done trigger failed", "action_id", id, "error", err)
 		}
 

@@ -157,14 +157,14 @@ func TestTasksModel_DateFilter(t *testing.T) {
 	d.UpdateTask(taskID2, "done")
 
 	// Set old-action and old task dates to a different date
-	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE template_id = 'old-action'")
+	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE prompt_id = 'old-action'")
 	d.Exec(fmt.Sprintf("UPDATE tasks SET created_at = '2025-01-01 00:00:00', updated_at = '2025-01-01 00:00:00' WHERE id = %d", taskID2))
 
 	// Get today's date from the first action
 	actions, _ := d.ListActions("", nil)
 	var todayDate string
 	for _, a := range actions {
-		if a.TemplateID == "today-action" {
+		if a.PromptID == "today-action" {
 			todayDate = a.CreatedAt[:10]
 			break
 		}
@@ -203,7 +203,7 @@ func TestTasksModel_DateFilter_NonDoneTaskShown(t *testing.T) {
 	// Open task with action on a different date
 	taskID, _ := d.InsertTask(1, "Open no-match task", "", "{}")
 	d.InsertAction("old-action", &taskID, "{}", "pending", "auto")
-	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE template_id = 'old-action'")
+	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE prompt_id = 'old-action'")
 
 	m := NewTasksModel(d, "2026-03-03")
 	msg := m.Init()()
@@ -223,7 +223,7 @@ func TestTasksModel_DateFilter_ArchivedTaskFiltered(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "Old archived", "", "{}")
 	d.InsertAction("old-action", &taskID, "{}", "pending", "auto")
 	d.UpdateTask(taskID, "archived")
-	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE template_id = 'old-action'")
+	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE prompt_id = 'old-action'")
 	d.Exec(fmt.Sprintf("UPDATE tasks SET created_at = '2025-01-01 00:00:00', updated_at = '2025-01-01 00:00:00' WHERE id = %d", taskID))
 
 	// Open task — should always appear
@@ -233,7 +233,7 @@ func TestTasksModel_DateFilter_ArchivedTaskFiltered(t *testing.T) {
 	actions, _ := d.ListActions("", nil)
 	var todayDate string
 	for _, a := range actions {
-		if a.TemplateID == "open-action" {
+		if a.PromptID == "open-action" {
 			todayDate = a.CreatedAt[:10]
 			break
 		}

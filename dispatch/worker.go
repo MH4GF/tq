@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	tmpl "github.com/MH4GF/tq/template"
+	"github.com/MH4GF/tq/prompt"
 )
 
 // CommandRunner abstracts command execution for testing.
@@ -25,5 +25,5 @@ func (r *ExecRunner) Run(ctx context.Context, name string, args []string, dir st
 
 // Worker executes a rendered prompt.
 type Worker interface {
-	Execute(ctx context.Context, prompt string, cfg tmpl.Config, workDir string, actionID int64) (string, error)
+	Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64) (string, error)
 }

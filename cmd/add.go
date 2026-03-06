@@ -7,20 +7,20 @@ import (
 )
 
 var (
-	addTemplate string
-	addTask     int64
-	addMeta     string
-	addSource   string
-	addStatus   string
-	addForce    bool
+	addPrompt string
+	addTask   int64
+	addMeta   string
+	addSource string
+	addStatus string
+	addForce  bool
 )
 
 var addCmd = &cobra.Command{
-	Use:   "create <TEMPLATE>",
+	Use:   "create <PROMPT>",
 	Short: "Create an action",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		addTemplate = args[0]
+		addPrompt = args[0]
 
 		if addTask <= 0 {
 			return fmt.Errorf("--task flag is required")
@@ -34,16 +34,16 @@ var addCmd = &cobra.Command{
 		taskIDPtr := &addTask
 
 		if !addForce {
-			dup, err := database.HasActiveAction(addTask, addTemplate)
+			dup, err := database.HasActiveAction(addTask, addPrompt)
 			if err != nil {
 				return fmt.Errorf("check duplicates: %w", err)
 			}
 			if dup {
-				return fmt.Errorf("blocked: active action already exists for task %d template %s (use --force to override)", addTask, addTemplate)
+				return fmt.Errorf("blocked: active action already exists for task %d prompt %s (use --force to override)", addTask, addPrompt)
 			}
 		}
 
-		id, err := database.InsertAction(addTemplate, taskIDPtr, addMeta, status, addSource)
+		id, err := database.InsertAction(addPrompt, taskIDPtr, addMeta, status, addSource)
 		if err != nil {
 			return fmt.Errorf("insert action: %w", err)
 		}

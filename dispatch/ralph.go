@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/MH4GF/tq/db"
-	"github.com/MH4GF/tq/template"
+	"github.com/MH4GF/tq/prompt"
 )
 
 // TmuxChecker checks for the existence of tmux windows.
@@ -48,6 +48,7 @@ type RalphConfig struct {
 	PollInterval       time.Duration
 	NonInteractiveFunc func() Worker
 	InteractiveFunc    func() Worker
+	RemoteFunc         func() Worker
 	TmuxChecker        TmuxChecker
 	StaleGracePeriod   time.Duration
 }
@@ -149,12 +150,11 @@ func dispatchOne(ctx context.Context, cfg RalphConfig) (bool, error) {
 		return false, nil
 	}
 
-	projectWorkDir := getProjectWorkDir(cfg.DB, action)
-	templatesDir := resolveTemplatesDir(projectWorkDir, cfg.UserConfigDir)
-	tmpl, err := template.Load(templatesDir, action.TemplateID)
+	promptsDir := resolvePromptsDir(cfg.UserConfigDir)
+	tmpl, err := prompt.Load(promptsDir, action.PromptID)
 	if err != nil {
-		_ = cfg.DB.MarkFailed(action.ID, fmt.Sprintf("template load error: %v", err))
-		return true, fmt.Errorf("load template %q: %w", action.TemplateID, err)
+		_ = cfg.DB.MarkFailed(action.ID, fmt.Sprintf("prompt load error: %v", err))
+		return true, fmt.Errorf("load prompt %q: %w", action.PromptID, err)
 	}
 
 	promptData, err := buildPromptDataFromDB(cfg.DB, action)
@@ -166,7 +166,7 @@ func dispatchOne(ctx context.Context, cfg RalphConfig) (bool, error) {
 	prompt, err := tmpl.Render(promptData)
 	if err != nil {
 		_ = cfg.DB.MarkFailed(action.ID, fmt.Sprintf("render error: %v", err))
-		return true, fmt.Errorf("render template: %w", err)
+		return true, fmt.Errorf("render prompt: %w", err)
 	}
 
 	workDir := "."
@@ -174,13 +174,16 @@ func dispatchOne(ctx context.Context, cfg RalphConfig) (bool, error) {
 		workDir = expandHome(promptData.Project.WorkDir)
 	}
 
-	if tmpl.Config.Interactive {
+	if tmpl.Config.IsRemote() {
+		return dispatchRemote(ctx, cfg, action, prompt, tmpl.Config, workDir)
+	}
+	if tmpl.Config.IsInteractive() {
 		return dispatchInteractive(ctx, cfg, action, prompt, tmpl.Config, workDir)
 	}
 	return dispatchNonInteractive(ctx, cfg, action, prompt, tmpl.Config, workDir)
 }
 
-func dispatchInteractive(ctx context.Context, cfg RalphConfig, action *db.Action, prompt string, tmplCfg template.Config, workDir string) (bool, error) {
+func dispatchInteractive(ctx context.Context, cfg RalphConfig, action *db.Action, prompt string, tmplCfg prompt.Config, workDir string) (bool, error) {
 	running, err := cfg.DB.CountRunningInteractive()
 	if err != nil {
 		return true, fmt.Errorf("count running interactive: %w", err)
@@ -207,7 +210,25 @@ func dispatchInteractive(ctx context.Context, cfg RalphConfig, action *db.Action
 	return true, nil
 }
 
-func dispatchNonInteractive(ctx context.Context, cfg RalphConfig, action *db.Action, prompt string, tmplCfg template.Config, workDir string) (bool, error) {
+func dispatchRemote(ctx context.Context, cfg RalphConfig, action *db.Action, prompt string, tmplCfg prompt.Config, workDir string) (bool, error) {
+	worker := cfg.RemoteFunc()
+	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID)
+	if err != nil {
+		handleFailure(cfg, action, err)
+		return true, nil
+	}
+
+	if err := cfg.DB.MergeActionMetadata(action.ID, map[string]any{
+		"remote_session": result,
+	}); err != nil {
+		slog.Warn("failed to save remote session info", "action_id", action.ID, "error", err)
+	}
+
+	slog.Info("remote action dispatched", "action_id", action.ID, "result", result)
+	return true, nil
+}
+
+func dispatchNonInteractive(ctx context.Context, cfg RalphConfig, action *db.Action, prompt string, tmplCfg prompt.Config, workDir string) (bool, error) {
 	worker := cfg.NonInteractiveFunc()
 	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID)
 	if err != nil {
@@ -219,9 +240,8 @@ func dispatchNonInteractive(ctx context.Context, cfg RalphConfig, action *db.Act
 		return true, fmt.Errorf("mark done: %w", err)
 	}
 
-	projectWorkDir := getProjectWorkDir(cfg.DB, action)
-	templatesDir := resolveTemplatesDir(projectWorkDir, cfg.UserConfigDir)
-	if err := TriggerOnDone(cfg.DB, templatesDir, action, result); err != nil {
+	promptsDir := resolvePromptsDir(cfg.UserConfigDir)
+	if err := TriggerOnDone(cfg.DB, promptsDir, action, result); err != nil {
 		slog.Warn("on_done trigger failed", "action_id", action.ID, "error", err)
 	}
 
@@ -234,8 +254,8 @@ func handleFailure(cfg RalphConfig, action *db.Action, execErr error) {
 	slog.Error("action failed, escalating to human", "action_id", action.ID, "error", execErr)
 }
 
-func buildPromptDataFromDB(database *db.DB, action *db.Action) (template.PromptData, error) {
-	var data template.PromptData
+func buildPromptDataFromDB(database *db.DB, action *db.Action) (prompt.PromptData, error) {
+	var data prompt.PromptData
 
 	actionMeta := make(map[string]any)
 	if action.Metadata != "" && action.Metadata != "{}" {
@@ -243,9 +263,9 @@ func buildPromptDataFromDB(database *db.DB, action *db.Action) (template.PromptD
 			return data, fmt.Errorf("parse action metadata: %w", err)
 		}
 	}
-	data.Action = template.ActionData{
+	data.Action = prompt.ActionData{
 		ID:         action.ID,
-		TemplateID: action.TemplateID,
+		PromptID: action.PromptID,
 		Status:     action.Status,
 		Source:     action.Source,
 		Meta:       actionMeta,
@@ -262,7 +282,7 @@ func buildPromptDataFromDB(database *db.DB, action *db.Action) (template.PromptD
 				return data, fmt.Errorf("parse task metadata: %w", err)
 			}
 		}
-		data.Task = template.TaskData{
+		data.Task = prompt.TaskData{
 			ID:     task.ID,
 			Title:  task.Title,
 			URL:    task.URL,
@@ -280,7 +300,7 @@ func buildPromptDataFromDB(database *db.DB, action *db.Action) (template.PromptD
 				return data, fmt.Errorf("parse project metadata: %w", err)
 			}
 		}
-		data.Project = template.ProjectData{
+		data.Project = prompt.ProjectData{
 			ID:      project.ID,
 			Name:    project.Name,
 			WorkDir: project.WorkDir,
@@ -291,29 +311,8 @@ func buildPromptDataFromDB(database *db.DB, action *db.Action) (template.PromptD
 	return data, nil
 }
 
-func resolveTemplatesDir(projectWorkDir, userConfigDir string) string {
-	if projectWorkDir != "" {
-		projDir := filepath.Join(projectWorkDir, "tq", "templates")
-		if info, err := os.Stat(projDir); err == nil && info.IsDir() {
-			return projDir
-		}
-	}
-	return filepath.Join(userConfigDir, "templates")
-}
-
-func getProjectWorkDir(database *db.DB, action *db.Action) string {
-	if !action.TaskID.Valid {
-		return ""
-	}
-	task, err := database.GetTask(action.TaskID.Int64)
-	if err != nil {
-		return ""
-	}
-	project, err := database.GetProjectByID(task.ProjectID)
-	if err != nil {
-		return ""
-	}
-	return expandHome(project.WorkDir)
+func resolvePromptsDir(userConfigDir string) string {
+	return filepath.Join(userConfigDir, "prompts")
 }
 
 func expandHome(path string) string {

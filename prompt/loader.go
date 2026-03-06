@@ -1,4 +1,4 @@
-package template
+package prompt
 
 import (
 	"bytes"
@@ -13,11 +13,15 @@ import (
 
 type Config struct {
 	Description string `yaml:"description"`
-	Interactive bool   `yaml:"interactive"`
+	Mode        string `yaml:"mode"` // "interactive" (default) | "noninteractive" | "remote"
 	OnDone      string `yaml:"on_done"`
 }
 
-type Template struct {
+func (c Config) IsInteractive() bool    { return c.Mode == "interactive" }
+func (c Config) IsNonInteractive() bool { return c.Mode == "noninteractive" }
+func (c Config) IsRemote() bool         { return c.Mode == "remote" }
+
+type Prompt struct {
 	ID     string
 	Config Config
 	Body   string
@@ -45,24 +49,24 @@ type ProjectData struct {
 }
 
 type ActionData struct {
-	ID         int64
-	TemplateID string
-	Status     string
-	Source     string
-	Meta       map[string]any
+	ID       int64
+	PromptID string
+	Status   string
+	Source   string
+	Meta     map[string]any
 }
 
-func Load(templatesDir, templateID string) (*Template, error) {
-	path := filepath.Join(templatesDir, templateID+".md")
+func Load(promptsDir, promptID string) (*Prompt, error) {
+	path := filepath.Join(promptsDir, promptID+".md")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("template %q not found: %w", templateID, err)
+		return nil, fmt.Errorf("prompt %q not found: %w", promptID, err)
 	}
 
 	content := string(data)
 	parts := strings.SplitN(content, "---", 3)
 	if len(parts) < 3 {
-		return nil, fmt.Errorf("template %q: missing frontmatter delimiters", templateID)
+		return nil, fmt.Errorf("prompt %q: missing frontmatter delimiters", promptID)
 	}
 
 	frontmatter := []byte(strings.TrimSpace(parts[1]))
@@ -70,25 +74,29 @@ func Load(templatesDir, templateID string) (*Template, error) {
 
 	var cfg Config
 	if err := yaml.Unmarshal(frontmatter, &cfg); err != nil {
-		return nil, fmt.Errorf("template %q: invalid YAML: %w", templateID, err)
+		return nil, fmt.Errorf("prompt %q: invalid YAML: %w", promptID, err)
 	}
 
-	return &Template{
-		ID:     templateID,
+	if cfg.Mode == "" {
+		cfg.Mode = "interactive"
+	}
+
+	return &Prompt{
+		ID:     promptID,
 		Config: cfg,
 		Body:   body,
 	}, nil
 }
 
-func (t *Template) Render(data PromptData) (string, error) {
-	tmpl, err := template.New(t.ID).Parse(t.Body)
+func (p *Prompt) Render(data PromptData) (string, error) {
+	tmpl, err := template.New(p.ID).Parse(p.Body)
 	if err != nil {
-		return "", fmt.Errorf("template %q: parse error: %w", t.ID, err)
+		return "", fmt.Errorf("prompt %q: parse error: %w", p.ID, err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("template %q: render error: %w", t.ID, err)
+		return "", fmt.Errorf("prompt %q: render error: %w", p.ID, err)
 	}
 
 	return buf.String(), nil

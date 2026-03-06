@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	tmpl "github.com/MH4GF/tq/template"
+	"github.com/MH4GF/tq/prompt"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -19,35 +19,51 @@ type countingWorker struct {
 	err    error
 }
 
-func (w *countingWorker) Execute(ctx context.Context, prompt string, cfg tmpl.Config, workDir string, actionID int64) (string, error) {
+func (w *countingWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64) (string, error) {
 	w.count++
 	return w.result, w.err
 }
 
-func setupTemplatesDir(t *testing.T) string {
+func setupPromptsDir(t *testing.T) string {
 	t.Helper()
 	tqDir := t.TempDir()
-	templatesDir := filepath.Join(tqDir, "templates")
-	os.MkdirAll(templatesDir, 0o755)
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0o755)
 
-	writeTestTemplate(t, templatesDir, "check-pr-status", false)
-	writeTestTemplate(t, templatesDir, "fix-conflict", true)
-	writeTestTemplate(t, templatesDir, "respond-review", true)
-	writeTestTemplate(t, templatesDir, "fix-ci", true)
-	writeTestTemplate(t, templatesDir, "merge-pr", true)
+	writeTestPrompt(t, promptsDir, "check-pr-status", false)
+	writeTestPrompt(t, promptsDir, "fix-conflict", true)
+	writeTestPrompt(t, promptsDir, "respond-review", true)
+	writeTestPrompt(t, promptsDir, "fix-ci", true)
+	writeTestPrompt(t, promptsDir, "merge-pr", true)
+	writeTestPromptWithMode(t, promptsDir, "remote-task", "remote", "")
 	return tqDir
 }
 
-func writeTestTemplate(t *testing.T, dir, name string, interactive bool) {
+func writeTestPromptWithMode(t *testing.T, dir, name, mode, onDone string) {
 	t.Helper()
-	writeTestTemplateWithOnDone(t, dir, name, interactive, "")
+	onDoneLine := ""
+	if onDone != "" {
+		onDoneLine = fmt.Sprintf("on_done: %s\n", onDone)
+	}
+	content := fmt.Sprintf(`---
+description: %s
+mode: %s
+%s---
+Do %s for {{.Task.Title}}.
+`, name, mode, onDoneLine, name)
+	os.WriteFile(filepath.Join(dir, name+".md"), []byte(content), 0o644)
 }
 
-func writeTestTemplateWithOnDone(t *testing.T, dir, name string, interactive bool, onDone string) {
+func writeTestPrompt(t *testing.T, dir, name string, interactive bool) {
 	t.Helper()
-	interactiveStr := "false"
+	writeTestPromptWithOnDone(t, dir, name, interactive, "")
+}
+
+func writeTestPromptWithOnDone(t *testing.T, dir, name string, interactive bool, onDone string) {
+	t.Helper()
+	mode := "noninteractive"
 	if interactive {
-		interactiveStr = "true"
+		mode = "interactive"
 	}
 
 	onDoneLine := ""
@@ -57,10 +73,10 @@ func writeTestTemplateWithOnDone(t *testing.T, dir, name string, interactive boo
 
 	content := fmt.Sprintf(`---
 description: %s
-interactive: %s
+mode: %s
 %s---
 Do %s for {{.Task.Title}}.
-`, name, interactiveStr, onDoneLine, name)
+`, name, mode, onDoneLine, name)
 
 	os.WriteFile(filepath.Join(dir, name+".md"), []byte(content), 0o644)
 }
@@ -72,7 +88,7 @@ func TestRalphLoop_ProcessesAndStops(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
 	d.InsertAction("check-pr-status", &taskID, "{}", "pending", "test")
 
-	tqDir := setupTemplatesDir(t)
+	tqDir := setupPromptsDir(t)
 
 	worker := &countingWorker{result: `{"ok":true}`}
 
@@ -114,7 +130,7 @@ func TestRalphLoop_InteractiveLimitEnforced(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
 	d.InsertAction("fix-conflict", &taskID, "{}", "pending", "test")
 
-	tqDir := setupTemplatesDir(t)
+	tqDir := setupPromptsDir(t)
 
 	// Simulate an already-running interactive session
 	d.InsertAction("respond-review", &taskID, "{}", "running", "test")
@@ -152,7 +168,7 @@ func TestRalphLoop_FailureEscalation(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
 	d.InsertAction("check-pr-status", &taskID, "{}", "pending", "test")
 
-	tqDir := setupTemplatesDir(t)
+	tqDir := setupPromptsDir(t)
 
 	worker := &countingWorker{err: context.DeadlineExceeded}
 
@@ -185,11 +201,11 @@ func TestRalphLoop_OnDoneTriggersFollowUp(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	tqDir := t.TempDir()
-	templatesDir := filepath.Join(tqDir, "templates")
-	os.MkdirAll(templatesDir, 0o755)
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0o755)
 
-	writeTestTemplateWithOnDone(t, templatesDir, "check-pr", false, "review")
-	writeTestTemplate(t, templatesDir, "review", false)
+	writeTestPromptWithOnDone(t, promptsDir, "check-pr", false, "review")
+	writeTestPrompt(t, promptsDir, "review", false)
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
 	d.InsertAction("check-pr", &taskID, "{}", "pending", "test")
@@ -230,8 +246,8 @@ func TestRalphLoop_OnDoneTriggersFollowUp(t *testing.T) {
 	}
 
 	review := actions[1]
-	if review.TemplateID != "review" {
-		t.Errorf("follow-up template = %q, want review", review.TemplateID)
+	if review.PromptID != "review" {
+		t.Errorf("follow-up template = %q, want review", review.PromptID)
 	}
 	if review.Source != "on_done" {
 		t.Errorf("follow-up source = %q, want on_done", review.Source)
@@ -369,11 +385,101 @@ func TestReapStaleActions_NilChecker(t *testing.T) {
 	}
 }
 
+func TestRalphLoop_RemoteDispatch(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Remote task", "https://example.com", "{}")
+	d.InsertAction("remote-task", &taskID, "{}", "pending", "test")
+
+	tqDir := setupPromptsDir(t)
+
+	remoteWorker := &countingWorker{result: "remote:session=https://console.anthropic.com/p/abc"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	cfg := RalphConfig{
+		UserConfigDir:  tqDir,
+		DB:             d,
+		MaxInteractive: 1,
+		PollInterval:   50 * time.Millisecond,
+		NonInteractiveFunc: func() Worker {
+			return &countingWorker{result: `{"ok":true}`}
+		},
+		InteractiveFunc: func() Worker {
+			return &countingWorker{result: "interactive:action=1"}
+		},
+		RemoteFunc: func() Worker {
+			return remoteWorker
+		},
+	}
+
+	_ = RalphLoop(ctx, cfg)
+
+	if remoteWorker.count != 1 {
+		t.Errorf("remote worker called %d times, want 1", remoteWorker.count)
+	}
+
+	action, _ := d.GetAction(1)
+	if action.Status != "running" {
+		t.Errorf("action status = %q, want running (fire-and-forget)", action.Status)
+	}
+}
+
+func TestRalphLoop_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	// First: a remote action (pending)
+	d.InsertAction("remote-task", &taskID, "{}", "pending", "test")
+	// Second: an interactive action (pending)
+	d.InsertAction("fix-conflict", &taskID, "{}", "pending", "test")
+
+	// Simulate an already-running interactive session to fill max
+	d.InsertAction("respond-review", &taskID, "{}", "running", "test")
+	d.Exec("UPDATE actions SET session_id = 'session-1' WHERE id = 3")
+
+	tqDir := setupPromptsDir(t)
+
+	remoteWorker := &countingWorker{result: "remote:session=https://example.com"}
+	interactiveWorker := &countingWorker{result: "interactive:action=2"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	cfg := RalphConfig{
+		UserConfigDir:  tqDir,
+		DB:             d,
+		MaxInteractive: 1,
+		PollInterval:   50 * time.Millisecond,
+		NonInteractiveFunc: func() Worker {
+			return &countingWorker{result: `{"ok":true}`}
+		},
+		InteractiveFunc: func() Worker {
+			return interactiveWorker
+		},
+		RemoteFunc: func() Worker {
+			return remoteWorker
+		},
+	}
+
+	_ = RalphLoop(ctx, cfg)
+
+	if remoteWorker.count != 1 {
+		t.Errorf("remote worker called %d times, want 1 (should not be limited)", remoteWorker.count)
+	}
+	if interactiveWorker.count != 0 {
+		t.Errorf("interactive worker called %d times, want 0 (limit reached)", interactiveWorker.count)
+	}
+}
+
 func TestDispatchOne_NoPending(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	tqDir := setupTemplatesDir(t)
+	tqDir := setupPromptsDir(t)
 
 	cfg := RalphConfig{
 		UserConfigDir:        tqDir,

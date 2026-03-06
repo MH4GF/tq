@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	tmpl "github.com/MH4GF/tq/template"
+	"github.com/MH4GF/tq/prompt"
 )
 
 type MockRunner struct {
@@ -33,7 +33,7 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"success","result":"{\"result\":\"ok\"}","cost_usd":0.01}`)}
 	w := &NonInteractiveWorker{Runner: mock}
 
-	cfg := tmpl.Config{}
+	cfg := prompt.Config{}
 
 	result, err := w.Execute(context.Background(), "do something", cfg, "/work", 1)
 	if err != nil {
@@ -78,7 +78,7 @@ func TestNonInteractiveWorker_Execute_Error(t *testing.T) {
 	mock := &MockRunner{Err: errors.New("command failed")}
 	w := &NonInteractiveWorker{Runner: mock}
 
-	cfg := tmpl.Config{}
+	cfg := prompt.Config{}
 
 	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1)
 	if err == nil {
@@ -93,7 +93,7 @@ func TestNonInteractiveWorker_Execute_Timeout(t *testing.T) {
 	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"success","result":"ok"}`)}
 	w := &NonInteractiveWorker{Runner: mock}
 
-	cfg := tmpl.Config{}
+	cfg := prompt.Config{}
 
 	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1)
 	if err != nil {
@@ -118,7 +118,7 @@ func TestNonInteractiveWorker_Execute_Output(t *testing.T) {
 	mock := &MockRunner{Output: []byte(wrapperJSON)}
 	w := &NonInteractiveWorker{Runner: mock}
 
-	cfg := tmpl.Config{}
+	cfg := prompt.Config{}
 
 	got, err := w.Execute(context.Background(), "process data", cfg, "/projects/app", 42)
 	if err != nil {
@@ -133,7 +133,7 @@ func TestNonInteractiveWorker_Execute_ErrorSubtype(t *testing.T) {
 	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"error","result":"model refused"}`)}
 	w := &NonInteractiveWorker{Runner: mock}
 
-	cfg := tmpl.Config{}
+	cfg := prompt.Config{}
 
 	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1)
 	if err == nil {
@@ -148,7 +148,7 @@ func TestNonInteractiveWorker_Execute_MalformedJSON(t *testing.T) {
 	mock := &MockRunner{Output: []byte(`not json at all`)}
 	w := &NonInteractiveWorker{Runner: mock}
 
-	cfg := tmpl.Config{}
+	cfg := prompt.Config{}
 
 	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1)
 	if err == nil {

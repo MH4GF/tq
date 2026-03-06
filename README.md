@@ -8,7 +8,7 @@
 cd tq && go install .
 ```
 
-DB は `~/.config/tq/tq.db` に配置（固定）。テンプレートはプロジェクトの `tq/templates/` → `~/.config/tq/templates/` の順で解決。
+DB は `~/.config/tq/tq.db` に配置（固定）。プロンプトは `~/.config/tq/prompts/` に配置。
 
 ### プロジェクト登録
 
@@ -55,11 +55,11 @@ tq ui
 
 ## AI向け: CLI
 
-CLIはAIワーカー（Claude Code）がプログラムから操作するためのインターフェース。テンプレート内で呼び出される。
+CLIはAIワーカー（Claude Code）がプログラムから操作するためのインターフェース。プロンプト内で呼び出される。
 
 ### tq action done — アクション完了報告
 
-interactive worker が作業完了時に呼ぶ。全テンプレートに記載される。
+interactive worker が作業完了時に呼ぶ。全プロンプトに記載される。
 
 ```bash
 tq action done {{.Action.ID}} '{"result":"<要約>"}'
@@ -67,7 +67,7 @@ tq action done {{.Action.ID}} '{"result":"<要約>"}'
 
 ### tq action create — アクション作成
 
-classify テンプレートが通知からアクションを生成する際に使う。
+classify プロンプトが通知からアクションを生成する際に使う。
 
 ```bash
 tq action create fix-ci --task 1 --meta '{"pr_url":"https://..."}'
@@ -75,7 +75,7 @@ tq action create fix-ci --task 1 --meta '{"pr_url":"https://..."}'
 
 ### tq task create / update — タスク操作
 
-classify テンプレートがタスクを生成・更新する際に使う。
+classify プロンプトがタスクを生成・更新する際に使う。
 
 ```bash
 tq task create "CI修正" --project hearable --url "https://..."
@@ -148,9 +148,9 @@ tq task list                     # タスク一覧（JSON）
 | true | true | `claude --worktree --tmux` — fire-and-forget、worker が `tq action done` で報告 |
 | false | * | dispatch しない → `waiting_human` |
 
-### テンプレート
+### プロンプト
 
-`templates/` に frontmatter 付き markdown で定義:
+`prompts/` に frontmatter 付き markdown で定義:
 
 ```markdown
 ---

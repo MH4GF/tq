@@ -6,14 +6,14 @@ import (
 	"log/slog"
 
 	"github.com/MH4GF/tq/db"
-	"github.com/MH4GF/tq/template"
+	"github.com/MH4GF/tq/prompt"
 )
 
 // TriggerOnDone creates a follow-up action if the completed action's template has on_done configured.
-func TriggerOnDone(database *db.DB, templatesDir string, action *db.Action, result string) error {
-	tmpl, err := template.Load(templatesDir, action.TemplateID)
+func TriggerOnDone(database *db.DB, promptsDir string, action *db.Action, result string) error {
+	tmpl, err := prompt.Load(promptsDir, action.PromptID)
 	if err != nil {
-		return fmt.Errorf("load source template %q: %w", action.TemplateID, err)
+		return fmt.Errorf("load source prompt %q: %w", action.PromptID, err)
 	}
 
 	if tmpl.Config.OnDone == "" {
@@ -26,20 +26,20 @@ func TriggerOnDone(database *db.DB, templatesDir string, action *db.Action, resu
 	}
 
 	taskID := action.TaskID.Int64
-	onDoneTemplateID := tmpl.Config.OnDone
+	onDonePromptID := tmpl.Config.OnDone
 
-	has, err := database.HasActiveAction(taskID, onDoneTemplateID)
+	has, err := database.HasActiveAction(taskID, onDonePromptID)
 	if err != nil {
 		return fmt.Errorf("check duplicate: %w", err)
 	}
 	if has {
-		slog.Info("on_done skipped: active action exists", "action_id", action.ID, "on_done", onDoneTemplateID)
+		slog.Info("on_done skipped: active action exists", "action_id", action.ID, "on_done", onDonePromptID)
 		return nil
 	}
 
-	if _, err := template.Load(templatesDir, onDoneTemplateID); err != nil {
-		slog.Warn("on_done template not found", "template", onDoneTemplateID)
-		return fmt.Errorf("load target template %q: %w", onDoneTemplateID, err)
+	if _, err := prompt.Load(promptsDir, onDonePromptID); err != nil {
+		slog.Warn("on_done prompt not found", "template", onDonePromptID)
+		return fmt.Errorf("load target prompt %q: %w", onDonePromptID, err)
 	}
 
 	status := "pending"
@@ -53,11 +53,11 @@ func TriggerOnDone(database *db.DB, templatesDir string, action *db.Action, resu
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	_, err = database.InsertAction(onDoneTemplateID, &taskID, string(metaJSON), status, "on_done")
+	_, err = database.InsertAction(onDonePromptID, &taskID, string(metaJSON), status, "on_done")
 	if err != nil {
 		return fmt.Errorf("insert on_done action: %w", err)
 	}
 
-	slog.Info("on_done triggered", "action_id", action.ID, "on_done", onDoneTemplateID, "status", status)
+	slog.Info("on_done triggered", "action_id", action.ID, "on_done", onDonePromptID, "status", status)
 	return nil
 }

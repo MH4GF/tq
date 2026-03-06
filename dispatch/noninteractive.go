@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	tmpl "github.com/MH4GF/tq/template"
+	"github.com/MH4GF/tq/prompt"
 )
 
 const defaultTimeout = 300
@@ -21,7 +21,7 @@ type NonInteractiveWorker struct {
 	Runner CommandRunner
 }
 
-func (w *NonInteractiveWorker) Execute(ctx context.Context, prompt string, cfg tmpl.Config, workDir string, actionID int64) (string, error) {
+func (w *NonInteractiveWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64) (string, error) {
 	args := []string{"-p", prompt, "--output-format", "json"}
 	env := []string{fmt.Sprintf("TQ_ACTION_ID=%d", actionID)}
 

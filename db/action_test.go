@@ -26,8 +26,8 @@ func TestInsertAction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.TemplateID != "review-pr" {
-		t.Errorf("expected template_id 'review-pr', got %s", a.TemplateID)
+	if a.PromptID != "review-pr" {
+		t.Errorf("expected prompt_id 'review-pr', got %s", a.PromptID)
 	}
 }
 
@@ -122,8 +122,8 @@ func TestNextPending(t *testing.T) {
 	if a == nil {
 		t.Fatal("expected action, got nil")
 	}
-	if a.TemplateID != "first" {
-		t.Errorf("expected first (lowest ID), got %s", a.TemplateID)
+	if a.PromptID != "first" {
+		t.Errorf("expected first (lowest ID), got %s", a.PromptID)
 	}
 	if a.Status != "running" {
 		t.Errorf("expected status running, got %s", a.Status)
@@ -140,8 +140,8 @@ func TestNextPending(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a2.TemplateID != "second" {
-		t.Errorf("expected second, got %s", a2.TemplateID)
+	if a2.PromptID != "second" {
+		t.Errorf("expected second, got %s", a2.PromptID)
 	}
 }
 
@@ -308,8 +308,8 @@ func TestListRunningInteractive(t *testing.T) {
 	if len(actions) != 1 {
 		t.Fatalf("expected 1 action, got %d", len(actions))
 	}
-	if actions[0].TemplateID != "a" {
-		t.Errorf("expected template_id 'a', got %s", actions[0].TemplateID)
+	if actions[0].PromptID != "a" {
+		t.Errorf("expected prompt_id 'a', got %s", actions[0].PromptID)
 	}
 	if !actions[0].SessionID.Valid || actions[0].SessionID.String != "main" {
 		t.Errorf("expected session_id 'main', got %v", actions[0].SessionID)

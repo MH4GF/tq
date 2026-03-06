@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 CREATE TABLE IF NOT EXISTS actions (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  template_id  TEXT NOT NULL,
+  prompt_id    TEXT NOT NULL,
   task_id      INTEGER REFERENCES tasks(id),
   metadata     TEXT NOT NULL DEFAULT '{}',
   status       TEXT DEFAULT 'pending',

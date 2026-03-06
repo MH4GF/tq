@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/MH4GF/tq/dispatch"
-	"github.com/MH4GF/tq/template"
+	"github.com/MH4GF/tq/prompt"
 	"github.com/spf13/cobra"
 )
 
@@ -34,11 +34,11 @@ var classifyCmd = &cobra.Command{
 }
 
 func runClassify(w io.Writer, notificationJSON string) error {
-	templatesDir := resolveTemplatesDir("")
-	tmpl, err := template.Load(templatesDir, "classify")
+	promptsDir := resolvePromptsDir()
+	tmpl, err := prompt.Load(promptsDir, "classify")
 	if err != nil {
-		recordClassifyFailure(notificationJSON, fmt.Sprintf("load classify template: %v", err))
-		return fmt.Errorf("load classify template: %w", err)
+		recordClassifyFailure(notificationJSON, fmt.Sprintf("load classify prompt: %v", err))
+		return fmt.Errorf("load classify prompt: %w", err)
 	}
 
 	existingTasks, err := buildExistingTasksList()
@@ -47,8 +47,8 @@ func runClassify(w io.Writer, notificationJSON string) error {
 		return fmt.Errorf("build tasks list: %w", err)
 	}
 
-	promptData := template.PromptData{
-		Action: template.ActionData{
+	promptData := prompt.PromptData{
+		Action: prompt.ActionData{
 			Meta: map[string]any{
 				"notification":   notificationJSON,
 				"existing_tasks": existingTasks,
@@ -57,13 +57,13 @@ func runClassify(w io.Writer, notificationJSON string) error {
 	}
 	prompt, err := tmpl.Render(promptData)
 	if err != nil {
-		recordClassifyFailure(notificationJSON, fmt.Sprintf("render template: %v", err))
-		return fmt.Errorf("render template: %w", err)
+		recordClassifyFailure(notificationJSON, fmt.Sprintf("render prompt: %v", err))
+		return fmt.Errorf("render prompt: %w", err)
 	}
 
 	ctx := context.Background()
 	var worker dispatch.Worker
-	if tmpl.Config.Interactive {
+	if tmpl.Config.IsInteractive() {
 		worker = getInteractiveWorkerFactory()()
 	} else {
 		worker = getWorkerFactory()()

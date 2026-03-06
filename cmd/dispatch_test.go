@@ -9,7 +9,7 @@ import (
 
 	"github.com/MH4GF/tq/cmd"
 	"github.com/MH4GF/tq/dispatch"
-	tmpl "github.com/MH4GF/tq/template"
+	"github.com/MH4GF/tq/prompt"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -18,7 +18,7 @@ type mockWorker struct {
 	err    error
 }
 
-func (m *mockWorker) Execute(ctx context.Context, prompt string, cfg tmpl.Config, workDir string, actionID int64) (string, error) {
+func (m *mockWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64) (string, error) {
 	return m.result, m.err
 }
 
@@ -54,11 +54,11 @@ func TestDispatch_Success(t *testing.T) {
 	tqDir := t.TempDir()
 	cmd.SetConfigDir(tqDir)
 
-	templatesDir := filepath.Join(tqDir, "templates")
-	os.MkdirAll(templatesDir, 0755)
-	os.WriteFile(filepath.Join(templatesDir, "review-pr.md"), []byte(`---
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0755)
+	os.WriteFile(filepath.Join(promptsDir, "review-pr.md"), []byte(`---
 description: Review PR
-auto: true
+mode: noninteractive
 ---
 Review PR for {{.Task.Title}}.
 `), 0644)
@@ -107,11 +107,11 @@ func TestDispatch_WorkerError(t *testing.T) {
 	tqDir := t.TempDir()
 	cmd.SetConfigDir(tqDir)
 
-	templatesDir := filepath.Join(tqDir, "templates")
-	os.MkdirAll(templatesDir, 0755)
-	os.WriteFile(filepath.Join(templatesDir, "test.md"), []byte(`---
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0755)
+	os.WriteFile(filepath.Join(promptsDir, "test.md"), []byte(`---
 description: Test
-auto: true
+mode: noninteractive
 ---
 Do something.
 `), 0644)

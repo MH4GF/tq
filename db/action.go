@@ -3,12 +3,14 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"strings"
 )
 
 type Action struct {
 	ID          int64
-	TemplateID  string
+	PromptID    string
 	TaskID      sql.NullInt64
 	Metadata    string
 	Status      string
@@ -62,14 +64,14 @@ func FilterByDate(actions []Action, date string) []Action {
 	return filtered
 }
 
-func (db *DB) InsertAction(templateID string, taskID *int64, metadata string, status string, source string) (int64, error) {
+func (db *DB) InsertAction(promptID string, taskID *int64, metadata string, status string, source string) (int64, error) {
 	var tid sql.NullInt64
 	if taskID != nil {
 		tid = sql.NullInt64{Int64: *taskID, Valid: true}
 	}
 	res, err := db.Exec(
-		"INSERT INTO actions (template_id, task_id, metadata, status, source) VALUES (?, ?, ?, ?, ?)",
-		templateID, tid, metadata, status, source,
+		"INSERT INTO actions (prompt_id, task_id, metadata, status, source) VALUES (?, ?, ?, ?, ?)",
+		promptID, tid, metadata, status, source,
 	)
 	if err != nil {
 		return 0, err
@@ -77,11 +79,11 @@ func (db *DB) InsertAction(templateID string, taskID *int64, metadata string, st
 	return res.LastInsertId()
 }
 
-func (db *DB) HasActiveAction(taskID int64, templateID string) (bool, error) {
+func (db *DB) HasActiveAction(taskID int64, promptID string) (bool, error) {
 	var count int
 	err := db.QueryRow(
-		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND template_id = ? AND status IN ('pending', 'running', 'waiting_human')",
-		taskID, templateID,
+		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN ('pending', 'running', 'waiting_human')",
+		taskID, promptID,
 	).Scan(&count)
 	if err != nil {
 		return false, err
@@ -98,8 +100,8 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 
 	a := &Action{}
 	err = tx.QueryRowContext(ctx,
-		"SELECT id, template_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE status = 'pending' ORDER BY id ASC LIMIT 1",
-	).Scan(&a.ID, &a.TemplateID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt)
+		"SELECT id, prompt_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE status = 'pending' ORDER BY id ASC LIMIT 1",
+	).Scan(&a.ID, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -145,7 +147,7 @@ func (db *DB) MarkWaitingHuman(id int64, result string) error {
 }
 
 func (db *DB) ListActions(status string, taskID *int64) ([]Action, error) {
-	query := "SELECT id, template_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE 1=1"
+	query := "SELECT id, prompt_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE 1=1"
 	var args []any
 
 	if status != "" {
@@ -167,7 +169,7 @@ func (db *DB) ListActions(status string, taskID *int64) ([]Action, error) {
 	var actions []Action
 	for rows.Next() {
 		var a Action
-		if err := rows.Scan(&a.ID, &a.TemplateID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt); err != nil {
 			return nil, err
 		}
 		actions = append(actions, a)
@@ -196,7 +198,7 @@ func (db *DB) CountByStatus() (map[string]int, error) {
 
 func (db *DB) ListRunningInteractive() ([]Action, error) {
 	rows, err := db.Query(
-		"SELECT id, template_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE status = 'running' AND session_id IS NOT NULL ORDER BY id",
+		"SELECT id, prompt_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE status = 'running' AND session_id IS NOT NULL ORDER BY id",
 	)
 	if err != nil {
 		return nil, err
@@ -206,7 +208,7 @@ func (db *DB) ListRunningInteractive() ([]Action, error) {
 	var actions []Action
 	for rows.Next() {
 		var a Action
-		if err := rows.Scan(&a.ID, &a.TemplateID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt); err != nil {
 			return nil, err
 		}
 		actions = append(actions, a)
@@ -238,12 +240,38 @@ func (db *DB) SetSessionInfo(id int64, sessionID, tmuxPane string) error {
 	return err
 }
 
+func (db *DB) MergeActionMetadata(id int64, updates map[string]any) error {
+	var existing string
+	err := db.QueryRow("SELECT metadata FROM actions WHERE id = ?", id).Scan(&existing)
+	if err != nil {
+		return err
+	}
+
+	merged := make(map[string]any)
+	if existing != "" && existing != "{}" {
+		if err := json.Unmarshal([]byte(existing), &merged); err != nil {
+			return fmt.Errorf("parse existing metadata: %w", err)
+		}
+	}
+	for k, v := range updates {
+		merged[k] = v
+	}
+
+	data, err := json.Marshal(merged)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	_, err = db.Exec("UPDATE actions SET metadata = ? WHERE id = ?", string(data), id)
+	return err
+}
+
 func (db *DB) GetAction(id int64) (*Action, error) {
 	a := &Action{}
 	err := db.QueryRow(
-		"SELECT id, template_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE id = ?",
+		"SELECT id, prompt_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE id = ?",
 		id,
-	).Scan(&a.ID, &a.TemplateID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt)
+	).Scan(&a.ID, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt)
 	if err != nil {
 		return nil, err
 	}
