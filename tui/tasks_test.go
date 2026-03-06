@@ -31,7 +31,7 @@ func TestTasksModel_LoadAndExpand(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	// Default expanded: project, task, and actions should all be visible
+	// Default expanded: project and task should be visible
 	view := m.View()
 	if !contains(view, "immedio") {
 		t.Errorf("view should contain project name 'immedio', got %q", view)
@@ -39,11 +39,9 @@ func TestTasksModel_LoadAndExpand(t *testing.T) {
 	if !contains(view, "Fix bug") {
 		t.Errorf("view should show task 'Fix bug', got %q", view)
 	}
-	if !contains(view, "check-pr") {
-		t.Errorf("view should show action 'check-pr', got %q", view)
-	}
-	if !contains(view, "fix-ci") {
-		t.Errorf("view should show action 'fix-ci', got %q", view)
+	// Actions are no longer shown in tasks view (they are in queue view)
+	if !contains(view, "2 actions") {
+		t.Errorf("view should show action count '2 actions', got %q", view)
 	}
 }
 
@@ -60,9 +58,9 @@ func TestTasksModel_Navigation(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	// Default expanded: 2 projects + 2 tasks + 2 actions = 6 lines
-	if len(m.lines) != 6 {
-		t.Errorf("lines = %d, want 6 (fully expanded)", len(m.lines))
+	// Default expanded: 2 projects + 2 tasks = 4 lines (no action lines)
+	if len(m.lines) != 4 {
+		t.Errorf("lines = %d, want 4 (projects + tasks, no actions)", len(m.lines))
 	}
 
 	if m.cursor != 0 {
@@ -78,13 +76,13 @@ func TestTasksModel_Navigation(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	}
-	if m.cursor != 5 {
-		t.Errorf("at end, cursor = %d, want 5", m.cursor)
+	if m.cursor != 3 {
+		t.Errorf("at end, cursor = %d, want 3", m.cursor)
 	}
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
-	if m.cursor != 4 {
-		t.Errorf("after k, cursor = %d, want 4", m.cursor)
+	if m.cursor != 2 {
+		t.Errorf("after k, cursor = %d, want 2", m.cursor)
 	}
 }
 
@@ -99,9 +97,9 @@ func TestTasksModel_CollapseExpand(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	// Default expanded: project + task + action = 3 lines
-	if len(m.lines) != 3 {
-		t.Fatalf("lines = %d, want 3", len(m.lines))
+	// Default expanded: project + task = 2 lines (no action lines)
+	if len(m.lines) != 2 {
+		t.Fatalf("lines = %d, want 2", len(m.lines))
 	}
 
 	// Collapse project
@@ -113,8 +111,41 @@ func TestTasksModel_CollapseExpand(t *testing.T) {
 
 	// Expand project again
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if len(m.lines) != 3 {
-		t.Errorf("after expand project, lines = %d, want 3", len(m.lines))
+	if len(m.lines) != 2 {
+		t.Errorf("after expand project, lines = %d, want 2", len(m.lines))
+	}
+}
+
+func TestTasksModel_SelectTask(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Fix bug", "", "{}")
+	d.InsertAction("check", &taskID, "{}", "pending", "auto")
+
+	m := NewTasksModel(d, "")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Navigate to task line (line 1)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+
+	// Press enter on task line should emit taskSelectedMsg
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter on task line should return a command")
+	}
+
+	selMsg := cmd()
+	tsm, ok := selMsg.(taskSelectedMsg)
+	if !ok {
+		t.Fatalf("expected taskSelectedMsg, got %T", selMsg)
+	}
+	if tsm.taskID != taskID {
+		t.Errorf("taskSelectedMsg.taskID = %d, want %d", tsm.taskID, taskID)
+	}
+	if tsm.title != "Fix bug" {
+		t.Errorf("taskSelectedMsg.title = %q, want %q", tsm.title, "Fix bug")
 	}
 }
 
@@ -139,9 +170,9 @@ func TestTasksModel_Reload(t *testing.T) {
 		m, _ = m.Update(reloadMsg)
 	}
 
-	// Default expanded: project + task + action = 3 lines
-	if len(m.lines) != 3 {
-		t.Errorf("after reload, lines = %d, want 3", len(m.lines))
+	// Default expanded: project + task = 2 lines
+	if len(m.lines) != 2 {
+		t.Errorf("after reload, lines = %d, want 2", len(m.lines))
 	}
 }
 
@@ -252,129 +283,22 @@ func TestTasksModel_DateFilter_ArchivedTaskFiltered(t *testing.T) {
 	}
 }
 
-func TestTasksModel_ArchivedTaskCollapsed(t *testing.T) {
+func TestTasksModel_ActionCount(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Archived task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Task with actions", "", "{}")
 	d.InsertAction("check", &taskID, "{}", "pending", "auto")
-	d.UpdateTask(taskID, "archived")
+	d.InsertAction("fix", &taskID, "{}", "running", "auto")
+	d.InsertAction("deploy", &taskID, "{}", "done", "auto")
 
 	m := NewTasksModel(d, "")
 	msg := m.Init()()
 	m, _ = m.Update(msg)
-
-	// Archived task should be collapsed: project + task = 2 lines (action hidden)
-	if len(m.lines) != 2 {
-		t.Errorf("lines = %d, want 2 (archived task should be collapsed)", len(m.lines))
-	}
-}
-
-func TestTasksModel_InlineResult(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
-	id, _ := d.InsertAction("check", &taskID, "{}", "running", "auto")
-	d.MarkDone(id, "all passed")
-
-	m := NewTasksModel(d, "")
-	m = m.SetSize(120, 40)
-	msg := m.Init()()
-	m, _ = m.Update(msg)
-
-	// Navigate to the action line (project=0, task=1, action=2)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 
 	view := m.View()
-	if !contains(view, "result: all passed") {
-		t.Errorf("view should contain inline result, got %q", view)
-	}
-}
-
-func TestTasksModel_DetailView(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
-	id, _ := d.InsertAction("check", &taskID, "{}", "running", "auto")
-	d.MarkDone(id, "detailed output\nline 2")
-
-	m := NewTasksModel(d, "")
-	m = m.SetSize(120, 40)
-	msg := m.Init()()
-	m, _ = m.Update(msg)
-
-	// Navigate to the action line
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-
-	if m.mode != modeNormal {
-		t.Fatalf("mode = %d, want modeNormal", m.mode)
-	}
-
-	// Press v to enter detail view
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
-	if m.mode != modeViewDetail {
-		t.Fatalf("mode = %d, want modeViewDetail", m.mode)
-	}
-
-	view := m.View()
-	if !contains(view, "Action Detail") {
-		t.Errorf("detail view should contain header, got %q", view)
-	}
-	if !contains(view, "detailed output") {
-		t.Errorf("detail view should contain result, got %q", view)
-	}
-
-	// Press q to return
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	if m.mode != modeNormal {
-		t.Errorf("mode = %d, want modeNormal after q", m.mode)
-	}
-}
-
-func TestTasksModel_DetailViewNoResultNoOp(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
-	d.InsertAction("check", &taskID, "{}", "pending", "auto")
-
-	m := NewTasksModel(d, "")
-	m = m.SetSize(120, 40)
-	msg := m.Init()()
-	m, _ = m.Update(msg)
-
-	// Navigate to action line
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-
-	// Press v - should be no-op (no result)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
-	if m.mode != modeNormal {
-		t.Errorf("v on action with no result should be no-op, mode = %d", m.mode)
-	}
-}
-
-func TestTasksModel_DetailViewOnProjectLineNoOp(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
-	id, _ := d.InsertAction("check", &taskID, "{}", "running", "auto")
-	d.MarkDone(id, "some result")
-
-	m := NewTasksModel(d, "")
-	m = m.SetSize(120, 40)
-	msg := m.Init()()
-	m, _ = m.Update(msg)
-
-	// Cursor at 0 = project line (no action)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
-	if m.mode != modeNormal {
-		t.Errorf("v on project line should be no-op, mode = %d", m.mode)
+	if !contains(view, "3 actions") {
+		t.Errorf("view should show '3 actions', got %q", view)
 	}
 }
 
@@ -386,7 +310,7 @@ func TestTasksModel_VisibleRange_AllVisible(t *testing.T) {
 	d.InsertAction("a", &taskID, "{}", "pending", "auto")
 
 	m := NewTasksModel(d, "")
-	m = m.SetSize(80, 40) // height 40 → maxVisible=38, plenty of room
+	m = m.SetSize(80, 40)
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
@@ -400,7 +324,7 @@ func TestTasksModel_VisibleRange_Scroll(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	// Create enough lines to exceed viewport: 1 project + 30 tasks + 30 actions = 61 lines
+	// Create enough lines to exceed viewport: 1 project + 30 tasks = 31 lines
 	for i := 0; i < 30; i++ {
 		taskID, _ := d.InsertTask(1, fmt.Sprintf("Task %d", i), "", "{}")
 		d.InsertAction("a", &taskID, "{}", "pending", "auto")
@@ -452,36 +376,6 @@ func TestTasksModel_VisibleRange_Scroll(t *testing.T) {
 	}
 	if vr.end-vr.start != 10 {
 		t.Errorf("cursor at end: window size = %d, want 10", vr.end-vr.start)
-	}
-}
-
-func TestTasksModel_DetailViewEscIgnored(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
-	id, _ := d.InsertAction("check", &taskID, "{}", "running", "auto")
-	d.MarkDone(id, "some result")
-
-	m := NewTasksModel(d, "")
-	m = m.SetSize(120, 40)
-	msg := m.Init()()
-	m, _ = m.Update(msg)
-
-	// Navigate to action line
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-
-	// Enter detail view
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
-	if m.mode != modeViewDetail {
-		t.Fatal("should be in detail view")
-	}
-
-	// Press esc — should be ignored
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if m.mode != modeViewDetail {
-		t.Error("esc should be ignored in detail view")
 	}
 }
 
