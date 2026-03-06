@@ -132,6 +132,107 @@ Body.
 	}
 }
 
+func TestList_MultipleDirs(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+
+	writePrompt(t, dir1, "alpha", `---
+description: Alpha
+mode: interactive
+---
+Body.
+`)
+	writePrompt(t, dir2, "beta", `---
+description: Beta
+mode: noninteractive
+---
+Body.
+`)
+
+	prompts, err := List(dir1, dir2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prompts) != 2 {
+		t.Fatalf("expected 2 prompts, got %d", len(prompts))
+	}
+	if prompts[0].ID != "alpha" {
+		t.Errorf("first prompt ID = %q, want %q", prompts[0].ID, "alpha")
+	}
+	if prompts[1].ID != "beta" {
+		t.Errorf("second prompt ID = %q, want %q", prompts[1].ID, "beta")
+	}
+}
+
+func TestList_DuplicateIDOverride(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+
+	writePrompt(t, dir1, "same", `---
+description: From dir1
+---
+Body.
+`)
+	writePrompt(t, dir2, "same", `---
+description: From dir2
+---
+Body.
+`)
+
+	prompts, err := List(dir1, dir2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prompts) != 1 {
+		t.Fatalf("expected 1 prompt, got %d", len(prompts))
+	}
+	if prompts[0].Config.Description != "From dir2" {
+		t.Errorf("description = %q, want %q (later dir should override)", prompts[0].Config.Description, "From dir2")
+	}
+}
+
+func TestList_NonexistentDir(t *testing.T) {
+	prompts, err := List("/nonexistent/path")
+	if err != nil {
+		t.Fatalf("expected no error for nonexistent dir, got %v", err)
+	}
+	if len(prompts) != 0 {
+		t.Fatalf("expected 0 prompts, got %d", len(prompts))
+	}
+}
+
+func TestList_EmptyDir(t *testing.T) {
+	dir := t.TempDir()
+	prompts, err := List(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prompts) != 0 {
+		t.Fatalf("expected 0 prompts, got %d", len(prompts))
+	}
+}
+
+func TestList_InvalidFileSkipped(t *testing.T) {
+	dir := t.TempDir()
+	writePrompt(t, dir, "good", `---
+description: Good
+---
+Body.
+`)
+	writePrompt(t, dir, "bad", `no frontmatter here`)
+
+	prompts, err := List(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prompts) != 1 {
+		t.Fatalf("expected 1 prompt (bad skipped), got %d", len(prompts))
+	}
+	if prompts[0].ID != "good" {
+		t.Errorf("prompt ID = %q, want %q", prompts[0].ID, "good")
+	}
+}
+
 func TestRender_AllVariables(t *testing.T) {
 	p := &Prompt{
 		ID: "test",

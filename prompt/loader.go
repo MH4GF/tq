@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -86,6 +87,42 @@ func Load(promptsDir, promptID string) (*Prompt, error) {
 		Config: cfg,
 		Body:   body,
 	}, nil
+}
+
+// List scans the given directories for .md prompt files, loads their frontmatter,
+// and returns them sorted by ID. Later directories override earlier ones for duplicate IDs.
+func List(dirs ...string) ([]Prompt, error) {
+	seen := make(map[string]Prompt)
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, fmt.Errorf("read dir %q: %w", dir, err)
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+				continue
+			}
+			id := strings.TrimSuffix(e.Name(), ".md")
+			p, err := Load(dir, id)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", filepath.Join(dir, e.Name()), err)
+				continue
+			}
+			seen[id] = *p
+		}
+	}
+
+	prompts := make([]Prompt, 0, len(seen))
+	for _, p := range seen {
+		prompts = append(prompts, p)
+	}
+	sort.Slice(prompts, func(i, j int) bool {
+		return prompts[i].ID < prompts[j].ID
+	})
+	return prompts, nil
 }
 
 func (p *Prompt) Render(data PromptData) (string, error) {
