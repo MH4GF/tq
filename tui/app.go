@@ -228,7 +228,7 @@ func (m Model) renderHelp() string {
 	case modeViewDetail:
 		return styleHelp.Render("j/k: scroll  q: back")
 	default:
-		return styleHelp.Render("j/k: navigate  enter: expand  v: view result  tab: switch  r: reload  q: quit")
+		return styleHelp.Render("j/k: navigate  enter: expand  f: toggle focus  v: view result  tab: switch  r: reload  q: quit")
 	}
 }
 

@@ -146,6 +146,75 @@ func TestNextPending(t *testing.T) {
 	}
 }
 
+func TestNextPending_SkipsDisabledProject(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// Disable project 1 (immedio)
+	d.SetDispatchEnabled(1, false)
+
+	taskID, _ := d.InsertTask(1, "disabled task", "", "{}")
+	d.InsertAction("disabled-action", &taskID, "{}", "pending", "auto")
+
+	taskID2, _ := d.InsertTask(2, "enabled task", "", "{}")
+	d.InsertAction("enabled-action", &taskID2, "{}", "pending", "auto")
+
+	ctx := context.Background()
+	a, err := d.NextPending(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == nil {
+		t.Fatal("expected action, got nil")
+	}
+	if a.PromptID != "enabled-action" {
+		t.Errorf("expected enabled-action, got %s", a.PromptID)
+	}
+}
+
+func TestNextPending_IncludesNullTaskID(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// Disable all projects
+	d.SetAllDispatchEnabled(false)
+
+	// Action with no task (task_id IS NULL) should still be dispatched
+	d.InsertAction("standalone", nil, "{}", "pending", "auto")
+
+	ctx := context.Background()
+	a, err := d.NextPending(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == nil {
+		t.Fatal("expected action, got nil")
+	}
+	if a.PromptID != "standalone" {
+		t.Errorf("expected standalone, got %s", a.PromptID)
+	}
+}
+
+func TestNextPending_AllDisabled(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// Disable all projects
+	d.SetAllDispatchEnabled(false)
+
+	taskID, _ := d.InsertTask(1, "disabled task", "", "{}")
+	d.InsertAction("disabled-action", &taskID, "{}", "pending", "auto")
+
+	ctx := context.Background()
+	a, err := d.NextPending(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a != nil {
+		t.Errorf("expected nil when all projects disabled, got action %s", a.PromptID)
+	}
+}
+
 func TestNextPending_Empty(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

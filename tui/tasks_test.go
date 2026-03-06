@@ -60,9 +60,9 @@ func TestTasksModel_Navigation(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	// Default expanded: 2 projects + 2 tasks + 2 actions = 6 lines
-	if len(m.lines) != 6 {
-		t.Errorf("lines = %d, want 6 (fully expanded)", len(m.lines))
+	// 3 projects (seeded) + 2 tasks + 2 actions = 7 lines
+	if len(m.lines) != 7 {
+		t.Errorf("lines = %d, want 7 (fully expanded)", len(m.lines))
 	}
 
 	if m.cursor != 0 {
@@ -78,13 +78,14 @@ func TestTasksModel_Navigation(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	}
-	if m.cursor != 5 {
-		t.Errorf("at end, cursor = %d, want 5", m.cursor)
+	last := len(m.lines) - 1
+	if m.cursor != last {
+		t.Errorf("at end, cursor = %d, want %d", m.cursor, last)
 	}
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
-	if m.cursor != 4 {
-		t.Errorf("after k, cursor = %d, want 4", m.cursor)
+	if m.cursor != last-1 {
+		t.Errorf("after k, cursor = %d, want %d", m.cursor, last-1)
 	}
 }
 
@@ -99,22 +100,23 @@ func TestTasksModel_CollapseExpand(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	// Default expanded: project + task + action = 3 lines
-	if len(m.lines) != 3 {
-		t.Fatalf("lines = %d, want 3", len(m.lines))
+	// 3 projects + 1 task + 1 action = 5 lines
+	if len(m.lines) != 5 {
+		t.Fatalf("lines = %d, want 5", len(m.lines))
 	}
 
-	// Collapse project
+	// Collapse first project (immedio)
 	m.cursor = 0
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if len(m.lines) != 1 {
-		t.Errorf("after collapse project, lines = %d, want 1", len(m.lines))
+	// collapsed project 1 + project 2 + project 3 = 3 lines
+	if len(m.lines) != 3 {
+		t.Errorf("after collapse project, lines = %d, want 3", len(m.lines))
 	}
 
 	// Expand project again
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if len(m.lines) != 3 {
-		t.Errorf("after expand project, lines = %d, want 3", len(m.lines))
+	if len(m.lines) != 5 {
+		t.Errorf("after expand project, lines = %d, want 5", len(m.lines))
 	}
 }
 
@@ -126,8 +128,9 @@ func TestTasksModel_Reload(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	if len(m.lines) != 0 {
-		t.Errorf("initial lines = %d, want 0", len(m.lines))
+	// 3 seeded projects with no tasks = 3 lines
+	if len(m.lines) != 3 {
+		t.Errorf("initial lines = %d, want 3", len(m.lines))
 	}
 
 	taskID, _ := d.InsertTask(1, "New Task", "", "{}")
@@ -139,9 +142,9 @@ func TestTasksModel_Reload(t *testing.T) {
 		m, _ = m.Update(reloadMsg)
 	}
 
-	// Default expanded: project + task + action = 3 lines
-	if len(m.lines) != 3 {
-		t.Errorf("after reload, lines = %d, want 3", len(m.lines))
+	// 3 projects + 1 task + 1 action = 5 lines
+	if len(m.lines) != 5 {
+		t.Errorf("after reload, lines = %d, want 5", len(m.lines))
 	}
 }
 
@@ -264,9 +267,9 @@ func TestTasksModel_ArchivedTaskCollapsed(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	// Archived task should be collapsed: project + task = 2 lines (action hidden)
-	if len(m.lines) != 2 {
-		t.Errorf("lines = %d, want 2 (archived task should be collapsed)", len(m.lines))
+	// Archived task collapsed: 3 projects + 1 task (collapsed) = 4 lines
+	if len(m.lines) != 4 {
+		t.Errorf("lines = %d, want 4 (archived task should be collapsed)", len(m.lines))
 	}
 }
 
@@ -501,9 +504,10 @@ func TestTasksModel_SortOrder(t *testing.T) {
 	m, _ = m.Update(msg)
 
 	// Expected sort: done(3) → open(1) → archived(2)
-	if len(m.trees) != 1 {
-		t.Fatalf("trees = %d, want 1", len(m.trees))
+	if len(m.trees) != 3 {
+		t.Fatalf("trees = %d, want 3", len(m.trees))
 	}
+	// All tasks are in project 1 (immedio)
 	tasks := m.trees[0].tasks
 	if len(tasks) != 3 {
 		t.Fatalf("tasks = %d, want 3", len(tasks))
@@ -516,6 +520,105 @@ func TestTasksModel_SortOrder(t *testing.T) {
 	}
 	if tasks[2].task.Status != "archived" {
 		t.Errorf("tasks[2].status = %q, want archived", tasks[2].task.Status)
+	}
+}
+
+func TestTasksModel_DisabledProjectDisplay(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// Disable "works" project (id=3)
+	d.SetDispatchEnabled(3, false)
+
+	taskID, _ := d.InsertTask(3, "Works task", "", "{}")
+	d.InsertAction("a", &taskID, "{}", "pending", "auto")
+
+	m := NewTasksModel(d, "")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	view := m.View()
+	if !contains(view, "⊘") {
+		t.Errorf("disabled project should show ⊘ icon, got %q", view)
+	}
+	if !contains(view, "works") {
+		t.Errorf("disabled project name should still be shown, got %q", view)
+	}
+}
+
+func TestTasksModel_ToggleFocus(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "", "{}")
+	d.InsertAction("a", &taskID, "{}", "pending", "auto")
+
+	m := NewTasksModel(d, "")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Cursor should be on the first project line
+	if m.cursor != 0 {
+		t.Fatalf("cursor = %d, want 0", m.cursor)
+	}
+
+	// Press f to toggle focus (disable)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	if cmd != nil {
+		reloadMsg := cmd()
+		m, _ = m.Update(reloadMsg)
+	}
+
+	// Verify project is now disabled
+	p, _ := d.GetProjectByID(1)
+	if p.DispatchEnabled {
+		t.Error("expected project to be disabled after toggle")
+	}
+
+	view := m.View()
+	if !contains(view, "⊘") {
+		t.Errorf("disabled project should show ⊘, got %q", view)
+	}
+}
+
+func TestTasksModel_ToggleFocusOnlyOnProjectLine(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "", "{}")
+	d.InsertAction("a", &taskID, "{}", "pending", "auto")
+
+	m := NewTasksModel(d, "")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Move to task line
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+
+	// Press f on task line — should be a no-op
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	if cmd != nil {
+		t.Error("f on non-project line should be no-op")
+	}
+
+	// Project should still be enabled
+	p, _ := d.GetProjectByID(1)
+	if !p.DispatchEnabled {
+		t.Error("project should still be enabled")
+	}
+}
+
+func TestTasksModel_ProjectsWithoutTasks(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// No tasks — all 3 projects should still appear for focus toggling
+	m := NewTasksModel(d, "")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	if len(m.trees) != 3 {
+		t.Errorf("trees = %d, want 3 (all projects)", len(m.trees))
 	}
 }
 

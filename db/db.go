@@ -107,6 +107,37 @@ func (db *DB) Migrate() error {
 	db.Exec(`UPDATE actions SET prompt_id = 'classify-gh-notification' WHERE prompt_id = 'classify'`)
 	db.Exec(`UPDATE actions SET source = 'classify-gh-notification' WHERE source = 'classify'`)
 
+	// Add dispatch_enabled column to projects (idempotent)
+	rows3, err := db.Query("PRAGMA table_info(projects)")
+	if err != nil {
+		return err
+	}
+	defer rows3.Close()
+
+	hasDispatchEnabled := false
+	for rows3.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var dfltValue *string
+		var pk int
+		if err := rows3.Scan(&cid, &name, &typ, &notNull, &dfltValue, &pk); err != nil {
+			return err
+		}
+		if name == "dispatch_enabled" {
+			hasDispatchEnabled = true
+		}
+	}
+	if err := rows3.Err(); err != nil {
+		return err
+	}
+
+	if !hasDispatchEnabled {
+		if _, err := db.Exec("ALTER TABLE projects ADD COLUMN dispatch_enabled INTEGER NOT NULL DEFAULT 1"); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

@@ -100,7 +100,14 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 
 	a := &Action{}
 	err = tx.QueryRowContext(ctx,
-		"SELECT id, prompt_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE status = 'pending' ORDER BY id ASC LIMIT 1",
+		`SELECT a.id, a.prompt_id, a.task_id, a.metadata, a.status, a.result,
+		        a.session_id, a.tmux_pane, a.source, a.created_at, a.started_at, a.completed_at
+		 FROM actions a
+		 LEFT JOIN tasks t ON a.task_id = t.id
+		 LEFT JOIN projects p ON t.project_id = p.id
+		 WHERE a.status = 'pending'
+		   AND (a.task_id IS NULL OR p.dispatch_enabled = 1)
+		 ORDER BY a.id ASC LIMIT 1`,
 	).Scan(&a.ID, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
