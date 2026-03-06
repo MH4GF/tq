@@ -31,6 +31,7 @@ func (s *GitHubSource) enrichPullRequest(ctx context.Context, u *url.URL, owner,
 	}
 
 	m["url"] = pr.GetHTMLURL()
+	m["head_branch"] = pr.GetHead().GetRef()
 	m["state"] = pr.GetState()
 	m["author"] = pr.GetUser().GetLogin()
 	m["merged"] = pr.GetMerged()

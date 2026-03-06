@@ -24,7 +24,7 @@ func TestEnrichPullRequest(t *testing.T) {
 			MergeableState: ghapi.Ptr("clean"),
 			Labels:         []*ghapi.Label{{Name: ghapi.Ptr("bug")}},
 			Assignees:      []*ghapi.User{{Login: ghapi.Ptr("reviewer1")}},
-			Head:           &ghapi.PullRequestBranch{SHA: ghapi.Ptr("abc123")},
+			Head:           &ghapi.PullRequestBranch{SHA: ghapi.Ptr("abc123"), Ref: ghapi.Ptr("feature-branch")},
 		}
 		json.NewEncoder(w).Encode(pr)
 	})
@@ -79,6 +79,9 @@ func TestEnrichPullRequest(t *testing.T) {
 
 	if m["url"] != "https://github.com/owner/repo/pull/42" {
 		t.Errorf("url = %v, want https://github.com/owner/repo/pull/42", m["url"])
+	}
+	if m["head_branch"] != "feature-branch" {
+		t.Errorf("head_branch = %v, want feature-branch", m["head_branch"])
 	}
 	if m["state"] != "open" {
 		t.Errorf("state = %v, want open", m["state"])
