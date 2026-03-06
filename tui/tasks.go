@@ -7,7 +7,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/MH4GF/tq/db"
 )
 
@@ -21,13 +20,6 @@ type taskNode struct {
 	actions []db.Action
 }
 
-type tasksMode int
-
-const (
-	modeNormal tasksMode = iota
-	modeViewDetail
-)
-
 type TasksModel struct {
 	trees      []projectTree
 	cursor     int
@@ -38,11 +30,6 @@ type TasksModel struct {
 	database   *db.DB
 	message    string
 	dateFilter string
-
-	// Detail view state
-	mode         tasksMode
-	detailAction *db.Action
-	detailScroll int
 }
 
 type treeLine struct {
@@ -51,11 +38,16 @@ type treeLine struct {
 	expandKey string
 	taskID    int64
 	projectID int64
-	action    *db.Action
 }
 
 type tasksLoadedMsg struct {
 	trees []projectTree
+}
+
+// taskSelectedMsg is emitted when a user selects a task to view its actions.
+type taskSelectedMsg struct {
+	taskID int64
+	title  string
 }
 
 func NewTasksModel(database *db.DB, dateFilter string) TasksModel {
@@ -118,9 +110,6 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 		m.trees = msg.trees
 		for _, pt := range m.trees {
 			m.expanded[fmt.Sprintf("p:%d", pt.project.ID)] = true
-			for _, tn := range pt.tasks {
-				m.expanded[fmt.Sprintf("t:%d", tn.task.ID)] = tn.task.Status != "done" && tn.task.Status != "archived"
-			}
 		}
 		m.buildLines()
 		if m.cursor >= len(m.lines) {
@@ -129,12 +118,7 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		switch m.mode {
-		case modeViewDetail:
-			return m.updateViewDetail(msg)
-		default:
-			return m.updateNormal(msg)
-		}
+		return m.updateNormal(msg)
 	}
 	return m, nil
 }
@@ -152,23 +136,29 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 		}
 	case key.Matches(msg, key.NewBinding(key.WithKeys("enter", " "))):
 		if m.cursor < len(m.lines) {
-			ek := m.lines[m.cursor].expandKey
-			if ek != "" {
-				m.expanded[ek] = !m.expanded[ek]
+			line := m.lines[m.cursor]
+			if line.expandKey != "" && line.taskID == 0 {
+				// Project line: toggle expand/collapse
+				m.expanded[line.expandKey] = !m.expanded[line.expandKey]
 				m.buildLines()
-			}
-		}
-	case key.Matches(msg, key.NewBinding(key.WithKeys("v"))):
-		if m.cursor >= 0 && m.cursor < len(m.lines) {
-			if a := m.lines[m.cursor].action; a != nil && a.Result.Valid && a.Result.String != "" {
-				m.detailAction = a
-				m.detailScroll = 0
-				m.mode = modeViewDetail
+			} else if line.taskID != 0 {
+				// Task line: navigate to queue for this task
+				var title string
+				for _, pt := range m.trees {
+					for _, tn := range pt.tasks {
+						if tn.task.ID == line.taskID {
+							title = tn.task.Title
+						}
+					}
+				}
+				return m, func() tea.Msg {
+					return taskSelectedMsg{taskID: line.taskID, title: title}
+				}
 			}
 		}
 	case key.Matches(msg, key.NewBinding(key.WithKeys("f"))):
 		if m.cursor >= 0 && m.cursor < len(m.lines) {
-			if pid := m.lines[m.cursor].projectID; pid > 0 && m.lines[m.cursor].action == nil && m.lines[m.cursor].taskID == 0 {
+			if pid := m.lines[m.cursor].projectID; pid > 0 && m.lines[m.cursor].taskID == 0 {
 				for _, pt := range m.trees {
 					if pt.project.ID == pid {
 						_ = m.database.SetDispatchEnabled(pid, !pt.project.DispatchEnabled)
@@ -179,22 +169,6 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 		}
 	case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
 		return m, m.loadTasks()
-	}
-	return m, nil
-}
-
-func (m TasksModel) updateViewDetail(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
-	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("q"))):
-		m.detailAction = nil
-		m.detailScroll = 0
-		m.mode = modeNormal
-	case key.Matches(msg, key.NewBinding(key.WithKeys("j", "down"))):
-		m.detailScroll++
-	case key.Matches(msg, key.NewBinding(key.WithKeys("k", "up"))):
-		if m.detailScroll > 0 {
-			m.detailScroll--
-		}
 	}
 	return m, nil
 }
@@ -223,38 +197,13 @@ func (m *TasksModel) buildLines() {
 		}
 
 		for _, tn := range pt.tasks {
-			taskKey := fmt.Sprintf("t:%d", tn.task.ID)
-			tArrow := "  ▸"
-			if m.expanded[taskKey] {
-				tArrow = "  ▾"
-			}
 			st := StatusStyle(tn.task.Status)
+			actionCount := len(tn.actions)
 			m.lines = append(m.lines, treeLine{
-				text:      fmt.Sprintf("%s #%d %s %s", tArrow, tn.task.ID, st.Render(tn.task.Status), tn.task.Title),
-				key:       taskKey,
-				expandKey: taskKey,
-				taskID:    tn.task.ID,
+				text:   fmt.Sprintf("  #%d %s %s (%d actions)", tn.task.ID, st.Render(tn.task.Status), tn.task.Title, actionCount),
+				key:    fmt.Sprintf("t:%d", tn.task.ID),
+				taskID: tn.task.ID,
 			})
-
-			if !m.expanded[taskKey] {
-				continue
-			}
-
-			for _, a := range tn.actions {
-				a := a
-				icon := StatusIcon(a.Status)
-				ast := StatusStyle(a.Status)
-				m.lines = append(m.lines, treeLine{
-					text: fmt.Sprintf("      %s %s %s",
-						ast.Render(icon),
-						ast.Render(fmt.Sprintf("%-14s", a.Status)),
-						a.PromptID,
-					),
-					key:    fmt.Sprintf("a:%d", a.ID),
-					taskID: tn.task.ID,
-					action: &a,
-				})
-			}
 		}
 	}
 }
@@ -281,10 +230,6 @@ func (m TasksModel) visibleRange() visibleRange {
 }
 
 func (m TasksModel) View() string {
-	if m.mode == modeViewDetail && m.detailAction != nil {
-		return RenderDetailView(m.detailAction, m.detailScroll, m.width, m.height)
-	}
-
 	if len(m.lines) == 0 {
 		return styleMuted.Render("  No tasks found")
 	}
@@ -298,22 +243,6 @@ func (m TasksModel) View() string {
 			prefix = "> "
 		}
 		rendered := prefix + line.text
-
-		if i == m.cursor && line.action != nil && line.action.Result.Valid && line.action.Result.String != "" {
-			label := "result"
-			if line.action.Status == "waiting_human" {
-				label = "reason"
-			}
-			rst := StatusStyle(line.action.Status)
-			lineWidth := lipgloss.Width(rendered)
-			pad := 2
-			labelLen := len(label) + 2
-			remaining := m.width - lineWidth - pad - labelLen
-			if remaining > 10 {
-				rendered += "  " + rst.Render(label+": "+truncateResult(line.action.Result.String, remaining))
-			}
-		}
-
 		b.WriteString(rendered + "\n")
 	}
 
@@ -341,8 +270,4 @@ func (m TasksModel) SetSize(w, h int) TasksModel {
 	m.width = w
 	m.height = h
 	return m
-}
-
-func (m TasksModel) Mode() tasksMode {
-	return m.mode
 }
