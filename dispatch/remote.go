@@ -22,7 +22,7 @@ func (w *RemoteWorker) Execute(ctx context.Context, prompt string, cfg prompt.Co
 
 	output, err := w.Runner.Run(ctx, "claude", args, workDir, env)
 	if err != nil {
-		return "", fmt.Errorf("claude --remote: %w", err)
+		return "", fmt.Errorf("claude --remote: %w\noutput: %s", err, string(output))
 	}
 
 	sessionURL := parseSessionURL(string(output))
