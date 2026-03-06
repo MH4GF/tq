@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/MH4GF/tq/prompt"
 )
@@ -19,8 +20,21 @@ type ExecRunner struct{}
 func (r *ExecRunner) Run(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = append(filteredEnv(), env...)
 	return cmd.CombinedOutput()
+}
+
+// filteredEnv returns os.Environ() without CLAUDECODE to avoid
+// Claude Code's nested session detection blocking child processes.
+func filteredEnv() []string {
+	env := os.Environ()
+	filtered := make([]string, 0, len(env))
+	for _, e := range env {
+		if !strings.HasPrefix(e, "CLAUDECODE=") {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
 }
 
 // Worker executes a rendered prompt.
