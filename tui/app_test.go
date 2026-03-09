@@ -12,84 +12,44 @@ func TestNew(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	m := New(d, nil)
-	if m.Screen() != screenTasks {
-		t.Errorf("initial screen = %d, want screenTasks(0)", m.Screen())
+	if m.ActiveTab() != tabQueue {
+		t.Errorf("initial tab = %d, want tabQueue(0)", m.ActiveTab())
 	}
 	if m.IsQuitting() {
 		t.Error("should not be quitting initially")
 	}
 }
 
-func TestNavigateToQueueAndBack(t *testing.T) {
+func TestTabSwitch(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
-	d.InsertAction("check", &taskID, "{}", "pending", "auto")
-
 	m := New(d, nil)
-	// Load tasks
-	msg := m.tasks.Init()()
-	updated, _ := m.Update(msg)
-	m = updated.(Model)
 
-	// Navigate cursor to task line (line 0 = project, line 1 = task)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	// Tab key switches
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = updated.(Model)
-
-	// Press enter to select task → should emit taskSelectedMsg
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(Model)
-
-	if cmd != nil {
-		selMsg := cmd()
-		updated, _ = m.Update(selMsg)
-		m = updated.(Model)
+	if m.ActiveTab() != tabTasks {
+		t.Errorf("after tab, active = %d, want tabTasks(1)", m.ActiveTab())
 	}
 
-	if m.Screen() != screenQueue {
-		t.Errorf("after selecting task, screen = %d, want screenQueue(1)", m.Screen())
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+	if m.ActiveTab() != tabQueue {
+		t.Errorf("after 2nd tab, active = %d, want tabQueue(0)", m.ActiveTab())
 	}
 
-	// Press q to go back
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	// Number keys
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
 	m = updated.(Model)
-	if m.Screen() != screenTasks {
-		t.Errorf("after q, screen = %d, want screenTasks(0)", m.Screen())
-	}
-}
-
-func TestNavigateBackWithEsc(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
-	d.InsertAction("check", &taskID, "{}", "pending", "auto")
-
-	m := New(d, nil)
-	msg := m.tasks.Init()()
-	updated, _ := m.Update(msg)
-	m = updated.(Model)
-
-	// Navigate to task and select
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m = updated.(Model)
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(Model)
-	if cmd != nil {
-		updated, _ = m.Update(cmd())
-		m = updated.(Model)
+	if m.ActiveTab() != tabTasks {
+		t.Errorf("after '2', active = %d, want tabTasks(1)", m.ActiveTab())
 	}
 
-	if m.Screen() != screenQueue {
-		t.Fatalf("should be on queue screen")
-	}
-
-	// Press esc to go back
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
 	m = updated.(Model)
-	if m.Screen() != screenTasks {
-		t.Errorf("after esc, screen = %d, want screenTasks(0)", m.Screen())
+	if m.ActiveTab() != tabQueue {
+		t.Errorf("after '1', active = %d, want tabQueue(0)", m.ActiveTab())
 	}
 }
 
@@ -102,46 +62,13 @@ func TestQuit(t *testing.T) {
 	m = updated.(Model)
 
 	if !m.IsQuitting() {
-		t.Error("should be quitting after 'q' on tasks screen")
+		t.Error("should be quitting after 'q'")
 	}
 	if cmd == nil {
 		t.Error("expected tea.Quit cmd")
 	}
 	if m.View() != "" {
 		t.Errorf("quitting view should be empty, got %q", m.View())
-	}
-}
-
-func TestQuitFromQueueNotQuit(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
-	d.InsertAction("check", &taskID, "{}", "pending", "auto")
-
-	m := New(d, nil)
-	msg := m.tasks.Init()()
-	updated, _ := m.Update(msg)
-	m = updated.(Model)
-
-	// Navigate to queue
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m = updated.(Model)
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(Model)
-	if cmd != nil {
-		updated, _ = m.Update(cmd())
-		m = updated.(Model)
-	}
-
-	// q from queue should go back, not quit
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	m = updated.(Model)
-	if m.IsQuitting() {
-		t.Error("q from queue screen should go back, not quit")
-	}
-	if m.Screen() != screenTasks {
-		t.Error("should be back on tasks screen")
 	}
 }
 
@@ -169,12 +96,15 @@ func TestInit(t *testing.T) {
 	}
 }
 
-func TestViewContainsHeader(t *testing.T) {
+func TestViewContainsTabs(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
 	m := New(d, nil)
 	view := m.View()
+	if !contains(view, "Queue") {
+		t.Errorf("view should contain 'Queue', got %q", view)
+	}
 	if !contains(view, "Tasks") {
 		t.Errorf("view should contain 'Tasks', got %q", view)
 	}
@@ -200,13 +130,18 @@ func TestHelpText(t *testing.T) {
 
 	m := New(d, nil)
 
-	// Tasks screen help
+	// Queue tab help
 	view := m.View()
 	if !contains(view, "j/k: navigate") {
-		t.Errorf("tasks help missing navigate, got %q", view)
+		t.Errorf("queue help missing navigate, got %q", view)
 	}
-	if !contains(view, "enter: select") {
-		t.Errorf("tasks help missing select, got %q", view)
+
+	// Tasks tab help
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+	view = m.View()
+	if !contains(view, "enter: expand") {
+		t.Errorf("tasks help missing expand, got %q", view)
 	}
 }
 

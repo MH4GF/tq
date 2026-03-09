@@ -8,14 +8,15 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/MH4GF/tq/db"
 )
 
-type screen int
+type tab int
 
 const (
-	screenTasks screen = iota
-	screenQueue
+	tabQueue tab = iota
+	tabTasks
 )
 
 // BackgroundFunc is a function that runs in the background (ralph loop, watch, etc).
@@ -23,7 +24,7 @@ const (
 type BackgroundFunc func(ctx context.Context) error
 
 type Model struct {
-	screen      screen
+	activeTab   tab
 	queue       QueueModel
 	tasks       TasksModel
 	width       int
@@ -34,10 +35,6 @@ type Model struct {
 	statusLine  string
 	logCh       <-chan LogEntry
 	logs        []LogEntry
-
-	// Hierarchical navigation state
-	selectedTaskID    int64
-	selectedTaskTitle string
 }
 
 type tickMsg time.Time
@@ -56,7 +53,7 @@ type backgroundStatusMsg struct {
 func New(database *db.DB, logCh <-chan LogEntry, backgrounds ...BackgroundFunc) Model {
 	today := time.Now().Format("2006-01-02")
 	return Model{
-		screen:      screenTasks,
+		activeTab:   tabQueue,
 		queue:       NewQueueModel(database, today),
 		tasks:       NewTasksModel(database, today),
 		backgrounds: backgrounds,
@@ -68,7 +65,7 @@ func (m Model) Init() tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
-	cmds := []tea.Cmd{m.tasks.Init(), doTick()}
+	cmds := []tea.Cmd{m.queue.Init(), m.tasks.Init(), doTick()}
 
 	if m.logCh != nil {
 		cmds = append(cmds, waitForLog(m.logCh))
@@ -96,13 +93,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		switch m.screen {
-		case screenTasks:
-			return m, tea.Batch(m.tasks.loadTasks(), doTick())
-		case screenQueue:
-			return m, tea.Batch(m.queue.loadActions(), doTick())
-		}
-		return m, doTick()
+		return m, tea.Batch(m.queue.loadActions(), m.tasks.loadTasks(), doTick())
 
 	case logMsg:
 		m.logs = append(m.logs, LogEntry(msg))
@@ -117,56 +108,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case taskSelectedMsg:
-		// Navigate from tasks to queue for the selected task
-		m.screen = screenQueue
-		m.selectedTaskID = msg.taskID
-		m.selectedTaskTitle = msg.title
-		taskID := msg.taskID
-		m.queue = m.queue.SetTaskFilter(&taskID)
-		return m, m.queue.loadActions()
-
 	case tea.KeyMsg:
-		// When queue is in detail view, delegate all keys to it
-		if m.screen == screenQueue && m.queue.InDetailView() {
+		// When queue tab is in detail view, delegate all keys to it
+		if m.activeTab == tabQueue && m.queue.InDetailView() {
 			var cmd tea.Cmd
 			m.queue, cmd = m.queue.Update(msg)
 			return m, cmd
 		}
+		// When tasks tab is in a sub-mode, delegate all keys to it
+		if m.activeTab == tabTasks && m.tasks.Mode() != modeNormal {
+			var cmd tea.Cmd
+			m.tasks, cmd = m.tasks.Update(msg)
+			return m, cmd
+		}
 
 		switch {
-		case key.Matches(msg, key.NewBinding(key.WithKeys("ctrl+c"))):
+		case key.Matches(msg, key.NewBinding(key.WithKeys("q", "ctrl+c"))):
 			m.quitting = true
 			if m.cancel != nil {
 				m.cancel()
 			}
 			return m, tea.Quit
-		case key.Matches(msg, key.NewBinding(key.WithKeys("q"))):
-			if m.screen == screenQueue {
-				// Go back to tasks list
-				m.screen = screenTasks
-				m.selectedTaskID = 0
-				m.selectedTaskTitle = ""
-				return m, m.tasks.loadTasks()
+		case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
+			if m.activeTab == tabQueue {
+				m.activeTab = tabTasks
+			} else {
+				m.activeTab = tabQueue
 			}
-			// Quit from tasks screen
-			m.quitting = true
-			if m.cancel != nil {
-				m.cancel()
-			}
-			return m, tea.Quit
-		case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
-			if m.screen == screenQueue {
-				m.screen = screenTasks
-				m.selectedTaskID = 0
-				m.selectedTaskTitle = ""
-				return m, m.tasks.loadTasks()
-			}
+			return m, nil
+		case key.Matches(msg, key.NewBinding(key.WithKeys("1"))):
+			m.activeTab = tabQueue
+			return m, nil
+		case key.Matches(msg, key.NewBinding(key.WithKeys("2"))):
+			m.activeTab = tabTasks
 			return m, nil
 		}
 	}
 
-	// Data messages go to their owning model regardless of active screen
+	// Data messages go to their owning model regardless of active tab
 	switch msg.(type) {
 	case actionsLoadedMsg, actionUpdatedMsg:
 		var cmd tea.Cmd
@@ -178,12 +157,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	// Key messages go to the active screen only
+	// Key messages go to the active tab only
 	var cmd tea.Cmd
-	switch m.screen {
-	case screenQueue:
+	switch m.activeTab {
+	case tabQueue:
 		m.queue, cmd = m.queue.Update(msg)
-	case screenTasks:
+	case tabTasks:
 		m.tasks, cmd = m.tasks.Update(msg)
 	}
 	return m, cmd
@@ -196,14 +175,14 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	b.WriteString(m.renderHeader())
+	b.WriteString(m.renderTabs())
 	b.WriteString("\n\n")
 
-	switch m.screen {
-	case screenTasks:
-		b.WriteString(m.tasks.View())
-	case screenQueue:
+	switch m.activeTab {
+	case tabQueue:
 		b.WriteString(m.queue.View())
+	case tabTasks:
+		b.WriteString(m.tasks.View())
 	}
 
 	b.WriteString("\n")
@@ -216,25 +195,40 @@ func (m Model) View() string {
 	return b.String()
 }
 
-func (m Model) renderHeader() string {
-	switch m.screen {
-	case screenQueue:
-		title := fmt.Sprintf("Tasks > #%d %s", m.selectedTaskID, m.selectedTaskTitle)
-		return styleTabActive.Render(title)
-	default:
-		return styleTabActive.Render("Tasks")
+func (m Model) renderTabs() string {
+	tabs := []struct {
+		label string
+		key   string
+		t     tab
+	}{
+		{"Queue", "1", tabQueue},
+		{"Tasks", "2", tabTasks},
 	}
+
+	var parts []string
+	for _, t := range tabs {
+		label := fmt.Sprintf("[%s] %s", t.key, t.label)
+		if m.activeTab == t.t {
+			parts = append(parts, styleTabActive.Render(label))
+		} else {
+			parts = append(parts, styleTabInactive.Render(label))
+		}
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, strings.Join(parts, "  "))
 }
 
 func (m Model) renderHelp() string {
-	switch m.screen {
-	case screenQueue:
+	if m.activeTab == tabQueue {
 		if m.queue.InDetailView() {
 			return styleHelp.Render("j/k: scroll  q: back")
 		}
-		return styleHelp.Render("j/k: navigate  o: attach  v: view result  r: reload  q/esc: back")
+		return styleHelp.Render("j/k: navigate  o: attach  v: view result  tab: switch  r: reload  q: quit")
+	}
+	switch m.tasks.Mode() {
+	case modeViewDetail:
+		return styleHelp.Render("j/k: scroll  q: back")
 	default:
-		return styleHelp.Render("j/k: navigate  enter: select/expand  f: toggle focus  r: reload  q: quit")
+		return styleHelp.Render("j/k: navigate  enter: expand  v: view result  f: toggle focus  tab: switch  r: reload  q: quit")
 	}
 }
 
@@ -257,8 +251,8 @@ func (m Model) renderActivity() string {
 	return b.String()
 }
 
-func (m Model) Screen() screen {
-	return m.screen
+func (m Model) ActiveTab() tab {
+	return m.activeTab
 }
 
 func (m Model) Queue() QueueModel {

@@ -19,7 +19,6 @@ type QueueModel struct {
 	database     *db.DB
 	message      string
 	dateFilter   string
-	taskFilter   *int64
 	detailAction *db.Action
 	detailScroll int
 }
@@ -39,7 +38,7 @@ type actionUpdatedMsg struct {
 
 func (m QueueModel) loadActions() tea.Cmd {
 	return func() tea.Msg {
-		actions, err := m.database.ListActions("", m.taskFilter)
+		actions, err := m.database.ListActions("", nil)
 		if err != nil {
 			return actionsLoadedMsg{}
 		}
@@ -60,15 +59,6 @@ func (m QueueModel) selectedAction() *db.Action {
 
 func (m QueueModel) InDetailView() bool {
 	return m.detailAction != nil
-}
-
-func (m QueueModel) SetTaskFilter(taskID *int64) QueueModel {
-	m.taskFilter = taskID
-	m.cursor = 0
-	m.actions = nil
-	m.detailAction = nil
-	m.detailScroll = 0
-	return m
 }
 
 func (m QueueModel) Update(msg tea.Msg) (QueueModel, tea.Cmd) {
