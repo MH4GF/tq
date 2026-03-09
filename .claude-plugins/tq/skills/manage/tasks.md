@@ -12,9 +12,25 @@ tq task create "タイトル" --project <project_name> --url "https://..."
 # ステータス変更
 tq task update <task_id> --status <open|review|done|blocked|archived>
 
-# プロジェクト一覧（project_name の確認用）
+# プロジェクト一覧（project_name / ID の確認用）
 tq project list
+
+# プロジェクト作成
+tq project create <NAME> <WORK_DIR> --metadata '<json>'
+
+# プロジェクト編集（ID は tq project list で確認）
+tq project edit <ID> --dispatch-enabled true   # ディスパッチ有効化
+tq project edit <ID> --dispatch-enabled false  # ディスパッチ無効化
+
+# プロジェクト削除
+tq project delete <ID>
 ```
+
+### project edit の注意点
+
+- コマンドは `edit`（`update` ではない）
+- ID を指定する（名前ではない）。`tq project list` で ID を確認すること
+- フラグは `--dispatch-enabled`（`--dispatch` ではない）。値は `true` / `false`
 
 ## 運用ルール
 
