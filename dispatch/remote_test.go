@@ -25,14 +25,18 @@ func TestRemoteWorker_Execute(t *testing.T) {
 	}
 
 	c := runner.calls[0]
-	if c.name != "claude" {
-		t.Errorf("command = %q, want claude", c.name)
+	if c.name != "script" {
+		t.Errorf("command = %q, want script", c.name)
 	}
-	if c.args[0] != "--remote" {
-		t.Errorf("args[0] = %q, want --remote", c.args[0])
+	// args: -q /dev/null claude --remote <prompt>
+	if c.args[0] != "-q" || c.args[1] != "/dev/null" {
+		t.Errorf("args[0:2] = %v, want [-q /dev/null]", c.args[0:2])
 	}
-	if !strings.Contains(c.args[1], "tq-42-") {
-		t.Errorf("prompt should contain branch naming rule with action ID, got: %s", c.args[1])
+	if c.args[2] != "claude" || c.args[3] != "--remote" {
+		t.Errorf("args[2:4] = %v, want [claude --remote]", c.args[2:4])
+	}
+	if !strings.Contains(c.args[4], "tq-42-") {
+		t.Errorf("prompt should contain branch naming rule with action ID, got: %s", c.args[4])
 	}
 	if c.dir != "/tmp/work" {
 		t.Errorf("dir = %q, want /tmp/work", c.dir)

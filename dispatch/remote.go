@@ -8,6 +8,8 @@ import (
 	"github.com/MH4GF/tq/prompt"
 )
 
+const RemoteSessionPrefix = "remote:session="
+
 // RemoteWorker runs `claude --remote` for cloud-based execution.
 // The session is fire-and-forget; completion is detected via PR branch naming.
 type RemoteWorker struct {
@@ -17,16 +19,19 @@ type RemoteWorker struct {
 func (w *RemoteWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64) (string, error) {
 	remotePrompt := prompt + remoteRules(actionID)
 
-	args := []string{"--remote", remotePrompt}
+	// claude --remote requires a TTY (stdout must be a terminal).
+	// Without a TTY, claude auto-switches to --print mode and fails.
+	// Use `script -q /dev/null` to allocate a PTY.
+	args := []string{"-q", "/dev/null", "claude", "--remote", remotePrompt}
 	env := []string{fmt.Sprintf("TQ_ACTION_ID=%d", actionID)}
 
-	output, err := w.Runner.Run(ctx, "claude", args, workDir, env)
+	output, err := w.Runner.Run(ctx, "script", args, workDir, env)
 	if err != nil {
 		return "", fmt.Errorf("claude --remote: %w\noutput: %s", err, string(output))
 	}
 
 	sessionURL := parseSessionURL(string(output))
-	return fmt.Sprintf("remote:session=%s", sessionURL), nil
+	return RemoteSessionPrefix + sessionURL, nil
 }
 
 func remoteRules(actionID int64) string {
