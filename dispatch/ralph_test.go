@@ -85,7 +85,7 @@ func TestRalphLoop_ProcessesAndStops(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "https://example.com", "{}")
 	d.InsertAction("check-pr-status", &taskID, "{}", "pending", "test")
 
 	tqDir := setupPromptsDir(t)
@@ -127,7 +127,7 @@ func TestRalphLoop_InteractiveLimitEnforced(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Task", "", "https://example.com", "{}")
 	d.InsertAction("fix-conflict", &taskID, "{}", "pending", "test")
 
 	tqDir := setupPromptsDir(t)
@@ -165,7 +165,7 @@ func TestRalphLoop_FailureEscalation(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Task", "", "https://example.com", "{}")
 	d.InsertAction("check-pr-status", &taskID, "{}", "pending", "test")
 
 	tqDir := setupPromptsDir(t)
@@ -207,7 +207,7 @@ func TestRalphLoop_OnDoneTriggersFollowUp(t *testing.T) {
 	writeTestPromptWithOnDone(t, promptsDir, "check-pr", false, "review")
 	writeTestPrompt(t, promptsDir, "review", false)
 
-	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "https://example.com", "{}")
 	d.InsertAction("check-pr", &taskID, "{}", "pending", "test")
 
 	worker := &countingWorker{result: `{"status":"merged"}`}
@@ -267,7 +267,7 @@ func TestReapStaleActions_DetectsStale(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Task", "", "https://example.com", "{}")
 	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
@@ -294,7 +294,7 @@ func TestReapStaleActions_SkipsLiveWindows(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Task", "", "https://example.com", "{}")
 	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
@@ -318,7 +318,7 @@ func TestReapStaleActions_GracePeriod(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Task", "", "https://example.com", "{}")
 	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
 	// started_at is now (within grace period)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now') WHERE id = 1")
@@ -343,7 +343,7 @@ func TestReapStaleActions_TmuxError(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Task", "", "https://example.com", "{}")
 	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
@@ -367,7 +367,7 @@ func TestReapStaleActions_NilChecker(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Task", "", "https://example.com", "{}")
 	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1' WHERE id = 1")
 
@@ -389,7 +389,7 @@ func TestRalphLoop_RemoteDispatch(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Remote task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Remote task", "", "https://example.com", "{}")
 	d.InsertAction("remote-task", &taskID, "{}", "pending", "test")
 
 	tqDir := setupPromptsDir(t)
@@ -431,7 +431,7 @@ func TestRalphLoop_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Task", "", "https://example.com", "{}")
 	// First: a remote action (pending)
 	d.InsertAction("remote-task", &taskID, "{}", "pending", "test")
 	// Second: an interactive action (pending)

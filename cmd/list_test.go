@@ -15,7 +15,7 @@ func TestList(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	taskID, _ := d.InsertTask(1, "task1", "", "{}")
+	taskID, _ := d.InsertTask(1, "task1", "", "", "{}")
 	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
 	d.InsertAction("deploy", nil, "{}", "running", "human")
 
@@ -83,8 +83,8 @@ func TestList_TaskFilter(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	taskID1, _ := d.InsertTask(1, "task1", "", "{}")
-	taskID2, _ := d.InsertTask(1, "task2", "", "{}")
+	taskID1, _ := d.InsertTask(1, "task1", "", "", "{}")
+	taskID2, _ := d.InsertTask(1, "task2", "", "", "{}")
 	d.InsertAction("a", &taskID1, "{}", "pending", "auto")
 	d.InsertAction("b", &taskID2, "{}", "pending", "auto")
 
@@ -139,7 +139,7 @@ func TestList_JSON(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	taskID, _ := d.InsertTask(1, "test task", "", "{}")
+	taskID, _ := d.InsertTask(1, "test task", "", "", "{}")
 	actionID, _ := d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
 
 	longResult := "Line 1\nLine 2\nThis is a very long result string that exceeds sixty characters and should NOT be truncated in JSON output"

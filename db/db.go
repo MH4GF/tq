@@ -138,6 +138,37 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	// Add description column to tasks (idempotent)
+	rows4, err := db.Query("PRAGMA table_info(tasks)")
+	if err != nil {
+		return err
+	}
+	defer rows4.Close()
+
+	hasDescription := false
+	for rows4.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var dfltValue *string
+		var pk int
+		if err := rows4.Scan(&cid, &name, &typ, &notNull, &dfltValue, &pk); err != nil {
+			return err
+		}
+		if name == "description" {
+			hasDescription = true
+		}
+	}
+	if err := rows4.Err(); err != nil {
+		return err
+	}
+
+	if !hasDescription {
+		if _, err := db.Exec("ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''"); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

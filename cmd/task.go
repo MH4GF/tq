@@ -17,6 +17,7 @@ var taskCmd = &cobra.Command{
 var (
 	taskProjectID int64
 	taskTitle     string
+	taskDesc      string
 	taskURL       string
 	taskMeta      string
 )
@@ -31,7 +32,7 @@ var taskCreateCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("project %d not found: %w", taskProjectID, err)
 		}
-		id, err := database.InsertTask(project.ID, taskTitle, taskURL, taskMeta)
+		id, err := database.InsertTask(project.ID, taskTitle, taskDesc, taskURL, taskMeta)
 		if err != nil {
 			return fmt.Errorf("insert task: %w", err)
 		}
@@ -61,13 +62,14 @@ var taskListCmd = &cobra.Command{
 		rows := make([]map[string]any, len(tasks))
 		for i, t := range tasks {
 			row := map[string]any{
-				"id":         t.ID,
-				"project_id": t.ProjectID,
-				"title":      t.Title,
-				"url":        t.URL,
-				"metadata":   t.Metadata,
-				"status":     t.Status,
-				"created_at": t.CreatedAt,
+				"id":          t.ID,
+				"project_id":  t.ProjectID,
+				"title":       t.Title,
+				"description": t.Description,
+				"url":         t.URL,
+				"metadata":    t.Metadata,
+				"status":      t.Status,
+				"created_at":  t.CreatedAt,
 			}
 			if t.UpdatedAt.Valid {
 				row["updated_at"] = t.UpdatedAt.String
@@ -133,6 +135,7 @@ func joinUpdates(updates []string) string {
 
 func init() {
 	taskCreateCmd.Flags().Int64Var(&taskProjectID, "project", 0, "Project ID (required)")
+	taskCreateCmd.Flags().StringVar(&taskDesc, "desc", "", "Task description")
 	taskCreateCmd.Flags().StringVar(&taskURL, "url", "", "Related URL")
 	taskCreateCmd.Flags().StringVar(&taskMeta, "meta", "{}", "Metadata JSON")
 	taskCreateCmd.MarkFlagRequired("project")

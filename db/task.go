@@ -6,14 +6,15 @@ import (
 )
 
 type Task struct {
-	ID        int64
-	ProjectID int64
-	Title     string
-	URL       string
-	Metadata  string
-	Status    string
-	CreatedAt string
-	UpdatedAt sql.NullString
+	ID          int64
+	ProjectID   int64
+	Title       string
+	Description string
+	URL         string
+	Metadata    string
+	Status      string
+	CreatedAt   string
+	UpdatedAt   sql.NullString
 }
 
 func (t Task) MatchesDate(date string) bool {
@@ -26,10 +27,10 @@ func (t Task) MatchesDate(date string) bool {
 	return false
 }
 
-func (db *DB) InsertTask(projectID int64, title, url, metadata string) (int64, error) {
+func (db *DB) InsertTask(projectID int64, title, description, url, metadata string) (int64, error) {
 	res, err := db.Exec(
-		"INSERT INTO tasks (project_id, title, url, metadata) VALUES (?, ?, ?, ?)",
-		projectID, title, url, metadata,
+		"INSERT INTO tasks (project_id, title, description, url, metadata) VALUES (?, ?, ?, ?, ?)",
+		projectID, title, description, url, metadata,
 	)
 	if err != nil {
 		return 0, err
@@ -54,9 +55,9 @@ func (db *DB) UpdateTaskProject(id int64, projectID int64) error {
 }
 
 func (db *DB) GetTask(id int64) (*Task, error) {
-	row := db.QueryRow("SELECT id, project_id, title, url, metadata, status, created_at, updated_at FROM tasks WHERE id = ?", id)
+	row := db.QueryRow("SELECT id, project_id, title, description, url, metadata, status, created_at, updated_at FROM tasks WHERE id = ?", id)
 	t := &Task{}
-	err := row.Scan(&t.ID, &t.ProjectID, &t.Title, &t.URL, &t.Metadata, &t.Status, &t.CreatedAt, &t.UpdatedAt)
+	err := row.Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.URL, &t.Metadata, &t.Status, &t.CreatedAt, &t.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +65,7 @@ func (db *DB) GetTask(id int64) (*Task, error) {
 }
 
 func (db *DB) ListTasks(projectID int64, status string) ([]Task, error) {
-	query := "SELECT t.id, t.project_id, t.title, t.url, t.metadata, t.status, t.created_at, t.updated_at FROM tasks t"
+	query := "SELECT t.id, t.project_id, t.title, t.description, t.url, t.metadata, t.status, t.created_at, t.updated_at FROM tasks t"
 	var args []any
 	var conditions []string
 
@@ -94,7 +95,7 @@ func (db *DB) ListTasks(projectID int64, status string) ([]Task, error) {
 	var tasks []Task
 	for rows.Next() {
 		var t Task
-		if err := rows.Scan(&t.ID, &t.ProjectID, &t.Title, &t.URL, &t.Metadata, &t.Status, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.URL, &t.Metadata, &t.Status, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, t)
@@ -103,7 +104,7 @@ func (db *DB) ListTasks(projectID int64, status string) ([]Task, error) {
 }
 
 func (db *DB) ListTasksByProject(projectID int64) ([]Task, error) {
-	rows, err := db.Query("SELECT id, project_id, title, url, metadata, status, created_at, updated_at FROM tasks WHERE project_id = ? ORDER BY id", projectID)
+	rows, err := db.Query("SELECT id, project_id, title, description, url, metadata, status, created_at, updated_at FROM tasks WHERE project_id = ? ORDER BY id", projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +113,7 @@ func (db *DB) ListTasksByProject(projectID int64) ([]Task, error) {
 	var tasks []Task
 	for rows.Next() {
 		var t Task
-		if err := rows.Scan(&t.ID, &t.ProjectID, &t.Title, &t.URL, &t.Metadata, &t.Status, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.URL, &t.Metadata, &t.Status, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, t)
@@ -121,7 +122,7 @@ func (db *DB) ListTasksByProject(projectID int64) ([]Task, error) {
 }
 
 func (db *DB) ListTasksByStatus(status string) ([]Task, error) {
-	rows, err := db.Query("SELECT id, project_id, title, url, metadata, status, created_at, updated_at FROM tasks WHERE status = ? ORDER BY id", status)
+	rows, err := db.Query("SELECT id, project_id, title, description, url, metadata, status, created_at, updated_at FROM tasks WHERE status = ? ORDER BY id", status)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +131,7 @@ func (db *DB) ListTasksByStatus(status string) ([]Task, error) {
 	var tasks []Task
 	for rows.Next() {
 		var t Task
-		if err := rows.Scan(&t.ID, &t.ProjectID, &t.Title, &t.URL, &t.Metadata, &t.Status, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.URL, &t.Metadata, &t.Status, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, t)

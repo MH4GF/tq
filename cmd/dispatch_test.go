@@ -63,7 +63,7 @@ mode: noninteractive
 Review PR for {{.Task.Title}}.
 `), 0644)
 
-	taskID, _ := d.InsertTask(1, "Fix bug", "https://github.com/test/1", "{}")
+	taskID, _ := d.InsertTask(1, "Fix bug", "", "https://github.com/test/1", "{}")
 	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
@@ -116,7 +116,7 @@ mode: noninteractive
 Review PR for {{.Task.Title}}.
 `), 0644)
 
-	taskID, _ := d.InsertTask(1, "Fix bug", "https://github.com/test/1", "{}")
+	taskID, _ := d.InsertTask(1, "Fix bug", "", "https://github.com/test/1", "{}")
 	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
 	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
 

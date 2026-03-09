@@ -33,7 +33,7 @@ func TestTriggerOnDone_NoOnDone(t *testing.T) {
 
 	writeOnDoneTemplate(t, promptsDir, "check-pr", "")
 
-	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "https://example.com", "{}")
 	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action, _ := d.GetAction(actionID)
 
@@ -84,7 +84,7 @@ func TestTriggerOnDone_AutoTarget(t *testing.T) {
 	writeOnDoneTemplate(t, promptsDir, "check-pr", "review")
 	writeOnDoneTemplate(t, promptsDir, "review", "")
 
-	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "https://example.com", "{}")
 	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action, _ := d.GetAction(actionID)
 
@@ -136,7 +136,7 @@ func TestTriggerOnDone_DuplicateSkipped(t *testing.T) {
 	writeOnDoneTemplate(t, promptsDir, "check-pr", "review")
 	writeOnDoneTemplate(t, promptsDir, "review", "")
 
-	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "https://example.com", "{}")
 	d.InsertAction("review", &taskID, "{}", "pending", "on_done")
 
 	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
@@ -164,7 +164,7 @@ func TestTriggerOnDone_PendingSkipped(t *testing.T) {
 	writeOnDoneTemplate(t, promptsDir, "check-pr", "review")
 	writeOnDoneTemplate(t, promptsDir, "review", "")
 
-	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "https://example.com", "{}")
 	d.InsertAction("review", &taskID, "{}", "pending", "on_done")
 
 	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
@@ -191,7 +191,7 @@ func TestTriggerOnDone_TargetTemplateNotFound(t *testing.T) {
 
 	writeOnDoneTemplate(t, promptsDir, "check-pr", "nonexistent")
 
-	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "https://example.com", "{}")
 	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action := &db.Action{
 		ID:         actionID,

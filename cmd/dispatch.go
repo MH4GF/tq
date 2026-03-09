@@ -203,11 +203,12 @@ func buildPromptData(action *db.Action) (prompt.PromptData, error) {
 			}
 		}
 		data.Task = prompt.TaskData{
-			ID:     task.ID,
-			Title:  task.Title,
-			URL:    task.URL,
-			Status: task.Status,
-			Meta:   taskMeta,
+			ID:          task.ID,
+			Title:       task.Title,
+			Description: task.Description,
+			URL:         task.URL,
+			Status:      task.Status,
+			Meta:        taskMeta,
 		}
 
 		project, err := database.GetProjectByID(task.ProjectID)

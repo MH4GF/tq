@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id  INTEGER NOT NULL REFERENCES projects(id),
   title       TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
   url         TEXT,
   metadata    TEXT NOT NULL DEFAULT '{}',
   status      TEXT DEFAULT 'open',
