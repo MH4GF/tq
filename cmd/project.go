@@ -81,7 +81,10 @@ var projectDeleteCmd = &cobra.Command{
 	},
 }
 
-var projectEditDispatchEnabled string
+var (
+	projectEditDispatchEnabled string
+	projectEditWorkDir         string
+)
 
 var projectEditCmd = &cobra.Command{
 	Use:   "edit <ID>",
@@ -113,6 +116,13 @@ var projectEditCmd = &cobra.Command{
 			fmt.Fprintf(cmd.OutOrStdout(), "%s: dispatch %s\n", p.Name, state)
 		}
 
+		if projectEditWorkDir != "" {
+			if err := database.SetWorkDir(id, projectEditWorkDir); err != nil {
+				return fmt.Errorf("set work_dir: %w", err)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%s: work_dir updated to %s\n", p.Name, projectEditWorkDir)
+		}
+
 		return nil
 	},
 }
@@ -120,6 +130,7 @@ var projectEditCmd = &cobra.Command{
 func init() {
 	projectCreateCmd.Flags().StringVar(&projectCreateMeta, "metadata", "{}", "Metadata JSON")
 	projectEditCmd.Flags().StringVar(&projectEditDispatchEnabled, "dispatch-enabled", "", "Enable or disable dispatch (true/false)")
+	projectEditCmd.Flags().StringVar(&projectEditWorkDir, "work-dir", "", "Set the working directory")
 
 	projectCmd.AddCommand(projectCreateCmd)
 	projectCmd.AddCommand(projectListCmd)

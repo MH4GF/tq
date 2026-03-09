@@ -157,6 +157,36 @@ func TestSetDispatchEnabled_NotFound(t *testing.T) {
 	}
 }
 
+func TestSetWorkDir(t *testing.T) {
+	d := testutil.NewTestDB(t)
+
+	id, err := d.InsertProject("test", "/tmp/old", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.SetWorkDir(id, "/tmp/new"); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := d.GetProjectByID(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.WorkDir != "/tmp/new" {
+		t.Errorf("work_dir = %q, want %q", p.WorkDir, "/tmp/new")
+	}
+}
+
+func TestSetWorkDir_NotFound(t *testing.T) {
+	d := testutil.NewTestDB(t)
+
+	err := d.SetWorkDir(999, "/tmp/nope")
+	if err == nil {
+		t.Error("expected error for non-existent project")
+	}
+}
+
 func TestSetAllDispatchEnabled(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

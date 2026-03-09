@@ -94,6 +94,21 @@ func (db *DB) SetDispatchEnabled(projectID int64, enabled bool) error {
 	return nil
 }
 
+func (db *DB) SetWorkDir(projectID int64, workDir string) error {
+	res, err := db.Exec("UPDATE projects SET work_dir = ? WHERE id = ?", workDir, projectID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("project %d not found", projectID)
+	}
+	return nil
+}
+
 func (db *DB) SetAllDispatchEnabled(enabled bool) error {
 	val := 0
 	if enabled {
