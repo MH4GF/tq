@@ -405,6 +405,60 @@ func TestTaskUpdate_NeitherStatusNorProject(t *testing.T) {
 	}
 }
 
+func TestTaskList_WithActions(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	taskID1, _ := d.InsertTask(1, "task with actions", "", "{}")
+	taskID2, _ := d.InsertTask(1, "task without actions", "", "{}")
+	d.InsertAction("review-pr", &taskID1, `{"pr":1}`, "pending", "auto")
+	d.InsertAction("implement", &taskID1, "{}", "done", "auto")
+	_ = taskID2
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "list"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
+	}
+
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+
+	// Task with actions
+	actions1, ok := rows[0]["actions"].([]any)
+	if !ok {
+		t.Fatalf("actions field missing or wrong type for task 1: %v", rows[0]["actions"])
+	}
+	if len(actions1) != 2 {
+		t.Errorf("task 1 actions = %d, want 2", len(actions1))
+	}
+	firstAction := actions1[0].(map[string]any)
+	if firstAction["prompt_id"] != "review-pr" {
+		t.Errorf("first action prompt_id = %v, want %q", firstAction["prompt_id"], "review-pr")
+	}
+
+	// Task without actions — should be empty array, not null
+	actions2, ok := rows[1]["actions"].([]any)
+	if !ok {
+		t.Fatalf("actions field missing or wrong type for task 2: %v", rows[1]["actions"])
+	}
+	if len(actions2) != 0 {
+		t.Errorf("task 2 actions = %d, want 0", len(actions2))
+	}
+}
+
 func contains(s, substr string) bool {
 	return bytes.Contains([]byte(s), []byte(substr))
 }

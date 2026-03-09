@@ -599,6 +599,45 @@ func TestClaimPending_NotPending(t *testing.T) {
 	}
 }
 
+func TestListActionsByTaskIDs(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID1, _ := d.InsertTask(1, "task1", "", "{}")
+	taskID2, _ := d.InsertTask(1, "task2", "", "{}")
+	taskID3, _ := d.InsertTask(1, "task3 no actions", "", "{}")
+
+	d.InsertAction("a1", &taskID1, "{}", "pending", "auto")
+	d.InsertAction("a2", &taskID1, "{}", "done", "auto")
+	d.InsertAction("b1", &taskID2, "{}", "running", "auto")
+
+	t.Run("multiple tasks", func(t *testing.T) {
+		result, err := d.ListActionsByTaskIDs([]int64{taskID1, taskID2, taskID3})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(result[taskID1]) != 2 {
+			t.Errorf("task1 actions = %d, want 2", len(result[taskID1]))
+		}
+		if len(result[taskID2]) != 1 {
+			t.Errorf("task2 actions = %d, want 1", len(result[taskID2]))
+		}
+		if len(result[taskID3]) != 0 {
+			t.Errorf("task3 actions = %d, want 0", len(result[taskID3]))
+		}
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		result, err := d.ListActionsByTaskIDs([]int64{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(result) != 0 {
+			t.Errorf("expected empty map, got %d entries", len(result))
+		}
+	})
+}
+
 func TestGetAction_NotFound(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

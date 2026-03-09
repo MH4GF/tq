@@ -301,6 +301,41 @@ func (db *DB) MergeActionMetadata(id int64, updates map[string]any) error {
 	return err
 }
 
+func (db *DB) ListActionsByTaskIDs(taskIDs []int64) (map[int64][]Action, error) {
+	result := make(map[int64][]Action)
+	if len(taskIDs) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(taskIDs))
+	args := make([]any, len(taskIDs))
+	for i, id := range taskIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(
+		"SELECT id, prompt_id, task_id, metadata, status, result, session_id, tmux_pane, source, created_at, started_at, completed_at FROM actions WHERE task_id IN (%s) ORDER BY id",
+		strings.Join(placeholders, ", "),
+	)
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var a Action
+		if err := rows.Scan(&a.ID, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.Source, &a.CreatedAt, &a.StartedAt, &a.CompletedAt); err != nil {
+			return nil, err
+		}
+		tid := a.TaskID.Int64
+		result[tid] = append(result[tid], a)
+	}
+	return result, rows.Err()
+}
+
 func (db *DB) GetAction(id int64) (*Action, error) {
 	a := &Action{}
 	err := db.QueryRow(

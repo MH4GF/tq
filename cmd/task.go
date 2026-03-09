@@ -58,6 +58,15 @@ var taskListCmd = &cobra.Command{
 			return nil
 		}
 
+		taskIDs := make([]int64, len(tasks))
+		for i, t := range tasks {
+			taskIDs[i] = t.ID
+		}
+		actionsByTask, err := database.ListActionsByTaskIDs(taskIDs)
+		if err != nil {
+			return fmt.Errorf("list actions: %w", err)
+		}
+
 		rows := make([]map[string]any, len(tasks))
 		for i, t := range tasks {
 			row := map[string]any{
@@ -74,6 +83,46 @@ var taskListCmd = &cobra.Command{
 			} else {
 				row["updated_at"] = nil
 			}
+
+			actions := actionsByTask[t.ID]
+			actionRows := make([]map[string]any, len(actions))
+			for j, a := range actions {
+				ar := map[string]any{
+					"id":         a.ID,
+					"prompt_id":  a.PromptID,
+					"metadata":   a.Metadata,
+					"status":     a.Status,
+					"source":     a.Source,
+					"created_at": a.CreatedAt,
+				}
+				if a.TaskID.Valid {
+					ar["task_id"] = a.TaskID.Int64
+				} else {
+					ar["task_id"] = nil
+				}
+				if a.Result.Valid {
+					ar["result"] = a.Result.String
+				} else {
+					ar["result"] = nil
+				}
+				if a.SessionID.Valid {
+					ar["session_id"] = a.SessionID.String
+				} else {
+					ar["session_id"] = nil
+				}
+				if a.StartedAt.Valid {
+					ar["started_at"] = a.StartedAt.String
+				} else {
+					ar["started_at"] = nil
+				}
+				if a.CompletedAt.Valid {
+					ar["completed_at"] = a.CompletedAt.String
+				} else {
+					ar["completed_at"] = nil
+				}
+				actionRows[j] = ar
+			}
+			row["actions"] = actionRows
 			rows[i] = row
 		}
 		enc := json.NewEncoder(cmd.OutOrStdout())
