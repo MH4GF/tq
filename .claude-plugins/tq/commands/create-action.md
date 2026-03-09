@@ -57,11 +57,10 @@ metadata は `{}` で作成する（プロンプト側で `{{.Task.URL}}` 等を
 ### 4. アクション作成
 
 ```bash
-tq action create <prompt> --task <task_id> --meta '<json>' --source human --status pending
+tq action create <prompt> --task <task_id> --meta '<json>'
 ```
 
 - `--task <task_id>` は task_id が特定できた場合のみ付与する
-- `--status pending` で作成し、worker が自動ピックアップできるようにする
 - `--meta` の JSON 内でプロンプト中の改行は `\n` にエスケープする
 
 ### 5. 結果報告

@@ -35,7 +35,7 @@ tq project delete <ID>
 tq action list
 tq action list --task <task_id>
 tq action list --status <pending|running|done|failed>
-tq action create <prompt_id> --task <task_id> --meta '<json>' --source human
+tq action create <prompt_id> --task <task_id> --meta '<json>'
 tq action done <action_id> '<result>'
 tq action reset <action_id>      # failed/running → pending
 ```
