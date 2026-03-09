@@ -16,7 +16,6 @@ func TestReset(t *testing.T) {
 		wantErr   bool
 	}{
 		{"failed to pending", "failed", "action #1 reset to pending", false},
-		{"waiting_human to pending", "waiting_human", "action #1 reset to pending", false},
 		{"done is rejected", "done", "", true},
 		{"running to pending", "running", "action #1 reset to pending", false},
 		{"pending is rejected", "pending", "", true},

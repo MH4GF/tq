@@ -42,7 +42,7 @@ func FilterForOpenTask(actions []Action, date string) []Action {
 	}
 	var filtered []Action
 	for _, a := range actions {
-		if a.Status == "pending" || a.Status == "running" || a.Status == "waiting_human" {
+		if a.Status == "pending" || a.Status == "running" {
 			filtered = append(filtered, a)
 		} else if a.MatchesDate(date) {
 			filtered = append(filtered, a)
@@ -82,7 +82,7 @@ func (db *DB) InsertAction(promptID string, taskID *int64, metadata string, stat
 func (db *DB) HasActiveAction(taskID int64, promptID string) (bool, error) {
 	var count int
 	err := db.QueryRow(
-		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN ('pending', 'running', 'waiting_human')",
+		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN ('pending', 'running')",
 		taskID, promptID,
 	).Scan(&count)
 	if err != nil {
@@ -176,14 +176,6 @@ func (db *DB) MarkDone(id int64, result string) error {
 func (db *DB) MarkFailed(id int64, result string) error {
 	_, err := db.Exec(
 		"UPDATE actions SET status = 'failed', result = ?, completed_at = datetime('now') WHERE id = ?",
-		result, id,
-	)
-	return err
-}
-
-func (db *DB) MarkWaitingHuman(id int64, result string) error {
-	_, err := db.Exec(
-		"UPDATE actions SET status = 'waiting_human', result = ? WHERE id = ?",
 		result, id,
 	)
 	return err

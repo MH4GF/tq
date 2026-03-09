@@ -171,9 +171,6 @@ func (m QueueModel) View() string {
 
 		if i == m.cursor && a.Result.Valid && a.Result.String != "" {
 			label := "result"
-			if a.Status == "waiting_human" {
-				label = "reason"
-			}
 			rst := StatusStyle(a.Status)
 			lineWidth := lipgloss.Width(line)
 			pad := 2

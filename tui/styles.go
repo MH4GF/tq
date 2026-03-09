@@ -13,16 +13,16 @@ var (
 	colorRunning      = lipgloss.Color("4")  // blue
 	colorDone         = lipgloss.Color("2")  // green
 	colorFailed       = lipgloss.Color("1")  // red
-	colorWaitingHuman = lipgloss.Color("5")  // magenta
-	colorMuted        = lipgloss.Color("8")  // gray
+	colorWarning = lipgloss.Color("5")  // magenta
+	colorMuted   = lipgloss.Color("8")  // gray
 	colorAccent       = lipgloss.Color("14") // cyan
 
 	stylePending      = lipgloss.NewStyle().Foreground(colorPending)
 	styleRunning      = lipgloss.NewStyle().Foreground(colorRunning)
 	styleDone         = lipgloss.NewStyle().Foreground(colorDone)
 	styleFailed       = lipgloss.NewStyle().Foreground(colorFailed)
-	styleWaitingHuman = lipgloss.NewStyle().Foreground(colorWaitingHuman)
-	styleMuted        = lipgloss.NewStyle().Foreground(colorMuted)
+	styleWarning = lipgloss.NewStyle().Foreground(colorWarning)
+	styleMuted   = lipgloss.NewStyle().Foreground(colorMuted)
 
 	styleTabActive   = lipgloss.NewStyle().Bold(true).Foreground(colorAccent).Underline(true)
 	styleTabInactive = lipgloss.NewStyle().Foreground(colorMuted)
@@ -42,8 +42,6 @@ func StatusStyle(status string) lipgloss.Style {
 		return styleDone
 	case "failed":
 		return styleFailed
-	case "waiting_human":
-		return styleWaitingHuman
 	default:
 		return styleMuted
 	}
@@ -115,8 +113,6 @@ func StatusIcon(status string) string {
 		return "✓"
 	case "failed":
 		return "✗"
-	case "waiting_human":
-		return "!"
 	default:
 		return "?"
 	}

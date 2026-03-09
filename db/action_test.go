@@ -74,22 +74,6 @@ func TestHasActiveAction(t *testing.T) {
 	}
 }
 
-func TestHasActiveAction_WaitingHuman(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "test", "", "{}")
-	d.InsertAction("implement", &taskID, "{}", "waiting_human", "auto")
-
-	has, err := d.HasActiveAction(taskID, "implement")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !has {
-		t.Error("expected true for waiting_human action")
-	}
-}
-
 func TestHasActiveAction_DoneNotActive(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -264,21 +248,6 @@ func TestMarkFailed(t *testing.T) {
 	}
 	if !a.Result.Valid || a.Result.String != "error occurred" {
 		t.Errorf("expected result 'error occurred', got %v", a.Result)
-	}
-}
-
-func TestMarkWaitingHuman(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	id, _ := d.InsertAction("test", nil, "{}", "running", "auto")
-	if err := d.MarkWaitingHuman(id, "needs approval"); err != nil {
-		t.Fatal(err)
-	}
-
-	a, _ := d.GetAction(id)
-	if a.Status != "waiting_human" {
-		t.Errorf("expected status waiting_human, got %s", a.Status)
 	}
 }
 
@@ -513,7 +482,6 @@ func TestFilterForOpenTask(t *testing.T) {
 	actions := []db.Action{
 		{ID: 1, Status: "pending", CreatedAt: "2026-01-01 00:00:00"},
 		{ID: 2, Status: "running", CreatedAt: "2026-01-01 00:00:00"},
-		{ID: 3, Status: "waiting_human", CreatedAt: "2026-01-01 00:00:00"},
 		{ID: 4, Status: "done", CreatedAt: "2026-01-01 00:00:00", CompletedAt: sql.NullString{String: "2026-03-04 10:00:00", Valid: true}},
 		{ID: 5, Status: "failed", CreatedAt: "2026-01-01 00:00:00", CompletedAt: sql.NullString{String: "2026-01-01 12:00:00", Valid: true}},
 		{ID: 6, Status: "done", CreatedAt: "2026-03-04 09:00:00"},
@@ -526,8 +494,8 @@ func TestFilterForOpenTask(t *testing.T) {
 		ids[a.ID] = true
 	}
 
-	// pending/running/waiting_human always included
-	for _, id := range []int64{1, 2, 3} {
+	// pending/running always included
+	for _, id := range []int64{1, 2} {
 		if !ids[id] {
 			t.Errorf("expected action %d (non-terminal) to be included", id)
 		}

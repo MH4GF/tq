@@ -220,24 +220,6 @@ func TestQueueModel_InlineResultFailed(t *testing.T) {
 	}
 }
 
-func TestQueueModel_InlineResultWaitingHuman(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	id, _ := d.InsertAction("deploy", nil, "{}", "running", "auto")
-	d.MarkWaitingHuman(id, "needs approval")
-
-	m := NewQueueModel(d, "")
-	m = m.SetSize(120, 40)
-	msg := m.Init()()
-	m, _ = m.Update(msg)
-
-	view := m.View()
-	if !contains(view, "reason: needs approval") {
-		t.Errorf("view should contain 'reason:' for waiting_human, got %q", view)
-	}
-}
-
 func TestQueueModel_DetailView(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

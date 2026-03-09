@@ -100,38 +100,6 @@ Review.
 	}
 }
 
-func TestAdd_DuplicateWaitingHumanBlocked(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	tqDir := t.TempDir()
-	cmd.SetConfigDir(tqDir)
-	writeTestPrompt(t, tqDir, "implement", `---
-description: Implement
----
-Implement.
-`)
-
-	taskID, _ := d.InsertTask(1, "test task", "", "{}")
-	d.InsertAction("implement", &taskID, "{}", "waiting_human", "auto")
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "implement", "--task", "1"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected error for duplicate waiting_human action")
-	}
-	if !contains(err.Error(), "blocked") {
-		t.Errorf("error = %q, want to contain 'blocked'", err.Error())
-	}
-}
-
 func TestAdd_DuplicateForce(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

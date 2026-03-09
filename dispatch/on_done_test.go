@@ -153,7 +153,7 @@ func TestTriggerOnDone_DuplicateSkipped(t *testing.T) {
 	}
 }
 
-func TestTriggerOnDone_WaitingHumanSkipped(t *testing.T) {
+func TestTriggerOnDone_PendingSkipped(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -165,7 +165,7 @@ func TestTriggerOnDone_WaitingHumanSkipped(t *testing.T) {
 	writeOnDoneTemplate(t, promptsDir, "review", "")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	d.InsertAction("review", &taskID, "{}", "waiting_human", "on_done")
+	d.InsertAction("review", &taskID, "{}", "pending", "on_done")
 
 	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
 	action, _ := d.GetAction(actionID)
@@ -177,7 +177,7 @@ func TestTriggerOnDone_WaitingHumanSkipped(t *testing.T) {
 
 	actions, _ := d.ListActions("", nil)
 	if len(actions) != 2 {
-		t.Errorf("expected 2 actions (waiting_human blocks creation), got %d", len(actions))
+		t.Errorf("expected 2 actions (pending blocks creation), got %d", len(actions))
 	}
 }
 

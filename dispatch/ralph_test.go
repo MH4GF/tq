@@ -191,8 +191,8 @@ func TestRalphLoop_FailureEscalation(t *testing.T) {
 	_ = RalphLoop(ctx, cfg)
 
 	action, _ := d.GetAction(1)
-	if action.Status != "waiting_human" {
-		t.Errorf("action status = %q, want waiting_human", action.Status)
+	if action.Status != "failed" {
+		t.Errorf("action status = %q, want failed", action.Status)
 	}
 }
 

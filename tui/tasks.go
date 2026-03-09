@@ -301,9 +301,6 @@ func (m TasksModel) View() string {
 
 		if i == m.cursor && line.action != nil && line.action.Result.Valid && line.action.Result.String != "" {
 			label := "result"
-			if line.action.Status == "waiting_human" {
-				label = "reason"
-			}
 			rst := StatusStyle(line.action.Status)
 			lineWidth := lipgloss.Width(rendered)
 			pad := 2

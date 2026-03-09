@@ -250,8 +250,8 @@ func dispatchNonInteractive(ctx context.Context, cfg RalphConfig, action *db.Act
 }
 
 func handleFailure(cfg RalphConfig, action *db.Action, execErr error) {
-	_ = cfg.DB.MarkWaitingHuman(action.ID, execErr.Error())
-	slog.Error("action failed, escalating to human", "action_id", action.ID, "error", execErr)
+	_ = cfg.DB.MarkFailed(action.ID, execErr.Error())
+	slog.Error("action failed", "action_id", action.ID, "error", execErr)
 }
 
 func buildPromptDataFromDB(database *db.DB, action *db.Action) (prompt.PromptData, error) {

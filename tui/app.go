@@ -188,7 +188,7 @@ func (m Model) View() string {
 	b.WriteString("\n")
 	b.WriteString(m.renderActivity())
 	if m.statusLine != "" {
-		b.WriteString(styleWaitingHuman.Render(m.statusLine) + "\n")
+		b.WriteString(styleWarning.Render(m.statusLine) + "\n")
 	}
 	b.WriteString(m.renderHelp())
 

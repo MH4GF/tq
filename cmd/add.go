@@ -56,7 +56,7 @@ func init() {
 	addCmd.Flags().Int64Var(&addTask, "task", 0, "Task ID")
 	addCmd.Flags().StringVar(&addMeta, "meta", "{}", "Metadata JSON")
 	addCmd.Flags().StringVar(&addSource, "source", "human", "Source")
-	addCmd.Flags().StringVar(&addStatus, "status", "", "Override status (pending|done|running|failed|waiting_human)")
+	addCmd.Flags().StringVar(&addStatus, "status", "", "Override status (pending|done|running|failed)")
 	addCmd.Flags().BoolVar(&addForce, "force", false, "Skip duplicate check")
 	actionCmd.AddCommand(addCmd)
 }
