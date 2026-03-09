@@ -63,15 +63,14 @@ func (db *DB) GetTask(id int64) (*Task, error) {
 	return t, nil
 }
 
-func (db *DB) ListTasks(projectName, status string) ([]Task, error) {
+func (db *DB) ListTasks(projectID int64, status string) ([]Task, error) {
 	query := "SELECT t.id, t.project_id, t.title, t.url, t.metadata, t.status, t.created_at, t.updated_at FROM tasks t"
 	var args []any
 	var conditions []string
 
-	if projectName != "" {
-		query += " JOIN projects p ON t.project_id = p.id"
-		conditions = append(conditions, "p.name = ?")
-		args = append(args, projectName)
+	if projectID != 0 {
+		conditions = append(conditions, "t.project_id = ?")
+		args = append(args, projectID)
 	}
 	if status != "" {
 		conditions = append(conditions, "t.status = ?")

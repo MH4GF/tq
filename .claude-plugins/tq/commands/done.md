@@ -26,8 +26,6 @@ tqアクションの完了報告を行う。セッション中の作業内容を
 tq action create <template> --task <task_id> --source human --status running
 ```
 
-初回プロンプトに task_id や template の情報もない場合は、「action_id を特定できませんでした。`/tq:done <action_id>` の形式で指定してください。」と伝えて終了する。
-
 ### 2. サマリー生成
 
 セッション中の作業内容を振り返り、以下の内容を含む複数行のプレーンテキストサマリーを生成する。情報量は多くてよい。

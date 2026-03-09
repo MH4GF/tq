@@ -15,10 +15,10 @@ var taskCmd = &cobra.Command{
 }
 
 var (
-	taskProject string
-	taskTitle   string
-	taskURL     string
-	taskMeta    string
+	taskProjectID int64
+	taskTitle     string
+	taskURL       string
+	taskMeta      string
 )
 
 var taskCreateCmd = &cobra.Command{
@@ -27,9 +27,9 @@ var taskCreateCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		taskTitle = args[0]
-		project, err := database.GetProjectByName(taskProject)
+		project, err := database.GetProjectByID(taskProjectID)
 		if err != nil {
-			return fmt.Errorf("project %q not found: %w", taskProject, err)
+			return fmt.Errorf("project %d not found: %w", taskProjectID, err)
 		}
 		id, err := database.InsertTask(project.ID, taskTitle, taskURL, taskMeta)
 		if err != nil {
@@ -41,15 +41,15 @@ var taskCreateCmd = &cobra.Command{
 }
 
 var (
-	taskListProject string
-	taskListStatus  string
+	taskListProjectID int64
+	taskListStatus    string
 )
 
 var taskListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List tasks",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tasks, err := database.ListTasks(taskListProject, taskListStatus)
+		tasks, err := database.ListTasks(taskListProjectID, taskListStatus)
 		if err != nil {
 			return fmt.Errorf("list tasks: %w", err)
 		}
@@ -83,9 +83,9 @@ var taskListCmd = &cobra.Command{
 }
 
 var (
-	taskUpdateID      int64
-	taskUpdateStatus  string
-	taskUpdateProject string
+	taskUpdateID        int64
+	taskUpdateStatus    string
+	taskUpdateProjectID int64
 )
 
 var taskUpdateCmd = &cobra.Command{
@@ -98,16 +98,16 @@ var taskUpdateCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("invalid task ID: %w", err)
 		}
-		if taskUpdateStatus == "" && taskUpdateProject == "" {
+		if taskUpdateStatus == "" && taskUpdateProjectID == 0 {
 			return fmt.Errorf("at least one of --status or --project is required")
 		}
 
 		var updates []string
 
-		if taskUpdateProject != "" {
-			project, err := database.GetProjectByName(taskUpdateProject)
+		if taskUpdateProjectID != 0 {
+			project, err := database.GetProjectByID(taskUpdateProjectID)
 			if err != nil {
-				return fmt.Errorf("project %q not found: %w", taskUpdateProject, err)
+				return fmt.Errorf("project %d not found: %w", taskUpdateProjectID, err)
 			}
 			if err := database.UpdateTaskProject(taskUpdateID, project.ID); err != nil {
 				return fmt.Errorf("update task project: %w", err)
@@ -132,15 +132,15 @@ func joinUpdates(updates []string) string {
 }
 
 func init() {
-	taskCreateCmd.Flags().StringVar(&taskProject, "project", "", "Project name (required)")
+	taskCreateCmd.Flags().Int64Var(&taskProjectID, "project", 0, "Project ID (required)")
 	taskCreateCmd.Flags().StringVar(&taskURL, "url", "", "Related URL")
 	taskCreateCmd.Flags().StringVar(&taskMeta, "meta", "{}", "Metadata JSON")
 	taskCreateCmd.MarkFlagRequired("project")
 
 	taskUpdateCmd.Flags().StringVar(&taskUpdateStatus, "status", "", "New status (open|review|done|blocked|archived)")
-	taskUpdateCmd.Flags().StringVar(&taskUpdateProject, "project", "", "Project name")
+	taskUpdateCmd.Flags().Int64Var(&taskUpdateProjectID, "project", 0, "Project ID")
 
-	taskListCmd.Flags().StringVar(&taskListProject, "project", "", "Filter by project name")
+	taskListCmd.Flags().Int64Var(&taskListProjectID, "project", 0, "Filter by project ID")
 	taskListCmd.Flags().StringVar(&taskListStatus, "status", "", "Filter by status")
 
 	taskCmd.AddCommand(taskListCmd)

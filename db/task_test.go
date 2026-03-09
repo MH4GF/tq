@@ -100,7 +100,7 @@ func TestListTasks(t *testing.T) {
 	d.UpdateTask(id2, "done")
 
 	t.Run("no filter", func(t *testing.T) {
-		tasks, err := d.ListTasks("", "")
+		tasks, err := d.ListTasks(0, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -110,17 +110,17 @@ func TestListTasks(t *testing.T) {
 	})
 
 	t.Run("filter by project", func(t *testing.T) {
-		tasks, err := d.ListTasks("immedio", "")
+		tasks, err := d.ListTasks(1, "")
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(tasks) != 2 {
-			t.Errorf("expected 2 tasks for immedio, got %d", len(tasks))
+			t.Errorf("expected 2 tasks for project 1, got %d", len(tasks))
 		}
 	})
 
 	t.Run("filter by status", func(t *testing.T) {
-		tasks, err := d.ListTasks("", "open")
+		tasks, err := d.ListTasks(0, "open")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -130,12 +130,12 @@ func TestListTasks(t *testing.T) {
 	})
 
 	t.Run("filter by project and status", func(t *testing.T) {
-		tasks, err := d.ListTasks("immedio", "done")
+		tasks, err := d.ListTasks(1, "done")
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(tasks) != 1 {
-			t.Errorf("expected 1 done task for immedio, got %d", len(tasks))
+			t.Errorf("expected 1 done task for project 1, got %d", len(tasks))
 		}
 	})
 }
