@@ -255,11 +255,13 @@ func TestRalphLoop_OnDoneTriggersFollowUp(t *testing.T) {
 }
 
 type mockTmuxChecker struct {
-	windows []string
-	err     error
+	windows       []string
+	err           error
+	calledSession string
 }
 
 func (m *mockTmuxChecker) ListWindows(ctx context.Context, session string) ([]string, error) {
+	m.calledSession = session
 	return m.windows, m.err
 }
 
@@ -472,6 +474,35 @@ func TestRalphLoop_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
 	}
 	if interactiveWorker.count != 0 {
 		t.Errorf("interactive worker called %d times, want 0 (limit reached)", interactiveWorker.count)
+	}
+}
+
+func TestReapStaleActions_CustomSession(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
+	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
+	d.Exec("UPDATE actions SET session_id = 'work', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
+
+	checker := &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}}
+
+	cfg := RalphConfig{
+		DB:               d,
+		TmuxChecker:      checker,
+		TmuxSession:      "work",
+		StaleGracePeriod: 30 * time.Second,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	if checker.calledSession != "work" {
+		t.Errorf("ListWindows called with session %q, want %q", checker.calledSession, "work")
+	}
+
+	action, _ := d.GetAction(1)
+	if action.Status != "running" {
+		t.Errorf("action status = %q, want running", action.Status)
 	}
 }
 

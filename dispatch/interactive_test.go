@@ -136,6 +136,40 @@ func TestInteractiveWorker_SendKeysError(t *testing.T) {
 	}
 }
 
+func TestInteractiveWorker_CustomSession(t *testing.T) {
+	runner := &mockRunner{output: []byte("ok"), failAt: -1}
+	w := &InteractiveWorker{
+		Runner:  runner,
+		Session: "work",
+	}
+
+	cfg := prompt.Config{}
+
+	_, err := w.Execute(context.Background(), "Fix the bug", cfg, "/work/dir", 7)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	// Call 1: tmux new-window -t work
+	c := runner.calls[0]
+	wantArgs := []string{"new-window", "-t", "work", "-n", "tq-action-7", "-c", "/work/dir"}
+	if strings.Join(c.args, " ") != strings.Join(wantArgs, " ") {
+		t.Errorf("call[0] args = %v, want %v", c.args, wantArgs)
+	}
+
+	// Call 2: send-keys -t work:tq-action-7
+	argsStr := strings.Join(runner.calls[1].args, " ")
+	if !strings.Contains(argsStr, "work:tq-action-7") {
+		t.Errorf("call[1] args = %v, want to contain work:tq-action-7", runner.calls[1].args)
+	}
+
+	// Call 3: send-keys Enter -t work:tq-action-7
+	argsStr = strings.Join(runner.calls[2].args, " ")
+	if !strings.Contains(argsStr, "work:tq-action-7") {
+		t.Errorf("call[2] args = %v, want to contain work:tq-action-7", runner.calls[2].args)
+	}
+}
+
 func TestInteractiveWorker_SingleQuoteEscape(t *testing.T) {
 	runner := &mockRunner{output: []byte("ok"), failAt: -1}
 	w := &InteractiveWorker{

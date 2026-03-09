@@ -51,6 +51,7 @@ type RalphConfig struct {
 	RemoteFunc         func() Worker
 	TmuxChecker        TmuxChecker
 	StaleGracePeriod   time.Duration
+	TmuxSession        string
 }
 
 // RalphLoop continuously dispatches pending actions.
@@ -64,6 +65,9 @@ func RalphLoop(ctx context.Context, cfg RalphConfig) error {
 	}
 	if cfg.StaleGracePeriod <= 0 {
 		cfg.StaleGracePeriod = 30 * time.Second
+	}
+	if cfg.TmuxSession == "" {
+		cfg.TmuxSession = "main"
 	}
 
 	slog.Info("ralph loop started", "max_interactive", cfg.MaxInteractive, "poll_interval", cfg.PollInterval)
@@ -107,7 +111,7 @@ func reapStaleActions(ctx context.Context, cfg RalphConfig) {
 		return
 	}
 
-	windows, err := cfg.TmuxChecker.ListWindows(ctx, "main")
+	windows, err := cfg.TmuxChecker.ListWindows(ctx, cfg.TmuxSession)
 	if err != nil {
 		slog.Warn("tmux list-windows failed, skipping stale check", "error", err)
 		return
@@ -202,7 +206,7 @@ func dispatchInteractive(ctx context.Context, cfg RalphConfig, action *db.Action
 	}
 
 	windowName := fmt.Sprintf("tq-action-%d", action.ID)
-	if err := cfg.DB.SetSessionInfo(action.ID, "main", windowName); err != nil {
+	if err := cfg.DB.SetSessionInfo(action.ID, cfg.TmuxSession, windowName); err != nil {
 		slog.Warn("failed to save session info", "action_id", action.ID, "error", err)
 	}
 
