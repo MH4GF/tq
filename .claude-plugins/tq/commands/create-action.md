@@ -7,38 +7,14 @@ argument-hint: "<プロンプト名 or 実装指示>"
 
 ユーザーの指示やセッションのコンテキストからプロンプトを特定し、`tq action create` で worker が自動ピックアップする pending アクションを作成する。
 
-## 選択可能プロンプト一覧
-
-| プロンプト | 用途 | metadata |
-|---|---|---|
-| `implement` | 汎用実装タスク | `{"instruction":"..."}` |
-| `implement-remote` | リモート実装タスク | `{"instruction":"..."}` |
-| `generic` | 汎用対話タスク | `{"instruction":"..."}` |
-| `fix-ci` | CI失敗修正 | `{}` |
-| `fix-conflict` | コンフリクト解消 | `{}` |
-| `self-review` | PRセルフレビュー | `{}` |
-| `respond-review` | レビューコメント対応 | `{}` |
-| `merge-pr` | PRマージ | `{}` |
-| `alert` | 外部アラート | `{}` |
-
-※ `classify-next-action`, `classify-gh-notification` は選択不可。
-
 ## 手順
 
 ### 1. プロンプトの特定
 
-以下の優先順で決定する:
+まず `tq prompt list` で利用可能なプロンプト一覧を取得する。以下の優先順で決定する:
 
-1. `$ARGUMENTS` の先頭トークンが上記の有効プロンプト名に**完全一致**する場合 → そのプロンプトを使用し、残りの文字列を instruction 候補として扱う
-2. 一致しない場合 → `$ARGUMENTS` 全体を instruction 候補として保持し、次のステップでプロンプトを推測する
-3. セッションのコンテキストからプロンプトを推測する:
-   - CI失敗の話題 → `fix-ci`
-   - PRレビューの話題 → `self-review`
-   - レビューコメント対応の話題 → `respond-review`
-   - コンフリクトの話題 → `fix-conflict`
-   - PRマージの話題 → `merge-pr`
-   - 実装指示がある → `implement`
-   - 上記に当てはまらない → ユーザーに選択肢を提示して選んでもらう
+1. `$ARGUMENTS` とセッションのコンテキストから適切なプロンプトを推測する
+2. 推測できない場合 → ユーザーに選択肢を提示して選んでもらう
 
 ### 2. task_id の特定
 
