@@ -41,8 +41,8 @@ func remoteRules(actionID int64) string {
 func parseSessionURL(output string) string {
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "https://") {
-			return line
+		if idx := strings.Index(line, "https://"); idx >= 0 {
+			return line[idx:]
 		}
 	}
 	return strings.TrimSpace(output)

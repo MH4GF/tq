@@ -76,6 +76,16 @@ func TestParseSessionURL(t *testing.T) {
 			output: "  https://example.com/session  \n",
 			want:   "https://example.com/session",
 		},
+		{
+			name:   "View: prefix",
+			output: "View: https://claude.ai/code/session_01DRSiqedrMrewdvjRqtujYe?m=0\n",
+			want:   "https://claude.ai/code/session_01DRSiqedrMrewdvjRqtujYe?m=0",
+		},
+		{
+			name:   "full claude --remote output",
+			output: "Created remote session: Test implementation\nView: https://claude.ai/code/session_01DRSiqedrMrewdvjRqtujYe?m=0\nResume with: claude --teleport session_01DRSiqedrMrewdvjRqtujYe\n",
+			want:   "https://claude.ai/code/session_01DRSiqedrMrewdvjRqtujYe?m=0",
+		},
 	}
 
 	for _, tt := range tests {
