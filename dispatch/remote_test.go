@@ -86,6 +86,41 @@ func TestParseSessionURL(t *testing.T) {
 			output: "Created remote session: Test implementation\nView: https://claude.ai/code/session_01DRSiqedrMrewdvjRqtujYe?m=0\nResume with: claude --teleport session_01DRSiqedrMrewdvjRqtujYe\n",
 			want:   "https://claude.ai/code/session_01DRSiqedrMrewdvjRqtujYe?m=0",
 		},
+		{
+			name:   "empty string",
+			output: "",
+			want:   "",
+		},
+		{
+			name:   "only newlines",
+			output: "\n\n\n",
+			want:   "",
+		},
+		{
+			name:   "multiple URLs returns first",
+			output: "https://first.example.com/session1\nhttps://second.example.com/session2\n",
+			want:   "https://first.example.com/session1",
+		},
+		{
+			name:   "URL with query params and fragment",
+			output: "View: https://claude.ai/code/session_abc?m=0&tab=1#section\n",
+			want:   "https://claude.ai/code/session_abc?m=0&tab=1#section",
+		},
+		{
+			name:   "http URL is not matched",
+			output: "http://insecure.example.com/session\n",
+			want:   "http://insecure.example.com/session",
+		},
+		{
+			name:   "URL embedded mid-line with surrounding text",
+			output: "Session URL: https://claude.ai/code/sess_123 (click to view)\n",
+			want:   "https://claude.ai/code/sess_123 (click to view)",
+		},
+		{
+			name:   "whitespace-only lines before URL",
+			output: "  \n\t\nhttps://claude.ai/code/session_xyz\n",
+			want:   "https://claude.ai/code/session_xyz",
+		},
 	}
 
 	for _, tt := range tests {
