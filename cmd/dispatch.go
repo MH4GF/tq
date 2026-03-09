@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 
 	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/dispatch"
@@ -32,9 +33,12 @@ func SetWorkerFactory(f func() dispatch.Worker) {
 	activeWorkerFactory = f
 }
 
+var dispatchSession string
+
 var defaultInteractiveWorkerFactory = func() dispatch.Worker {
 	return &dispatch.InteractiveWorker{
-		Runner: &dispatch.ExecRunner{},
+		Runner:  &dispatch.ExecRunner{},
+		Session: dispatchSession,
 	}
 }
 
@@ -137,7 +141,8 @@ var dispatchCmd = &cobra.Command{
 			}); err != nil {
 				slog.Warn("failed to save remote session info", "action_id", action.ID, "error", err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched remotely: %s\n", action.ID, result)
+			sessionURL := strings.TrimPrefix(result, dispatch.RemoteSessionPrefix)
+			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched remotely\nView: %s\n", action.ID, sessionURL)
 			return nil
 		}
 
@@ -229,4 +234,8 @@ func buildPromptData(action *db.Action) (prompt.PromptData, error) {
 	}
 
 	return data, nil
+}
+
+func init() {
+	dispatchCmd.Flags().StringVar(&dispatchSession, "session", "main", "Target tmux session name")
 }

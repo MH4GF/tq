@@ -21,6 +21,7 @@ var (
 	uiMaxInteractive int
 	uiPollInterval   time.Duration
 	uiWatchInterval  time.Duration
+	uiSession        string
 )
 
 var uiCmd = &cobra.Command{
@@ -47,6 +48,7 @@ var uiCmd = &cobra.Command{
 				DB:             database,
 				MaxInteractive: uiMaxInteractive,
 				PollInterval:   uiPollInterval,
+				TmuxSession:    uiSession,
 				TmuxChecker:    &dispatch.ExecTmuxChecker{Runner: &dispatch.ExecRunner{}},
 				NonInteractiveFunc: func() dispatch.Worker {
 					return &dispatch.NonInteractiveWorker{
@@ -55,7 +57,8 @@ var uiCmd = &cobra.Command{
 				},
 				InteractiveFunc: func() dispatch.Worker {
 					return &dispatch.InteractiveWorker{
-						Runner: &dispatch.ExecRunner{},
+						Runner:  &dispatch.ExecRunner{},
+						Session: uiSession,
 					}
 				},
 				RemoteFunc: func() dispatch.Worker {
@@ -177,4 +180,5 @@ func init() {
 	uiCmd.Flags().IntVar(&uiMaxInteractive, "max-interactive", 3, "Maximum concurrent interactive sessions")
 	uiCmd.Flags().DurationVar(&uiPollInterval, "poll", 10*time.Second, "Ralph loop poll interval")
 	uiCmd.Flags().DurationVar(&uiWatchInterval, "watch-interval", 5*time.Minute, "GitHub notification check interval")
+	uiCmd.Flags().StringVar(&uiSession, "session", "main", "Target tmux session name")
 }

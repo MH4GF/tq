@@ -14,6 +14,7 @@ import (
 var (
 	runMaxInteractive int
 	runPollInterval   time.Duration
+	runSession        string
 )
 
 var runCmd = &cobra.Command{
@@ -35,6 +36,7 @@ var runCmd = &cobra.Command{
 			DB:             database,
 			MaxInteractive: runMaxInteractive,
 			PollInterval:   runPollInterval,
+			TmuxSession:    runSession,
 			NonInteractiveFunc: func() dispatch.Worker {
 				return &dispatch.NonInteractiveWorker{
 					Runner: &dispatch.ExecRunner{},
@@ -42,7 +44,8 @@ var runCmd = &cobra.Command{
 			},
 			InteractiveFunc: func() dispatch.Worker {
 				return &dispatch.InteractiveWorker{
-					Runner: &dispatch.ExecRunner{},
+					Runner:  &dispatch.ExecRunner{},
+					Session: runSession,
 				}
 			},
 			RemoteFunc: func() dispatch.Worker {
@@ -64,4 +67,5 @@ var runCmd = &cobra.Command{
 func init() {
 	runCmd.Flags().IntVar(&runMaxInteractive, "max-interactive", 3, "Maximum concurrent interactive sessions")
 	runCmd.Flags().DurationVar(&runPollInterval, "poll", 10*time.Second, "Poll interval when idle")
+	runCmd.Flags().StringVar(&runSession, "session", "main", "Target tmux session name")
 }
