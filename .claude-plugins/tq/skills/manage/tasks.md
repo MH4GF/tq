@@ -14,7 +14,22 @@ tq task update <task_id> --status <open|review|done|blocked|archived>
 
 # プロジェクト一覧（project_name の確認用）
 tq project list
+
+# プロジェクト作成
+tq project create <NAME> <WORK_DIR> --metadata '<json>'
+
+# プロジェクト編集（ID は tq project list で確認）
+tq project edit <ID> --dispatch-enabled true/false
+
+# プロジェクト削除
+tq project delete <ID>
 ```
+
+## プロジェクト管理の注意点
+
+- `tq project edit` は ID（名前ではない）を指定する
+- dispatch の有効/無効切替: `--dispatch-enabled true` / `--dispatch-enabled false`
+  - `update` や `--dispatch` は存在しない。必ず `edit` と `--dispatch-enabled` を使う
 
 ## 運用ルール
 
