@@ -136,7 +136,7 @@ func (m QueueModel) View() string {
 	}
 
 	var b strings.Builder
-	header := fmt.Sprintf("  %-4s %-6s %-20s %-14s %s", "ID", "Status", "Prompt", "Source", "Task")
+	header := fmt.Sprintf("  %-4s %-6s %-20s %s", "ID", "Status", "Prompt", "Task")
 	b.WriteString(styleMuted.Render(header) + "\n")
 	b.WriteString(styleMuted.Render(strings.Repeat("─", min(m.width, 80))) + "\n")
 

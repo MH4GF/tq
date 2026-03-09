@@ -268,11 +268,10 @@ func buildPromptDataFromDB(database *db.DB, action *db.Action) (prompt.PromptDat
 		}
 	}
 	data.Action = prompt.ActionData{
-		ID:         action.ID,
+		ID:       action.ID,
 		PromptID: action.PromptID,
-		Status:     action.Status,
-		Source:     action.Source,
-		Meta:       actionMeta,
+		Status:   action.Status,
+		Meta:     actionMeta,
 	}
 
 	if action.TaskID.Valid {

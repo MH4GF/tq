@@ -413,8 +413,8 @@ func TestTaskList_WithActions(t *testing.T) {
 
 	taskID1, _ := d.InsertTask(1, "task with actions", "", "{}")
 	taskID2, _ := d.InsertTask(1, "task without actions", "", "{}")
-	d.InsertAction("review-pr", &taskID1, `{"pr":1}`, "pending", "auto")
-	d.InsertAction("implement", &taskID1, "{}", "done", "auto")
+	d.InsertAction("review-pr", &taskID1, `{"pr":1}`, "pending")
+	d.InsertAction("implement", &taskID1, "{}", "done")
 	_ = taskID2
 
 	root := cmd.GetRootCmd()

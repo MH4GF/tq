@@ -80,7 +80,7 @@ Review.
 `)
 
 	taskID, _ := d.InsertTask(1, "test task", "", "{}")
-	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
+	d.InsertAction("review-pr", &taskID, "{}", "pending")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -115,7 +115,7 @@ Review.
 `)
 
 	taskID, _ := d.InsertTask(1, "test task", "", "{}")
-	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
+	d.InsertAction("review-pr", &taskID, "{}", "pending")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)

@@ -23,8 +23,8 @@ func TestQueueModel_LoadActions(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
-	d.InsertAction("check-pr", &taskID, "{}", "pending", "auto")
-	d.InsertAction("fix-ci", &taskID, "{}", "running", "auto")
+	d.InsertAction("check-pr", &taskID, "{}", "pending")
+	d.InsertAction("fix-ci", &taskID, "{}", "running")
 
 	m := NewQueueModel(d, "")
 
@@ -46,9 +46,9 @@ func TestQueueModel_Navigation(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	d.InsertAction("a", nil, "{}", "pending", "auto")
-	d.InsertAction("b", nil, "{}", "pending", "auto")
-	d.InsertAction("c", nil, "{}", "pending", "auto")
+	d.InsertAction("a", nil, "{}", "pending")
+	d.InsertAction("b", nil, "{}", "pending")
+	d.InsertAction("c", nil, "{}", "pending")
 
 	m := NewQueueModel(d, "")
 	msg := m.Init()()
@@ -102,7 +102,7 @@ func TestQueueModel_Reload(t *testing.T) {
 	}
 
 	// Insert after initial load
-	d.InsertAction("new-one", nil, "{}", "pending", "auto")
+	d.InsertAction("new-one", nil, "{}", "pending")
 
 	// Reload
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
@@ -120,8 +120,8 @@ func TestQueueModel_StatusIcons(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	d.InsertAction("pending-action", nil, "{}", "pending", "auto")
-	d.InsertAction("running-action", nil, "{}", "running", "auto")
+	d.InsertAction("pending-action", nil, "{}", "pending")
+	d.InsertAction("running-action", nil, "{}", "running")
 
 	m := NewQueueModel(d, "")
 	msg := m.Init()()
@@ -141,8 +141,8 @@ func TestQueueModel_DateFilter(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
-	d.InsertAction("today-action", &taskID, "{}", "pending", "auto")
-	d.InsertAction("old-action", &taskID, "{}", "pending", "auto")
+	d.InsertAction("today-action", &taskID, "{}", "pending")
+	d.InsertAction("old-action", &taskID, "{}", "pending")
 
 	// Set old-action's created_at to a different date
 	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE prompt_id = 'old-action'")
@@ -188,7 +188,7 @@ func TestQueueModel_InlineResult(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
-	id, _ := d.InsertAction("check-pr", &taskID, "{}", "running", "auto")
+	id, _ := d.InsertAction("check-pr", &taskID, "{}", "running")
 	d.MarkDone(id, "all checks passed")
 
 	m := NewQueueModel(d, "")
@@ -206,7 +206,7 @@ func TestQueueModel_InlineResultFailed(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, _ := d.InsertAction("deploy", nil, "{}", "running", "auto")
+	id, _ := d.InsertAction("deploy", nil, "{}", "running")
 	d.MarkFailed(id, "timeout error")
 
 	m := NewQueueModel(d, "")
@@ -224,7 +224,7 @@ func TestQueueModel_DetailView(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, _ := d.InsertAction("check", nil, "{}", "running", "auto")
+	id, _ := d.InsertAction("check", nil, "{}", "running")
 	d.MarkDone(id, "detailed result\nline 2\nline 3")
 
 	m := NewQueueModel(d, "")
@@ -261,7 +261,7 @@ func TestQueueModel_DetailViewNoResult(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	d.InsertAction("check", nil, "{}", "pending", "auto")
+	d.InsertAction("check", nil, "{}", "pending")
 
 	m := NewQueueModel(d, "")
 	m = m.SetSize(120, 40)
@@ -279,7 +279,7 @@ func TestQueueModel_DetailViewScroll(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, _ := d.InsertAction("check", nil, "{}", "running", "auto")
+	id, _ := d.InsertAction("check", nil, "{}", "running")
 	d.MarkDone(id, "line1\nline2\nline3")
 
 	m := NewQueueModel(d, "")
@@ -315,7 +315,7 @@ func TestQueueModel_DetailViewEscIgnored(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, _ := d.InsertAction("check", nil, "{}", "running", "auto")
+	id, _ := d.InsertAction("check", nil, "{}", "running")
 	d.MarkDone(id, "some result")
 
 	m := NewQueueModel(d, "")

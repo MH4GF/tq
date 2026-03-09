@@ -64,7 +64,7 @@ Review PR for {{.Task.Title}}.
 `), 0644)
 
 	taskID, _ := d.InsertTask(1, "Fix bug", "https://github.com/test/1", "{}")
-	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
+	d.InsertAction("review-pr", &taskID, "{}", "pending")
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{result: `{"review":"approved"}`}
@@ -117,8 +117,8 @@ Review PR for {{.Task.Title}}.
 `), 0644)
 
 	taskID, _ := d.InsertTask(1, "Fix bug", "https://github.com/test/1", "{}")
-	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
-	d.InsertAction("review-pr", &taskID, "{}", "pending", "auto")
+	d.InsertAction("review-pr", &taskID, "{}", "pending")
+	d.InsertAction("review-pr", &taskID, "{}", "pending")
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{result: `{"review":"approved"}`}
@@ -193,7 +193,7 @@ mode: noninteractive
 Do something.
 `), 0644)
 
-	d.InsertAction("test", nil, "{}", "pending", "auto")
+	d.InsertAction("test", nil, "{}", "pending")
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{err: context.DeadlineExceeded}

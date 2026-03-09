@@ -27,7 +27,6 @@ CREATE TABLE IF NOT EXISTS actions (
   result       TEXT,
   session_id   TEXT,
   tmux_pane    TEXT,
-  source       TEXT DEFAULT 'human',
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   started_at   TEXT,
   completed_at TEXT

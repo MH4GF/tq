@@ -91,7 +91,7 @@ func recordClassifyGhNotificationFailure(notificationJSON, errMsg string) {
 			meta = string(b)
 		}
 	}
-	id, err := database.InsertAction("classify-gh-notification", nil, meta, "failed", "classify-gh-notification")
+	id, err := database.InsertAction("classify-gh-notification", nil, meta, "failed")
 	if err != nil {
 		return
 	}

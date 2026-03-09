@@ -53,7 +53,6 @@ type ActionData struct {
 	ID       int64
 	PromptID string
 	Status   string
-	Source   string
 	Meta     map[string]any
 }
 

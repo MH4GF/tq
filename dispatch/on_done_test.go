@@ -34,7 +34,7 @@ func TestTriggerOnDone_NoOnDone(t *testing.T) {
 	writeOnDoneTemplate(t, promptsDir, "check-pr", "")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
+	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done")
 	action, _ := d.GetAction(actionID)
 
 	err := TriggerOnDone(d, promptsDir, action, `{"ok":true}`)
@@ -59,7 +59,7 @@ func TestTriggerOnDone_NoTaskID(t *testing.T) {
 	writeOnDoneTemplate(t, promptsDir, "check-pr", "review")
 	writeOnDoneTemplate(t, promptsDir, "review", "")
 
-	actionID, _ := d.InsertAction("check-pr", nil, "{}", "done", "test")
+	actionID, _ := d.InsertAction("check-pr", nil, "{}", "done")
 	action, _ := d.GetAction(actionID)
 
 	err := TriggerOnDone(d, promptsDir, action, `{"ok":true}`)
@@ -85,7 +85,7 @@ func TestTriggerOnDone_AutoTarget(t *testing.T) {
 	writeOnDoneTemplate(t, promptsDir, "review", "")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
+	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done")
 	action, _ := d.GetAction(actionID)
 
 	result := `{"status":"merged"}`
@@ -105,9 +105,6 @@ func TestTriggerOnDone_AutoTarget(t *testing.T) {
 	}
 	if followUp.Status != "pending" {
 		t.Errorf("status = %q, want %q", followUp.Status, "pending")
-	}
-	if followUp.Source != "on_done" {
-		t.Errorf("source = %q, want %q", followUp.Source, "on_done")
 	}
 	if !followUp.TaskID.Valid || followUp.TaskID.Int64 != taskID {
 		t.Errorf("task_id = %v, want %d", followUp.TaskID, taskID)
@@ -137,9 +134,9 @@ func TestTriggerOnDone_DuplicateSkipped(t *testing.T) {
 	writeOnDoneTemplate(t, promptsDir, "review", "")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	d.InsertAction("review", &taskID, "{}", "pending", "on_done")
+	d.InsertAction("review", &taskID, "{}", "pending")
 
-	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
+	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done")
 	action, _ := d.GetAction(actionID)
 
 	err := TriggerOnDone(d, promptsDir, action, `{"ok":true}`)
@@ -165,9 +162,9 @@ func TestTriggerOnDone_PendingSkipped(t *testing.T) {
 	writeOnDoneTemplate(t, promptsDir, "review", "")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	d.InsertAction("review", &taskID, "{}", "pending", "on_done")
+	d.InsertAction("review", &taskID, "{}", "pending")
 
-	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
+	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done")
 	action, _ := d.GetAction(actionID)
 
 	err := TriggerOnDone(d, promptsDir, action, `{"ok":true}`)
@@ -192,7 +189,7 @@ func TestTriggerOnDone_TargetTemplateNotFound(t *testing.T) {
 	writeOnDoneTemplate(t, promptsDir, "check-pr", "nonexistent")
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done", "test")
+	actionID, _ := d.InsertAction("check-pr", &taskID, "{}", "done")
 	action := &db.Action{
 		ID:         actionID,
 		PromptID: "check-pr",

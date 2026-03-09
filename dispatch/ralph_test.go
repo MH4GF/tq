@@ -86,7 +86,7 @@ func TestRalphLoop_ProcessesAndStops(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	d.InsertAction("check-pr-status", &taskID, "{}", "pending", "test")
+	d.InsertAction("check-pr-status", &taskID, "{}", "pending")
 
 	tqDir := setupPromptsDir(t)
 
@@ -128,12 +128,12 @@ func TestRalphLoop_InteractiveLimitEnforced(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
-	d.InsertAction("fix-conflict", &taskID, "{}", "pending", "test")
+	d.InsertAction("fix-conflict", &taskID, "{}", "pending")
 
 	tqDir := setupPromptsDir(t)
 
 	// Simulate an already-running interactive session
-	d.InsertAction("respond-review", &taskID, "{}", "running", "test")
+	d.InsertAction("respond-review", &taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'session-1' WHERE id = 2")
 
 	interactiveWorker := &countingWorker{result: "interactive:session=test"}
@@ -166,7 +166,7 @@ func TestRalphLoop_FailureEscalation(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
-	d.InsertAction("check-pr-status", &taskID, "{}", "pending", "test")
+	d.InsertAction("check-pr-status", &taskID, "{}", "pending")
 
 	tqDir := setupPromptsDir(t)
 
@@ -208,7 +208,7 @@ func TestRalphLoop_OnDoneTriggersFollowUp(t *testing.T) {
 	writeTestPrompt(t, promptsDir, "review", false)
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	d.InsertAction("check-pr", &taskID, "{}", "pending", "test")
+	d.InsertAction("check-pr", &taskID, "{}", "pending")
 
 	worker := &countingWorker{result: `{"status":"merged"}`}
 
@@ -249,9 +249,6 @@ func TestRalphLoop_OnDoneTriggersFollowUp(t *testing.T) {
 	if review.PromptID != "review" {
 		t.Errorf("follow-up template = %q, want review", review.PromptID)
 	}
-	if review.Source != "on_done" {
-		t.Errorf("follow-up source = %q, want on_done", review.Source)
-	}
 }
 
 type mockTmuxChecker struct {
@@ -270,7 +267,7 @@ func TestReapStaleActions_DetectsStale(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
-	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
+	d.InsertAction("fix-conflict", &taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "other-window"}}
@@ -297,7 +294,7 @@ func TestReapStaleActions_SkipsLiveWindows(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
-	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
+	d.InsertAction("fix-conflict", &taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}}
@@ -321,7 +318,7 @@ func TestReapStaleActions_GracePeriod(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
-	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
+	d.InsertAction("fix-conflict", &taskID, "{}", "running")
 	// started_at is now (within grace period)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now') WHERE id = 1")
 
@@ -346,7 +343,7 @@ func TestReapStaleActions_TmuxError(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
-	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
+	d.InsertAction("fix-conflict", &taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{err: fmt.Errorf("tmux not available")}
@@ -370,7 +367,7 @@ func TestReapStaleActions_NilChecker(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
-	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
+	d.InsertAction("fix-conflict", &taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1' WHERE id = 1")
 
 	cfg := RalphConfig{
@@ -392,7 +389,7 @@ func TestRalphLoop_RemoteDispatch(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Remote task", "https://example.com", "{}")
-	d.InsertAction("remote-task", &taskID, "{}", "pending", "test")
+	d.InsertAction("remote-task", &taskID, "{}", "pending")
 
 	tqDir := setupPromptsDir(t)
 
@@ -435,12 +432,12 @@ func TestRalphLoop_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
 	// First: a remote action (pending)
-	d.InsertAction("remote-task", &taskID, "{}", "pending", "test")
+	d.InsertAction("remote-task", &taskID, "{}", "pending")
 	// Second: an interactive action (pending)
-	d.InsertAction("fix-conflict", &taskID, "{}", "pending", "test")
+	d.InsertAction("fix-conflict", &taskID, "{}", "pending")
 
 	// Simulate an already-running interactive session to fill max
-	d.InsertAction("respond-review", &taskID, "{}", "running", "test")
+	d.InsertAction("respond-review", &taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'session-1' WHERE id = 3")
 
 	tqDir := setupPromptsDir(t)
@@ -482,7 +479,7 @@ func TestReapStaleActions_CustomSession(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}")
-	d.InsertAction("fix-conflict", &taskID, "{}", "running", "test")
+	d.InsertAction("fix-conflict", &taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'work', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}}

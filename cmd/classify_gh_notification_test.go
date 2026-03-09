@@ -183,9 +183,6 @@ func TestClassifyGhNotification_ExecutionFailure(t *testing.T) {
 	if action.PromptID != "classify-gh-notification" {
 		t.Errorf("template_id = %q, want %q", action.PromptID, "classify-gh-notification")
 	}
-	if action.Source != "classify-gh-notification" {
-		t.Errorf("source = %q, want %q", action.Source, "classify-gh-notification")
-	}
 	if !action.Result.Valid || !contains(action.Result.String, "LLM timeout") {
 		t.Errorf("result = %v, want to contain 'LLM timeout'", action.Result)
 	}

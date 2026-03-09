@@ -92,7 +92,6 @@ var taskListCmd = &cobra.Command{
 					"prompt_id":  a.PromptID,
 					"metadata":   a.Metadata,
 					"status":     a.Status,
-					"source":     a.Source,
 					"created_at": a.CreatedAt,
 				}
 				if a.TaskID.Valid {

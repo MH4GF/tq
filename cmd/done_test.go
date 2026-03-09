@@ -17,7 +17,7 @@ func TestDone(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	id, _ := d.InsertAction("test", nil, "{}", "running", "human")
+	id, _ := d.InsertAction("test", nil, "{}", "running")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -52,7 +52,7 @@ func TestDone_NoResult(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertAction("test", nil, "{}", "running", "human")
+	d.InsertAction("test", nil, "{}", "running")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -107,7 +107,7 @@ func TestDone_TriggersOnDone(t *testing.T) {
 	cmd.SetConfigDir(tqDir)
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
-	d.InsertAction("check-pr", &taskID, "{}", "running", "test")
+	d.InsertAction("check-pr", &taskID, "{}", "running")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -130,8 +130,5 @@ func TestDone_TriggersOnDone(t *testing.T) {
 	}
 	if followUp.Status != "pending" {
 		t.Errorf("status = %q, want pending", followUp.Status)
-	}
-	if followUp.Source != "on_done" {
-		t.Errorf("source = %q, want on_done", followUp.Source)
 	}
 }

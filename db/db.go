@@ -30,19 +30,13 @@ func Open(dsn string) (*DB, error) {
 	return &DB{sqlDB}, nil
 }
 
-func (db *DB) Migrate() error {
-	if _, err := db.Exec(schemaSQL); err != nil {
-		return err
-	}
-
-	// Drop priority column from existing DBs (idempotent)
-	rows, err := db.Query("PRAGMA table_info(actions)")
+func (db *DB) hasColumn(table, column string) (bool, error) {
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer rows.Close()
 
-	hasPriority := false
 	for rows.Next() {
 		var cid int
 		var name, typ string
@@ -50,17 +44,24 @@ func (db *DB) Migrate() error {
 		var dfltValue *string
 		var pk int
 		if err := rows.Scan(&cid, &name, &typ, &notNull, &dfltValue, &pk); err != nil {
-			return err
+			return false, err
 		}
-		if name == "priority" {
-			hasPriority = true
+		if name == column {
+			return true, nil
 		}
 	}
-	if err := rows.Err(); err != nil {
+	return false, rows.Err()
+}
+
+func (db *DB) Migrate() error {
+	if _, err := db.Exec(schemaSQL); err != nil {
 		return err
 	}
 
-	if hasPriority {
+	// Drop priority column from existing DBs (idempotent)
+	if has, err := db.hasColumn("actions", "priority"); err != nil {
+		return err
+	} else if has {
 		if _, err := db.Exec("DROP INDEX IF EXISTS idx_actions_dispatch"); err != nil {
 			return err
 		}
@@ -73,66 +74,30 @@ func (db *DB) Migrate() error {
 	}
 
 	// Rename template_id → prompt_id (idempotent)
-	rows2, err := db.Query("PRAGMA table_info(actions)")
-	if err != nil {
+	if has, err := db.hasColumn("actions", "template_id"); err != nil {
 		return err
-	}
-	defer rows2.Close()
-
-	hasTemplateID := false
-	for rows2.Next() {
-		var cid int
-		var name, typ string
-		var notNull int
-		var dfltValue *string
-		var pk int
-		if err := rows2.Scan(&cid, &name, &typ, &notNull, &dfltValue, &pk); err != nil {
-			return err
-		}
-		if name == "template_id" {
-			hasTemplateID = true
-		}
-	}
-	if err := rows2.Err(); err != nil {
-		return err
-	}
-
-	if hasTemplateID {
+	} else if has {
 		if _, err := db.Exec("ALTER TABLE actions RENAME COLUMN template_id TO prompt_id"); err != nil {
 			return err
 		}
 	}
 
-	// Rename classify → classify-gh-notification in prompt_id and source (idempotent)
+	// Rename classify → classify-gh-notification in prompt_id (idempotent)
 	db.Exec(`UPDATE actions SET prompt_id = 'classify-gh-notification' WHERE prompt_id = 'classify'`)
-	db.Exec(`UPDATE actions SET source = 'classify-gh-notification' WHERE source = 'classify'`)
 
-	// Add dispatch_enabled column to projects (idempotent)
-	rows3, err := db.Query("PRAGMA table_info(projects)")
-	if err != nil {
+	// Drop source column from existing DBs (idempotent)
+	if has, err := db.hasColumn("actions", "source"); err != nil {
 		return err
-	}
-	defer rows3.Close()
-
-	hasDispatchEnabled := false
-	for rows3.Next() {
-		var cid int
-		var name, typ string
-		var notNull int
-		var dfltValue *string
-		var pk int
-		if err := rows3.Scan(&cid, &name, &typ, &notNull, &dfltValue, &pk); err != nil {
+	} else if has {
+		if _, err := db.Exec("ALTER TABLE actions DROP COLUMN source"); err != nil {
 			return err
 		}
-		if name == "dispatch_enabled" {
-			hasDispatchEnabled = true
-		}
-	}
-	if err := rows3.Err(); err != nil {
-		return err
 	}
 
-	if !hasDispatchEnabled {
+	// Add dispatch_enabled column to projects (idempotent)
+	if has, err := db.hasColumn("projects", "dispatch_enabled"); err != nil {
+		return err
+	} else if !has {
 		if _, err := db.Exec("ALTER TABLE projects ADD COLUMN dispatch_enabled INTEGER NOT NULL DEFAULT 1"); err != nil {
 			return err
 		}
