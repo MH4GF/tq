@@ -157,6 +157,66 @@ func TestListTasksByProject(t *testing.T) {
 	}
 }
 
+func TestInsertTask_SpacesAndLongMetadata(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	tests := []struct {
+		name     string
+		title    string
+		url      string
+		metadata string
+	}{
+		{
+			name:     "title with multiple spaces",
+			title:    "review pull request for feature branch",
+			url:      "https://github.com/org/repo/pull/42",
+			metadata: `{"type":"pr","number":42}`,
+		},
+		{
+			name:     "title with leading and trailing spaces",
+			title:    "  spaced out title  ",
+			url:      "",
+			metadata: `{}`,
+		},
+		{
+			name:  "long metadata with prompt content",
+			title: "task with long prompt",
+			url:   "",
+			metadata: `{"prompt":"You are a helpful assistant. Please review the following code changes carefully and provide detailed feedback on correctness, performance, and style. Pay special attention to edge cases and potential security issues. Make sure to check for proper error handling and resource cleanup.","labels":["review","security","performance"],"context":{"repo":"org/repo","branch":"feature/new-auth","files_changed":15}}`,
+		},
+		{
+			name:     "title with special whitespace",
+			title:    "fix\tbug\nin\tmodule",
+			url:      "https://example.com/issues/1",
+			metadata: `{"description":"a task with\ttabs and\nnewlines in metadata"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id, err := d.InsertTask(1, tt.title, tt.url, tt.metadata)
+			if err != nil {
+				t.Fatalf("InsertTask failed: %v", err)
+			}
+
+			task, err := d.GetTask(id)
+			if err != nil {
+				t.Fatalf("GetTask failed: %v", err)
+			}
+			if task.Title != tt.title {
+				t.Errorf("title mismatch: got %q, want %q", task.Title, tt.title)
+			}
+			if task.URL != tt.url {
+				t.Errorf("url mismatch: got %q, want %q", task.URL, tt.url)
+			}
+			if task.Metadata != tt.metadata {
+				t.Errorf("metadata mismatch: got %q, want %q", task.Metadata, tt.metadata)
+			}
+		})
+	}
+}
+
 func TestListTasksByStatus(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
