@@ -514,6 +514,50 @@ func TestTasksModel_DisabledProjectDisplay(t *testing.T) {
 	if !contains(view, "works") {
 		t.Errorf("disabled project name should still be shown, got %q", view)
 	}
+	// Disabled project should be collapsed by default — task hidden
+	if contains(view, "Works task") {
+		t.Errorf("disabled project should be collapsed, task should be hidden, got %q", view)
+	}
+}
+
+func TestTasksModel_DisabledProjectManualExpand(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// Disable "immedio" project (id=1)
+	d.SetDispatchEnabled(1, false)
+
+	taskID, _ := d.InsertTask(1, "Task A", "", "{}")
+	d.InsertAction("a", &taskID, "{}", "pending")
+
+	m := NewTasksModel(d, "")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Disabled project should be collapsed
+	view := m.View()
+	if contains(view, "Task A") {
+		t.Fatalf("disabled project should be collapsed initially, got %q", view)
+	}
+
+	// Manually expand the disabled project
+	m.cursor = 0
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	view = m.View()
+	if !contains(view, "Task A") {
+		t.Fatalf("after manual expand, task should be visible, got %q", view)
+	}
+
+	// Reload — manual expand state should be preserved
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	if cmd != nil {
+		reloadMsg := cmd()
+		m, _ = m.Update(reloadMsg)
+	}
+	view = m.View()
+	if !contains(view, "Task A") {
+		t.Errorf("after reload, manually expanded project should stay expanded, got %q", view)
+	}
 }
 
 func TestTasksModel_ToggleFocus(t *testing.T) {
