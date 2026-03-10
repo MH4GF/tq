@@ -3,13 +3,13 @@ package cmd_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
-	"github.com/MH4GF/tq/dispatch"
 	"github.com/MH4GF/tq/source"
 	"github.com/MH4GF/tq/testutil"
 )
@@ -122,11 +122,6 @@ func TestWatch_WithNotifications(t *testing.T) {
 	})
 	t.Cleanup(func() { cmd.SetWatchSourceFactory(nil) })
 
-	cmd.SetWorkerFactory(func() dispatch.Worker {
-		return &mockWorker{result: "task created, action created"}
-	})
-	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
-
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
@@ -148,6 +143,37 @@ func TestWatch_WithNotifications(t *testing.T) {
 	// Verify notification was marked processed
 	if len(src.processedIDs) != 1 || src.processedIDs[0] != "123" {
 		t.Errorf("processedIDs = %v, want [123]", src.processedIDs)
+	}
+
+	// Verify action was created in DB as pending
+	actions, err := d.ListActions("pending", nil)
+	if err != nil {
+		t.Fatalf("list actions: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("pending action count = %d, want 1", len(actions))
+	}
+	action := actions[0]
+	if action.PromptID != "classify-gh-notification" {
+		t.Errorf("prompt_id = %q, want %q", action.PromptID, "classify-gh-notification")
+	}
+	if action.TaskID.Valid {
+		t.Errorf("task_id = %v, want NULL", action.TaskID)
+	}
+
+	// Verify metadata contains notification and existing_tasks
+	var meta map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(action.Metadata), &meta); err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+	if _, ok := meta["notification"]; !ok {
+		t.Error("metadata missing 'notification' key")
+	}
+	if _, ok := meta["existing_tasks"]; !ok {
+		t.Error("metadata missing 'existing_tasks' key")
+	}
+	if !contains(string(meta["notification"]), "Fix bug") {
+		t.Errorf("notification = %s, want to contain 'Fix bug'", meta["notification"])
 	}
 }
 
@@ -209,7 +235,7 @@ func TestWatch_SourceCreateError(t *testing.T) {
 	}
 }
 
-func TestWatch_AllClassifyFail(t *testing.T) {
+func TestWatch_MarkProcessedOnlyOnSuccess(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
@@ -220,12 +246,14 @@ func TestWatch_AllClassifyFail(t *testing.T) {
 		name: "test-source",
 		notifications: []source.Notification{
 			{
-				Source:  "test",
-				Message: "notification 1",
-				Metadata: map[string]any{
-					"id":    "1",
-					"title": "test",
-				},
+				Source:   "test",
+				Message:  "good notification",
+				Metadata: map[string]any{"id": "1", "title": "ok"},
+			},
+			{
+				Source:   "test",
+				Message:  "bad notification",
+				Metadata: map[string]any{"id": "2", "title": "bad"},
 			},
 		},
 	}
@@ -234,22 +262,101 @@ func TestWatch_AllClassifyFail(t *testing.T) {
 	})
 	t.Cleanup(func() { cmd.SetWatchSourceFactory(nil) })
 
-	cmd.SetWorkerFactory(func() dispatch.Worker {
-		return &mockWorker{err: fmt.Errorf("classify failed")}
-	})
-	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
-
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
 	root.SetArgs([]string{"watch"})
 
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected error when all notifications fail, got nil")
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !contains(err.Error(), "all") {
-		t.Errorf("error = %q, want to contain 'all'", err.Error())
+
+	// Both notifications should succeed and be marked processed
+	if len(src.processedIDs) != 2 {
+		t.Errorf("processedIDs = %v, want 2 items", src.processedIDs)
+	}
+
+	actions, _ := d.ListActions("pending", nil)
+	if len(actions) != 2 {
+		t.Errorf("pending action count = %d, want 2", len(actions))
+	}
+}
+
+func TestCreateClassifyAction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+
+	notifJSON := `{"type":"pull_request","action":"opened","repo":"test/repo"}`
+
+	id, err := cmd.CreateClassifyAction(notifJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id <= 0 {
+		t.Fatalf("action ID = %d, want > 0", id)
+	}
+
+	action, err := d.GetAction(id)
+	if err != nil {
+		t.Fatalf("get action: %v", err)
+	}
+
+	if action.PromptID != "classify-gh-notification" {
+		t.Errorf("prompt_id = %q, want %q", action.PromptID, "classify-gh-notification")
+	}
+	if action.Status != "pending" {
+		t.Errorf("status = %q, want %q", action.Status, "pending")
+	}
+	if action.TaskID.Valid {
+		t.Errorf("task_id = %v, want NULL", action.TaskID)
+	}
+
+	var meta map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(action.Metadata), &meta); err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+
+	if !contains(string(meta["notification"]), "test/repo") {
+		t.Errorf("notification = %s, want to contain 'test/repo'", meta["notification"])
+	}
+	if _, ok := meta["existing_tasks"]; !ok {
+		t.Error("metadata missing 'existing_tasks' key")
+	}
+}
+
+func TestCreateClassifyAction_WithExistingTasks(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+
+	// Create an open task
+	_, err := d.InsertTask(1, "Test task", "", "{}")
+	if err != nil {
+		t.Fatalf("insert task: %v", err)
+	}
+
+	id, err := cmd.CreateClassifyAction(`{"type":"issue"}`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	action, err := d.GetAction(id)
+	if err != nil {
+		t.Fatalf("get action: %v", err)
+	}
+
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(action.Metadata), &meta); err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+
+	existingTasks, ok := meta["existing_tasks"].(string)
+	if !ok {
+		t.Fatal("existing_tasks is not a string")
+	}
+	if !contains(existingTasks, "Test task") {
+		t.Errorf("existing_tasks = %q, want to contain 'Test task'", existingTasks)
 	}
 }

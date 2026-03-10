@@ -65,11 +65,9 @@ func init() {
 	rootCmd.AddCommand(taskCmd)
 	rootCmd.AddCommand(actionCmd)
 	dispatchCmd.Hidden = true
-	classifyGhNotificationCmd.Hidden = true
 	watchCmd.Hidden = true
 	runCmd.Hidden = true
 	rootCmd.AddCommand(dispatchCmd)
-	rootCmd.AddCommand(classifyGhNotificationCmd)
 	rootCmd.AddCommand(watchCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(uiCmd)

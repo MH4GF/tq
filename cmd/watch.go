@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
+	"strings"
 
 	"github.com/MH4GF/tq/source"
 	ghsource "github.com/MH4GF/tq/source/github"
@@ -27,7 +27,7 @@ func SetWatchSourceFactory(f func() (source.Source, error)) {
 
 var watchCmd = &cobra.Command{
 	Use:   "watch",
-	Short: "Fetch GitHub notifications and classify GitHub notifications",
+	Short: "Fetch GitHub notifications and create classify actions",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
@@ -52,8 +52,8 @@ var watchCmd = &cobra.Command{
 				continue
 			}
 
-			if err := classifyGhNotification(cmd.OutOrStdout(), string(notifJSON)); err != nil {
-				slog.Error("classify-gh-notification", "error", err, "title", n.Metadata["title"])
+			if _, err := CreateClassifyAction(string(notifJSON)); err != nil {
+				slog.Error("create classify action", "error", err, "title", n.Metadata["title"])
 				failed++
 				continue
 			}
@@ -67,12 +67,60 @@ var watchCmd = &cobra.Command{
 		fmt.Fprintf(cmd.OutOrStdout(), "processed %d, failed %d\n", processed, failed)
 
 		if len(notifications) > 0 && failed == len(notifications) {
-			return fmt.Errorf("all %d notifications failed to classify-gh-notification", failed)
+			return fmt.Errorf("all %d notifications failed to create classify action", failed)
 		}
 		return nil
 	},
 }
 
-func classifyGhNotification(w io.Writer, notificationJSON string) error {
-	return runClassifyGhNotification(w, notificationJSON)
+func buildExistingTasksList() (string, error) {
+	tasks, err := database.ListTasksByStatus("open")
+	if err != nil {
+		return "", err
+	}
+	if len(tasks) == 0 {
+		return "No existing open tasks.", nil
+	}
+	var lines []string
+	for _, t := range tasks {
+		project, _ := database.GetProjectByID(t.ProjectID)
+		projectName := "unknown"
+		if project != nil {
+			projectName = project.Name
+		}
+		line := fmt.Sprintf("- #%d [%s] %s", t.ID, projectName, t.Title)
+		if t.URL != "" {
+			line += " " + t.URL
+		}
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+func CreateClassifyAction(notificationJSON string) (int64, error) {
+	existingTasks, err := buildExistingTasksList()
+	if err != nil {
+		return 0, fmt.Errorf("build tasks list: %w", err)
+	}
+
+	meta := map[string]any{
+		"existing_tasks": existingTasks,
+	}
+	if json.Valid([]byte(notificationJSON)) {
+		meta["notification"] = json.RawMessage(notificationJSON)
+	} else {
+		meta["notification"] = notificationJSON
+	}
+
+	metaBytes, err := json.Marshal(meta)
+	if err != nil {
+		return 0, fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	id, err := database.InsertAction("classify-gh-notification", nil, string(metaBytes), "pending")
+	if err != nil {
+		return 0, fmt.Errorf("insert action: %w", err)
+	}
+
+	return id, nil
 }
