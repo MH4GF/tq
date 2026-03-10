@@ -99,8 +99,8 @@ func TestTaskList(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "task A", "https://example.com/a", "{}")
-	d.InsertTask(1, "task B", "", "{}")
+	d.InsertTask(1, "task A", "https://example.com/a", "{}", "")
+	d.InsertTask(1, "task B", "", "{}", "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -134,7 +134,7 @@ func TestTaskList_JSON(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "test task", "https://example.com", `{"key":"value"}`)
+	d.InsertTask(1, "test task", "https://example.com", `{"key":"value"}`, "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -185,7 +185,7 @@ func TestTaskList_JSON_NullFields(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "new task", "", "{}")
+	d.InsertTask(1, "new task", "", "{}", "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -218,8 +218,8 @@ func TestTaskList_StatusFilter(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "open task", "", "{}")
-	id2, _ := d.InsertTask(1, "done task", "", "{}")
+	d.InsertTask(1, "open task", "", "{}", "")
+	id2, _ := d.InsertTask(1, "done task", "", "{}", "")
 	d.UpdateTask(id2, "done")
 
 	root := cmd.GetRootCmd()
@@ -251,8 +251,8 @@ func TestTaskList_ProjectFilter(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "immedio task", "", "{}")
-	d.InsertTask(2, "hearable task", "", "{}")
+	d.InsertTask(1, "immedio task", "", "{}", "")
+	d.InsertTask(2, "hearable task", "", "{}", "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -305,7 +305,7 @@ func TestTaskUpdate_ProjectOnly(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "task to move", "", "{}")
+	d.InsertTask(1, "task to move", "", "{}", "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -337,7 +337,7 @@ func TestTaskUpdate_StatusAndProject(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "task to update", "", "{}")
+	d.InsertTask(1, "task to update", "", "{}", "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -375,7 +375,7 @@ func TestTaskUpdate_UnknownProject(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "task", "", "{}")
+	d.InsertTask(1, "task", "", "{}", "")
 
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
@@ -393,7 +393,7 @@ func TestTaskUpdate_NeitherStatusNorProject(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "task", "", "{}")
+	d.InsertTask(1, "task", "", "{}", "")
 
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
@@ -411,8 +411,8 @@ func TestTaskList_WithActions(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	taskID1, _ := d.InsertTask(1, "task with actions", "", "{}")
-	taskID2, _ := d.InsertTask(1, "task without actions", "", "{}")
+	taskID1, _ := d.InsertTask(1, "task with actions", "", "{}", "")
+	taskID2, _ := d.InsertTask(1, "task without actions", "", "{}", "")
 	d.InsertAction("review-pr", &taskID1, `{"pr":1}`, "pending")
 	d.InsertAction("implement", &taskID1, "{}", "done")
 	_ = taskID2

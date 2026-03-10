@@ -19,6 +19,7 @@ var (
 	taskTitle     string
 	taskURL       string
 	taskMeta      string
+	taskWorkDir   string
 )
 
 var taskCreateCmd = &cobra.Command{
@@ -31,7 +32,11 @@ var taskCreateCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("project %d not found: %w", taskProjectID, err)
 		}
-		id, err := database.InsertTask(project.ID, taskTitle, taskURL, taskMeta)
+		workDir := taskWorkDir
+		if workDir == "" {
+			workDir = project.WorkDir
+		}
+		id, err := database.InsertTask(project.ID, taskTitle, taskURL, taskMeta, workDir)
 		if err != nil {
 			return fmt.Errorf("insert task: %w", err)
 		}
@@ -76,6 +81,7 @@ var taskListCmd = &cobra.Command{
 				"url":        t.URL,
 				"metadata":   t.Metadata,
 				"status":     t.Status,
+				"work_dir":   t.WorkDir,
 				"created_at": t.CreatedAt,
 			}
 			if t.UpdatedAt.Valid {
@@ -134,6 +140,7 @@ var (
 	taskUpdateID        int64
 	taskUpdateStatus    string
 	taskUpdateProjectID int64
+	taskUpdateWorkDir   string
 )
 
 var taskUpdateCmd = &cobra.Command{
@@ -146,8 +153,8 @@ var taskUpdateCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("invalid task ID: %w", err)
 		}
-		if taskUpdateStatus == "" && taskUpdateProjectID == 0 {
-			return fmt.Errorf("at least one of --status or --project is required")
+		if taskUpdateStatus == "" && taskUpdateProjectID == 0 && taskUpdateWorkDir == "" {
+			return fmt.Errorf("at least one of --status, --project, or --work-dir is required")
 		}
 
 		var updates []string
@@ -161,6 +168,13 @@ var taskUpdateCmd = &cobra.Command{
 				return fmt.Errorf("update task project: %w", err)
 			}
 			updates = append(updates, fmt.Sprintf("project: %s", project.Name))
+		}
+
+		if taskUpdateWorkDir != "" {
+			if err := database.UpdateTaskWorkDir(taskUpdateID, taskUpdateWorkDir); err != nil {
+				return fmt.Errorf("update task work_dir: %w", err)
+			}
+			updates = append(updates, fmt.Sprintf("work_dir: %s", taskUpdateWorkDir))
 		}
 
 		if taskUpdateStatus != "" {
@@ -183,10 +197,12 @@ func init() {
 	taskCreateCmd.Flags().Int64Var(&taskProjectID, "project", 0, "Project ID (required)")
 	taskCreateCmd.Flags().StringVar(&taskURL, "url", "", "Related URL")
 	taskCreateCmd.Flags().StringVar(&taskMeta, "meta", "{}", "Metadata JSON")
+	taskCreateCmd.Flags().StringVar(&taskWorkDir, "work-dir", "", "Working directory (defaults to project work_dir)")
 	taskCreateCmd.MarkFlagRequired("project")
 
 	taskUpdateCmd.Flags().StringVar(&taskUpdateStatus, "status", "", "New status (open|review|done|blocked|archived)")
 	taskUpdateCmd.Flags().Int64Var(&taskUpdateProjectID, "project", 0, "Project ID")
+	taskUpdateCmd.Flags().StringVar(&taskUpdateWorkDir, "work-dir", "", "Working directory")
 
 	taskListCmd.Flags().Int64Var(&taskListProjectID, "project", 0, "Filter by project ID")
 	taskListCmd.Flags().StringVar(&taskListStatus, "status", "", "Filter by status")

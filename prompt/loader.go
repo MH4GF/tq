@@ -35,11 +35,12 @@ type PromptData struct {
 }
 
 type TaskData struct {
-	ID     int64
-	Title  string
-	URL    string
-	Status string
-	Meta   map[string]any
+	ID      int64
+	Title   string
+	URL     string
+	Status  string
+	WorkDir string
+	Meta    map[string]any
 }
 
 type ProjectData struct {

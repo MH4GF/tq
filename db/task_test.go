@@ -11,7 +11,7 @@ func TestInsertTask(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, err := d.InsertTask(1, "test task", "https://example.com", "{}")
+	id, err := d.InsertTask(1, "test task", "https://example.com", "{}", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestUpdateTask(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, err := d.InsertTask(1, "task to update", "", "{}")
+	id, err := d.InsertTask(1, "task to update", "", "{}", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestUpdateTaskProject(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, err := d.InsertTask(1, "task to move", "", "{}")
+	id, err := d.InsertTask(1, "task to move", "", "{}", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,9 +94,9 @@ func TestListTasks(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	d.InsertTask(1, "task A", "", "{}")
-	id2, _ := d.InsertTask(1, "task B", "", "{}")
-	d.InsertTask(2, "task C", "", "{}")
+	d.InsertTask(1, "task A", "", "{}", "")
+	id2, _ := d.InsertTask(1, "task B", "", "{}", "")
+	d.InsertTask(2, "task C", "", "{}", "")
 	d.UpdateTask(id2, "done")
 
 	t.Run("no filter", func(t *testing.T) {
@@ -144,9 +144,9 @@ func TestListTasksByProject(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	d.InsertTask(1, "task A", "", "{}")
-	d.InsertTask(1, "task B", "", "{}")
-	d.InsertTask(2, "task C", "", "{}")
+	d.InsertTask(1, "task A", "", "{}", "")
+	d.InsertTask(1, "task B", "", "{}", "")
+	d.InsertTask(2, "task C", "", "{}", "")
 
 	tasks, err := d.ListTasksByProject(1)
 	if err != nil {
@@ -157,12 +157,73 @@ func TestListTasksByProject(t *testing.T) {
 	}
 }
 
+func TestInsertTaskWithWorkDir(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	id, err := d.InsertTask(1, "worktree task", "", "{}", "/tmp/worktree")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	task, err := d.GetTask(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.WorkDir != "/tmp/worktree" {
+		t.Errorf("expected work_dir '/tmp/worktree', got %s", task.WorkDir)
+	}
+}
+
+func TestInsertTaskDefaultWorkDir(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	id, err := d.InsertTask(1, "default workdir task", "", "{}", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	task, err := d.GetTask(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.WorkDir != "" {
+		t.Errorf("expected empty work_dir, got %s", task.WorkDir)
+	}
+}
+
+func TestUpdateTaskWorkDir(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	id, err := d.InsertTask(1, "task", "", "{}", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.UpdateTaskWorkDir(id, "/new/path"); err != nil {
+		t.Fatal(err)
+	}
+
+	task, err := d.GetTask(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.WorkDir != "/new/path" {
+		t.Errorf("expected work_dir '/new/path', got %s", task.WorkDir)
+	}
+	if !task.UpdatedAt.Valid {
+		t.Error("expected updated_at to be set")
+	}
+}
+
 func TestListTasksByStatus(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id1, _ := d.InsertTask(1, "open task", "", "{}")
-	id2, _ := d.InsertTask(1, "done task", "", "{}")
+	id1, _ := d.InsertTask(1, "open task", "", "{}", "")
+	id2, _ := d.InsertTask(1, "done task", "", "{}", "")
 	_ = id1
 	d.UpdateTask(id2, "done")
 

@@ -332,7 +332,7 @@ func TestCreateClassifyAction_WithExistingTasks(t *testing.T) {
 	cmd.SetDB(d)
 
 	// Create an open task
-	_, err := d.InsertTask(1, "Test task", "", "{}")
+	_, err := d.InsertTask(1, "Test task", "", "{}", "")
 	if err != nil {
 		t.Fatalf("insert task: %v", err)
 	}

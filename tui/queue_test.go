@@ -22,7 +22,7 @@ func TestQueueModel_LoadActions(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
 	d.InsertAction("check-pr", &taskID, "{}", "pending")
 	d.InsertAction("fix-ci", &taskID, "{}", "running")
 
@@ -140,7 +140,7 @@ func TestQueueModel_DateFilter(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
 	d.InsertAction("today-action", &taskID, "{}", "pending")
 	d.InsertAction("old-action", &taskID, "{}", "pending")
 
@@ -187,7 +187,7 @@ func TestQueueModel_InlineResult(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
 	id, _ := d.InsertAction("check-pr", &taskID, "{}", "running")
 	d.MarkDone(id, "all checks passed")
 

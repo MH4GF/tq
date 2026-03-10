@@ -103,6 +103,18 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	// Add work_dir column to tasks (idempotent)
+	if has, err := db.hasColumn("tasks", "work_dir"); err != nil {
+		return err
+	} else if !has {
+		if _, err := db.Exec("ALTER TABLE tasks ADD COLUMN work_dir TEXT NOT NULL DEFAULT ''"); err != nil {
+			return err
+		}
+		if _, err := db.Exec("UPDATE tasks SET work_dir = (SELECT work_dir FROM projects WHERE projects.id = tasks.project_id) WHERE work_dir = ''"); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

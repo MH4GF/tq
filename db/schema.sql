@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   url         TEXT,
   metadata    TEXT NOT NULL DEFAULT '{}',
   status      TEXT DEFAULT 'open',
+  work_dir    TEXT NOT NULL DEFAULT '',
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at  TEXT
 );

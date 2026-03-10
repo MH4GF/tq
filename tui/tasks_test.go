@@ -23,7 +23,7 @@ func TestTasksModel_LoadAndExpand(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Fix bug", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Fix bug", "https://example.com", "{}", "")
 	d.InsertAction("check-pr", &taskID, "{}", "pending")
 	d.InsertAction("fix-ci", &taskID, "{}", "running")
 
@@ -51,9 +51,9 @@ func TestTasksModel_Navigation(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID1, _ := d.InsertTask(1, "Task A", "", "{}")
+	taskID1, _ := d.InsertTask(1, "Task A", "", "{}", "")
 	d.InsertAction("a", &taskID1, "{}", "pending")
-	taskID2, _ := d.InsertTask(2, "Task B", "", "{}")
+	taskID2, _ := d.InsertTask(2, "Task B", "", "{}", "")
 	d.InsertAction("b", &taskID2, "{}", "pending")
 
 	m := NewTasksModel(d, "")
@@ -93,7 +93,7 @@ func TestTasksModel_CollapseExpand(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Task", "", "{}", "")
 	d.InsertAction("a", &taskID, "{}", "pending")
 
 	m := NewTasksModel(d, "")
@@ -133,7 +133,7 @@ func TestTasksModel_Reload(t *testing.T) {
 		t.Errorf("initial lines = %d, want 3", len(m.lines))
 	}
 
-	taskID, _ := d.InsertTask(1, "New Task", "", "{}")
+	taskID, _ := d.InsertTask(1, "New Task", "", "{}", "")
 	d.InsertAction("x", &taskID, "{}", "pending")
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
@@ -152,10 +152,10 @@ func TestTasksModel_DateFilter(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID1, _ := d.InsertTask(1, "Today task", "", "{}")
+	taskID1, _ := d.InsertTask(1, "Today task", "", "{}", "")
 	d.InsertAction("today-action", &taskID1, "{}", "pending")
 
-	taskID2, _ := d.InsertTask(1, "Old task", "", "{}")
+	taskID2, _ := d.InsertTask(1, "Old task", "", "{}", "")
 	d.InsertAction("old-action", &taskID2, "{}", "pending")
 	d.UpdateTask(taskID2, "done")
 
@@ -204,7 +204,7 @@ func TestTasksModel_DateFilter_NonDoneTaskShown(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	// Open task with action on a different date
-	taskID, _ := d.InsertTask(1, "Open no-match task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Open no-match task", "", "{}", "")
 	d.InsertAction("old-action", &taskID, "{}", "pending")
 	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE prompt_id = 'old-action'")
 
@@ -223,14 +223,14 @@ func TestTasksModel_DateFilter_ArchivedTaskFiltered(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	// Archived task with old dates — should be filtered out
-	taskID, _ := d.InsertTask(1, "Old archived", "", "{}")
+	taskID, _ := d.InsertTask(1, "Old archived", "", "{}", "")
 	d.InsertAction("old-action", &taskID, "{}", "pending")
 	d.UpdateTask(taskID, "archived")
 	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE prompt_id = 'old-action'")
 	d.Exec(fmt.Sprintf("UPDATE tasks SET created_at = '2025-01-01 00:00:00', updated_at = '2025-01-01 00:00:00' WHERE id = %d", taskID))
 
 	// Open task — should always appear
-	taskID2, _ := d.InsertTask(1, "Open task", "", "{}")
+	taskID2, _ := d.InsertTask(1, "Open task", "", "{}", "")
 	d.InsertAction("open-action", &taskID2, "{}", "pending")
 
 	actions, _ := d.ListActions("", nil)
@@ -259,7 +259,7 @@ func TestTasksModel_ArchivedTaskCollapsed(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Archived task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Archived task", "", "{}", "")
 	d.InsertAction("check", &taskID, "{}", "pending")
 	d.UpdateTask(taskID, "archived")
 
@@ -277,7 +277,7 @@ func TestTasksModel_InlineResult(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
 	id, _ := d.InsertAction("check", &taskID, "{}", "running")
 	d.MarkDone(id, "all passed")
 
@@ -300,7 +300,7 @@ func TestTasksModel_DetailView(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
 	id, _ := d.InsertAction("check", &taskID, "{}", "running")
 	d.MarkDone(id, "detailed output\nline 2")
 
@@ -342,7 +342,7 @@ func TestTasksModel_DetailViewNoResultNoOp(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
 	d.InsertAction("check", &taskID, "{}", "pending")
 
 	m := NewTasksModel(d, "")
@@ -365,7 +365,7 @@ func TestTasksModel_DetailViewOnProjectLineNoOp(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
 	id, _ := d.InsertAction("check", &taskID, "{}", "running")
 	d.MarkDone(id, "some result")
 
@@ -385,7 +385,7 @@ func TestTasksModel_VisibleRange_AllVisible(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Task", "", "{}", "")
 	d.InsertAction("a", &taskID, "{}", "pending")
 
 	m := NewTasksModel(d, "")
@@ -405,7 +405,7 @@ func TestTasksModel_VisibleRange_Scroll(t *testing.T) {
 
 	// Create enough lines to exceed viewport: 1 project + 30 tasks + 30 actions = 61 lines
 	for i := 0; i < 30; i++ {
-		taskID, _ := d.InsertTask(1, fmt.Sprintf("Task %d", i), "", "{}")
+		taskID, _ := d.InsertTask(1, fmt.Sprintf("Task %d", i), "", "{}", "")
 		d.InsertAction("a", &taskID, "{}", "pending")
 	}
 
@@ -463,10 +463,10 @@ func TestTasksModel_SortOrder(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	// Create tasks in order: open(1), archived(2), done(3)
-	d.InsertTask(1, "TaskA-open", "", "{}")
-	taskID2, _ := d.InsertTask(1, "TaskB-archived", "", "{}")
+	d.InsertTask(1, "TaskA-open", "", "{}", "")
+	taskID2, _ := d.InsertTask(1, "TaskB-archived", "", "{}", "")
 	d.UpdateTask(taskID2, "archived")
-	taskID3, _ := d.InsertTask(1, "TaskC-done", "", "{}")
+	taskID3, _ := d.InsertTask(1, "TaskC-done", "", "{}", "")
 	d.UpdateTask(taskID3, "done")
 
 	m := NewTasksModel(d, "")
@@ -500,7 +500,7 @@ func TestTasksModel_DisabledProjectDisplay(t *testing.T) {
 	// Disable "works" project (id=3)
 	d.SetDispatchEnabled(3, false)
 
-	taskID, _ := d.InsertTask(3, "Works task", "", "{}")
+	taskID, _ := d.InsertTask(3, "Works task", "", "{}", "")
 	d.InsertAction("a", &taskID, "{}", "pending")
 
 	m := NewTasksModel(d, "")
@@ -520,7 +520,7 @@ func TestTasksModel_ToggleFocus(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Task", "", "{}", "")
 	d.InsertAction("a", &taskID, "{}", "pending")
 
 	m := NewTasksModel(d, "")
@@ -555,7 +555,7 @@ func TestTasksModel_ToggleFocusOnlyOnProjectLine(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Task", "", "{}", "")
 	d.InsertAction("a", &taskID, "{}", "pending")
 
 	m := NewTasksModel(d, "")
@@ -596,7 +596,7 @@ func TestTasksModel_DetailViewEscIgnored(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Test task", "", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
 	id, _ := d.InsertAction("check", &taskID, "{}", "running")
 	d.MarkDone(id, "some result")
 

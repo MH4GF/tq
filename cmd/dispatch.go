@@ -124,8 +124,8 @@ var dispatchCmd = &cobra.Command{
 		}
 
 		workDir := "."
-		if promptData.Project.WorkDir != "" {
-			workDir = promptData.Project.WorkDir
+		if promptData.Task.WorkDir != "" {
+			workDir = promptData.Task.WorkDir
 		}
 
 		if tmpl.Config.IsRemote() {
@@ -207,11 +207,12 @@ func buildPromptData(action *db.Action) (prompt.PromptData, error) {
 			}
 		}
 		data.Task = prompt.TaskData{
-			ID:     task.ID,
-			Title:  task.Title,
-			URL:    task.URL,
-			Status: task.Status,
-			Meta:   taskMeta,
+			ID:      task.ID,
+			Title:   task.Title,
+			URL:     task.URL,
+			Status:  task.Status,
+			WorkDir: task.WorkDir,
+			Meta:    taskMeta,
 		}
 
 		project, err := database.GetProjectByID(task.ProjectID)

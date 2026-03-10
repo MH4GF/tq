@@ -106,7 +106,7 @@ func TestDone_TriggersOnDone(t *testing.T) {
 
 	cmd.SetConfigDir(tqDir)
 
-	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}")
+	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
 	d.InsertAction("check-pr", &taskID, "{}", "running")
 
 	root := cmd.GetRootCmd()
