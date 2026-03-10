@@ -39,7 +39,7 @@ Review this PR.
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "review-pr", "--task", "1"})
+	root.SetArgs([]string{"action", "create", "review-pr", "--title", "review-pr", "--task", "1"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -80,13 +80,13 @@ Review.
 `)
 
 	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
-	d.InsertAction("review-pr", &taskID, "{}", "pending")
+	d.InsertAction("review-pr", "review-pr", &taskID, "{}", "pending")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "review-pr", "--task", "1"})
+	root.SetArgs([]string{"action", "create", "review-pr", "--title", "review-pr", "--task", "1"})
 
 	err := root.Execute()
 	if err == nil {
@@ -115,13 +115,13 @@ Review.
 `)
 
 	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
-	d.InsertAction("review-pr", &taskID, "{}", "pending")
+	d.InsertAction("review-pr", "review-pr", &taskID, "{}", "pending")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "review-pr", "--task", "1", "--force"})
+	root.SetArgs([]string{"action", "create", "review-pr", "--title", "review-pr", "--task", "1", "--force"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -151,7 +151,7 @@ Review.
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "review-pr"})
+	root.SetArgs([]string{"action", "create", "review-pr", "--title", "review-pr"})
 
 	err := root.Execute()
 	if err == nil {

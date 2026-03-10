@@ -17,7 +17,7 @@ func TestDone(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	id, _ := d.InsertAction("test", nil, "{}", "running")
+	id, _ := d.InsertAction("test", "test", nil, "{}", "running")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -52,7 +52,7 @@ func TestDone_NoResult(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertAction("test", nil, "{}", "running")
+	d.InsertAction("test", "test", nil, "{}", "running")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -107,7 +107,7 @@ func TestDone_TriggersOnDone(t *testing.T) {
 	cmd.SetConfigDir(tqDir)
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
-	d.InsertAction("check-pr", &taskID, "{}", "running")
+	d.InsertAction("check-pr", "check-pr", &taskID, "{}", "running")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)

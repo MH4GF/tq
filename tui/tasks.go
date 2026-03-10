@@ -248,7 +248,7 @@ func (m *TasksModel) buildLines() {
 					text: fmt.Sprintf("      %s %s %s",
 						ast.Render(icon),
 						ast.Render(fmt.Sprintf("%-14s", a.Status)),
-						a.PromptID,
+						a.Title,
 					),
 					key:    fmt.Sprintf("a:%d", a.ID),
 					taskID: tn.task.ID,

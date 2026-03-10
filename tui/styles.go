@@ -64,6 +64,7 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 	st := StatusStyle(a.Status)
 	b.WriteString(fmt.Sprintf("  ID:        %d\n", a.ID))
 	b.WriteString(fmt.Sprintf("  Status:    %s\n", st.Render(a.Status)))
+	b.WriteString(fmt.Sprintf("  Title:     %s\n", a.Title))
 	b.WriteString(fmt.Sprintf("  Prompt:    %s\n", a.PromptID))
 	if a.TaskID.Valid {
 		b.WriteString(fmt.Sprintf("  Task:      #%d\n", a.TaskID.Int64))
@@ -79,7 +80,7 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 	}
 	lines := strings.Split(result, "\n")
 
-	headerLines := 8
+	headerLines := 9
 	bodyHeight := height - headerLines
 	if bodyHeight < 1 {
 		bodyHeight = 10

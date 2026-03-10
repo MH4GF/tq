@@ -34,11 +34,12 @@ var listCmd = &cobra.Command{
 		rows := make([]map[string]any, len(actions))
 		for i, a := range actions {
 			row := map[string]any{
-				"id":          a.ID,
-				"prompt_id": a.PromptID,
-				"metadata":    a.Metadata,
-				"status":      a.Status,
-				"created_at":  a.CreatedAt,
+				"id":         a.ID,
+				"title":      a.Title,
+				"prompt_id":  a.PromptID,
+				"metadata":   a.Metadata,
+				"status":     a.Status,
+				"created_at": a.CreatedAt,
 			}
 			if a.TaskID.Valid {
 				row["task_id"] = a.TaskID.Int64

@@ -10,6 +10,7 @@ import (
 
 type Action struct {
 	ID          int64
+	Title       string
 	PromptID    string
 	TaskID      sql.NullInt64
 	Metadata    string
@@ -20,6 +21,12 @@ type Action struct {
 	CreatedAt   string
 	StartedAt   sql.NullString
 	CompletedAt sql.NullString
+}
+
+const actionColumns = "id, title, prompt_id, task_id, metadata, status, result, session_id, tmux_pane, created_at, started_at, completed_at"
+
+func (a *Action) scanFields() []any {
+	return []any{&a.ID, &a.Title, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.CreatedAt, &a.StartedAt, &a.CompletedAt}
 }
 
 func (a Action) MatchesDate(date string) bool {
@@ -63,14 +70,14 @@ func FilterByDate(actions []Action, date string) []Action {
 	return filtered
 }
 
-func (db *DB) InsertAction(promptID string, taskID *int64, metadata string, status string) (int64, error) {
+func (db *DB) InsertAction(title, promptID string, taskID *int64, metadata string, status string) (int64, error) {
 	var tid sql.NullInt64
 	if taskID != nil {
 		tid = sql.NullInt64{Int64: *taskID, Valid: true}
 	}
 	res, err := db.Exec(
-		"INSERT INTO actions (prompt_id, task_id, metadata, status) VALUES (?, ?, ?, ?)",
-		promptID, tid, metadata, status,
+		"INSERT INTO actions (title, prompt_id, task_id, metadata, status) VALUES (?, ?, ?, ?, ?)",
+		title, promptID, tid, metadata, status,
 	)
 	if err != nil {
 		return 0, err
@@ -99,7 +106,7 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 
 	a := &Action{}
 	err = tx.QueryRowContext(ctx,
-		`SELECT a.id, a.prompt_id, a.task_id, a.metadata, a.status, a.result,
+		`SELECT a.id, a.title, a.prompt_id, a.task_id, a.metadata, a.status, a.result,
 		        a.session_id, a.tmux_pane, a.created_at, a.started_at, a.completed_at
 		 FROM actions a
 		 LEFT JOIN tasks t ON a.task_id = t.id
@@ -107,7 +114,7 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 		 WHERE a.status = 'pending'
 		   AND (a.task_id IS NULL OR p.dispatch_enabled = 1)
 		 ORDER BY a.id ASC LIMIT 1`,
-	).Scan(&a.ID, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.CreatedAt, &a.StartedAt, &a.CompletedAt)
+	).Scan(a.scanFields()...)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -137,9 +144,9 @@ func (db *DB) ClaimPending(ctx context.Context, id int64) (*Action, error) {
 
 	a := &Action{}
 	err = tx.QueryRowContext(ctx,
-		"SELECT id, prompt_id, task_id, metadata, status, result, session_id, tmux_pane, created_at, started_at, completed_at FROM actions WHERE id = ?",
+		"SELECT "+actionColumns+" FROM actions WHERE id = ?",
 		id,
-	).Scan(&a.ID, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.CreatedAt, &a.StartedAt, &a.CompletedAt)
+	).Scan(a.scanFields()...)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("action #%d not found", id)
 	}
@@ -181,7 +188,7 @@ func (db *DB) MarkFailed(id int64, result string) error {
 }
 
 func (db *DB) ListActions(status string, taskID *int64) ([]Action, error) {
-	query := "SELECT id, prompt_id, task_id, metadata, status, result, session_id, tmux_pane, created_at, started_at, completed_at FROM actions WHERE 1=1"
+	query := "SELECT " + actionColumns + " FROM actions WHERE 1=1"
 	var args []any
 
 	if status != "" {
@@ -203,7 +210,7 @@ func (db *DB) ListActions(status string, taskID *int64) ([]Action, error) {
 	var actions []Action
 	for rows.Next() {
 		var a Action
-		if err := rows.Scan(&a.ID, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.CreatedAt, &a.StartedAt, &a.CompletedAt); err != nil {
+		if err := rows.Scan(a.scanFields()...); err != nil {
 			return nil, err
 		}
 		actions = append(actions, a)
@@ -232,7 +239,7 @@ func (db *DB) CountByStatus() (map[string]int, error) {
 
 func (db *DB) ListRunningInteractive() ([]Action, error) {
 	rows, err := db.Query(
-		"SELECT id, prompt_id, task_id, metadata, status, result, session_id, tmux_pane, created_at, started_at, completed_at FROM actions WHERE status = 'running' AND session_id IS NOT NULL ORDER BY id",
+		"SELECT "+actionColumns+" FROM actions WHERE status = 'running' AND session_id IS NOT NULL ORDER BY id",
 	)
 	if err != nil {
 		return nil, err
@@ -242,7 +249,7 @@ func (db *DB) ListRunningInteractive() ([]Action, error) {
 	var actions []Action
 	for rows.Next() {
 		var a Action
-		if err := rows.Scan(&a.ID, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.CreatedAt, &a.StartedAt, &a.CompletedAt); err != nil {
+		if err := rows.Scan(a.scanFields()...); err != nil {
 			return nil, err
 		}
 		actions = append(actions, a)
@@ -314,7 +321,7 @@ func (db *DB) ListActionsByTaskIDs(taskIDs []int64) (map[int64][]Action, error) 
 	}
 
 	query := fmt.Sprintf(
-		"SELECT id, prompt_id, task_id, metadata, status, result, session_id, tmux_pane, created_at, started_at, completed_at FROM actions WHERE task_id IN (%s) ORDER BY id",
+		"SELECT "+actionColumns+" FROM actions WHERE task_id IN (%s) ORDER BY id",
 		strings.Join(placeholders, ", "),
 	)
 
@@ -326,7 +333,7 @@ func (db *DB) ListActionsByTaskIDs(taskIDs []int64) (map[int64][]Action, error) 
 
 	for rows.Next() {
 		var a Action
-		if err := rows.Scan(&a.ID, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.CreatedAt, &a.StartedAt, &a.CompletedAt); err != nil {
+		if err := rows.Scan(a.scanFields()...); err != nil {
 			return nil, err
 		}
 		tid := a.TaskID.Int64
@@ -338,9 +345,9 @@ func (db *DB) ListActionsByTaskIDs(taskIDs []int64) (map[int64][]Action, error) 
 func (db *DB) GetAction(id int64) (*Action, error) {
 	a := &Action{}
 	err := db.QueryRow(
-		"SELECT id, prompt_id, task_id, metadata, status, result, session_id, tmux_pane, created_at, started_at, completed_at FROM actions WHERE id = ?",
+		"SELECT "+actionColumns+" FROM actions WHERE id = ?",
 		id,
-	).Scan(&a.ID, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.CreatedAt, &a.StartedAt, &a.CompletedAt)
+	).Scan(a.scanFields()...)
 	if err != nil {
 		return nil, err
 	}

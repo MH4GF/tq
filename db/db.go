@@ -115,6 +115,18 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	// Add title column to actions (idempotent)
+	if has, err := db.hasColumn("actions", "title"); err != nil {
+		return err
+	} else if !has {
+		if _, err := db.Exec("ALTER TABLE actions ADD COLUMN title TEXT NOT NULL DEFAULT ''"); err != nil {
+			return err
+		}
+		if _, err := db.Exec("UPDATE actions SET title = prompt_id WHERE title = ''"); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

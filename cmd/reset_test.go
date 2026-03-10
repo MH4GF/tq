@@ -28,7 +28,7 @@ func TestReset(t *testing.T) {
 			cmd.SetDB(d)
 			cmd.ResetForTest()
 
-			d.InsertAction("test", nil, "{}", tc.status)
+			d.InsertAction("test", "test", nil, "{}", tc.status)
 
 			root := cmd.GetRootCmd()
 			buf := new(bytes.Buffer)

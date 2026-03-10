@@ -53,7 +53,7 @@ func TriggerOnDone(database *db.DB, promptsDir string, action *db.Action, result
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	_, err = database.InsertAction(onDonePromptID, &taskID, string(metaJSON), status)
+	_, err = database.InsertAction(onDonePromptID, onDonePromptID, &taskID, string(metaJSON), status)
 	if err != nil {
 		return fmt.Errorf("insert on_done action: %w", err)
 	}

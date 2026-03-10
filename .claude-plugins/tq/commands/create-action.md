@@ -57,9 +57,10 @@ metadata は `{}` で作成する（プロンプト側で `{{.Task.URL}}` 等を
 ### 4. アクション作成
 
 ```bash
-tq action create <prompt> --task <task_id> --meta '<json>'
+tq action create <prompt> --title '<title>' --task <task_id> --meta '<json>'
 ```
 
+- `--title '<title>'` は必須。1行で内容が理解できる簡潔なタイトルを設定する（最大100文字）
 - `--task <task_id>` は task_id が特定できた場合のみ付与する
 - `--meta` の JSON 内でプロンプト中の改行は `\n` にエスケープする
 

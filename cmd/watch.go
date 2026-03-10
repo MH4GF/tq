@@ -117,7 +117,7 @@ func CreateClassifyAction(notificationJSON string) (int64, error) {
 		return 0, fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	id, err := database.InsertAction("classify-gh-notification", nil, string(metaBytes), "pending")
+	id, err := database.InsertAction("classify-gh-notification", "classify-gh-notification", nil, string(metaBytes), "pending")
 	if err != nil {
 		return 0, fmt.Errorf("insert action: %w", err)
 	}
