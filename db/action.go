@@ -187,6 +187,14 @@ func (db *DB) MarkFailed(id int64, result string) error {
 	return err
 }
 
+func (db *DB) MarkCancelled(id int64, result string) error {
+	_, err := db.Exec(
+		"UPDATE actions SET status = 'cancelled', result = ?, completed_at = datetime('now') WHERE id = ?",
+		result, id,
+	)
+	return err
+}
+
 func (db *DB) ListActions(status string, taskID *int64) ([]Action, error) {
 	query := "SELECT " + actionColumns + " FROM actions WHERE 1=1"
 	var args []any

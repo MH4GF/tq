@@ -21,8 +21,8 @@ var resetCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("get action: %w", err)
 		}
-		if action.Status != "failed" && action.Status != "running" {
-			return fmt.Errorf("action #%d is %q, only failed or running can be reset", id, action.Status)
+		if action.Status != "failed" && action.Status != "running" && action.Status != "cancelled" {
+			return fmt.Errorf("action #%d is %q, only failed/running/cancelled can be reset", id, action.Status)
 		}
 		if action.Status == "running" && action.TmuxPane.Valid {
 			_ = exec.Command("tmux", "kill-window", "-t", fmt.Sprintf("main:tq-action-%d", id)).Run()

@@ -32,10 +32,11 @@ tq project delete <ID>
 ```bash
 tq action list
 tq action list --task <task_id>
-tq action list --status <pending|running|done|failed>
+tq action list --status <pending|running|done|failed|cancelled>
 tq action create <prompt_id> --task <task_id> --meta '<json>'
 tq action done <action_id> '<result>'
-tq action reset <action_id>      # failed/running → pending
+tq action cancel <action_id> '<reason>'  # pending/running/failed → cancelled
+tq action reset <action_id>      # failed/running/cancelled → pending
 ```
 
 ### プロンプト一覧
