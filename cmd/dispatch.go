@@ -128,9 +128,14 @@ var dispatchCmd = &cobra.Command{
 			workDir = promptData.Task.WorkDir
 		}
 
+		var taskID *int64
+		if action.TaskID.Valid {
+			taskID = &action.TaskID.Int64
+		}
+
 		if tmpl.Config.IsRemote() {
 			worker := getRemoteWorkerFactory()()
-			result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID)
+			result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID, taskID)
 			if err != nil {
 				_ = database.MarkFailed(action.ID, err.Error())
 				fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", action.ID, err)
@@ -148,7 +153,7 @@ var dispatchCmd = &cobra.Command{
 
 		if tmpl.Config.IsInteractive() {
 			worker := getInteractiveWorkerFactory()()
-			result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID)
+			result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID, taskID)
 			if err != nil {
 				_ = database.MarkFailed(action.ID, err.Error())
 				fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", action.ID, err)
@@ -159,7 +164,7 @@ var dispatchCmd = &cobra.Command{
 		}
 
 		worker := getWorkerFactory()()
-		result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID)
+		result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID, taskID)
 		if err != nil {
 			_ = database.MarkFailed(action.ID, err.Error())
 			fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", action.ID, err)

@@ -16,14 +16,14 @@ type RemoteWorker struct {
 	Runner CommandRunner
 }
 
-func (w *RemoteWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64) (string, error) {
+func (w *RemoteWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID *int64) (string, error) {
 	remotePrompt := prompt + remoteRules(actionID)
 
 	// claude --remote requires a TTY (stdout must be a terminal).
 	// Without a TTY, claude auto-switches to --print mode and fails.
 	// Use `script -q /dev/null` to allocate a PTY.
 	args := []string{"-q", "/dev/null", "claude", "--remote", remotePrompt}
-	env := []string{fmt.Sprintf("TQ_ACTION_ID=%d", actionID)}
+	env := buildTQEnv(actionID, taskID)
 
 	output, err := w.Runner.Run(ctx, "script", args, workDir, env)
 	if err != nil {

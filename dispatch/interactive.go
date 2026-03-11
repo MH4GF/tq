@@ -16,7 +16,7 @@ type InteractiveWorker struct {
 	Session string
 }
 
-func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64) (string, error) {
+func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID *int64) (string, error) {
 	session := w.Session
 	if session == "" {
 		session = "main"
@@ -34,7 +34,11 @@ func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg prom
 	// 2. Send claude command text
 	tmuxTarget := fmt.Sprintf("%s:%s", session, windowName)
 	escapedPrompt := strings.ReplaceAll(prompt, "'", "'\\''")
-	claudeCmd := fmt.Sprintf("TQ_ACTION_ID=%d claude '%s'", actionID, escapedPrompt)
+	envPrefix := fmt.Sprintf("TQ_ACTION_ID=%d", actionID)
+	if taskID != nil {
+		envPrefix += fmt.Sprintf(" TQ_TASK_ID=%d", *taskID)
+	}
+	claudeCmd := fmt.Sprintf("%s claude '%s'", envPrefix, escapedPrompt)
 	out, err = w.Runner.Run(ctx, "tmux", []string{
 		"send-keys", "-t", tmuxTarget, claudeCmd,
 	}, workDir, nil)

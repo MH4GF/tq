@@ -20,6 +20,8 @@ type MockRunner struct {
 	GotCtx  context.Context
 }
 
+func int64Ptr(v int64) *int64 { return &v }
+
 func (m *MockRunner) Run(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, error) {
 	m.GotCtx = ctx
 	m.GotName = name
@@ -35,7 +37,7 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 
 	cfg := prompt.Config{}
 
-	result, err := w.Execute(context.Background(), "do something", cfg, "/work", 1)
+	result, err := w.Execute(context.Background(), "do something", cfg, "/work", 1, int64Ptr(10))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -63,14 +65,20 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 	}
 
 	foundActionID := false
+	foundTaskID := false
 	for _, e := range mock.GotEnv {
 		if e == "TQ_ACTION_ID=1" {
 			foundActionID = true
-			break
+		}
+		if e == "TQ_TASK_ID=10" {
+			foundTaskID = true
 		}
 	}
 	if !foundActionID {
 		t.Errorf("env missing TQ_ACTION_ID=1, got %v", mock.GotEnv)
+	}
+	if !foundTaskID {
+		t.Errorf("env missing TQ_TASK_ID=10, got %v", mock.GotEnv)
 	}
 }
 
@@ -80,7 +88,7 @@ func TestNonInteractiveWorker_Execute_Error(t *testing.T) {
 
 	cfg := prompt.Config{}
 
-	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1)
+	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1, nil)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -95,7 +103,7 @@ func TestNonInteractiveWorker_Execute_Timeout(t *testing.T) {
 
 	cfg := prompt.Config{}
 
-	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1)
+	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -120,7 +128,7 @@ func TestNonInteractiveWorker_Execute_Output(t *testing.T) {
 
 	cfg := prompt.Config{}
 
-	got, err := w.Execute(context.Background(), "process data", cfg, "/projects/app", 42)
+	got, err := w.Execute(context.Background(), "process data", cfg, "/projects/app", 42, int64Ptr(5))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -135,7 +143,7 @@ func TestNonInteractiveWorker_Execute_ErrorSubtype(t *testing.T) {
 
 	cfg := prompt.Config{}
 
-	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1)
+	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1, nil)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -150,7 +158,7 @@ func TestNonInteractiveWorker_Execute_MalformedJSON(t *testing.T) {
 
 	cfg := prompt.Config{}
 
-	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1)
+	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1, nil)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

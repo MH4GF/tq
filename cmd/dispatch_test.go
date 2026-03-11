@@ -18,7 +18,7 @@ type mockWorker struct {
 	err    error
 }
 
-func (m *mockWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64) (string, error) {
+func (m *mockWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID *int64) (string, error) {
 	return m.result, m.err
 }
 

@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -199,7 +200,7 @@ func dispatchInteractive(ctx context.Context, cfg RalphConfig, action *db.Action
 	}
 
 	worker := cfg.InteractiveFunc()
-	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID)
+	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID, nullInt64ToPtr(action.TaskID))
 	if err != nil {
 		handleFailure(cfg, action, err)
 		return true, nil
@@ -216,7 +217,7 @@ func dispatchInteractive(ctx context.Context, cfg RalphConfig, action *db.Action
 
 func dispatchRemote(ctx context.Context, cfg RalphConfig, action *db.Action, prompt string, tmplCfg prompt.Config, workDir string) (bool, error) {
 	worker := cfg.RemoteFunc()
-	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID)
+	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID, nullInt64ToPtr(action.TaskID))
 	if err != nil {
 		handleFailure(cfg, action, err)
 		return true, nil
@@ -234,7 +235,7 @@ func dispatchRemote(ctx context.Context, cfg RalphConfig, action *db.Action, pro
 
 func dispatchNonInteractive(ctx context.Context, cfg RalphConfig, action *db.Action, prompt string, tmplCfg prompt.Config, workDir string) (bool, error) {
 	worker := cfg.NonInteractiveFunc()
-	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID)
+	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID, nullInt64ToPtr(action.TaskID))
 	if err != nil {
 		handleFailure(cfg, action, err)
 		return true, nil
@@ -251,6 +252,13 @@ func dispatchNonInteractive(ctx context.Context, cfg RalphConfig, action *db.Act
 
 	slog.Info("action done", "action_id", action.ID)
 	return true, nil
+}
+
+func nullInt64ToPtr(n sql.NullInt64) *int64 {
+	if !n.Valid {
+		return nil
+	}
+	return &n.Int64
 }
 
 func handleFailure(cfg RalphConfig, action *db.Action, execErr error) {

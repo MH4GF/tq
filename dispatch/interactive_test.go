@@ -40,7 +40,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 
 	cfg := prompt.Config{}
 
-	result, err := w.Execute(context.Background(), "Fix the bug", cfg, "/work/dir", 42)
+	result, err := w.Execute(context.Background(), "Fix the bug", cfg, "/work/dir", 42, int64Ptr(10))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -87,6 +87,9 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 	if !strings.Contains(argsStr, "TQ_ACTION_ID=42") {
 		t.Errorf("call[1] args = %v, want to contain TQ_ACTION_ID=42", c.args)
 	}
+	if !strings.Contains(argsStr, "TQ_TASK_ID=10") {
+		t.Errorf("call[1] args = %v, want to contain TQ_TASK_ID=10", c.args)
+	}
 	if strings.Contains(argsStr, "--tmux") {
 		t.Errorf("call[1] args = %v, must NOT contain --tmux", c.args)
 	}
@@ -111,7 +114,7 @@ func TestInteractiveWorker_NewWindowError(t *testing.T) {
 	}
 
 	cfg := prompt.Config{}
-	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1)
+	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1, nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -127,7 +130,7 @@ func TestInteractiveWorker_SendKeysError(t *testing.T) {
 	}
 
 	cfg := prompt.Config{}
-	_, err := w.Execute(context.Background(), "test", cfg, "/work", 2)
+	_, err := w.Execute(context.Background(), "test", cfg, "/work", 2, nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -145,7 +148,7 @@ func TestInteractiveWorker_CustomSession(t *testing.T) {
 
 	cfg := prompt.Config{}
 
-	_, err := w.Execute(context.Background(), "Fix the bug", cfg, "/work/dir", 7)
+	_, err := w.Execute(context.Background(), "Fix the bug", cfg, "/work/dir", 7, nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -177,7 +180,7 @@ func TestInteractiveWorker_SingleQuoteEscape(t *testing.T) {
 	}
 
 	cfg := prompt.Config{}
-	_, err := w.Execute(context.Background(), "it's a test", cfg, "/work/dir", 99)
+	_, err := w.Execute(context.Background(), "it's a test", cfg, "/work/dir", 99, nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}

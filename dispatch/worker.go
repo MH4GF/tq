@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -37,7 +38,15 @@ func filteredEnv() []string {
 	return filtered
 }
 
+func buildTQEnv(actionID int64, taskID *int64) []string {
+	env := []string{fmt.Sprintf("TQ_ACTION_ID=%d", actionID)}
+	if taskID != nil {
+		env = append(env, fmt.Sprintf("TQ_TASK_ID=%d", *taskID))
+	}
+	return env
+}
+
 // Worker executes a rendered prompt.
 type Worker interface {
-	Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64) (string, error)
+	Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID *int64) (string, error)
 }
