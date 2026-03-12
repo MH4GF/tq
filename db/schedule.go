@@ -1,0 +1,111 @@
+package db
+
+import (
+	"database/sql"
+	"fmt"
+	"strings"
+)
+
+type Schedule struct {
+	ID        int64
+	TaskID    int64
+	PromptID  string
+	Title     string
+	CronExpr  string
+	Metadata  string
+	Enabled   bool
+	LastRunAt sql.NullString
+	CreatedAt string
+}
+
+const scheduleColumns = "id, task_id, prompt_id, title, cron_expr, metadata, enabled, last_run_at, created_at"
+
+func (s *Schedule) scanFields() []any {
+	return []any{&s.ID, &s.TaskID, &s.PromptID, &s.Title, &s.CronExpr, &s.Metadata, &s.Enabled, &s.LastRunAt, &s.CreatedAt}
+}
+
+func (db *DB) InsertSchedule(taskID int64, promptID, title, cronExpr, metadata string) (int64, error) {
+	res, err := db.Exec(
+		"INSERT INTO schedules (task_id, prompt_id, title, cron_expr, metadata) VALUES (?, ?, ?, ?, ?)",
+		taskID, promptID, title, cronExpr, metadata,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (db *DB) ListSchedules() ([]Schedule, error) {
+	rows, err := db.Query("SELECT " + scheduleColumns + " FROM schedules ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var schedules []Schedule
+	for rows.Next() {
+		var s Schedule
+		if err := rows.Scan(s.scanFields()...); err != nil {
+			return nil, err
+		}
+		schedules = append(schedules, s)
+	}
+	return schedules, rows.Err()
+}
+
+func (db *DB) GetSchedule(id int64) (*Schedule, error) {
+	s := &Schedule{}
+	err := db.QueryRow(
+		"SELECT "+scheduleColumns+" FROM schedules WHERE id = ?", id,
+	).Scan(s.scanFields()...)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func (db *DB) UpdateScheduleEnabled(id int64, enabled bool) error {
+	_, err := db.Exec("UPDATE schedules SET enabled = ? WHERE id = ?", enabled, id)
+	return err
+}
+
+func (db *DB) UpdateScheduleLastRunAt(id int64, t string) error {
+	_, err := db.Exec("UPDATE schedules SET last_run_at = ? WHERE id = ?", t, id)
+	return err
+}
+
+func (db *DB) UpdateSchedule(id int64, title, cronExpr, metadata *string, taskID *int64) error {
+	var setClauses []string
+	var args []any
+
+	if title != nil {
+		setClauses = append(setClauses, "title = ?")
+		args = append(args, *title)
+	}
+	if cronExpr != nil {
+		setClauses = append(setClauses, "cron_expr = ?")
+		args = append(args, *cronExpr)
+	}
+	if metadata != nil {
+		setClauses = append(setClauses, "metadata = ?")
+		args = append(args, *metadata)
+	}
+	if taskID != nil {
+		setClauses = append(setClauses, "task_id = ?")
+		args = append(args, *taskID)
+	}
+
+	if len(setClauses) == 0 {
+		return fmt.Errorf("no fields to update")
+	}
+
+	query := "UPDATE schedules SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
+	args = append(args, id)
+	_, err := db.Exec(query, args...)
+	return err
+}
+
+func (db *DB) DeleteSchedule(id int64) error {
+	_, err := db.Exec("DELETE FROM schedules WHERE id = ?", id)
+	return err
+}

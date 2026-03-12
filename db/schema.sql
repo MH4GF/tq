@@ -36,3 +36,15 @@ CREATE TABLE IF NOT EXISTS actions (
 
 CREATE INDEX IF NOT EXISTS idx_actions_dispatch ON actions(status, id ASC);
 CREATE INDEX IF NOT EXISTS idx_actions_task ON actions(task_id, id ASC);
+
+CREATE TABLE IF NOT EXISTS schedules (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id     INTEGER NOT NULL REFERENCES tasks(id),
+  prompt_id   TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  cron_expr   TEXT NOT NULL,
+  metadata    TEXT NOT NULL DEFAULT '{}',
+  enabled     INTEGER NOT NULL DEFAULT 1,
+  last_run_at TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
