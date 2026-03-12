@@ -35,8 +35,14 @@ func TestTabSwitch(t *testing.T) {
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = updated.(Model)
+	if m.ActiveTab() != tabSchedules {
+		t.Errorf("after 2nd tab, active = %d, want tabSchedules(2)", m.ActiveTab())
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
 	if m.ActiveTab() != tabQueue {
-		t.Errorf("after 2nd tab, active = %d, want tabQueue(0)", m.ActiveTab())
+		t.Errorf("after 3rd tab, active = %d, want tabQueue(0)", m.ActiveTab())
 	}
 
 	// Number keys

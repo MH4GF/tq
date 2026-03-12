@@ -17,6 +17,7 @@ type tab int
 const (
 	tabQueue tab = iota
 	tabTasks
+	tabSchedules
 )
 
 // BackgroundFunc is a function that runs in the background (ralph loop, watch, etc).
@@ -27,6 +28,7 @@ type Model struct {
 	activeTab   tab
 	queue       QueueModel
 	tasks       TasksModel
+	schedules   SchedulesModel
 	width       int
 	height      int
 	quitting    bool
@@ -56,6 +58,7 @@ func New(database *db.DB, logCh <-chan LogEntry, backgrounds ...BackgroundFunc) 
 		activeTab:   tabQueue,
 		queue:       NewQueueModel(database, today),
 		tasks:       NewTasksModel(database, today),
+		schedules:   NewSchedulesModel(database),
 		backgrounds: backgrounds,
 		logCh:       logCh,
 	}
@@ -65,7 +68,7 @@ func (m Model) Init() tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
-	cmds := []tea.Cmd{m.queue.Init(), m.tasks.Init(), doTick()}
+	cmds := []tea.Cmd{m.queue.Init(), m.tasks.Init(), m.schedules.Init(), doTick()}
 
 	if m.logCh != nil {
 		cmds = append(cmds, waitForLog(m.logCh))
@@ -90,10 +93,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		contentHeight := msg.Height - 14
 		m.queue = m.queue.SetSize(msg.Width, contentHeight)
 		m.tasks = m.tasks.SetSize(msg.Width, contentHeight)
+		m.schedules = m.schedules.SetSize(msg.Width, contentHeight)
 		return m, nil
 
 	case tickMsg:
-		return m, tea.Batch(m.queue.loadActions(), m.tasks.loadTasks(), doTick())
+		return m, tea.Batch(m.queue.loadActions(), m.tasks.loadTasks(), m.schedules.loadSchedules(), doTick())
 
 	case logMsg:
 		m.logs = append(m.logs, LogEntry(msg))
@@ -130,9 +134,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 		case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
-			if m.activeTab == tabQueue {
+			switch m.activeTab {
+			case tabQueue:
 				m.activeTab = tabTasks
-			} else {
+			case tabTasks:
+				m.activeTab = tabSchedules
+			default:
 				m.activeTab = tabQueue
 			}
 			return m, nil
@@ -141,6 +148,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, key.NewBinding(key.WithKeys("2"))):
 			m.activeTab = tabTasks
+			return m, nil
+		case key.Matches(msg, key.NewBinding(key.WithKeys("3"))):
+			m.activeTab = tabSchedules
 			return m, nil
 		}
 	}
@@ -155,6 +165,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.tasks, cmd = m.tasks.Update(msg)
 		return m, cmd
+	case schedulesLoadedMsg:
+		var cmd tea.Cmd
+		m.schedules, cmd = m.schedules.Update(msg)
+		return m, cmd
 	}
 
 	// Key messages go to the active tab only
@@ -164,6 +178,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.queue, cmd = m.queue.Update(msg)
 	case tabTasks:
 		m.tasks, cmd = m.tasks.Update(msg)
+	case tabSchedules:
+		m.schedules, cmd = m.schedules.Update(msg)
 	}
 	return m, cmd
 }
@@ -183,6 +199,8 @@ func (m Model) View() string {
 		b.WriteString(m.queue.View())
 	case tabTasks:
 		b.WriteString(m.tasks.View())
+	case tabSchedules:
+		b.WriteString(m.schedules.View())
 	}
 
 	b.WriteString("\n")
@@ -203,6 +221,7 @@ func (m Model) renderTabs() string {
 	}{
 		{"Queue", "1", tabQueue},
 		{"Tasks", "2", tabTasks},
+		{"Schedules", "3", tabSchedules},
 	}
 
 	var parts []string
@@ -218,18 +237,23 @@ func (m Model) renderTabs() string {
 }
 
 func (m Model) renderHelp() string {
-	if m.activeTab == tabQueue {
+	switch m.activeTab {
+	case tabQueue:
 		if m.queue.InDetailView() {
 			return styleHelp.Render("j/k: scroll  q: back")
 		}
 		return styleHelp.Render("j/k: navigate  o: attach  v: view result  tab: switch  r: reload  q: quit")
+	case tabTasks:
+		switch m.tasks.Mode() {
+		case modeViewDetail:
+			return styleHelp.Render("j/k: scroll  q: back")
+		default:
+			return styleHelp.Render("j/k: navigate  enter: expand  v: view result  f: toggle focus  tab: switch  r: reload  q: quit")
+		}
+	case tabSchedules:
+		return styleHelp.Render("j/k: navigate  e: enable/disable  d: delete  tab: switch  r: reload  q: quit")
 	}
-	switch m.tasks.Mode() {
-	case modeViewDetail:
-		return styleHelp.Render("j/k: scroll  q: back")
-	default:
-		return styleHelp.Render("j/k: navigate  enter: expand  v: view result  f: toggle focus  tab: switch  r: reload  q: quit")
-	}
+	return ""
 }
 
 func (m Model) renderActivity() string {
