@@ -117,9 +117,15 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 	case tasksLoadedMsg:
 		m.trees = msg.trees
 		for _, pt := range m.trees {
-			m.expanded[fmt.Sprintf("p:%d", pt.project.ID)] = true
+			projKey := fmt.Sprintf("p:%d", pt.project.ID)
+			if _, ok := m.expanded[projKey]; !ok {
+				m.expanded[projKey] = pt.project.DispatchEnabled
+			}
 			for _, tn := range pt.tasks {
-				m.expanded[fmt.Sprintf("t:%d", tn.task.ID)] = tn.task.Status != "done" && tn.task.Status != "archived"
+				taskKey := fmt.Sprintf("t:%d", tn.task.ID)
+				if _, ok := m.expanded[taskKey]; !ok {
+					m.expanded[taskKey] = tn.task.Status != "done" && tn.task.Status != "archived"
+				}
 			}
 		}
 		m.buildLines()
@@ -245,8 +251,9 @@ func (m *TasksModel) buildLines() {
 				icon := StatusIcon(a.Status)
 				ast := StatusStyle(a.Status)
 				m.lines = append(m.lines, treeLine{
-					text: fmt.Sprintf("      %s %s %s",
+					text: fmt.Sprintf("      %s %-4d %s %s",
 						ast.Render(icon),
+						a.ID,
 						ast.Render(fmt.Sprintf("%-14s", a.Status)),
 						a.Title,
 					),
