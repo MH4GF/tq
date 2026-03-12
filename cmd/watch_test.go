@@ -157,8 +157,8 @@ func TestWatch_WithNotifications(t *testing.T) {
 	if action.PromptID != "classify-gh-notification" {
 		t.Errorf("prompt_id = %q, want %q", action.PromptID, "classify-gh-notification")
 	}
-	if action.TaskID.Valid {
-		t.Errorf("task_id = %v, want NULL", action.TaskID)
+	if action.TaskID <= 0 {
+		t.Errorf("task_id = %d, want > 0 (should be assigned to triage task)", action.TaskID)
 	}
 
 	// Verify metadata contains notification and existing_tasks
@@ -309,8 +309,8 @@ func TestCreateClassifyAction(t *testing.T) {
 	if action.Status != "pending" {
 		t.Errorf("status = %q, want %q", action.Status, "pending")
 	}
-	if action.TaskID.Valid {
-		t.Errorf("task_id = %v, want NULL", action.TaskID)
+	if action.TaskID <= 0 {
+		t.Errorf("task_id = %d, want > 0 (should be assigned to triage task)", action.TaskID)
 	}
 
 	var meta map[string]json.RawMessage

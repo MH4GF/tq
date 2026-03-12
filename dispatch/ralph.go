@@ -2,7 +2,6 @@ package dispatch
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -162,7 +161,7 @@ func dispatchOne(ctx context.Context, cfg RalphConfig) (bool, error) {
 		return true, fmt.Errorf("load prompt %q: %w", action.PromptID, err)
 	}
 
-	promptData, err := buildPromptDataFromDB(cfg.DB, action)
+	promptData, err := BuildPromptData(cfg.DB, action)
 	if err != nil {
 		_ = cfg.DB.MarkFailed(action.ID, fmt.Sprintf("build prompt data: %v", err))
 		return true, fmt.Errorf("build prompt data: %w", err)
@@ -174,10 +173,7 @@ func dispatchOne(ctx context.Context, cfg RalphConfig) (bool, error) {
 		return true, fmt.Errorf("render prompt: %w", err)
 	}
 
-	workDir := "."
-	if promptData.Project.WorkDir != "" {
-		workDir = expandHome(promptData.Project.WorkDir)
-	}
+	workDir := ResolveWorkDir(promptData)
 
 	if tmpl.Config.IsRemote() {
 		return dispatchRemote(ctx, cfg, action, prompt, tmpl.Config, workDir)
@@ -200,7 +196,7 @@ func dispatchInteractive(ctx context.Context, cfg RalphConfig, action *db.Action
 	}
 
 	worker := cfg.InteractiveFunc()
-	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID, nullInt64ToPtr(action.TaskID))
+	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID, action.TaskID)
 	if err != nil {
 		handleFailure(cfg, action, err)
 		return true, nil
@@ -217,7 +213,7 @@ func dispatchInteractive(ctx context.Context, cfg RalphConfig, action *db.Action
 
 func dispatchRemote(ctx context.Context, cfg RalphConfig, action *db.Action, prompt string, tmplCfg prompt.Config, workDir string) (bool, error) {
 	worker := cfg.RemoteFunc()
-	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID, nullInt64ToPtr(action.TaskID))
+	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID, action.TaskID)
 	if err != nil {
 		handleFailure(cfg, action, err)
 		return true, nil
@@ -235,7 +231,7 @@ func dispatchRemote(ctx context.Context, cfg RalphConfig, action *db.Action, pro
 
 func dispatchNonInteractive(ctx context.Context, cfg RalphConfig, action *db.Action, prompt string, tmplCfg prompt.Config, workDir string) (bool, error) {
 	worker := cfg.NonInteractiveFunc()
-	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID, nullInt64ToPtr(action.TaskID))
+	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID, action.TaskID)
 	if err != nil {
 		handleFailure(cfg, action, err)
 		return true, nil
@@ -254,19 +250,13 @@ func dispatchNonInteractive(ctx context.Context, cfg RalphConfig, action *db.Act
 	return true, nil
 }
 
-func nullInt64ToPtr(n sql.NullInt64) *int64 {
-	if !n.Valid {
-		return nil
-	}
-	return &n.Int64
-}
-
 func handleFailure(cfg RalphConfig, action *db.Action, execErr error) {
 	_ = cfg.DB.MarkFailed(action.ID, execErr.Error())
 	slog.Error("action failed", "action_id", action.ID, "error", execErr)
 }
 
-func buildPromptDataFromDB(database *db.DB, action *db.Action) (prompt.PromptData, error) {
+// BuildPromptData builds prompt data by looking up the action's task and project from the database.
+func BuildPromptData(database *db.DB, action *db.Action) (prompt.PromptData, error) {
 	var data prompt.PromptData
 
 	actionMeta := make(map[string]any)
@@ -282,41 +272,40 @@ func buildPromptDataFromDB(database *db.DB, action *db.Action) (prompt.PromptDat
 		Meta:     actionMeta,
 	}
 
-	if action.TaskID.Valid {
-		task, err := database.GetTask(action.TaskID.Int64)
-		if err != nil {
-			return data, fmt.Errorf("get task: %w", err)
+	task, err := database.GetTask(action.TaskID)
+	if err != nil {
+		return data, fmt.Errorf("get task: %w", err)
+	}
+	taskMeta := make(map[string]any)
+	if task.Metadata != "" && task.Metadata != "{}" {
+		if err := json.Unmarshal([]byte(task.Metadata), &taskMeta); err != nil {
+			return data, fmt.Errorf("parse task metadata: %w", err)
 		}
-		taskMeta := make(map[string]any)
-		if task.Metadata != "" && task.Metadata != "{}" {
-			if err := json.Unmarshal([]byte(task.Metadata), &taskMeta); err != nil {
-				return data, fmt.Errorf("parse task metadata: %w", err)
-			}
-		}
-		data.Task = prompt.TaskData{
-			ID:     task.ID,
-			Title:  task.Title,
-			URL:    task.URL,
-			Status: task.Status,
-			Meta:   taskMeta,
-		}
+	}
+	data.Task = prompt.TaskData{
+		ID:      task.ID,
+		Title:   task.Title,
+		URL:     task.URL,
+		Status:  task.Status,
+		WorkDir: task.WorkDir,
+		Meta:    taskMeta,
+	}
 
-		project, err := database.GetProjectByID(task.ProjectID)
-		if err != nil {
-			return data, fmt.Errorf("get project: %w", err)
+	project, err := database.GetProjectByID(task.ProjectID)
+	if err != nil {
+		return data, fmt.Errorf("get project: %w", err)
+	}
+	projectMeta := make(map[string]any)
+	if project.Metadata != "" && project.Metadata != "{}" {
+		if err := json.Unmarshal([]byte(project.Metadata), &projectMeta); err != nil {
+			return data, fmt.Errorf("parse project metadata: %w", err)
 		}
-		projectMeta := make(map[string]any)
-		if project.Metadata != "" && project.Metadata != "{}" {
-			if err := json.Unmarshal([]byte(project.Metadata), &projectMeta); err != nil {
-				return data, fmt.Errorf("parse project metadata: %w", err)
-			}
-		}
-		data.Project = prompt.ProjectData{
-			ID:      project.ID,
-			Name:    project.Name,
-			WorkDir: project.WorkDir,
-			Meta:    projectMeta,
-		}
+	}
+	data.Project = prompt.ProjectData{
+		ID:      project.ID,
+		Name:    project.Name,
+		WorkDir: project.WorkDir,
+		Meta:    projectMeta,
 	}
 
 	return data, nil
@@ -324,6 +313,17 @@ func buildPromptDataFromDB(database *db.DB, action *db.Action) (prompt.PromptDat
 
 func resolvePromptsDir(userConfigDir string) string {
 	return filepath.Join(userConfigDir, "prompts")
+}
+
+// ResolveWorkDir returns the effective working directory for prompt execution.
+func ResolveWorkDir(data prompt.PromptData) string {
+	if data.Task.WorkDir != "" {
+		return expandHome(data.Task.WorkDir)
+	}
+	if data.Project.WorkDir != "" {
+		return expandHome(data.Project.WorkDir)
+	}
+	return "."
 }
 
 func expandHome(path string) string {

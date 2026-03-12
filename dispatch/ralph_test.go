@@ -19,7 +19,7 @@ type countingWorker struct {
 	err    error
 }
 
-func (w *countingWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID *int64) (string, error) {
+func (w *countingWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID int64) (string, error) {
 	w.count++
 	return w.result, w.err
 }
@@ -83,7 +83,7 @@ func TestRalphLoop_ProcessesAndStops(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
-	d.InsertAction("check-pr-status", "check-pr-status", &taskID, "{}", "pending")
+	d.InsertAction("check-pr-status", "check-pr-status", taskID, "{}", "pending")
 
 	tqDir := setupPromptsDir(t)
 
@@ -125,12 +125,12 @@ func TestRalphLoop_InteractiveLimitEnforced(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}", "")
-	d.InsertAction("fix-conflict", "fix-conflict", &taskID, "{}", "pending")
+	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", "pending")
 
 	tqDir := setupPromptsDir(t)
 
 	// Simulate an already-running interactive session
-	d.InsertAction("respond-review", "respond-review", &taskID, "{}", "running")
+	d.InsertAction("respond-review", "respond-review", taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'session-1' WHERE id = 2")
 
 	interactiveWorker := &countingWorker{result: "interactive:session=test"}
@@ -163,7 +163,7 @@ func TestRalphLoop_FailureEscalation(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}", "")
-	d.InsertAction("check-pr-status", "check-pr-status", &taskID, "{}", "pending")
+	d.InsertAction("check-pr-status", "check-pr-status", taskID, "{}", "pending")
 
 	tqDir := setupPromptsDir(t)
 
@@ -205,7 +205,7 @@ func TestRalphLoop_OnDoneTriggersFollowUp(t *testing.T) {
 	writeTestPrompt(t, promptsDir, "review", false)
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
-	d.InsertAction("check-pr", "check-pr", &taskID, "{}", "pending")
+	d.InsertAction("check-pr", "check-pr", taskID, "{}", "pending")
 
 	worker := &countingWorker{result: `{"status":"merged"}`}
 
@@ -264,7 +264,7 @@ func TestReapStaleActions_DetectsStale(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}", "")
-	d.InsertAction("fix-conflict", "fix-conflict", &taskID, "{}", "running")
+	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "other-window"}}
@@ -291,7 +291,7 @@ func TestReapStaleActions_SkipsLiveWindows(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}", "")
-	d.InsertAction("fix-conflict", "fix-conflict", &taskID, "{}", "running")
+	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}}
@@ -315,7 +315,7 @@ func TestReapStaleActions_GracePeriod(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}", "")
-	d.InsertAction("fix-conflict", "fix-conflict", &taskID, "{}", "running")
+	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", "running")
 	// started_at is now (within grace period)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now') WHERE id = 1")
 
@@ -340,7 +340,7 @@ func TestReapStaleActions_TmuxError(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}", "")
-	d.InsertAction("fix-conflict", "fix-conflict", &taskID, "{}", "running")
+	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{err: fmt.Errorf("tmux not available")}
@@ -364,7 +364,7 @@ func TestReapStaleActions_NilChecker(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}", "")
-	d.InsertAction("fix-conflict", "fix-conflict", &taskID, "{}", "running")
+	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1' WHERE id = 1")
 
 	cfg := RalphConfig{
@@ -386,7 +386,7 @@ func TestRalphLoop_RemoteDispatch(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Remote task", "https://example.com", "{}", "")
-	d.InsertAction("remote-task", "remote-task", &taskID, "{}", "pending")
+	d.InsertAction("remote-task", "remote-task", taskID, "{}", "pending")
 
 	tqDir := setupPromptsDir(t)
 
@@ -429,12 +429,12 @@ func TestRalphLoop_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}", "")
 	// First: a remote action (pending)
-	d.InsertAction("remote-task", "remote-task", &taskID, "{}", "pending")
+	d.InsertAction("remote-task", "remote-task", taskID, "{}", "pending")
 	// Second: an interactive action (pending)
-	d.InsertAction("fix-conflict", "fix-conflict", &taskID, "{}", "pending")
+	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", "pending")
 
 	// Simulate an already-running interactive session to fill max
-	d.InsertAction("respond-review", "respond-review", &taskID, "{}", "running")
+	d.InsertAction("respond-review", "respond-review", taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'session-1' WHERE id = 3")
 
 	tqDir := setupPromptsDir(t)
@@ -476,7 +476,7 @@ func TestReapStaleActions_CustomSession(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "https://example.com", "{}", "")
-	d.InsertAction("fix-conflict", "fix-conflict", &taskID, "{}", "running")
+	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'work', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}}

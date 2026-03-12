@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -104,7 +103,7 @@ var dispatchCmd = &cobra.Command{
 			}
 		}
 
-		promptData, err := buildPromptData(action)
+		promptData, err := dispatch.BuildPromptData(database, action)
 		if err != nil {
 			_ = database.MarkFailed(action.ID, fmt.Sprintf("build prompt data: %v", err))
 			return fmt.Errorf("build prompt data: %w", err)
@@ -123,19 +122,11 @@ var dispatchCmd = &cobra.Command{
 			return fmt.Errorf("render prompt: %w", err)
 		}
 
-		workDir := "."
-		if promptData.Task.WorkDir != "" {
-			workDir = promptData.Task.WorkDir
-		}
-
-		var taskID *int64
-		if action.TaskID.Valid {
-			taskID = &action.TaskID.Int64
-		}
+		workDir := dispatch.ResolveWorkDir(promptData)
 
 		if tmpl.Config.IsRemote() {
 			worker := getRemoteWorkerFactory()()
-			result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID, taskID)
+			result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID, action.TaskID)
 			if err != nil {
 				_ = database.MarkFailed(action.ID, err.Error())
 				fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", action.ID, err)
@@ -153,7 +144,7 @@ var dispatchCmd = &cobra.Command{
 
 		if tmpl.Config.IsInteractive() {
 			worker := getInteractiveWorkerFactory()()
-			result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID, taskID)
+			result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID, action.TaskID)
 			if err != nil {
 				_ = database.MarkFailed(action.ID, err.Error())
 				fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", action.ID, err)
@@ -164,7 +155,7 @@ var dispatchCmd = &cobra.Command{
 		}
 
 		worker := getWorkerFactory()()
-		result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID, taskID)
+		result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID, action.TaskID)
 		if err != nil {
 			_ = database.MarkFailed(action.ID, err.Error())
 			fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", action.ID, err)
@@ -182,63 +173,6 @@ var dispatchCmd = &cobra.Command{
 		fmt.Fprintf(cmd.OutOrStdout(), "action #%d done\n", action.ID)
 		return nil
 	},
-}
-
-func buildPromptData(action *db.Action) (prompt.PromptData, error) {
-	var data prompt.PromptData
-
-	actionMeta := make(map[string]any)
-	if action.Metadata != "" && action.Metadata != "{}" {
-		if err := json.Unmarshal([]byte(action.Metadata), &actionMeta); err != nil {
-			return data, fmt.Errorf("parse action metadata: %w", err)
-		}
-	}
-	data.Action = prompt.ActionData{
-		ID:       action.ID,
-		PromptID: action.PromptID,
-		Status:   action.Status,
-		Meta:     actionMeta,
-	}
-
-	if action.TaskID.Valid {
-		task, err := database.GetTask(action.TaskID.Int64)
-		if err != nil {
-			return data, fmt.Errorf("get task: %w", err)
-		}
-		taskMeta := make(map[string]any)
-		if task.Metadata != "" && task.Metadata != "{}" {
-			if err := json.Unmarshal([]byte(task.Metadata), &taskMeta); err != nil {
-				return data, fmt.Errorf("parse task metadata: %w", err)
-			}
-		}
-		data.Task = prompt.TaskData{
-			ID:      task.ID,
-			Title:   task.Title,
-			URL:     task.URL,
-			Status:  task.Status,
-			WorkDir: task.WorkDir,
-			Meta:    taskMeta,
-		}
-
-		project, err := database.GetProjectByID(task.ProjectID)
-		if err != nil {
-			return data, fmt.Errorf("get project: %w", err)
-		}
-		projectMeta := make(map[string]any)
-		if project.Metadata != "" && project.Metadata != "{}" {
-			if err := json.Unmarshal([]byte(project.Metadata), &projectMeta); err != nil {
-				return data, fmt.Errorf("parse project metadata: %w", err)
-			}
-		}
-		data.Project = prompt.ProjectData{
-			ID:      project.ID,
-			Name:    project.Name,
-			WorkDir: project.WorkDir,
-			Meta:    projectMeta,
-		}
-	}
-
-	return data, nil
 }
 
 func init() {

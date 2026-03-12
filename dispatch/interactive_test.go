@@ -40,7 +40,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 
 	cfg := prompt.Config{}
 
-	result, err := w.Execute(context.Background(), "Fix the bug", cfg, "/work/dir", 42, int64Ptr(10))
+	result, err := w.Execute(context.Background(), "Fix the bug", cfg, "/work/dir", 42, 10)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestInteractiveWorker_NewWindowError(t *testing.T) {
 	}
 
 	cfg := prompt.Config{}
-	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1, nil)
+	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1, 0)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -130,7 +130,7 @@ func TestInteractiveWorker_SendKeysError(t *testing.T) {
 	}
 
 	cfg := prompt.Config{}
-	_, err := w.Execute(context.Background(), "test", cfg, "/work", 2, nil)
+	_, err := w.Execute(context.Background(), "test", cfg, "/work", 2, 0)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -148,7 +148,7 @@ func TestInteractiveWorker_CustomSession(t *testing.T) {
 
 	cfg := prompt.Config{}
 
-	_, err := w.Execute(context.Background(), "Fix the bug", cfg, "/work/dir", 7, nil)
+	_, err := w.Execute(context.Background(), "Fix the bug", cfg, "/work/dir", 7, 0)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestInteractiveWorker_SingleQuoteEscape(t *testing.T) {
 	}
 
 	cfg := prompt.Config{}
-	_, err := w.Execute(context.Background(), "it's a test", cfg, "/work/dir", 99, nil)
+	_, err := w.Execute(context.Background(), "it's a test", cfg, "/work/dir", 99, 0)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}

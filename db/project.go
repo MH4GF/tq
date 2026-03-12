@@ -1,6 +1,9 @@
 package db
 
-import "fmt"
+import (
+	"database/sql"
+	"fmt"
+)
 
 type Project struct {
 	ID              int64
@@ -107,6 +110,17 @@ func (db *DB) SetWorkDir(projectID int64, workDir string) error {
 		return fmt.Errorf("project %d not found", projectID)
 	}
 	return nil
+}
+
+func (db *DB) EnsureNotificationsProject() (int64, error) {
+	p, err := db.GetProjectByName("notifications")
+	if err == nil {
+		return p.ID, nil
+	}
+	if err != sql.ErrNoRows {
+		return 0, fmt.Errorf("get notifications project: %w", err)
+	}
+	return db.InsertProject("notifications", "", "{}")
 }
 
 func (db *DB) SetAllDispatchEnabled(enabled bool) error {

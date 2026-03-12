@@ -16,8 +16,9 @@ func TestList(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "task1", "", "{}", "")
-	d.InsertAction("review-pr", "review-pr", &taskID, "{}", "pending")
-	d.InsertAction("deploy", "deploy", nil, "{}", "running")
+	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
+	taskID2, _ := d.InsertTask(1, "task2", "", "{}", "")
+	d.InsertAction("deploy", "deploy", taskID2, "{}", "running")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -51,8 +52,9 @@ func TestList_StatusFilter(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertAction("a", "a", nil, "{}", "pending")
-	d.InsertAction("b", "b", nil, "{}", "running")
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	d.InsertAction("a", "a", taskID, "{}", "pending")
+	d.InsertAction("b", "b", taskID, "{}", "running")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -85,8 +87,8 @@ func TestList_TaskFilter(t *testing.T) {
 
 	taskID1, _ := d.InsertTask(1, "task1", "", "{}", "")
 	taskID2, _ := d.InsertTask(1, "task2", "", "{}", "")
-	d.InsertAction("a", "a", &taskID1, "{}", "pending")
-	d.InsertAction("b", "b", &taskID2, "{}", "pending")
+	d.InsertAction("a", "a", taskID1, "{}", "pending")
+	d.InsertAction("b", "b", taskID2, "{}", "pending")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -140,7 +142,7 @@ func TestList_JSON(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
-	actionID, _ := d.InsertAction("review-pr", "review-pr", &taskID, "{}", "pending")
+	actionID, _ := d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
 
 	longResult := "Line 1\nLine 2\nThis is a very long result string that exceeds sixty characters and should NOT be truncated in JSON output"
 	d.MarkDone(actionID, longResult)
@@ -183,13 +185,14 @@ func TestList_JSON(t *testing.T) {
 	}
 }
 
-func TestList_JSON_NullFields(t *testing.T) {
+func TestList_JSON_MissingResult(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertAction("implement", "implement", nil, "{}", "pending")
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	d.InsertAction("implement", "implement", taskID, "{}", "pending")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -212,8 +215,8 @@ func TestList_JSON_NullFields(t *testing.T) {
 
 	row := rows[0]
 
-	if row["task_id"] != nil {
-		t.Errorf("task_id should be null, got %v", row["task_id"])
+	if row["task_id"] != float64(taskID) {
+		t.Errorf("task_id = %v, want %v", row["task_id"], taskID)
 	}
 	if row["result"] != nil {
 		t.Errorf("result should be null, got %v", row["result"])

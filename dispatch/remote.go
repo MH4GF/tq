@@ -16,7 +16,7 @@ type RemoteWorker struct {
 	Runner CommandRunner
 }
 
-func (w *RemoteWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID *int64) (string, error) {
+func (w *RemoteWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID int64) (string, error) {
 	remotePrompt := prompt + remoteRules(actionID)
 
 	// claude --remote requires a TTY (stdout must be a terminal).

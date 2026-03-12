@@ -12,7 +12,7 @@ type Action struct {
 	ID          int64
 	Title       string
 	PromptID    string
-	TaskID      sql.NullInt64
+	TaskID      int64
 	Metadata    string
 	Status      string
 	Result      sql.NullString
@@ -70,14 +70,10 @@ func FilterByDate(actions []Action, date string) []Action {
 	return filtered
 }
 
-func (db *DB) InsertAction(title, promptID string, taskID *int64, metadata string, status string) (int64, error) {
-	var tid sql.NullInt64
-	if taskID != nil {
-		tid = sql.NullInt64{Int64: *taskID, Valid: true}
-	}
+func (db *DB) InsertAction(title, promptID string, taskID int64, metadata string, status string) (int64, error) {
 	res, err := db.Exec(
 		"INSERT INTO actions (title, prompt_id, task_id, metadata, status) VALUES (?, ?, ?, ?, ?)",
-		title, promptID, tid, metadata, status,
+		title, promptID, taskID, metadata, status,
 	)
 	if err != nil {
 		return 0, err
@@ -109,10 +105,10 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 		`SELECT a.id, a.title, a.prompt_id, a.task_id, a.metadata, a.status, a.result,
 		        a.session_id, a.tmux_pane, a.created_at, a.started_at, a.completed_at
 		 FROM actions a
-		 LEFT JOIN tasks t ON a.task_id = t.id
-		 LEFT JOIN projects p ON t.project_id = p.id
+		 INNER JOIN tasks t ON a.task_id = t.id
+		 INNER JOIN projects p ON t.project_id = p.id
 		 WHERE a.status = 'pending'
-		   AND (a.task_id IS NULL OR p.dispatch_enabled = 1)
+		   AND p.dispatch_enabled = 1
 		 ORDER BY a.id ASC LIMIT 1`,
 	).Scan(a.scanFields()...)
 	if err == sql.ErrNoRows {
@@ -344,8 +340,7 @@ func (db *DB) ListActionsByTaskIDs(taskIDs []int64) (map[int64][]Action, error) 
 		if err := rows.Scan(a.scanFields()...); err != nil {
 			return nil, err
 		}
-		tid := a.TaskID.Int64
-		result[tid] = append(result[tid], a)
+		result[a.TaskID] = append(result[a.TaskID], a)
 	}
 	return result, rows.Err()
 }

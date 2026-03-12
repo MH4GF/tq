@@ -100,11 +100,7 @@ var taskListCmd = &cobra.Command{
 					"status":     a.Status,
 					"created_at": a.CreatedAt,
 				}
-				if a.TaskID.Valid {
-					ar["task_id"] = a.TaskID.Int64
-				} else {
-					ar["task_id"] = nil
-				}
+				ar["task_id"] = a.TaskID
 				if a.Result.Valid {
 					ar["result"] = a.Result.String
 				} else {

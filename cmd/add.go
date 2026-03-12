@@ -33,15 +33,13 @@ var addCmd = &cobra.Command{
 		}
 
 		if addTask <= 0 {
-			return fmt.Errorf("--task flag is required")
+			return fmt.Errorf("--task must be a positive integer")
 		}
 
 		status := addStatus
 		if status == "" {
 			status = "pending"
 		}
-
-		taskIDPtr := &addTask
 
 		if !addForce {
 			dup, err := database.HasActiveAction(addTask, addPrompt)
@@ -53,7 +51,7 @@ var addCmd = &cobra.Command{
 			}
 		}
 
-		id, err := database.InsertAction(addTitle, addPrompt, taskIDPtr, addMeta, status)
+		id, err := database.InsertAction(addTitle, addPrompt, addTask, addMeta, status)
 		if err != nil {
 			return fmt.Errorf("insert action: %w", err)
 		}
@@ -64,7 +62,8 @@ var addCmd = &cobra.Command{
 
 func init() {
 	addCmd.Flags().StringVar(&addTitle, "title", "", fmt.Sprintf("Concise title describing the action (max %d chars)", maxActionTitleLength))
-	addCmd.Flags().Int64Var(&addTask, "task", 0, "Task ID")
+	addCmd.Flags().Int64Var(&addTask, "task", 0, "Task ID (required)")
+	addCmd.MarkFlagRequired("task")
 	addCmd.Flags().StringVar(&addMeta, "meta", "{}", "Metadata JSON")
 	addCmd.Flags().StringVar(&addStatus, "status", "", "Override status (pending|done|running|failed)")
 	addCmd.Flags().BoolVar(&addForce, "force", false, "Skip duplicate check")

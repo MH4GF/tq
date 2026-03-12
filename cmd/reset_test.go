@@ -28,7 +28,8 @@ func TestReset(t *testing.T) {
 			cmd.SetDB(d)
 			cmd.ResetForTest()
 
-			d.InsertAction("test", "test", nil, "{}", tc.status)
+			taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+			d.InsertAction("test", "test", taskID, "{}", tc.status)
 
 			root := cmd.GetRootCmd()
 			buf := new(bytes.Buffer)

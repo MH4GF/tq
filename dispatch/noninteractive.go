@@ -21,7 +21,7 @@ type NonInteractiveWorker struct {
 	Runner CommandRunner
 }
 
-func (w *NonInteractiveWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID *int64) (string, error) {
+func (w *NonInteractiveWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID int64) (string, error) {
 	args := []string{"-p", prompt, "--output-format", "json"}
 	env := buildTQEnv(actionID, taskID)
 

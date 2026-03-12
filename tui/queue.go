@@ -151,10 +151,7 @@ func (m QueueModel) View() string {
 		icon := StatusIcon(a.Status)
 		st := StatusStyle(a.Status)
 
-		taskStr := "-"
-		if a.TaskID.Valid {
-			taskStr = fmt.Sprintf("#%d", a.TaskID.Int64)
-		}
+		taskStr := fmt.Sprintf("#%d", a.TaskID)
 
 		line := fmt.Sprintf("%s%s %-4d %-14s %-20s %s",
 			prefix,

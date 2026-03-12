@@ -60,8 +60,8 @@ Review this PR.
 	if a.PromptID != "review-pr" {
 		t.Errorf("prompt_id = %q, want %q", a.PromptID, "review-pr")
 	}
-	if !a.TaskID.Valid || a.TaskID.Int64 != taskID {
-		t.Errorf("task_id = %v, want %d", a.TaskID, taskID)
+	if a.TaskID != taskID {
+		t.Errorf("task_id = %d, want %d", a.TaskID, taskID)
 	}
 }
 
@@ -80,7 +80,7 @@ Review.
 `)
 
 	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
-	d.InsertAction("review-pr", "review-pr", &taskID, "{}", "pending")
+	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -115,7 +115,7 @@ Review.
 `)
 
 	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
-	d.InsertAction("review-pr", "review-pr", &taskID, "{}", "pending")
+	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -157,8 +157,8 @@ Review.
 	if err == nil {
 		t.Fatal("expected error for missing --task flag")
 	}
-	if !contains(err.Error(), "--task flag is required") {
-		t.Errorf("error = %q, want to contain '--task flag is required'", err.Error())
+	if !contains(err.Error(), "task") {
+		t.Errorf("error = %q, want to contain 'task'", err.Error())
 	}
 }
 

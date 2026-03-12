@@ -18,7 +18,7 @@ type mockWorker struct {
 	err    error
 }
 
-func (m *mockWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID *int64) (string, error) {
+func (m *mockWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID int64) (string, error) {
 	return m.result, m.err
 }
 
@@ -64,7 +64,7 @@ Review PR for {{.Task.Title}}.
 `), 0644)
 
 	taskID, _ := d.InsertTask(1, "Fix bug", "https://github.com/test/1", "{}", "")
-	d.InsertAction("review-pr", "review-pr", &taskID, "{}", "pending")
+	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{result: `{"review":"approved"}`}
@@ -117,8 +117,8 @@ Review PR for {{.Task.Title}}.
 `), 0644)
 
 	taskID, _ := d.InsertTask(1, "Fix bug", "https://github.com/test/1", "{}", "")
-	d.InsertAction("review-pr", "review-pr", &taskID, "{}", "pending")
-	d.InsertAction("review-pr", "review-pr", &taskID, "{}", "pending")
+	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
+	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{result: `{"review":"approved"}`}
@@ -193,7 +193,8 @@ mode: noninteractive
 Do something.
 `), 0644)
 
-	d.InsertAction("test", "test", nil, "{}", "pending")
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	d.InsertAction("test", "test", taskID, "{}", "pending")
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{err: context.DeadlineExceeded}

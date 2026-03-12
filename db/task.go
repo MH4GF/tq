@@ -129,6 +129,21 @@ func (db *DB) ListTasksByProject(projectID int64) ([]Task, error) {
 	return tasks, rows.Err()
 }
 
+func (db *DB) GetOrCreateTriageTask(projectID int64) (int64, error) {
+	var id int64
+	err := db.QueryRow(
+		"SELECT id FROM tasks WHERE project_id = ? AND title = 'triage' AND status = 'open' LIMIT 1",
+		projectID,
+	).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if err != sql.ErrNoRows {
+		return 0, err
+	}
+	return db.InsertTask(projectID, "triage", "", "{}", "")
+}
+
 func (db *DB) ListTasksByStatus(status string) ([]Task, error) {
 	rows, err := db.Query("SELECT id, project_id, title, url, metadata, status, work_dir, created_at, updated_at FROM tasks WHERE status = ? ORDER BY id", status)
 	if err != nil {

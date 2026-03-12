@@ -23,8 +23,8 @@ func TestQueueModel_LoadActions(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
-	d.InsertAction("check-pr", "check-pr", &taskID, "{}", "pending")
-	d.InsertAction("fix-ci", "fix-ci", &taskID, "{}", "running")
+	d.InsertAction("check-pr", "check-pr", taskID, "{}", "pending")
+	d.InsertAction("fix-ci", "fix-ci", taskID, "{}", "running")
 
 	m := NewQueueModel(d, "")
 
@@ -46,9 +46,10 @@ func TestQueueModel_Navigation(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	d.InsertAction("a", "a", nil, "{}", "pending")
-	d.InsertAction("b", "b", nil, "{}", "pending")
-	d.InsertAction("c", "c", nil, "{}", "pending")
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	d.InsertAction("a", "a", taskID, "{}", "pending")
+	d.InsertAction("b", "b", taskID, "{}", "pending")
+	d.InsertAction("c", "c", taskID, "{}", "pending")
 
 	m := NewQueueModel(d, "")
 	msg := m.Init()()
@@ -102,7 +103,8 @@ func TestQueueModel_Reload(t *testing.T) {
 	}
 
 	// Insert after initial load
-	d.InsertAction("new-one", "new-one", nil, "{}", "pending")
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	d.InsertAction("new-one", "new-one", taskID, "{}", "pending")
 
 	// Reload
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
@@ -120,8 +122,9 @@ func TestQueueModel_StatusIcons(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	d.InsertAction("pending-action", "pending-action", nil, "{}", "pending")
-	d.InsertAction("running-action", "running-action", nil, "{}", "running")
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	d.InsertAction("pending-action", "pending-action", taskID, "{}", "pending")
+	d.InsertAction("running-action", "running-action", taskID, "{}", "running")
 
 	m := NewQueueModel(d, "")
 	msg := m.Init()()
@@ -141,8 +144,8 @@ func TestQueueModel_DateFilter(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
-	d.InsertAction("today-action", "today-action", &taskID, "{}", "pending")
-	d.InsertAction("old-action", "old-action", &taskID, "{}", "pending")
+	d.InsertAction("today-action", "today-action", taskID, "{}", "pending")
+	d.InsertAction("old-action", "old-action", taskID, "{}", "pending")
 
 	// Set old-action's created_at to a different date
 	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE prompt_id = 'old-action'")
@@ -188,7 +191,7 @@ func TestQueueModel_InlineResult(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
-	id, _ := d.InsertAction("check-pr", "check-pr", &taskID, "{}", "running")
+	id, _ := d.InsertAction("check-pr", "check-pr", taskID, "{}", "running")
 	d.MarkDone(id, "all checks passed")
 
 	m := NewQueueModel(d, "")
@@ -206,7 +209,8 @@ func TestQueueModel_InlineResultFailed(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, _ := d.InsertAction("deploy", "deploy", nil, "{}", "running")
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	id, _ := d.InsertAction("deploy", "deploy", taskID, "{}", "running")
 	d.MarkFailed(id, "timeout error")
 
 	m := NewQueueModel(d, "")
@@ -224,7 +228,8 @@ func TestQueueModel_DetailView(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, _ := d.InsertAction("check", "check", nil, "{}", "running")
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	id, _ := d.InsertAction("check", "check", taskID, "{}", "running")
 	d.MarkDone(id, "detailed result\nline 2\nline 3")
 
 	m := NewQueueModel(d, "")
@@ -261,7 +266,8 @@ func TestQueueModel_DetailViewNoResult(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	d.InsertAction("check", "check", nil, "{}", "pending")
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	d.InsertAction("check", "check", taskID, "{}", "pending")
 
 	m := NewQueueModel(d, "")
 	m = m.SetSize(120, 40)
@@ -279,7 +285,8 @@ func TestQueueModel_DetailViewScroll(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, _ := d.InsertAction("check", "check", nil, "{}", "running")
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	id, _ := d.InsertAction("check", "check", taskID, "{}", "running")
 	d.MarkDone(id, "line1\nline2\nline3")
 
 	m := NewQueueModel(d, "")
@@ -315,7 +322,8 @@ func TestQueueModel_DetailViewEscIgnored(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id, _ := d.InsertAction("check", "check", nil, "{}", "running")
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	id, _ := d.InsertAction("check", "check", taskID, "{}", "running")
 	d.MarkDone(id, "some result")
 
 	m := NewQueueModel(d, "")

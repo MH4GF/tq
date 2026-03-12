@@ -66,9 +66,7 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 	b.WriteString(fmt.Sprintf("  Status:    %s\n", st.Render(a.Status)))
 	b.WriteString(fmt.Sprintf("  Title:     %s\n", a.Title))
 	b.WriteString(fmt.Sprintf("  Prompt:    %s\n", a.PromptID))
-	if a.TaskID.Valid {
-		b.WriteString(fmt.Sprintf("  Task:      #%d\n", a.TaskID.Int64))
-	}
+	b.WriteString(fmt.Sprintf("  Task:      #%d\n", a.TaskID))
 	if a.CompletedAt.Valid {
 		b.WriteString(fmt.Sprintf("  Completed: %s\n", a.CompletedAt.String))
 	}

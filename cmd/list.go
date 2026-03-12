@@ -37,14 +37,10 @@ var listCmd = &cobra.Command{
 				"id":         a.ID,
 				"title":      a.Title,
 				"prompt_id":  a.PromptID,
+				"task_id":    a.TaskID,
 				"metadata":   a.Metadata,
 				"status":     a.Status,
 				"created_at": a.CreatedAt,
-			}
-			if a.TaskID.Valid {
-				row["task_id"] = a.TaskID.Int64
-			} else {
-				row["task_id"] = nil
 			}
 			if a.Result.Valid {
 				row["result"] = a.Result.String

@@ -127,6 +127,10 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	if _, err := db.Exec("DELETE FROM actions WHERE task_id IS NULL"); err != nil {
+		return err
+	}
+
 	return nil
 }
 

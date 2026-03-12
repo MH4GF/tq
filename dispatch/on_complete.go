@@ -15,14 +15,7 @@ func triggerFollowUp(database *db.DB, promptsDir string, action *db.Action, resu
 		return nil
 	}
 
-	if !action.TaskID.Valid {
-		slog.Warn("follow-up skipped: action has no task_id", "action_id", action.ID, "target", targetPromptID)
-		return nil
-	}
-
-	taskID := action.TaskID.Int64
-
-	has, err := database.HasActiveAction(taskID, targetPromptID)
+	has, err := database.HasActiveAction(action.TaskID, targetPromptID)
 	if err != nil {
 		return fmt.Errorf("check duplicate: %w", err)
 	}
@@ -46,7 +39,7 @@ func triggerFollowUp(database *db.DB, promptsDir string, action *db.Action, resu
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	_, err = database.InsertAction(targetPromptID, targetPromptID, &taskID, string(metaJSON), "pending")
+	_, err = database.InsertAction(targetPromptID, targetPromptID, action.TaskID, string(metaJSON), "pending")
 	if err != nil {
 		return fmt.Errorf("insert follow-up action: %w", err)
 	}

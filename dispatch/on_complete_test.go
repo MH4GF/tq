@@ -11,7 +11,6 @@ func TestTriggerOnDone(t *testing.T) {
 	tests := []struct {
 		name           string
 		onDone         string
-		hasTask        bool
 		existingActive bool // pre-insert an active action for the target prompt
 		wantFollowUp   bool
 		wantErr        bool
@@ -20,33 +19,23 @@ func TestTriggerOnDone(t *testing.T) {
 		{
 			name:         "no on_done configured",
 			onDone:       "",
-			hasTask:      true,
-			wantFollowUp: false,
-		},
-		{
-			name:         "no task ID",
-			onDone:       "review",
-			hasTask:      false,
 			wantFollowUp: false,
 		},
 		{
 			name:         "creates follow-up",
 			onDone:       "review",
-			hasTask:      true,
 			wantFollowUp: true,
 			wantStatus:   "done",
 		},
 		{
 			name:           "duplicate skipped",
 			onDone:         "review",
-			hasTask:        true,
 			existingActive: true,
 			wantFollowUp:   false,
 		},
 		{
 			name:    "target template not found",
 			onDone:  "nonexistent",
-			hasTask: true,
 			wantErr: true,
 		},
 	}
@@ -62,18 +51,13 @@ func TestTriggerOnDone(t *testing.T) {
 				writeTestPromptFull(t, promptsDir, tc.onDone, "interactive", "", "")
 			}
 
-			var taskID int64
-			var taskIDPtr *int64
-			if tc.hasTask {
-				taskID, _ = d.InsertTask(1, "Test task", "https://example.com", "{}", "")
-				taskIDPtr = &taskID
-			}
+			taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
 
 			if tc.existingActive {
-				d.InsertAction(tc.onDone, tc.onDone, taskIDPtr, "{}", "pending")
+				d.InsertAction(tc.onDone, tc.onDone, taskID, "{}", "pending")
 			}
 
-			actionID, _ := d.InsertAction("check-pr", "check-pr", taskIDPtr, "{}", "done")
+			actionID, _ := d.InsertAction("check-pr", "check-pr", taskID, "{}", "done")
 			action, _ := d.GetAction(actionID)
 
 			result := `{"status":"merged"}`
@@ -160,7 +144,7 @@ func TestTriggerOnCancel(t *testing.T) {
 			}
 
 			taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
-			actionID, _ := d.InsertAction("check-pr", "check-pr", &taskID, "{}", "cancelled")
+			actionID, _ := d.InsertAction("check-pr", "check-pr", taskID, "{}", "cancelled")
 			action, _ := d.GetAction(actionID)
 
 			reason := "cancelled with feedback"

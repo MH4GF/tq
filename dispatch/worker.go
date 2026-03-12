@@ -25,8 +25,7 @@ func (r *ExecRunner) Run(ctx context.Context, name string, args []string, dir st
 	return cmd.CombinedOutput()
 }
 
-// filteredEnv returns os.Environ() without CLAUDECODE to avoid
-// Claude Code's nested session detection blocking child processes.
+// filteredEnv returns os.Environ() excluding CLAUDECODE.
 func filteredEnv() []string {
 	env := os.Environ()
 	filtered := make([]string, 0, len(env))
@@ -38,15 +37,14 @@ func filteredEnv() []string {
 	return filtered
 }
 
-func buildTQEnv(actionID int64, taskID *int64) []string {
-	env := []string{fmt.Sprintf("TQ_ACTION_ID=%d", actionID)}
-	if taskID != nil {
-		env = append(env, fmt.Sprintf("TQ_TASK_ID=%d", *taskID))
+func buildTQEnv(actionID int64, taskID int64) []string {
+	return []string{
+		fmt.Sprintf("TQ_ACTION_ID=%d", actionID),
+		fmt.Sprintf("TQ_TASK_ID=%d", taskID),
 	}
-	return env
 }
 
 // Worker executes a rendered prompt.
 type Worker interface {
-	Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID *int64) (string, error)
+	Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID int64) (string, error)
 }

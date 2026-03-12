@@ -43,6 +43,19 @@ var watchCmd = &cobra.Command{
 
 		fmt.Fprintf(cmd.OutOrStdout(), "fetched %d notifications from %s\n", len(notifications), src.Name())
 
+		projectID, err := database.EnsureNotificationsProject()
+		if err != nil {
+			return fmt.Errorf("ensure notifications project: %w", err)
+		}
+		taskID, err := database.GetOrCreateTriageTask(projectID)
+		if err != nil {
+			return fmt.Errorf("get or create triage task: %w", err)
+		}
+		existingTasks, err := buildExistingTasksList()
+		if err != nil {
+			return fmt.Errorf("build tasks list: %w", err)
+		}
+
 		var processed, failed int
 		for _, n := range notifications {
 			notifJSON, err := json.Marshal(n.Metadata)
@@ -52,7 +65,7 @@ var watchCmd = &cobra.Command{
 				continue
 			}
 
-			if _, err := CreateClassifyAction(string(notifJSON)); err != nil {
+			if _, err := createClassifyAction(string(notifJSON), taskID, existingTasks); err != nil {
 				slog.Error("create classify action", "error", err, "title", n.Metadata["title"])
 				failed++
 				continue
@@ -97,12 +110,27 @@ func buildExistingTasksList() (string, error) {
 	return strings.Join(lines, "\n"), nil
 }
 
+// CreateClassifyAction creates a classify action with automatic project/task setup.
 func CreateClassifyAction(notificationJSON string) (int64, error) {
+	projectID, err := database.EnsureNotificationsProject()
+	if err != nil {
+		return 0, fmt.Errorf("ensure notifications project: %w", err)
+	}
+
+	taskID, err := database.GetOrCreateTriageTask(projectID)
+	if err != nil {
+		return 0, fmt.Errorf("get or create triage task: %w", err)
+	}
+
 	existingTasks, err := buildExistingTasksList()
 	if err != nil {
 		return 0, fmt.Errorf("build tasks list: %w", err)
 	}
 
+	return createClassifyAction(notificationJSON, taskID, existingTasks)
+}
+
+func createClassifyAction(notificationJSON string, taskID int64, existingTasks string) (int64, error) {
 	meta := map[string]any{
 		"existing_tasks": existingTasks,
 	}
@@ -117,7 +145,7 @@ func CreateClassifyAction(notificationJSON string) (int64, error) {
 		return 0, fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	id, err := database.InsertAction("classify-gh-notification", "classify-gh-notification", nil, string(metaBytes), "pending")
+	id, err := database.InsertAction("classify-gh-notification", "classify-gh-notification", taskID, string(metaBytes), "pending")
 	if err != nil {
 		return 0, fmt.Errorf("insert action: %w", err)
 	}
