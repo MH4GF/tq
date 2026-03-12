@@ -611,6 +611,34 @@ func TestListActionsByTaskIDs(t *testing.T) {
 	})
 }
 
+func TestInsertAction_InvalidStatus(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
+
+	tests := []struct {
+		name   string
+		status string
+	}{
+		{"open is invalid", "open"},
+		{"arbitrary string", "bogus"},
+		{"empty string", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := d.InsertAction("test", "test", taskID, "{}", tt.status)
+			if err == nil {
+				t.Fatalf("expected error for invalid status %q, got nil", tt.status)
+			}
+			if !strings.Contains(err.Error(), "invalid action status") {
+				t.Errorf("error = %q, want to contain 'invalid action status'", err)
+			}
+		})
+	}
+}
+
 func TestGetAction_NotFound(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

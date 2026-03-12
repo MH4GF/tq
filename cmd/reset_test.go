@@ -19,6 +19,7 @@ func TestReset(t *testing.T) {
 		{"done is rejected", "done", "", true},
 		{"running to pending", "running", "action #1 reset to pending", false},
 		{"pending is rejected", "pending", "", true},
+		{"cancelled to pending", "cancelled", "action #1 reset to pending", false},
 	}
 
 	for _, tc := range tests {
@@ -61,6 +62,37 @@ func TestReset(t *testing.T) {
 				t.Errorf("status = %q, want %q", a.Status, "pending")
 			}
 		})
+	}
+}
+
+func TestReset_UnknownStatus(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	// Simulate an action with invalid status (e.g. "open") stuck in the DB
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	d.InsertAction("test", "test", taskID, "{}", "pending")
+	d.Exec("UPDATE actions SET status = 'open' WHERE id = 1")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"action", "reset", "1"})
+
+	err := root.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	a, err := d.GetAction(1)
+	if err != nil {
+		t.Fatalf("get action: %v", err)
+	}
+	if a.Status != "pending" {
+		t.Errorf("status = %q, want %q", a.Status, "pending")
 	}
 }
 

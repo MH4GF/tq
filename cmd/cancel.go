@@ -30,9 +30,8 @@ var cancelCmd = &cobra.Command{
 			return fmt.Errorf("action #%d not found: %w", id, err)
 		}
 
-		allowed := map[string]bool{"pending": true, "running": true, "failed": true}
-		if !allowed[action.Status] {
-			return fmt.Errorf("action #%d is %q, only pending/running/failed can be cancelled", id, action.Status)
+		if action.Status == "done" || action.Status == "cancelled" {
+			return fmt.Errorf("action #%d is %q, cannot cancel", id, action.Status)
 		}
 
 		if action.Status == "running" && action.TmuxPane.Valid {
