@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"strconv"
 	"strings"
 
+	"github.com/MH4GF/tq/dispatch"
 	"github.com/spf13/cobra"
 )
 
@@ -44,6 +46,11 @@ var cancelCmd = &cobra.Command{
 
 		if err := database.MarkCancelled(id, reason); err != nil {
 			return fmt.Errorf("mark cancelled: %w", err)
+		}
+
+		promptsDir := resolvePromptsDir()
+		if err := dispatch.TriggerOnCancel(database, promptsDir, action, reason); err != nil {
+			slog.Warn("on_cancel trigger failed", "action_id", id, "error", err)
 		}
 
 		fmt.Fprintf(cmd.OutOrStdout(), "action #%d cancelled\n", id)

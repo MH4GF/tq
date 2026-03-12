@@ -16,6 +16,7 @@ type Config struct {
 	Description string `yaml:"description"`
 	Mode        string `yaml:"mode"` // "interactive" (default) | "noninteractive" | "remote"
 	OnDone      string `yaml:"on_done"`
+	OnCancel    string `yaml:"on_cancel"`
 }
 
 func (c Config) IsInteractive() bool    { return c.Mode == "interactive" }

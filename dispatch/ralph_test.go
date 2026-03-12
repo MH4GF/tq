@@ -39,19 +39,29 @@ func setupPromptsDir(t *testing.T) string {
 	return tqDir
 }
 
-func writeTestPromptWithMode(t *testing.T, dir, name, mode, onDone string) {
+func writeTestPromptFull(t *testing.T, dir, name, mode, onDone, onCancel string) {
 	t.Helper()
-	onDoneLine := ""
+	hooks := ""
 	if onDone != "" {
-		onDoneLine = fmt.Sprintf("on_done: %s\n", onDone)
+		hooks += fmt.Sprintf("on_done: %s\n", onDone)
+	}
+	if onCancel != "" {
+		hooks += fmt.Sprintf("on_cancel: %s\n", onCancel)
 	}
 	content := fmt.Sprintf(`---
 description: %s
 mode: %s
 %s---
 Do %s for {{.Task.Title}}.
-`, name, mode, onDoneLine, name)
-	os.WriteFile(filepath.Join(dir, name+".md"), []byte(content), 0o644)
+`, name, mode, hooks, name)
+	if err := os.WriteFile(filepath.Join(dir, name+".md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write prompt %q: %v", name, err)
+	}
+}
+
+func writeTestPromptWithMode(t *testing.T, dir, name, mode, onDone string) {
+	t.Helper()
+	writeTestPromptFull(t, dir, name, mode, onDone, "")
 }
 
 func writeTestPrompt(t *testing.T, dir, name string, interactive bool) {
@@ -65,20 +75,7 @@ func writeTestPromptWithOnDone(t *testing.T, dir, name string, interactive bool,
 	if interactive {
 		mode = "interactive"
 	}
-
-	onDoneLine := ""
-	if onDone != "" {
-		onDoneLine = fmt.Sprintf("on_done: %s\n", onDone)
-	}
-
-	content := fmt.Sprintf(`---
-description: %s
-mode: %s
-%s---
-Do %s for {{.Task.Title}}.
-`, name, mode, onDoneLine, name)
-
-	os.WriteFile(filepath.Join(dir, name+".md"), []byte(content), 0o644)
+	writeTestPromptFull(t, dir, name, mode, onDone, "")
 }
 
 func TestRalphLoop_ProcessesAndStops(t *testing.T) {
