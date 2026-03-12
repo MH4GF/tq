@@ -73,6 +73,7 @@ func init() {
 	rootCmd.AddCommand(uiCmd)
 	rootCmd.AddCommand(projectCmd)
 	rootCmd.AddCommand(promptCmd)
+	rootCmd.AddCommand(scheduleCmd)
 }
 
 func Execute() error {

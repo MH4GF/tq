@@ -1,0 +1,207 @@
+package cmd
+
+import (
+	"fmt"
+	"os"
+	"text/tabwriter"
+
+	"github.com/robfig/cron/v3"
+	"github.com/spf13/cobra"
+)
+
+var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+
+var scheduleCmd = &cobra.Command{
+	Use:   "schedule",
+	Short: "Schedule management",
+}
+
+var scheduleCreateCmd = &cobra.Command{
+	Use:   "create <PROMPT_ID>",
+	Short: "Create a new schedule",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		promptID := args[0]
+		taskID, _ := cmd.Flags().GetInt64("task")
+		title, _ := cmd.Flags().GetString("title")
+		cronExpr, _ := cmd.Flags().GetString("cron")
+		meta, _ := cmd.Flags().GetString("meta")
+
+		if taskID == 0 {
+			return fmt.Errorf("--task is required")
+		}
+		if cronExpr == "" {
+			return fmt.Errorf("--cron is required")
+		}
+		if _, err := cronParser.Parse(cronExpr); err != nil {
+			return fmt.Errorf("invalid cron expression %q: %w", cronExpr, err)
+		}
+		if title == "" {
+			title = promptID
+		}
+		if meta == "" {
+			meta = "{}"
+		}
+
+		id, err := database.InsertSchedule(taskID, promptID, title, cronExpr, meta)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("schedule #%d created\n", id)
+		return nil
+	},
+}
+
+var scheduleListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List schedules",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		schedules, err := database.ListSchedules()
+		if err != nil {
+			return err
+		}
+		if len(schedules) == 0 {
+			fmt.Println("No schedules")
+			return nil
+		}
+
+		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "ID\tEnabled\tTitle\tCron\tPrompt\tTask\tLast Run")
+		for _, s := range schedules {
+			enabled := "yes"
+			if !s.Enabled {
+				enabled = "no"
+			}
+			lastRun := "-"
+			if s.LastRunAt.Valid {
+				lastRun = s.LastRunAt.String
+			}
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%d\t%s\n",
+				s.ID, enabled, s.Title, s.CronExpr, s.PromptID, s.TaskID, lastRun)
+		}
+		return w.Flush()
+	},
+}
+
+var scheduleEnableCmd = &cobra.Command{
+	Use:   "enable <ID>",
+	Short: "Enable a schedule",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := parseID(args[0])
+		if err != nil {
+			return err
+		}
+		if err := database.UpdateScheduleEnabled(id, true); err != nil {
+			return err
+		}
+		fmt.Printf("schedule #%d enabled\n", id)
+		return nil
+	},
+}
+
+var scheduleDisableCmd = &cobra.Command{
+	Use:   "disable <ID>",
+	Short: "Disable a schedule",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := parseID(args[0])
+		if err != nil {
+			return err
+		}
+		if err := database.UpdateScheduleEnabled(id, false); err != nil {
+			return err
+		}
+		fmt.Printf("schedule #%d disabled\n", id)
+		return nil
+	},
+}
+
+var scheduleDeleteCmd = &cobra.Command{
+	Use:   "delete <ID>",
+	Short: "Delete a schedule",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := parseID(args[0])
+		if err != nil {
+			return err
+		}
+		if err := database.DeleteSchedule(id); err != nil {
+			return err
+		}
+		fmt.Printf("schedule #%d deleted\n", id)
+		return nil
+	},
+}
+
+var scheduleUpdateCmd = &cobra.Command{
+	Use:   "update <ID>",
+	Short: "Update a schedule",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := parseID(args[0])
+		if err != nil {
+			return err
+		}
+
+		var title, cronExpr, meta *string
+		var taskID *int64
+
+		if cmd.Flags().Changed("title") {
+			v, _ := cmd.Flags().GetString("title")
+			title = &v
+		}
+		if cmd.Flags().Changed("cron") {
+			v, _ := cmd.Flags().GetString("cron")
+			if _, err := cronParser.Parse(v); err != nil {
+				return fmt.Errorf("invalid cron expression %q: %w", v, err)
+			}
+			cronExpr = &v
+		}
+		if cmd.Flags().Changed("meta") {
+			v, _ := cmd.Flags().GetString("meta")
+			meta = &v
+		}
+		if cmd.Flags().Changed("task") {
+			v, _ := cmd.Flags().GetInt64("task")
+			taskID = &v
+		}
+
+		if title == nil && cronExpr == nil && meta == nil && taskID == nil {
+			return fmt.Errorf("at least one flag (--title, --cron, --meta, --task) is required")
+		}
+
+		if err := database.UpdateSchedule(id, title, cronExpr, meta, taskID); err != nil {
+			return err
+		}
+		fmt.Printf("schedule #%d updated\n", id)
+		return nil
+	},
+}
+
+func parseID(s string) (int64, error) {
+	var id int64
+	if _, err := fmt.Sscanf(s, "%d", &id); err != nil {
+		return 0, fmt.Errorf("invalid ID %q: %w", s, err)
+	}
+	return id, nil
+}
+
+func init() {
+	scheduleCreateCmd.Flags().Int64("task", 0, "Task ID (required)")
+	scheduleCreateCmd.Flags().String("title", "", "Schedule title (defaults to prompt ID)")
+	scheduleCreateCmd.Flags().String("cron", "", "Cron expression (required)")
+	scheduleCreateCmd.Flags().String("meta", "{}", "JSON metadata")
+
+	scheduleCmd.AddCommand(scheduleCreateCmd)
+	scheduleCmd.AddCommand(scheduleListCmd)
+	scheduleCmd.AddCommand(scheduleEnableCmd)
+	scheduleCmd.AddCommand(scheduleDisableCmd)
+	scheduleCmd.AddCommand(scheduleDeleteCmd)
+
+	scheduleUpdateCmd.Flags().String("title", "", "Schedule title")
+	scheduleUpdateCmd.Flags().String("cron", "", "Cron expression")
+	scheduleUpdateCmd.Flags().String("meta", "", "JSON metadata")
+	scheduleUpdateCmd.Flags().Int64("task", 0, "Task ID")
+	scheduleCmd.AddCommand(scheduleUpdateCmd)
+}
