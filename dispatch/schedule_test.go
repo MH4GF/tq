@@ -1,0 +1,177 @@
+package dispatch_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/MH4GF/tq/dispatch"
+	"github.com/MH4GF/tq/testutil"
+)
+
+func TestCheckSchedules_ActionCreated(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", `{"key":"val"}`)
+
+	// Set created_at to 2 minutes ago so cron is due
+	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
+
+	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := d.ListActions("pending", nil)
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if actions[0].PromptID != "my-prompt" {
+		t.Errorf("prompt_id = %q, want %q", actions[0].PromptID, "my-prompt")
+	}
+	if actions[0].Title != "My Prompt" {
+		t.Errorf("title = %q, want %q", actions[0].Title, "My Prompt")
+	}
+	if actions[0].Metadata != `{"key":"val"}` {
+		t.Errorf("metadata = %q, want %q", actions[0].Metadata, `{"key":"val"}`)
+	}
+
+	// Verify last_run_at was updated
+	s, _ := d.GetSchedule(1)
+	if !s.LastRunAt.Valid {
+		t.Error("expected last_run_at to be set")
+	}
+}
+
+func TestCheckSchedules_NotDueYet(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "0 */3 * * *", "{}")
+
+	// created_at is now, next run is 3 hours later
+	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:00:00' WHERE id = 1")
+
+	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:30:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := d.ListActions("", nil)
+	if len(actions) != 0 {
+		t.Errorf("expected 0 actions, got %d", len(actions))
+	}
+}
+
+func TestCheckSchedules_DuplicateSkipped(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
+	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
+
+	// Insert an active action for the same task/prompt
+	d.InsertAction("existing", "my-prompt", taskID, "{}", "pending")
+
+	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := d.ListActions("pending", nil)
+	if len(actions) != 1 {
+		t.Errorf("expected 1 action (existing only), got %d", len(actions))
+	}
+}
+
+func TestCheckSchedules_DisabledSkipped(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
+	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = ?", id)
+	d.UpdateScheduleEnabled(id, false)
+
+	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := d.ListActions("", nil)
+	if len(actions) != 0 {
+		t.Errorf("expected 0 actions, got %d", len(actions))
+	}
+}
+
+func TestCheckSchedules_TaskDoneAutoDisable(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	d.UpdateTask(taskID, "done")
+	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
+	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = ?", id)
+
+	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	// No action created
+	actions, _ := d.ListActions("", nil)
+	if len(actions) != 0 {
+		t.Errorf("expected 0 actions, got %d", len(actions))
+	}
+
+	// Schedule auto-disabled
+	s, _ := d.GetSchedule(id)
+	if s.Enabled {
+		t.Error("expected schedule to be auto-disabled")
+	}
+}
+
+func TestCheckSchedules_TaskArchivedAutoDisable(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	d.UpdateTask(taskID, "archived")
+	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
+	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = ?", id)
+
+	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	s, _ := d.GetSchedule(id)
+	if s.Enabled {
+		t.Error("expected schedule to be auto-disabled for archived task")
+	}
+}
+
+func TestCheckSchedules_UsesLastRunAt(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "0 */3 * * *", "{}")
+
+	// Set created_at far in the past, last_run_at to recent
+	d.Exec("UPDATE schedules SET created_at = '2026-03-01 00:00:00', last_run_at = '2026-03-12 09:00:00' WHERE id = ?", id)
+
+	// now is 09:30, next run from 09:00 is 12:00 → should NOT trigger
+	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:30:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := d.ListActions("", nil)
+	if len(actions) != 0 {
+		t.Errorf("expected 0 actions (not due yet from last_run_at), got %d", len(actions))
+	}
+}

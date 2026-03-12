@@ -82,6 +82,10 @@ func RalphLoop(ctx context.Context, cfg RalphConfig) error {
 
 		reapStaleActions(ctx, cfg)
 
+		if err := CheckSchedules(cfg.DB, time.Now()); err != nil {
+			slog.Error("schedule check error", "error", err)
+		}
+
 		dispatched, err := dispatchOne(ctx, cfg)
 		if err != nil {
 			slog.Error("dispatch error", "error", err)
