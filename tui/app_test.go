@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -108,10 +109,10 @@ func TestViewContainsTabs(t *testing.T) {
 
 	m := New(d, nil)
 	view := m.View()
-	if !contains(view, "Queue") {
+	if !strings.Contains(view, "Queue") {
 		t.Errorf("view should contain 'Queue', got %q", view)
 	}
-	if !contains(view, "Tasks") {
+	if !strings.Contains(view, "Tasks") {
 		t.Errorf("view should contain 'Tasks', got %q", view)
 	}
 }
@@ -138,28 +139,15 @@ func TestHelpText(t *testing.T) {
 
 	// Queue tab help
 	view := m.View()
-	if !contains(view, "j/k: navigate") {
+	if !strings.Contains(view, "j/k: navigate") {
 		t.Errorf("queue help missing navigate, got %q", view)
 	}
 
-	// Tasks tab help
+	// Tasks tab help — no tasks loaded, so only common keys shown
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = updated.(Model)
 	view = m.View()
-	if !contains(view, "enter: expand") {
-		t.Errorf("tasks help missing expand, got %q", view)
+	if !strings.Contains(view, "tab: switch") {
+		t.Errorf("tasks help missing tab switch, got %q", view)
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchString(s, substr)
-}
-
-func searchString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

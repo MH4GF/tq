@@ -81,8 +81,6 @@ func (m SchedulesModel) Update(msg tea.Msg) (SchedulesModel, tea.Cmd) {
 				}
 				return m, m.loadSchedules()
 			}
-		case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
-			return m, m.loadSchedules()
 		}
 	}
 	return m, nil
@@ -163,24 +161,15 @@ func (m SchedulesModel) computeNextRun(s db.Schedule) string {
 }
 
 func (m SchedulesModel) visibleRange() visibleRange {
-	maxVisible := m.height - 4
-	if maxVisible <= 0 {
-		maxVisible = 20
+	return calcVisibleRange(m.cursor, len(m.schedules), m.height, 4)
+}
+
+func (m SchedulesModel) HelpKeys() []HelpKey {
+	keys := commonHelpKeys()
+	if m.selectedSchedule() != nil {
+		keys = append(keys, HelpKey{"e", "enable/disable"}, HelpKey{"d", "delete"})
 	}
-	total := len(m.schedules)
-	if total <= maxVisible {
-		return visibleRange{0, total}
-	}
-	start := m.cursor - maxVisible/2
-	if start < 0 {
-		start = 0
-	}
-	end := start + maxVisible
-	if end > total {
-		end = total
-		start = end - maxVisible
-	}
-	return visibleRange{start, end}
+	return keys
 }
 
 func (m SchedulesModel) SetSize(w, h int) SchedulesModel {

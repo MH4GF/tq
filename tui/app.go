@@ -237,23 +237,16 @@ func (m Model) renderTabs() string {
 }
 
 func (m Model) renderHelp() string {
+	var keys []HelpKey
 	switch m.activeTab {
 	case tabQueue:
-		if m.queue.InDetailView() {
-			return styleHelp.Render("j/k: scroll  q: back")
-		}
-		return styleHelp.Render("j/k: navigate  o: attach  v: view result  tab: switch  r: reload  q: quit")
+		keys = m.queue.HelpKeys()
 	case tabTasks:
-		switch m.tasks.Mode() {
-		case modeViewDetail:
-			return styleHelp.Render("j/k: scroll  q: back")
-		default:
-			return styleHelp.Render("j/k: navigate  enter: expand  v: view result  f: toggle focus  tab: switch  r: reload  q: quit")
-		}
+		keys = m.tasks.HelpKeys()
 	case tabSchedules:
-		return styleHelp.Render("j/k: navigate  e: enable/disable  d: delete  tab: switch  r: reload  q: quit")
+		keys = m.schedules.HelpKeys()
 	}
-	return ""
+	return styleHelp.Render(formatHelp(keys))
 }
 
 func (m Model) renderActivity() string {

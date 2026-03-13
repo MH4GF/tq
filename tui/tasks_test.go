@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -14,7 +15,7 @@ func TestTasksModel_Empty(t *testing.T) {
 
 	m := NewTasksModel(d, "")
 	view := m.View()
-	if !contains(view, "No tasks") {
+	if !strings.Contains(view, "No tasks") {
 		t.Errorf("empty view should show 'No tasks', got %q", view)
 	}
 }
@@ -33,16 +34,16 @@ func TestTasksModel_LoadAndExpand(t *testing.T) {
 
 	// Default expanded: project, task, and actions should all be visible
 	view := m.View()
-	if !contains(view, "immedio") {
+	if !strings.Contains(view, "immedio") {
 		t.Errorf("view should contain project name 'immedio', got %q", view)
 	}
-	if !contains(view, "Fix bug") {
+	if !strings.Contains(view, "Fix bug") {
 		t.Errorf("view should show task 'Fix bug', got %q", view)
 	}
-	if !contains(view, "check-pr") {
+	if !strings.Contains(view, "check-pr") {
 		t.Errorf("view should show action 'check-pr', got %q", view)
 	}
-	if !contains(view, "fix-ci") {
+	if !strings.Contains(view, "fix-ci") {
 		t.Errorf("view should show action 'fix-ci', got %q", view)
 	}
 }
@@ -136,11 +137,9 @@ func TestTasksModel_Reload(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "New Task", "", "{}", "")
 	d.InsertAction("x", "x", taskID, "{}", "pending")
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
-	if cmd != nil {
-		reloadMsg := cmd()
-		m, _ = m.Update(reloadMsg)
-	}
+	// Reload via loadTasks (auto-reload on tick)
+	reloadMsg := m.loadTasks()()
+	m, _ = m.Update(reloadMsg)
 
 	// 3 projects + 1 task (open, expanded) + 1 action = 5 lines
 	if len(m.lines) != 5 {
@@ -178,10 +177,10 @@ func TestTasksModel_DateFilter(t *testing.T) {
 	m, _ = m.Update(msg)
 
 	view := m.View()
-	if !contains(view, "Today task") {
+	if !strings.Contains(view, "Today task") {
 		t.Errorf("view should contain 'Today task', got %q", view)
 	}
-	if contains(view, "Old task") {
+	if strings.Contains(view, "Old task") {
 		t.Errorf("view should not contain 'Old task', got %q", view)
 	}
 
@@ -191,10 +190,10 @@ func TestTasksModel_DateFilter(t *testing.T) {
 	m2, _ = m2.Update(msg2)
 
 	view2 := m2.View()
-	if !contains(view2, "Today task") {
+	if !strings.Contains(view2, "Today task") {
 		t.Errorf("unfiltered view should contain 'Today task', got %q", view2)
 	}
-	if !contains(view2, "Old task") {
+	if !strings.Contains(view2, "Old task") {
 		t.Errorf("unfiltered view should contain 'Old task', got %q", view2)
 	}
 }
@@ -213,7 +212,7 @@ func TestTasksModel_DateFilter_NonDoneTaskShown(t *testing.T) {
 	m, _ = m.Update(msg)
 
 	view := m.View()
-	if !contains(view, "Open no-match task") {
+	if !strings.Contains(view, "Open no-match task") {
 		t.Errorf("view should contain non-done task even with no matching actions, got %q", view)
 	}
 }
@@ -247,10 +246,10 @@ func TestTasksModel_DateFilter_ArchivedTaskFiltered(t *testing.T) {
 	m, _ = m.Update(msg)
 
 	view := m.View()
-	if contains(view, "Old archived") {
+	if strings.Contains(view, "Old archived") {
 		t.Errorf("archived task with old date should be filtered out, got %q", view)
 	}
-	if !contains(view, "Open task") {
+	if !strings.Contains(view, "Open task") {
 		t.Errorf("open task should be visible, got %q", view)
 	}
 }
@@ -291,7 +290,7 @@ func TestTasksModel_InlineResult(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 
 	view := m.View()
-	if !contains(view, "result: all passed") {
+	if !strings.Contains(view, "result: all passed") {
 		t.Errorf("view should contain inline result, got %q", view)
 	}
 }
@@ -324,10 +323,10 @@ func TestTasksModel_DetailView(t *testing.T) {
 	}
 
 	view := m.View()
-	if !contains(view, "Action Detail") {
+	if !strings.Contains(view, "Action Detail") {
 		t.Errorf("detail view should contain header, got %q", view)
 	}
-	if !contains(view, "detailed output") {
+	if !strings.Contains(view, "detailed output") {
 		t.Errorf("detail view should contain result, got %q", view)
 	}
 
@@ -508,10 +507,10 @@ func TestTasksModel_DisabledProjectDisplay(t *testing.T) {
 	m, _ = m.Update(msg)
 
 	view := m.View()
-	if !contains(view, "⊘") {
+	if !strings.Contains(view, "⊘") {
 		t.Errorf("disabled project should show ⊘ icon, got %q", view)
 	}
-	if !contains(view, "works") {
+	if !strings.Contains(view, "works") {
 		t.Errorf("disabled project name should still be shown, got %q", view)
 	}
 }
@@ -546,7 +545,7 @@ func TestTasksModel_ToggleFocus(t *testing.T) {
 	}
 
 	view := m.View()
-	if !contains(view, "⊘") {
+	if !strings.Contains(view, "⊘") {
 		t.Errorf("disabled project should show ⊘, got %q", view)
 	}
 }

@@ -98,7 +98,7 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(styleHelp.Render("  j/k: scroll  q: back"))
+	b.WriteString(styleHelp.Render("  " + formatHelp(detailHelpKeys())))
 	return b.String()
 }
 

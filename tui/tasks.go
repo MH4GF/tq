@@ -183,8 +183,6 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 				}
 			}
 		}
-	case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
-		return m, m.loadTasks()
 	}
 	return m, nil
 }
@@ -267,24 +265,7 @@ func (m *TasksModel) buildLines() {
 }
 
 func (m TasksModel) visibleRange() visibleRange {
-	maxVisible := m.height - 2
-	if maxVisible <= 0 {
-		maxVisible = 20
-	}
-	total := len(m.lines)
-	if total <= maxVisible {
-		return visibleRange{0, total}
-	}
-	start := m.cursor - maxVisible/2
-	if start < 0 {
-		start = 0
-	}
-	end := start + maxVisible
-	if end > total {
-		end = total
-		start = end - maxVisible
-	}
-	return visibleRange{start, end}
+	return calcVisibleRange(m.cursor, len(m.lines), m.height, 2)
 }
 
 func (m TasksModel) View() string {
@@ -339,6 +320,26 @@ func taskStatusOrder(status string) int {
 	default:
 		return 2
 	}
+}
+
+func (m TasksModel) HelpKeys() []HelpKey {
+	if m.mode == modeViewDetail {
+		return detailHelpKeys()
+	}
+	keys := commonHelpKeys()
+	if m.cursor >= 0 && m.cursor < len(m.lines) {
+		line := m.lines[m.cursor]
+		if line.expandKey != "" {
+			keys = append(keys, HelpKey{"enter", "expand"})
+		}
+		if line.action != nil && line.action.Result.Valid && line.action.Result.String != "" {
+			keys = append(keys, HelpKey{"v", "view result"})
+		}
+		if line.projectID > 0 && line.taskID == 0 {
+			keys = append(keys, HelpKey{"f", "toggle focus"})
+		}
+	}
+	return keys
 }
 
 func (m TasksModel) SetSize(w, h int) TasksModel {

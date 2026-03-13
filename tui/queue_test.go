@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,7 +14,7 @@ func TestQueueModel_Empty(t *testing.T) {
 
 	m := NewQueueModel(d, "")
 	view := m.View()
-	if !contains(view, "No actions") {
+	if !strings.Contains(view, "No actions") {
 		t.Errorf("empty view should show 'No actions', got %q", view)
 	}
 }
@@ -34,10 +35,10 @@ func TestQueueModel_LoadActions(t *testing.T) {
 	m, _ = m.Update(msg)
 
 	view := m.View()
-	if !contains(view, "check-pr") {
+	if !strings.Contains(view, "check-pr") {
 		t.Errorf("view should contain 'check-pr', got %q", view)
 	}
-	if !contains(view, "fix-ci") {
+	if !strings.Contains(view, "fix-ci") {
 		t.Errorf("view should contain 'fix-ci', got %q", view)
 	}
 }
@@ -106,12 +107,9 @@ func TestQueueModel_Reload(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
 	d.InsertAction("new-one", "new-one", taskID, "{}", "pending")
 
-	// Reload
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
-	if cmd != nil {
-		reloadMsg := cmd()
-		m, _ = m.Update(reloadMsg)
-	}
+	// Reload via loadActions (auto-reload on tick)
+	reloadMsg := m.loadActions()()
+	m, _ = m.Update(reloadMsg)
 
 	if len(m.actions) != 1 {
 		t.Errorf("after reload, actions = %d, want 1", len(m.actions))
@@ -131,10 +129,10 @@ func TestQueueModel_StatusIcons(t *testing.T) {
 	m, _ = m.Update(msg)
 
 	view := m.View()
-	if !contains(view, "○") {
+	if !strings.Contains(view, "○") {
 		t.Errorf("view should contain pending icon ○, got %q", view)
 	}
-	if !contains(view, "●") {
+	if !strings.Contains(view, "●") {
 		t.Errorf("view should contain running icon ●, got %q", view)
 	}
 }
@@ -169,10 +167,10 @@ func TestQueueModel_DateFilter(t *testing.T) {
 	}
 
 	view := m.View()
-	if !contains(view, "today-action") {
+	if !strings.Contains(view, "today-action") {
 		t.Errorf("view should contain 'today-action', got %q", view)
 	}
-	if contains(view, "old-action") {
+	if strings.Contains(view, "old-action") {
 		t.Errorf("view should not contain 'old-action', got %q", view)
 	}
 
@@ -200,7 +198,7 @@ func TestQueueModel_InlineResult(t *testing.T) {
 	m, _ = m.Update(msg)
 
 	view := m.View()
-	if !contains(view, "result: all checks passed") {
+	if !strings.Contains(view, "result: all checks passed") {
 		t.Errorf("view should contain inline result, got %q", view)
 	}
 }
@@ -219,7 +217,7 @@ func TestQueueModel_InlineResultFailed(t *testing.T) {
 	m, _ = m.Update(msg)
 
 	view := m.View()
-	if !contains(view, "result: timeout error") {
+	if !strings.Contains(view, "result: timeout error") {
 		t.Errorf("view should contain inline result for failed action, got %q", view)
 	}
 }
@@ -248,10 +246,10 @@ func TestQueueModel_DetailView(t *testing.T) {
 	}
 
 	view := m.View()
-	if !contains(view, "Action Detail") {
+	if !strings.Contains(view, "Action Detail") {
 		t.Errorf("detail view should contain header, got %q", view)
 	}
-	if !contains(view, "detailed result") {
+	if !strings.Contains(view, "detailed result") {
 		t.Errorf("detail view should contain result text, got %q", view)
 	}
 

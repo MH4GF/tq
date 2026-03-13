@@ -85,8 +85,6 @@ func (m QueueModel) Update(msg tea.Msg) (QueueModel, tea.Cmd) {
 			if m.cursor > 0 {
 				m.cursor--
 			}
-		case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
-			return m, m.loadActions()
 		case key.Matches(msg, key.NewBinding(key.WithKeys("o"))):
 			if a := m.selectedAction(); a != nil && a.SessionID.Valid {
 				return m, m.attachAction(a)
@@ -188,30 +186,24 @@ func (m QueueModel) View() string {
 	return b.String()
 }
 
-type visibleRange struct {
-	start, end int
+func (m QueueModel) visibleRange() visibleRange {
+	return calcVisibleRange(m.cursor, len(m.actions), m.height, 4)
 }
 
-func (m QueueModel) visibleRange() visibleRange {
-	maxVisible := m.height - 4
-	if maxVisible <= 0 {
-		maxVisible = 20
+func (m QueueModel) HelpKeys() []HelpKey {
+	if m.detailAction != nil {
+		return detailHelpKeys()
 	}
-	total := len(m.actions)
-	if total <= maxVisible {
-		return visibleRange{0, total}
+	keys := commonHelpKeys()
+	if a := m.selectedAction(); a != nil {
+		if a.SessionID.Valid {
+			keys = append(keys, HelpKey{"o", "attach"})
+		}
+		if a.Result.Valid && a.Result.String != "" {
+			keys = append(keys, HelpKey{"v", "view result"})
+		}
 	}
-
-	start := m.cursor - maxVisible/2
-	if start < 0 {
-		start = 0
-	}
-	end := start + maxVisible
-	if end > total {
-		end = total
-		start = end - maxVisible
-	}
-	return visibleRange{start, end}
+	return keys
 }
 
 func (m QueueModel) SetSize(w, h int) QueueModel {
