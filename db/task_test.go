@@ -218,13 +218,45 @@ func TestUpdateTaskWorkDir(t *testing.T) {
 	}
 }
 
+func TestEnsureTask(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	id1, err := d.EnsureTask(1, "my task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id1 < 1 {
+		t.Errorf("expected positive id, got %d", id1)
+	}
+
+	id2, err := d.EnsureTask(1, "my task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id1 != id2 {
+		t.Errorf("EnsureTask returned different IDs: %d vs %d", id1, id2)
+	}
+
+	// Closing the task should cause a new one to be created
+	if err := d.UpdateTask(id1, "done"); err != nil {
+		t.Fatal(err)
+	}
+	id3, err := d.EnsureTask(1, "my task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id3 == id1 {
+		t.Errorf("expected new task after closing, got same ID %d", id3)
+	}
+}
+
 func TestListTasksByStatus(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	id1, _ := d.InsertTask(1, "open task", "", "{}", "")
+	_, _ = d.InsertTask(1, "open task", "", "{}", "")
 	id2, _ := d.InsertTask(1, "done task", "", "{}", "")
-	_ = id1
 	d.UpdateTask(id2, "done")
 
 	tasks, err := d.ListTasksByStatus("open")

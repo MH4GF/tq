@@ -130,10 +130,14 @@ func (db *DB) ListTasksByProject(projectID int64) ([]Task, error) {
 }
 
 func (db *DB) GetOrCreateTriageTask(projectID int64) (int64, error) {
+	return db.EnsureTask(projectID, "triage")
+}
+
+func (db *DB) EnsureTask(projectID int64, title string) (int64, error) {
 	var id int64
 	err := db.QueryRow(
-		"SELECT id FROM tasks WHERE project_id = ? AND title = 'triage' AND status = 'open' LIMIT 1",
-		projectID,
+		"SELECT id FROM tasks WHERE project_id = ? AND title = ? AND status = 'open' ORDER BY id ASC LIMIT 1",
+		projectID, title,
 	).Scan(&id)
 	if err == nil {
 		return id, nil
@@ -141,7 +145,7 @@ func (db *DB) GetOrCreateTriageTask(projectID int64) (int64, error) {
 	if err != sql.ErrNoRows {
 		return 0, err
 	}
-	return db.InsertTask(projectID, "triage", "", "{}", "")
+	return db.InsertTask(projectID, title, "", "{}", "")
 }
 
 func (db *DB) ListTasksByStatus(status string) ([]Task, error) {

@@ -114,6 +114,18 @@ func (db *DB) HasActiveAction(taskID int64, promptID string) (bool, error) {
 	return count > 0, nil
 }
 
+func (db *DB) HasActiveActionWithMeta(taskID int64, promptID, metaKey, metaValue string) (bool, error) {
+	var count int
+	err := db.QueryRow(
+		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN ('pending', 'running', 'dispatched') AND json_extract(metadata, '$.' || ?) = ?",
+		taskID, promptID, metaKey, metaValue,
+	).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {

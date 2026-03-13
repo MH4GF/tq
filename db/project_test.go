@@ -187,6 +187,34 @@ func TestSetWorkDir_NotFound(t *testing.T) {
 	}
 }
 
+func TestEnsureProject(t *testing.T) {
+	d := testutil.NewTestDB(t)
+
+	id1, err := d.EnsureProject("test-proj")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id1 < 1 {
+		t.Errorf("expected positive id, got %d", id1)
+	}
+
+	id2, err := d.EnsureProject("test-proj")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id1 != id2 {
+		t.Errorf("EnsureProject returned different IDs: %d vs %d", id1, id2)
+	}
+
+	projects, err := d.ListProjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(projects) != 1 {
+		t.Errorf("expected 1 project, got %d", len(projects))
+	}
+}
+
 func TestSetAllDispatchEnabled(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

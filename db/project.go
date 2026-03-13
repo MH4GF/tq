@@ -112,15 +112,19 @@ func (db *DB) SetWorkDir(projectID int64, workDir string) error {
 	return nil
 }
 
-func (db *DB) EnsureNotificationsProject() (int64, error) {
-	p, err := db.GetProjectByName("notifications")
+func (db *DB) EnsureProject(name string) (int64, error) {
+	p, err := db.GetProjectByName(name)
 	if err == nil {
 		return p.ID, nil
 	}
 	if err != sql.ErrNoRows {
-		return 0, fmt.Errorf("get notifications project: %w", err)
+		return 0, fmt.Errorf("get %s project: %w", name, err)
 	}
-	return db.InsertProject("notifications", "", "{}")
+	return db.InsertProject(name, "", "{}")
+}
+
+func (db *DB) EnsureNotificationsProject() (int64, error) {
+	return db.EnsureProject("notifications")
 }
 
 func (db *DB) SetAllDispatchEnabled(enabled bool) error {
