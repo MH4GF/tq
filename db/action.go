@@ -8,6 +8,22 @@ import (
 	"strings"
 )
 
+const (
+	ActionStatusPending   = "pending"
+	ActionStatusRunning   = "running"
+	ActionStatusDone      = "done"
+	ActionStatusFailed    = "failed"
+	ActionStatusCancelled = "cancelled"
+)
+
+var ValidActionStatuses = map[string]bool{
+	ActionStatusPending:   true,
+	ActionStatusRunning:   true,
+	ActionStatusDone:      true,
+	ActionStatusFailed:    true,
+	ActionStatusCancelled: true,
+}
+
 type Action struct {
 	ID          int64
 	Title       string
@@ -71,6 +87,9 @@ func FilterByDate(actions []Action, date string) []Action {
 }
 
 func (db *DB) InsertAction(title, promptID string, taskID int64, metadata string, status string) (int64, error) {
+	if !ValidActionStatuses[status] {
+		return 0, fmt.Errorf("invalid action status %q: must be one of pending, running, done, failed, cancelled", status)
+	}
 	res, err := db.Exec(
 		"INSERT INTO actions (title, prompt_id, task_id, metadata, status) VALUES (?, ?, ?, ?, ?)",
 		title, promptID, taskID, metadata, status,
