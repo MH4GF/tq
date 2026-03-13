@@ -2,16 +2,14 @@ package dispatch
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/MH4GF/tq/db"
-	"github.com/MH4GF/tq/prompt"
 )
 
 // TmuxChecker checks for the existence of tmux windows.
@@ -135,7 +133,7 @@ func reapStaleActions(ctx context.Context, cfg RalphConfig) {
 			}
 		}
 
-		windowName := fmt.Sprintf("tq-action-%d", a.ID)
+		windowName := WindowName(a.ID)
 		if _, exists := windowSet[windowName]; exists {
 			continue
 		}
@@ -158,197 +156,42 @@ func dispatchOne(ctx context.Context, cfg RalphConfig) (bool, error) {
 		return false, nil
 	}
 
-	promptsDir := resolvePromptsDir(cfg.UserConfigDir)
-	lr, err := prompt.Load(promptsDir, action.PromptID)
-	if err != nil {
-		_ = cfg.DB.MarkFailed(action.ID, fmt.Sprintf("prompt load error: %v", err))
-		return true, fmt.Errorf("load prompt %q: %w", action.PromptID, err)
-	}
-	tmpl := lr.Prompt
+	result, err := ExecuteAction(ctx, ExecuteParams{
+		DB:                 cfg.DB,
+		PromptsDir:         resolvePromptsDir(cfg.UserConfigDir),
+		NonInteractiveFunc: cfg.NonInteractiveFunc,
+		InteractiveFunc:    cfg.InteractiveFunc,
+		RemoteFunc:         cfg.RemoteFunc,
+		TmuxSession:        cfg.TmuxSession,
+		BeforeInteractive: func(a *db.Action) error {
+			running, err := cfg.DB.CountRunningInteractive()
+			if err != nil {
+				return fmt.Errorf("count running interactive: %w", err)
+			}
+			if running >= cfg.MaxInteractive {
+				slog.Info("interactive limit reached, deferring", "action_id", a.ID, "running", running, "max", cfg.MaxInteractive)
+				return ErrInteractiveDeferred
+			}
+			return nil
+		},
+	}, action)
 
-	if len(lr.UnknownFields) > 0 {
-		CreateSelfImprovementAction(cfg.DB, action.PromptID, lr.UnknownFields)
-	}
-
-	promptData, err := BuildPromptData(cfg.DB, action)
-	if err != nil {
-		_ = cfg.DB.MarkFailed(action.ID, fmt.Sprintf("build prompt data: %v", err))
-		return true, fmt.Errorf("build prompt data: %w", err)
-	}
-
-	rendered, err := tmpl.Render(promptData)
-	if err != nil {
-		_ = cfg.DB.MarkFailed(action.ID, fmt.Sprintf("render error: %v", err))
-		return true, fmt.Errorf("render prompt: %w", err)
-	}
-
-	workDir := ResolveWorkDir(promptData)
-
-	if tmpl.Config.IsRemote() {
-		return dispatchRemote(ctx, cfg, action, rendered, tmpl.Config, workDir)
-	}
-	if tmpl.Config.IsInteractive() {
-		return dispatchInteractive(ctx, cfg, action, rendered, tmpl.Config, workDir)
-	}
-	return dispatchNonInteractive(ctx, cfg, action, rendered, tmpl.Config, workDir)
-}
-
-func dispatchInteractive(ctx context.Context, cfg RalphConfig, action *db.Action, prompt string, tmplCfg prompt.Config, workDir string) (bool, error) {
-	running, err := cfg.DB.CountRunningInteractive()
-	if err != nil {
-		return true, fmt.Errorf("count running interactive: %w", err)
-	}
-	if running >= cfg.MaxInteractive {
-		_ = cfg.DB.ResetToPending(action.ID)
-		slog.Info("interactive limit reached, deferring", "action_id", action.ID, "running", running, "max", cfg.MaxInteractive)
+	if errors.Is(err, ErrInteractiveDeferred) {
 		return false, nil
 	}
-
-	worker := cfg.InteractiveFunc()
-	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID, action.TaskID)
-	if err != nil {
-		handleFailure(cfg, action, err)
+	var af *ActionFailedError
+	if errors.As(err, &af) {
+		slog.Error("action failed", "action_id", af.ActionID, "error", af.Err)
 		return true, nil
 	}
-
-	windowName := fmt.Sprintf("tq-action-%d", action.ID)
-	if err := cfg.DB.SetSessionInfo(action.ID, cfg.TmuxSession, windowName); err != nil {
-		slog.Warn("failed to save session info", "action_id", action.ID, "error", err)
+	if err != nil {
+		return true, err
 	}
 
-	slog.Info("interactive action dispatched", "action_id", action.ID, "result", result)
+	slog.Info("action dispatched", "action_id", action.ID, "mode", result.Mode)
 	return true, nil
-}
-
-func dispatchRemote(ctx context.Context, cfg RalphConfig, action *db.Action, prompt string, tmplCfg prompt.Config, workDir string) (bool, error) {
-	worker := cfg.RemoteFunc()
-	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID, action.TaskID)
-	if err != nil {
-		handleFailure(cfg, action, err)
-		return true, nil
-	}
-
-	if err := cfg.DB.MergeActionMetadata(action.ID, map[string]any{
-		"remote_session": result,
-	}); err != nil {
-		slog.Warn("failed to save remote session info", "action_id", action.ID, "error", err)
-	}
-
-	if err := cfg.DB.MarkDispatched(action.ID); err != nil {
-		slog.Warn("failed to mark action as dispatched", "action_id", action.ID, "error", err)
-	}
-
-	slog.Info("remote action dispatched", "action_id", action.ID, "result", result)
-	return true, nil
-}
-
-func dispatchNonInteractive(ctx context.Context, cfg RalphConfig, action *db.Action, prompt string, tmplCfg prompt.Config, workDir string) (bool, error) {
-	worker := cfg.NonInteractiveFunc()
-	result, err := worker.Execute(ctx, prompt, tmplCfg, workDir, action.ID, action.TaskID)
-	if err != nil {
-		handleFailure(cfg, action, err)
-		return true, nil
-	}
-
-	if err := cfg.DB.MarkDone(action.ID, result); err != nil {
-		return true, fmt.Errorf("mark done: %w", err)
-	}
-
-	promptsDir := resolvePromptsDir(cfg.UserConfigDir)
-	if err := TriggerOnDone(cfg.DB, promptsDir, action, result); err != nil {
-		slog.Warn("on_done trigger failed", "action_id", action.ID, "error", err)
-	}
-
-	slog.Info("action done", "action_id", action.ID)
-	return true, nil
-}
-
-func handleFailure(cfg RalphConfig, action *db.Action, execErr error) {
-	_ = cfg.DB.MarkFailed(action.ID, execErr.Error())
-	slog.Error("action failed", "action_id", action.ID, "error", execErr)
-}
-
-func parseMetadata(raw string) (map[string]any, error) {
-	m := make(map[string]any)
-	if raw == "" || raw == "{}" {
-		return m, nil
-	}
-	if err := json.Unmarshal([]byte(raw), &m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-// BuildPromptData builds prompt data by looking up the action's task and project from the database.
-func BuildPromptData(database *db.DB, action *db.Action) (prompt.PromptData, error) {
-	var data prompt.PromptData
-
-	actionMeta, err := parseMetadata(action.Metadata)
-	if err != nil {
-		return data, fmt.Errorf("parse action metadata: %w", err)
-	}
-	data.Action = prompt.ActionData{
-		ID:       action.ID,
-		PromptID: action.PromptID,
-		Status:   action.Status,
-		Meta:     actionMeta,
-	}
-
-	task, err := database.GetTask(action.TaskID)
-	if err != nil {
-		return data, fmt.Errorf("get task: %w", err)
-	}
-	taskMeta, err := parseMetadata(task.Metadata)
-	if err != nil {
-		return data, fmt.Errorf("parse task metadata: %w", err)
-	}
-	data.Task = prompt.TaskData{
-		ID:      task.ID,
-		Title:   task.Title,
-		URL:     task.URL,
-		Status:  task.Status,
-		WorkDir: task.WorkDir,
-		Meta:    taskMeta,
-	}
-
-	project, err := database.GetProjectByID(task.ProjectID)
-	if err != nil {
-		return data, fmt.Errorf("get project: %w", err)
-	}
-	projectMeta, err := parseMetadata(project.Metadata)
-	if err != nil {
-		return data, fmt.Errorf("parse project metadata: %w", err)
-	}
-	data.Project = prompt.ProjectData{
-		ID:      project.ID,
-		Name:    project.Name,
-		WorkDir: project.WorkDir,
-		Meta:    projectMeta,
-	}
-
-	return data, nil
 }
 
 func resolvePromptsDir(userConfigDir string) string {
 	return filepath.Join(userConfigDir, "prompts")
-}
-
-// ResolveWorkDir returns the effective working directory for prompt execution.
-func ResolveWorkDir(data prompt.PromptData) string {
-	if data.Task.WorkDir != "" {
-		return expandHome(data.Task.WorkDir)
-	}
-	if data.Project.WorkDir != "" {
-		return expandHome(data.Project.WorkDir)
-	}
-	return "."
-}
-
-func expandHome(path string) string {
-	if len(path) >= 2 && path[:2] == "~/" {
-		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, path[2:])
-		}
-	}
-	return path
 }

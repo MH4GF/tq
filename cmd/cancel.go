@@ -35,7 +35,7 @@ var cancelCmd = &cobra.Command{
 		}
 
 		if action.Status == "running" && action.TmuxPane.Valid {
-			_ = exec.Command("tmux", "kill-window", "-t", fmt.Sprintf("main:tq-action-%d", id)).Run()
+			_ = exec.Command("tmux", "kill-window", "-t", "main:"+dispatch.WindowName(id)).Run()
 		}
 
 		reason := ""

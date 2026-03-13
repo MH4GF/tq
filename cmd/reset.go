@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strconv"
 
+	"github.com/MH4GF/tq/dispatch"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +26,7 @@ var resetCmd = &cobra.Command{
 			return fmt.Errorf("action #%d is %q, cannot reset", id, action.Status)
 		}
 		if action.Status == "running" && action.TmuxPane.Valid {
-			_ = exec.Command("tmux", "kill-window", "-t", fmt.Sprintf("main:tq-action-%d", id)).Run()
+			_ = exec.Command("tmux", "kill-window", "-t", "main:"+dispatch.WindowName(id)).Run()
 		}
 		if err := database.ResetToPending(id); err != nil {
 			return fmt.Errorf("reset to pending: %w", err)

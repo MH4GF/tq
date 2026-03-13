@@ -2,14 +2,13 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log/slog"
 	"strconv"
 	"strings"
 
 	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/dispatch"
-	"github.com/MH4GF/tq/prompt"
 	"github.com/spf13/cobra"
 )
 
@@ -103,78 +102,32 @@ var dispatchCmd = &cobra.Command{
 			}
 		}
 
-		promptData, err := dispatch.BuildPromptData(database, action)
-		if err != nil {
-			_ = database.MarkFailed(action.ID, fmt.Sprintf("build prompt data: %v", err))
-			return fmt.Errorf("build prompt data: %w", err)
-		}
+		result, err := dispatch.ExecuteAction(ctx, dispatch.ExecuteParams{
+			DB:                 database,
+			PromptsDir:         resolvePromptsDir(),
+			NonInteractiveFunc: getWorkerFactory(),
+			InteractiveFunc:    getInteractiveWorkerFactory(),
+			RemoteFunc:         getRemoteWorkerFactory(),
+		}, action)
 
-		promptsDir := resolvePromptsDir()
-		lr, err := prompt.Load(promptsDir, action.PromptID)
-		if err != nil {
-			_ = database.MarkFailed(action.ID, fmt.Sprintf("prompt load error: %v", err))
-			return fmt.Errorf("load prompt: %w", err)
-		}
-		tmpl := lr.Prompt
-
-		rendered, err := tmpl.Render(promptData)
-		if err != nil {
-			_ = database.MarkFailed(action.ID, fmt.Sprintf("render error: %v", err))
-			return fmt.Errorf("render prompt: %w", err)
-		}
-
-		workDir := dispatch.ResolveWorkDir(promptData)
-
-		if tmpl.Config.IsRemote() {
-			worker := getRemoteWorkerFactory()()
-			result, err := worker.Execute(ctx, rendered, tmpl.Config, workDir, action.ID, action.TaskID)
-			if err != nil {
-				_ = database.MarkFailed(action.ID, err.Error())
-				fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", action.ID, err)
-				return nil
-			}
-			if err := database.MergeActionMetadata(action.ID, map[string]any{
-				"remote_session": result,
-			}); err != nil {
-				slog.Warn("failed to save remote session info", "action_id", action.ID, "error", err)
-			}
-			if err := database.MarkDispatched(action.ID); err != nil {
-				slog.Warn("failed to mark action as dispatched", "action_id", action.ID, "error", err)
-			}
-			sessionURL := strings.TrimPrefix(result, dispatch.RemoteSessionPrefix)
-			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched remotely\nView: %s\n", action.ID, sessionURL)
+		var af *dispatch.ActionFailedError
+		if errors.As(err, &af) {
+			fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", af.ActionID, af.Err)
 			return nil
 		}
-
-		if tmpl.Config.IsInteractive() {
-			worker := getInteractiveWorkerFactory()()
-			result, err := worker.Execute(ctx, rendered, tmpl.Config, workDir, action.ID, action.TaskID)
-			if err != nil {
-				_ = database.MarkFailed(action.ID, err.Error())
-				fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", action.ID, err)
-				return nil
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched interactively: %s\n", action.ID, result)
-			return nil
-		}
-
-		worker := getWorkerFactory()()
-		result, err := worker.Execute(ctx, rendered, tmpl.Config, workDir, action.ID, action.TaskID)
 		if err != nil {
-			_ = database.MarkFailed(action.ID, err.Error())
-			fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", action.ID, err)
-			return nil
+			return err
 		}
 
-		if err := database.MarkDone(action.ID, result); err != nil {
-			return fmt.Errorf("mark done: %w", err)
+		switch result.Mode {
+		case dispatch.ModeRemote:
+			url := strings.TrimPrefix(result.Output, dispatch.RemoteSessionPrefix)
+			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched remotely\nView: %s\n", action.ID, url)
+		case dispatch.ModeInteractive:
+			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched interactively: %s\n", action.ID, result.Output)
+		default:
+			fmt.Fprintf(cmd.OutOrStdout(), "action #%d done\n", action.ID)
 		}
-
-		if err := dispatch.TriggerOnDone(database, promptsDir, action, result); err != nil {
-			slog.Warn("on_done trigger failed", "action_id", action.ID, "error", err)
-		}
-
-		fmt.Fprintf(cmd.OutOrStdout(), "action #%d done\n", action.ID)
 		return nil
 	},
 }

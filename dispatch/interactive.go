@@ -21,7 +21,7 @@ func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg prom
 	if session == "" {
 		session = "main"
 	}
-	windowName := fmt.Sprintf("tq-action-%d", actionID)
+	windowName := WindowName(actionID)
 
 	// 1. Create tmux window
 	out, err := w.Runner.Run(ctx, "tmux", []string{
