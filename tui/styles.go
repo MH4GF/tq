@@ -19,6 +19,7 @@ var (
 
 	stylePending      = lipgloss.NewStyle().Foreground(colorPending)
 	styleRunning      = lipgloss.NewStyle().Foreground(colorRunning)
+	styleDispatched   = lipgloss.NewStyle().Foreground(colorAccent)
 	styleDone         = lipgloss.NewStyle().Foreground(colorDone)
 	styleFailed       = lipgloss.NewStyle().Foreground(colorFailed)
 	styleWarning = lipgloss.NewStyle().Foreground(colorWarning)
@@ -42,6 +43,8 @@ func StatusStyle(status string) lipgloss.Style {
 		return styleDone
 	case "failed":
 		return styleFailed
+	case "dispatched":
+		return styleDispatched
 	default:
 		return styleMuted
 	}
@@ -112,6 +115,8 @@ func StatusIcon(status string) string {
 		return "✓"
 	case "failed":
 		return "✗"
+	case "dispatched":
+		return "⇢"
 	default:
 		return "?"
 	}

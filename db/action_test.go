@@ -452,6 +452,7 @@ func TestFilterForOpenTask(t *testing.T) {
 	actions := []db.Action{
 		{ID: 1, Status: "pending", CreatedAt: "2026-01-01 00:00:00"},
 		{ID: 2, Status: "running", CreatedAt: "2026-01-01 00:00:00"},
+		{ID: 3, Status: "dispatched", CreatedAt: "2026-01-01 00:00:00"},
 		{ID: 4, Status: "done", CreatedAt: "2026-01-01 00:00:00", CompletedAt: sql.NullString{String: "2026-03-04 10:00:00", Valid: true}},
 		{ID: 5, Status: "failed", CreatedAt: "2026-01-01 00:00:00", CompletedAt: sql.NullString{String: "2026-01-01 12:00:00", Valid: true}},
 		{ID: 6, Status: "done", CreatedAt: "2026-03-04 09:00:00"},
@@ -464,8 +465,8 @@ func TestFilterForOpenTask(t *testing.T) {
 		ids[a.ID] = true
 	}
 
-	// pending/running always included
-	for _, id := range []int64{1, 2} {
+	// pending/running/dispatched always included
+	for _, id := range []int64{1, 2, 3} {
 		if !ids[id] {
 			t.Errorf("expected action %d (non-terminal) to be included", id)
 		}
@@ -636,6 +637,106 @@ func TestInsertAction_InvalidStatus(t *testing.T) {
 				t.Errorf("error = %q, want to contain 'invalid action status'", err)
 			}
 		})
+	}
+}
+
+func TestMarkDispatched(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
+
+	if err := d.MarkDispatched(id); err != nil {
+		t.Fatal(err)
+	}
+
+	a, _ := d.GetAction(id)
+	if a.Status != "dispatched" {
+		t.Errorf("status = %q, want dispatched", a.Status)
+	}
+}
+
+func TestMarkDispatched_NotRunning(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+
+	tests := []struct {
+		name   string
+		status string
+	}{
+		{"pending", "pending"},
+		{"done", "done"},
+		{"failed", "failed"},
+		{"cancelled", "cancelled"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id, _ := d.InsertAction("test-"+tt.status, "test", taskID, "{}", tt.status)
+			err := d.MarkDispatched(id)
+			if err == nil {
+				t.Fatalf("expected error for status %q", tt.status)
+			}
+			if !strings.Contains(err.Error(), "not running") {
+				t.Errorf("error = %q, want to contain 'not running'", err)
+			}
+		})
+	}
+}
+
+func TestHasActiveAction_Dispatched(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	id, _ := d.InsertAction("impl", "impl", taskID, "{}", "running")
+	d.MarkDispatched(id)
+
+	has, err := d.HasActiveAction(taskID, "impl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !has {
+		t.Error("expected true for dispatched action")
+	}
+}
+
+func TestMarkDone_FromDispatched(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
+	d.MarkDispatched(id)
+
+	if err := d.MarkDone(id, "pr merged"); err != nil {
+		t.Fatal(err)
+	}
+
+	a, _ := d.GetAction(id)
+	if a.Status != "done" {
+		t.Errorf("status = %q, want done", a.Status)
+	}
+}
+
+func TestMarkCancelled_FromDispatched(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
+	d.MarkDispatched(id)
+
+	if err := d.MarkCancelled(id, "no longer needed"); err != nil {
+		t.Fatal(err)
+	}
+
+	a, _ := d.GetAction(id)
+	if a.Status != "cancelled" {
+		t.Errorf("status = %q, want cancelled", a.Status)
 	}
 }
 

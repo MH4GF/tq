@@ -418,8 +418,8 @@ func TestRalphLoop_RemoteDispatch(t *testing.T) {
 	}
 
 	action, _ := d.GetAction(1)
-	if action.Status != "running" {
-		t.Errorf("action status = %q, want running (fire-and-forget)", action.Status)
+	if action.Status != "dispatched" {
+		t.Errorf("action status = %q, want dispatched", action.Status)
 	}
 }
 

@@ -153,7 +153,7 @@ func tryCompleteRemoteAction(metadata map[string]any, promptsDir string) bool {
 		slog.Warn("remote action lookup failed", "action_id", actionID, "error", err)
 		return false
 	}
-	if action.Status != "running" {
+	if action.Status != "running" && action.Status != "dispatched" {
 		return false
 	}
 

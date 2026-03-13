@@ -137,6 +137,9 @@ var dispatchCmd = &cobra.Command{
 			}); err != nil {
 				slog.Warn("failed to save remote session info", "action_id", action.ID, "error", err)
 			}
+			if err := database.MarkDispatched(action.ID); err != nil {
+				slog.Warn("failed to mark action as dispatched", "action_id", action.ID, "error", err)
+			}
 			sessionURL := strings.TrimPrefix(result, dispatch.RemoteSessionPrefix)
 			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched remotely\nView: %s\n", action.ID, sessionURL)
 			return nil

@@ -9,19 +9,21 @@ import (
 )
 
 const (
-	ActionStatusPending   = "pending"
-	ActionStatusRunning   = "running"
-	ActionStatusDone      = "done"
-	ActionStatusFailed    = "failed"
-	ActionStatusCancelled = "cancelled"
+	ActionStatusPending    = "pending"
+	ActionStatusRunning    = "running"
+	ActionStatusDispatched = "dispatched"
+	ActionStatusDone       = "done"
+	ActionStatusFailed     = "failed"
+	ActionStatusCancelled  = "cancelled"
 )
 
 var ValidActionStatuses = map[string]bool{
-	ActionStatusPending:   true,
-	ActionStatusRunning:   true,
-	ActionStatusDone:      true,
-	ActionStatusFailed:    true,
-	ActionStatusCancelled: true,
+	ActionStatusPending:    true,
+	ActionStatusRunning:    true,
+	ActionStatusDispatched: true,
+	ActionStatusDone:       true,
+	ActionStatusFailed:     true,
+	ActionStatusCancelled:  true,
 }
 
 type Action struct {
@@ -64,7 +66,7 @@ func FilterForOpenTask(actions []Action, date string) []Action {
 	}
 	var filtered []Action
 	for _, a := range actions {
-		if a.Status == "pending" || a.Status == "running" {
+		if a.Status == "pending" || a.Status == "running" || a.Status == "dispatched" {
 			filtered = append(filtered, a)
 		} else if a.MatchesDate(date) {
 			filtered = append(filtered, a)
@@ -88,7 +90,7 @@ func FilterByDate(actions []Action, date string) []Action {
 
 func (db *DB) InsertAction(title, promptID string, taskID int64, metadata string, status string) (int64, error) {
 	if !ValidActionStatuses[status] {
-		return 0, fmt.Errorf("invalid action status %q: must be one of pending, running, done, failed, cancelled", status)
+		return 0, fmt.Errorf("invalid action status %q: must be one of pending, running, dispatched, done, failed, cancelled", status)
 	}
 	res, err := db.Exec(
 		"INSERT INTO actions (title, prompt_id, task_id, metadata, status) VALUES (?, ?, ?, ?, ?)",
@@ -103,7 +105,7 @@ func (db *DB) InsertAction(title, promptID string, taskID int64, metadata string
 func (db *DB) HasActiveAction(taskID int64, promptID string) (bool, error) {
 	var count int
 	err := db.QueryRow(
-		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN ('pending', 'running')",
+		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN ('pending', 'running', 'dispatched')",
 		taskID, promptID,
 	).Scan(&count)
 	if err != nil {
@@ -208,6 +210,24 @@ func (db *DB) MarkCancelled(id int64, result string) error {
 		result, id,
 	)
 	return err
+}
+
+func (db *DB) MarkDispatched(id int64) error {
+	res, err := db.Exec(
+		"UPDATE actions SET status = 'dispatched' WHERE id = ? AND status = 'running'",
+		id,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("action #%d is not running, cannot mark as dispatched", id)
+	}
+	return nil
 }
 
 func (db *DB) ListActions(status string, taskID *int64) ([]Action, error) {

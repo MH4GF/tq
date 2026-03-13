@@ -229,6 +229,10 @@ func dispatchRemote(ctx context.Context, cfg RalphConfig, action *db.Action, pro
 		slog.Warn("failed to save remote session info", "action_id", action.ID, "error", err)
 	}
 
+	if err := cfg.DB.MarkDispatched(action.ID); err != nil {
+		slog.Warn("failed to mark action as dispatched", "action_id", action.ID, "error", err)
+	}
+
 	slog.Info("remote action dispatched", "action_id", action.ID, "result", result)
 	return true, nil
 }
