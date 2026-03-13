@@ -23,10 +23,11 @@ on_done: review
 Body content here.
 `)
 
-	p, err := Load(dir, "full")
+	lr, err := Load(dir, "full")
 	if err != nil {
 		t.Fatal(err)
 	}
+	p := lr.Prompt
 
 	if p.ID != "full" {
 		t.Errorf("ID = %q, want %q", p.ID, "full")
@@ -43,6 +44,9 @@ Body content here.
 	if p.Body != "Body content here." {
 		t.Errorf("Body = %q, want %q", p.Body, "Body content here.")
 	}
+	if len(lr.UnknownFields) != 0 {
+		t.Errorf("UnknownFields = %v, want empty", lr.UnknownFields)
+	}
 }
 
 func TestLoad_Defaults(t *testing.T) {
@@ -53,10 +57,11 @@ description: Minimal
 Hello.
 `)
 
-	p, err := Load(dir, "minimal")
+	lr, err := Load(dir, "minimal")
 	if err != nil {
 		t.Fatal(err)
 	}
+	p := lr.Prompt
 
 	if !p.Config.IsInteractive() {
 		t.Errorf("IsInteractive() = false, want true (default)")
@@ -75,14 +80,14 @@ mode: noninteractive
 Body.
 `)
 
-	p, err := Load(dir, "ni")
+	lr, err := Load(dir, "ni")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !p.Config.IsNonInteractive() {
+	if !lr.Prompt.Config.IsNonInteractive() {
 		t.Errorf("IsNonInteractive() = false, want true")
 	}
-	if p.Config.IsInteractive() {
+	if lr.Prompt.Config.IsInteractive() {
 		t.Errorf("IsInteractive() = true, want false")
 	}
 }
@@ -96,14 +101,14 @@ mode: remote
 Body.
 `)
 
-	p, err := Load(dir, "rem")
+	lr, err := Load(dir, "rem")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !p.Config.IsRemote() {
+	if !lr.Prompt.Config.IsRemote() {
 		t.Errorf("IsRemote() = false, want true")
 	}
-	if p.Config.IsInteractive() {
+	if lr.Prompt.Config.IsInteractive() {
 		t.Errorf("IsInteractive() = true, want false")
 	}
 }
@@ -280,6 +285,69 @@ ActionMeta: aval`
 
 	if result != expected {
 		t.Errorf("Render result:\n%s\nwant:\n%s", result, expected)
+	}
+}
+
+func TestLoad_UnknownFields(t *testing.T) {
+	dir := t.TempDir()
+	writePrompt(t, dir, "extra", `---
+description: Has extras
+mode: interactive
+allowed_tools: ["bash"]
+timeout: 30
+---
+Body.
+`)
+
+	lr, err := Load(dir, "extra")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(lr.UnknownFields) != 2 {
+		t.Fatalf("UnknownFields = %v, want 2 fields", lr.UnknownFields)
+	}
+	if lr.UnknownFields[0] != "allowed_tools" {
+		t.Errorf("UnknownFields[0] = %q, want %q", lr.UnknownFields[0], "allowed_tools")
+	}
+	if lr.UnknownFields[1] != "timeout" {
+		t.Errorf("UnknownFields[1] = %q, want %q", lr.UnknownFields[1], "timeout")
+	}
+	if lr.Prompt.Config.Description != "Has extras" {
+		t.Errorf("Description = %q, want %q", lr.Prompt.Config.Description, "Has extras")
+	}
+}
+
+func TestLoad_NoUnknownFields(t *testing.T) {
+	dir := t.TempDir()
+	writePrompt(t, dir, "clean", `---
+description: Clean prompt
+mode: noninteractive
+on_done: review
+on_cancel: notify
+---
+Body.
+`)
+
+	lr, err := Load(dir, "clean")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lr.UnknownFields) != 0 {
+		t.Errorf("UnknownFields = %v, want empty", lr.UnknownFields)
+	}
+}
+
+func TestLoad_InternalPrompt(t *testing.T) {
+	lr, err := Load("", "internal:remove-unknown-frontmatter")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lr.Prompt.Config.Mode != "noninteractive" {
+		t.Errorf("Mode = %q, want %q", lr.Prompt.Config.Mode, "noninteractive")
+	}
+	if lr.Prompt.ID != "internal:remove-unknown-frontmatter" {
+		t.Errorf("ID = %q, want %q", lr.Prompt.ID, "internal:remove-unknown-frontmatter")
 	}
 }
 

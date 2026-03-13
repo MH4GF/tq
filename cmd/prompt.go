@@ -41,7 +41,7 @@ var promptListCmd = &cobra.Command{
 		rows := make([]row, len(prompts))
 		for i, p := range prompts {
 			scope := "user"
-			if _, err := prompt.Load(projectDir, p.ID); err == nil {
+			if _, loadErr := prompt.Load(projectDir, p.ID); loadErr == nil {
 				scope = "project"
 			}
 			rows[i] = row{

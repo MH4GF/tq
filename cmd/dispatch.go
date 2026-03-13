@@ -110,13 +110,14 @@ var dispatchCmd = &cobra.Command{
 		}
 
 		promptsDir := resolvePromptsDir()
-		tmpl, err := prompt.Load(promptsDir, action.PromptID)
+		lr, err := prompt.Load(promptsDir, action.PromptID)
 		if err != nil {
 			_ = database.MarkFailed(action.ID, fmt.Sprintf("prompt load error: %v", err))
 			return fmt.Errorf("load prompt: %w", err)
 		}
+		tmpl := lr.Prompt
 
-		prompt, err := tmpl.Render(promptData)
+		rendered, err := tmpl.Render(promptData)
 		if err != nil {
 			_ = database.MarkFailed(action.ID, fmt.Sprintf("render error: %v", err))
 			return fmt.Errorf("render prompt: %w", err)
@@ -126,7 +127,7 @@ var dispatchCmd = &cobra.Command{
 
 		if tmpl.Config.IsRemote() {
 			worker := getRemoteWorkerFactory()()
-			result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID, action.TaskID)
+			result, err := worker.Execute(ctx, rendered, tmpl.Config, workDir, action.ID, action.TaskID)
 			if err != nil {
 				_ = database.MarkFailed(action.ID, err.Error())
 				fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", action.ID, err)
@@ -147,7 +148,7 @@ var dispatchCmd = &cobra.Command{
 
 		if tmpl.Config.IsInteractive() {
 			worker := getInteractiveWorkerFactory()()
-			result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID, action.TaskID)
+			result, err := worker.Execute(ctx, rendered, tmpl.Config, workDir, action.ID, action.TaskID)
 			if err != nil {
 				_ = database.MarkFailed(action.ID, err.Error())
 				fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", action.ID, err)
@@ -158,7 +159,7 @@ var dispatchCmd = &cobra.Command{
 		}
 
 		worker := getWorkerFactory()()
-		result, err := worker.Execute(ctx, prompt, tmpl.Config, workDir, action.ID, action.TaskID)
+		result, err := worker.Execute(ctx, rendered, tmpl.Config, workDir, action.ID, action.TaskID)
 		if err != nil {
 			_ = database.MarkFailed(action.ID, err.Error())
 			fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", action.ID, err)

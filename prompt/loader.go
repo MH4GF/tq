@@ -2,15 +2,21 @@ package prompt
 
 import (
 	"bytes"
+	"embed"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"text/template"
 
 	"gopkg.in/yaml.v3"
 )
+
+//go:embed internal/*.md
+var internalPrompts embed.FS
 
 type Config struct {
 	Description string `yaml:"description"`
@@ -28,6 +34,22 @@ type Prompt struct {
 	Config Config
 	Body   string
 }
+
+type LoadResult struct {
+	Prompt        *Prompt
+	UnknownFields []string
+}
+
+var knownFrontmatterKeys = func() map[string]bool {
+	m := make(map[string]bool)
+	t := reflect.TypeOf(Config{})
+	for i := range t.NumField() {
+		if tag := t.Field(i).Tag.Get("yaml"); tag != "" {
+			m[tag] = true
+		}
+	}
+	return m
+}()
 
 type PromptData struct {
 	Task    TaskData
@@ -58,11 +80,22 @@ type ActionData struct {
 	Meta     map[string]any
 }
 
-func Load(promptsDir, promptID string) (*Prompt, error) {
-	path := filepath.Join(promptsDir, promptID+".md")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("prompt %q not found: %w", promptID, err)
+func Load(promptsDir, promptID string) (*LoadResult, error) {
+	var data []byte
+	var err error
+
+	if strings.HasPrefix(promptID, "internal:") {
+		name := strings.TrimPrefix(promptID, "internal:")
+		data, err = internalPrompts.ReadFile("internal/" + name + ".md")
+		if err != nil {
+			return nil, fmt.Errorf("internal prompt %q not found: %w", promptID, err)
+		}
+	} else {
+		path := filepath.Join(promptsDir, promptID+".md")
+		data, err = os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("prompt %q not found: %w", promptID, err)
+		}
 	}
 
 	content := string(data)
@@ -79,14 +112,31 @@ func Load(promptsDir, promptID string) (*Prompt, error) {
 		return nil, fmt.Errorf("prompt %q: invalid YAML: %w", promptID, err)
 	}
 
+	var rawMap map[string]any
+	var unknownFields []string
+	if err := yaml.Unmarshal(frontmatter, &rawMap); err == nil {
+		for key := range rawMap {
+			if !knownFrontmatterKeys[key] {
+				unknownFields = append(unknownFields, key)
+			}
+		}
+		if len(unknownFields) > 0 {
+			sort.Strings(unknownFields)
+			slog.Warn("unknown frontmatter fields", "prompt_id", promptID, "fields", unknownFields)
+		}
+	}
+
 	if cfg.Mode == "" {
 		cfg.Mode = "interactive"
 	}
 
-	return &Prompt{
-		ID:     promptID,
-		Config: cfg,
-		Body:   body,
+	return &LoadResult{
+		Prompt: &Prompt{
+			ID:     promptID,
+			Config: cfg,
+			Body:   body,
+		},
+		UnknownFields: unknownFields,
 	}, nil
 }
 
@@ -107,12 +157,12 @@ func List(dirs ...string) ([]Prompt, error) {
 				continue
 			}
 			id := strings.TrimSuffix(e.Name(), ".md")
-			p, err := Load(dir, id)
+			result, err := Load(dir, id)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", filepath.Join(dir, e.Name()), err)
 				continue
 			}
-			seen[id] = *p
+			seen[id] = *result.Prompt
 		}
 	}
 

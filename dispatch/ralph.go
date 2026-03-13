@@ -159,10 +159,15 @@ func dispatchOne(ctx context.Context, cfg RalphConfig) (bool, error) {
 	}
 
 	promptsDir := resolvePromptsDir(cfg.UserConfigDir)
-	tmpl, err := prompt.Load(promptsDir, action.PromptID)
+	lr, err := prompt.Load(promptsDir, action.PromptID)
 	if err != nil {
 		_ = cfg.DB.MarkFailed(action.ID, fmt.Sprintf("prompt load error: %v", err))
 		return true, fmt.Errorf("load prompt %q: %w", action.PromptID, err)
+	}
+	tmpl := lr.Prompt
+
+	if len(lr.UnknownFields) > 0 {
+		CreateSelfImprovementAction(cfg.DB, action.PromptID, lr.UnknownFields)
 	}
 
 	promptData, err := BuildPromptData(cfg.DB, action)
@@ -171,7 +176,7 @@ func dispatchOne(ctx context.Context, cfg RalphConfig) (bool, error) {
 		return true, fmt.Errorf("build prompt data: %w", err)
 	}
 
-	prompt, err := tmpl.Render(promptData)
+	rendered, err := tmpl.Render(promptData)
 	if err != nil {
 		_ = cfg.DB.MarkFailed(action.ID, fmt.Sprintf("render error: %v", err))
 		return true, fmt.Errorf("render prompt: %w", err)
@@ -180,12 +185,12 @@ func dispatchOne(ctx context.Context, cfg RalphConfig) (bool, error) {
 	workDir := ResolveWorkDir(promptData)
 
 	if tmpl.Config.IsRemote() {
-		return dispatchRemote(ctx, cfg, action, prompt, tmpl.Config, workDir)
+		return dispatchRemote(ctx, cfg, action, rendered, tmpl.Config, workDir)
 	}
 	if tmpl.Config.IsInteractive() {
-		return dispatchInteractive(ctx, cfg, action, prompt, tmpl.Config, workDir)
+		return dispatchInteractive(ctx, cfg, action, rendered, tmpl.Config, workDir)
 	}
-	return dispatchNonInteractive(ctx, cfg, action, prompt, tmpl.Config, workDir)
+	return dispatchNonInteractive(ctx, cfg, action, rendered, tmpl.Config, workDir)
 }
 
 func dispatchInteractive(ctx context.Context, cfg RalphConfig, action *db.Action, prompt string, tmplCfg prompt.Config, workDir string) (bool, error) {
@@ -263,15 +268,24 @@ func handleFailure(cfg RalphConfig, action *db.Action, execErr error) {
 	slog.Error("action failed", "action_id", action.ID, "error", execErr)
 }
 
+func parseMetadata(raw string) (map[string]any, error) {
+	m := make(map[string]any)
+	if raw == "" || raw == "{}" {
+		return m, nil
+	}
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // BuildPromptData builds prompt data by looking up the action's task and project from the database.
 func BuildPromptData(database *db.DB, action *db.Action) (prompt.PromptData, error) {
 	var data prompt.PromptData
 
-	actionMeta := make(map[string]any)
-	if action.Metadata != "" && action.Metadata != "{}" {
-		if err := json.Unmarshal([]byte(action.Metadata), &actionMeta); err != nil {
-			return data, fmt.Errorf("parse action metadata: %w", err)
-		}
+	actionMeta, err := parseMetadata(action.Metadata)
+	if err != nil {
+		return data, fmt.Errorf("parse action metadata: %w", err)
 	}
 	data.Action = prompt.ActionData{
 		ID:       action.ID,
@@ -284,11 +298,9 @@ func BuildPromptData(database *db.DB, action *db.Action) (prompt.PromptData, err
 	if err != nil {
 		return data, fmt.Errorf("get task: %w", err)
 	}
-	taskMeta := make(map[string]any)
-	if task.Metadata != "" && task.Metadata != "{}" {
-		if err := json.Unmarshal([]byte(task.Metadata), &taskMeta); err != nil {
-			return data, fmt.Errorf("parse task metadata: %w", err)
-		}
+	taskMeta, err := parseMetadata(task.Metadata)
+	if err != nil {
+		return data, fmt.Errorf("parse task metadata: %w", err)
 	}
 	data.Task = prompt.TaskData{
 		ID:      task.ID,
@@ -303,11 +315,9 @@ func BuildPromptData(database *db.DB, action *db.Action) (prompt.PromptData, err
 	if err != nil {
 		return data, fmt.Errorf("get project: %w", err)
 	}
-	projectMeta := make(map[string]any)
-	if project.Metadata != "" && project.Metadata != "{}" {
-		if err := json.Unmarshal([]byte(project.Metadata), &projectMeta); err != nil {
-			return data, fmt.Errorf("parse project metadata: %w", err)
-		}
+	projectMeta, err := parseMetadata(project.Metadata)
+	if err != nil {
+		return data, fmt.Errorf("parse project metadata: %w", err)
 	}
 	data.Project = prompt.ProjectData{
 		ID:      project.ID,
