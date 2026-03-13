@@ -33,8 +33,7 @@ tq ui
 ```
 
 バックグラウンドで以下が自動実行される:
-- **Ralph Loop**: pending アクションを検出して自動ディスパッチ
-- **Watch**: GitHub通知を取得して task/action を自動生成
+- **Ralph Loop**: pending アクションを検出して自動ディスパッチ。スケジュール（cron）も Ralph Loop が管理し、時刻到達時にアクションを自動生成する
 
 ### 実行状況を確認する
 
@@ -67,10 +66,10 @@ tq action done {{.Action.ID}} '{"result":"<要約>"}'
 
 ### tq action create — アクション作成
 
-classify-gh-notification プロンプトが通知からアクションを生成する際に使う。
+プロンプトやスケジュールから新しいアクションを生成する際に使う。
 
 ```bash
-tq action create fix-ci --task 1 --meta '{"pr_url":"https://..."}'
+tq action create fix-ci --task 1 --title "CI修正" --meta '{"pr_url":"https://..."}'
 ```
 
 ### tq task create / update — タスク操作
@@ -88,6 +87,28 @@ tq task update 3 --status done
 tq project create hearable ~/ghq/github.com/thehearableapp/hearable-app --metadata '{"gh_owner":"thehearableapp","repos":["thehearableapp/hearable-app"]}'
 tq project list
 tq project delete 3
+```
+
+### tq schedule — スケジュール管理
+
+cron 式で定期実行するアクションを登録する。Ralph Loop がスケジュールを監視し、時刻到達時にアクションを自動生成する。
+
+```bash
+# スケジュール登録
+tq schedule create watch-gh-notifications \
+  --task 181 \
+  --title "Watch GitHub notifications" \
+  --cron "*/5 * * * *"
+
+# 一覧
+tq schedule list
+
+# 無効化 / 有効化
+tq schedule disable <id>
+tq schedule enable <id>
+
+# 削除
+tq schedule delete <id>
 ```
 
 ### その他
