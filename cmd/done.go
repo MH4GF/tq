@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"strconv"
 
 	"github.com/MH4GF/tq/dispatch"
@@ -35,6 +36,18 @@ var doneCmd = &cobra.Command{
 
 		if err := database.MarkDone(id, result); err != nil {
 			return fmt.Errorf("mark done: %w", err)
+		}
+
+		if task, err := database.GetTask(action.TaskID); err != nil {
+			slog.Warn("failed to get task for work_dir sync", "task_id", action.TaskID, "error", err)
+		} else if pwd, err := os.Getwd(); err != nil {
+			slog.Warn("failed to get working directory", "error", err)
+		} else if task.WorkDir != pwd {
+			if err := database.UpdateTaskWorkDir(task.ID, pwd); err != nil {
+				slog.Warn("failed to update task work_dir", "task_id", task.ID, "error", err)
+			} else {
+				slog.Info("updated task work_dir", "task_id", task.ID, "work_dir", pwd)
+			}
 		}
 
 		promptsDir := resolvePromptsDir()

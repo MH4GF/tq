@@ -24,21 +24,7 @@ tqアクションの完了報告を行う。セッション中の作業内容を
 tq action create <template> --task <task_id> --source human --status running
 ```
 
-### 2. work_dir の同期
-
-task_id が取得できている場合、タスクの work_dir が現在の作業ディレクトリと一致するか確認し、必要なら更新する。
-task_id が不明の場合はこのステップをスキップして次へ進む。
-
-1. `tq task list --output json` から該当 task_id の `work_dir` を取得する
-2. `pwd` と `work_dir` を比較し、異なる場合のみ以下を実行する（一致する場合は何もしない）:
-
-```bash
-tq task update <task_id> --work-dir "$(pwd)"
-```
-
-ユーザーへの報告は不要。
-
-### 3. サマリー生成
+### 2. サマリー生成
 
 セッション中の作業内容を振り返り、以下の内容を含む複数行のプレーンテキストサマリーを生成する。情報量は多くてよい。
 
@@ -61,7 +47,7 @@ tq task update <task_id> --work-dir "$(pwd)"
 - リフレッシュ失敗時のリトライ戦略を検討したい
 ```
 
-### 4. tq action done 実行
+### 3. tq action done 実行
 
 ```bash
 tq action done <action_id> '<summary>'
