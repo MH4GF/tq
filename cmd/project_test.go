@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
@@ -17,7 +18,7 @@ func TestProjectCreate(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"project", "create", "myapp", "/tmp/myapp", "--metadata", `{"key":"val"}`})
+	root.SetArgs([]string{"project", "create", "myapp", "/tmp/myapp", "--meta", `{"key":"val"}`})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -88,15 +89,21 @@ func TestProjectList(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	out := buf.String()
-	if !contains(out, "immedio") {
-		t.Errorf("output should contain 'immedio', got %q", out)
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("failed to parse JSON: %v\noutput: %s", err, buf.String())
 	}
-	if !contains(out, "hearable") {
-		t.Errorf("output should contain 'hearable', got %q", out)
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 projects, got %d", len(rows))
 	}
-	if !contains(out, "works") {
-		t.Errorf("output should contain 'works', got %q", out)
+	names := make(map[string]bool)
+	for _, r := range rows {
+		names[r["name"].(string)] = true
+	}
+	for _, want := range []string{"immedio", "hearable", "works"} {
+		if !names[want] {
+			t.Errorf("expected project %q in output", want)
+		}
 	}
 }
 

@@ -20,12 +20,10 @@ tq task update <task_id> --status <open|review|done|blocked|archived>
 
 ```bash
 tq project list
-tq project create <NAME> <WORK_DIR> --metadata '<json>'
-tq project edit <ID> --dispatch-enabled true/false   # ID は tq project list で確認
+tq project create <NAME> <WORK_DIR> --meta '<json>'
+tq project update <ID> --dispatch-enabled true/false   # ID は tq project list で確認
 tq project delete <ID>
 ```
-
-- `update` や `--dispatch` は存在しない。必ず `edit` と `--dispatch-enabled` を使う
 
 ## アクション管理
 

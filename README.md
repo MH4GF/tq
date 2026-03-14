@@ -15,7 +15,7 @@ DB は `~/.config/tq/tq.db` に配置（固定）。プロンプトは `~/.confi
 初回セットアップ時にプロジェクトを登録する:
 
 ```bash
-tq project create myapp ~/ghq/github.com/org/myapp --metadata '{"gh_owner":"org","repos":["org/myapp"]}'
+tq project create myapp ~/ghq/github.com/org/myapp --meta '{"gh_owner":"org","repos":["org/myapp"]}'
 ```
 
 登録済みプロジェクトの確認:
@@ -84,7 +84,7 @@ tq task update 3 --status done
 ### tq project create / list / delete — プロジェクト管理
 
 ```bash
-tq project create hearable ~/ghq/github.com/thehearableapp/hearable-app --metadata '{"gh_owner":"thehearableapp","repos":["thehearableapp/hearable-app"]}'
+tq project create hearable ~/ghq/github.com/thehearableapp/hearable-app --meta '{"gh_owner":"thehearableapp","repos":["thehearableapp/hearable-app"]}'
 tq project list
 tq project delete 3
 ```

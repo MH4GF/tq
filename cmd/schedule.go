@@ -1,9 +1,8 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
-	"os"
-	"text/tabwriter"
 
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/cobra"
@@ -47,7 +46,7 @@ var scheduleCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Printf("schedule #%d created\n", id)
+		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d created\n", id)
 		return nil
 	},
 }
@@ -61,25 +60,32 @@ var scheduleListCmd = &cobra.Command{
 			return err
 		}
 		if len(schedules) == 0 {
-			fmt.Println("No schedules")
+			fmt.Fprintln(cmd.OutOrStdout(), "no schedules found")
 			return nil
 		}
 
-		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tEnabled\tTitle\tCron\tPrompt\tTask\tLast Run")
-		for _, s := range schedules {
-			enabled := "yes"
-			if !s.Enabled {
-				enabled = "no"
+		rows := make([]map[string]any, len(schedules))
+		for i, s := range schedules {
+			row := map[string]any{
+				"id":        s.ID,
+				"task_id":   s.TaskID,
+				"prompt_id": s.PromptID,
+				"title":     s.Title,
+				"cron_expr": s.CronExpr,
+				"metadata":  s.Metadata,
+				"enabled":   s.Enabled,
 			}
-			lastRun := "-"
 			if s.LastRunAt.Valid {
-				lastRun = s.LastRunAt.String
+				row["last_run_at"] = s.LastRunAt.String
+			} else {
+				row["last_run_at"] = nil
 			}
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%d\t%s\n",
-				s.ID, enabled, s.Title, s.CronExpr, s.PromptID, s.TaskID, lastRun)
+			row["created_at"] = s.CreatedAt
+			rows[i] = row
 		}
-		return w.Flush()
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(rows)
 	},
 }
 
@@ -95,7 +101,7 @@ var scheduleEnableCmd = &cobra.Command{
 		if err := database.UpdateScheduleEnabled(id, true); err != nil {
 			return err
 		}
-		fmt.Printf("schedule #%d enabled\n", id)
+		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d enabled\n", id)
 		return nil
 	},
 }
@@ -112,7 +118,7 @@ var scheduleDisableCmd = &cobra.Command{
 		if err := database.UpdateScheduleEnabled(id, false); err != nil {
 			return err
 		}
-		fmt.Printf("schedule #%d disabled\n", id)
+		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d disabled\n", id)
 		return nil
 	},
 }
@@ -129,7 +135,7 @@ var scheduleDeleteCmd = &cobra.Command{
 		if err := database.DeleteSchedule(id); err != nil {
 			return err
 		}
-		fmt.Printf("schedule #%d deleted\n", id)
+		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d deleted\n", id)
 		return nil
 	},
 }
@@ -174,7 +180,7 @@ var scheduleUpdateCmd = &cobra.Command{
 		if err := database.UpdateSchedule(id, title, cronExpr, meta, taskID); err != nil {
 			return err
 		}
-		fmt.Printf("schedule #%d updated\n", id)
+		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d updated\n", id)
 		return nil
 	},
 }
