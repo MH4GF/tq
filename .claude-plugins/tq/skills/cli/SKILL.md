@@ -43,6 +43,16 @@ tq action reset <action_id>      # failed/running/cancelled → pending
 tq prompt list    # 利用可能なプロンプトを表示
 ```
 
+## ディスパッチ（割り込み実行）
+
+キューの順番を無視して特定アクションを即座に実行する。割り込みタスクに使用。
+
+```bash
+tq dispatch <action_id>           # 指定アクションを即座にディスパッチ
+tq dispatch                       # 次のpendingアクションをディスパッチ
+tq dispatch --session <name>      # tmuxセッションを指定（デフォルト: main）
+```
+
 ## イベント履歴
 
 タスクやアクションの状態変更経緯を追跡するときに使う。

@@ -111,6 +111,16 @@ tq schedule enable <id>
 tq schedule delete <id>
 ```
 
+### tq dispatch — 割り込み実行
+
+キューの順番を無視して特定アクションを即座にディスパッチする。優先実行したいアクションがある場合に使う。
+
+```bash
+tq dispatch <action_id>           # 指定アクションを即座にディスパッチ
+tq dispatch                       # 次のpendingアクションをディスパッチ
+tq dispatch --session worker2     # tmuxセッションを指定（デフォルト: main）
+```
+
 ### その他
 
 ```bash

@@ -74,7 +74,14 @@ func SetRemoteWorkerFactory(f func() dispatch.Worker) {
 
 var dispatchCmd = &cobra.Command{
 	Use:   "dispatch [action_id]",
-	Short: "Dispatch next pending action",
+	Short: "Dispatch an action immediately (skip queue)",
+	Long: `Dispatch an action immediately, bypassing the normal queue order.
+Use this for interrupt tasks that need priority execution.
+
+If action_id is provided, that specific action is dispatched.
+If omitted, the next pending action in the queue is dispatched.
+
+The --session flag controls which tmux session the interactive worker runs in.`,
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()

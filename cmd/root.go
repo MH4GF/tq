@@ -64,7 +64,6 @@ func init() {
 	rootCmd.Version = version
 	rootCmd.AddCommand(taskCmd)
 	rootCmd.AddCommand(actionCmd)
-	dispatchCmd.Hidden = true
 	rootCmd.AddCommand(dispatchCmd)
 	rootCmd.AddCommand(uiCmd)
 	rootCmd.AddCommand(projectCmd)
