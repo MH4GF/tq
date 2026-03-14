@@ -1,6 +1,6 @@
 ---
 description: Remove unknown frontmatter fields from a prompt file
-mode: noninteractive
+mode: interactive
 ---
 The prompt file "{{index .Action.Meta "prompt_id"}}" contains unknown frontmatter fields.
 Remove the following fields: {{index .Action.Meta "unknown_fields"}}

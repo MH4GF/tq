@@ -343,8 +343,8 @@ func TestLoad_InternalPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lr.Prompt.Config.Mode != "noninteractive" {
-		t.Errorf("Mode = %q, want %q", lr.Prompt.Config.Mode, "noninteractive")
+	if lr.Prompt.Config.Mode != "interactive" {
+		t.Errorf("Mode = %q, want %q", lr.Prompt.Config.Mode, "interactive")
 	}
 	if lr.Prompt.ID != "internal:remove-unknown-frontmatter" {
 		t.Errorf("ID = %q, want %q", lr.Prompt.ID, "internal:remove-unknown-frontmatter")
