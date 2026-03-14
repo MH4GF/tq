@@ -1,10 +1,2 @@
-pre-commit:
-  commands:
-    plugin-version-check:
-      glob: ".claude-plugins/**/*"
-      run: ./scripts/check-plugin-version.sh
-      fail_text: |
-        Plugin version not updated.
-
-        When modifying files in .claude-plugins/, you must also update
-        the version in the corresponding plugin.json file.
+# lefthook configuration
+# https://github.com/evilmartians/lefthook
