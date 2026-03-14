@@ -2,8 +2,6 @@ package cmd
 
 import "runtime/debug"
 
-// version is the semantic version of tq. This value is updated automatically
-// by tagpr when creating release pull requests.
 var version = "0.18.0"
 
 func buildVersion() string {
