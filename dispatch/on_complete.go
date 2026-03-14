@@ -10,7 +10,7 @@ import (
 )
 
 // triggerFollowUp creates a follow-up action if the given targetPromptID is non-empty.
-func triggerFollowUp(database *db.DB, promptsDir string, action *db.Action, result, targetPromptID, predecessorStatus string) error {
+func triggerFollowUp(database db.Store, promptsDir string, action *db.Action, result, targetPromptID, predecessorStatus string) error {
 	if targetPromptID == "" {
 		return nil
 	}
@@ -49,7 +49,7 @@ func triggerFollowUp(database *db.DB, promptsDir string, action *db.Action, resu
 }
 
 // TriggerOnDone creates a follow-up action if the completed action's prompt has on_done configured.
-func TriggerOnDone(database *db.DB, promptsDir string, action *db.Action, result string) error {
+func TriggerOnDone(database db.Store, promptsDir string, action *db.Action, result string) error {
 	lr, err := prompt.Load(promptsDir, action.PromptID)
 	if err != nil {
 		return fmt.Errorf("load source prompt %q: %w", action.PromptID, err)
@@ -58,7 +58,7 @@ func TriggerOnDone(database *db.DB, promptsDir string, action *db.Action, result
 }
 
 // TriggerOnCancel creates a follow-up action if the cancelled action's prompt has on_cancel configured.
-func TriggerOnCancel(database *db.DB, promptsDir string, action *db.Action, result string) error {
+func TriggerOnCancel(database db.Store, promptsDir string, action *db.Action, result string) error {
 	lr, err := prompt.Load(promptsDir, action.PromptID)
 	if err != nil {
 		return fmt.Errorf("load source prompt %q: %w", action.PromptID, err)

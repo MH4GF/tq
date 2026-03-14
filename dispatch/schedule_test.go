@@ -112,7 +112,7 @@ func TestCheckSchedules_TaskDoneAutoDisable(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
-	d.UpdateTask(taskID, "done")
+	d.UpdateTask(taskID, "done", "")
 	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
 	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = ?", id)
 
@@ -139,7 +139,7 @@ func TestCheckSchedules_TaskArchivedAutoDisable(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
-	d.UpdateTask(taskID, "archived")
+	d.UpdateTask(taskID, "archived", "")
 	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
 	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = ?", id)
 

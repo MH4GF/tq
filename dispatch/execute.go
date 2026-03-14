@@ -20,7 +20,7 @@ const (
 )
 
 type ExecuteParams struct {
-	DB                 *db.DB
+	DB                 db.Store
 	PromptsDir         string
 	NonInteractiveFunc func() Worker
 	InteractiveFunc    func() Worker
@@ -170,7 +170,7 @@ func parseMetadata(raw string) (map[string]any, error) {
 }
 
 // BuildPromptData builds prompt data by looking up the action's task and project from the database.
-func BuildPromptData(database *db.DB, action *db.Action) (prompt.PromptData, error) {
+func BuildPromptData(database db.Store, action *db.Action) (prompt.PromptData, error) {
 	var data prompt.PromptData
 
 	actionMeta, err := parseMetadata(action.Metadata)

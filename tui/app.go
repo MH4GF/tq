@@ -52,7 +52,7 @@ type backgroundStatusMsg struct {
 	err  error
 }
 
-func New(database *db.DB, logCh <-chan LogEntry, backgrounds ...BackgroundFunc) Model {
+func New(database db.Store, logCh <-chan LogEntry, backgrounds ...BackgroundFunc) Model {
 	today := time.Now().Format("2006-01-02")
 	return Model{
 		activeTab:   tabQueue,

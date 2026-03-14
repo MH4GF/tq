@@ -17,6 +17,12 @@ type Task struct {
 	UpdatedAt sql.NullString
 }
 
+const taskColumns = "id, project_id, title, url, metadata, status, work_dir, created_at, updated_at"
+
+func (t *Task) scanFields() []any {
+	return []any{&t.ID, &t.ProjectID, &t.Title, &t.URL, &t.Metadata, &t.Status, &t.WorkDir, &t.CreatedAt, &t.UpdatedAt}
+}
+
 func (t Task) MatchesDate(date string) bool {
 	if strings.HasPrefix(t.CreatedAt, date) {
 		return true
@@ -35,37 +41,67 @@ func (db *DB) InsertTask(projectID int64, title, url, metadata, workDir string) 
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	db.emitEvent("task", id, "task.created", map[string]any{
+		"project_id": projectID, "title": title,
+	})
+	return id, nil
 }
 
-func (db *DB) UpdateTask(id int64, status string) error {
+func (db *DB) UpdateTask(id int64, status, reason string) error {
+	var from string
+	db.QueryRow("SELECT status FROM tasks WHERE id = ?", id).Scan(&from)
+
 	_, err := db.Exec(
 		"UPDATE tasks SET status = ?, updated_at = datetime('now') WHERE id = ?",
 		status, id,
 	)
+	if err == nil {
+		db.emitEvent("task", id, "task.status_changed", map[string]any{
+			"from": from, "to": status, "reason": reason,
+		})
+	}
 	return err
 }
 
 func (db *DB) UpdateTaskProject(id int64, projectID int64) error {
+	var from int64
+	db.QueryRow("SELECT project_id FROM tasks WHERE id = ?", id).Scan(&from)
+
 	_, err := db.Exec(
 		"UPDATE tasks SET project_id = ?, updated_at = datetime('now') WHERE id = ?",
 		projectID, id,
 	)
+	if err == nil {
+		db.emitEvent("task", id, "task.project_changed", map[string]any{
+			"from": from, "to": projectID,
+		})
+	}
 	return err
 }
 
 func (db *DB) UpdateTaskWorkDir(id int64, workDir string) error {
+	var from string
+	db.QueryRow("SELECT work_dir FROM tasks WHERE id = ?", id).Scan(&from)
+
 	_, err := db.Exec(
 		"UPDATE tasks SET work_dir = ?, updated_at = datetime('now') WHERE id = ?",
 		workDir, id,
 	)
+	if err == nil {
+		db.emitEvent("task", id, "task.workdir_changed", map[string]any{
+			"from": from, "to": workDir,
+		})
+	}
 	return err
 }
 
 func (db *DB) GetTask(id int64) (*Task, error) {
-	row := db.QueryRow("SELECT id, project_id, title, url, metadata, status, work_dir, created_at, updated_at FROM tasks WHERE id = ?", id)
 	t := &Task{}
-	err := row.Scan(&t.ID, &t.ProjectID, &t.Title, &t.URL, &t.Metadata, &t.Status, &t.WorkDir, &t.CreatedAt, &t.UpdatedAt)
+	err := db.QueryRow("SELECT "+taskColumns+" FROM tasks WHERE id = ?", id).Scan(t.scanFields()...)
 	if err != nil {
 		return nil, err
 	}
@@ -73,26 +109,18 @@ func (db *DB) GetTask(id int64) (*Task, error) {
 }
 
 func (db *DB) ListTasks(projectID int64, status string) ([]Task, error) {
-	query := "SELECT t.id, t.project_id, t.title, t.url, t.metadata, t.status, t.work_dir, t.created_at, t.updated_at FROM tasks t"
+	query := "SELECT " + taskColumns + " FROM tasks WHERE 1=1"
 	var args []any
-	var conditions []string
 
 	if projectID != 0 {
-		conditions = append(conditions, "t.project_id = ?")
+		query += " AND project_id = ?"
 		args = append(args, projectID)
 	}
 	if status != "" {
-		conditions = append(conditions, "t.status = ?")
+		query += " AND status = ?"
 		args = append(args, status)
 	}
-	for i, c := range conditions {
-		if i == 0 {
-			query += " WHERE " + c
-		} else {
-			query += " AND " + c
-		}
-	}
-	query += " ORDER BY t.id"
+	query += " ORDER BY id"
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
@@ -103,7 +131,7 @@ func (db *DB) ListTasks(projectID int64, status string) ([]Task, error) {
 	var tasks []Task
 	for rows.Next() {
 		var t Task
-		if err := rows.Scan(&t.ID, &t.ProjectID, &t.Title, &t.URL, &t.Metadata, &t.Status, &t.WorkDir, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(t.scanFields()...); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, t)
@@ -112,21 +140,7 @@ func (db *DB) ListTasks(projectID int64, status string) ([]Task, error) {
 }
 
 func (db *DB) ListTasksByProject(projectID int64) ([]Task, error) {
-	rows, err := db.Query("SELECT id, project_id, title, url, metadata, status, work_dir, created_at, updated_at FROM tasks WHERE project_id = ? ORDER BY id", projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var tasks []Task
-	for rows.Next() {
-		var t Task
-		if err := rows.Scan(&t.ID, &t.ProjectID, &t.Title, &t.URL, &t.Metadata, &t.Status, &t.WorkDir, &t.CreatedAt, &t.UpdatedAt); err != nil {
-			return nil, err
-		}
-		tasks = append(tasks, t)
-	}
-	return tasks, rows.Err()
+	return db.ListTasks(projectID, "")
 }
 
 func (db *DB) GetOrCreateTriageTask(projectID int64) (int64, error) {
@@ -149,19 +163,5 @@ func (db *DB) EnsureTask(projectID int64, title string) (int64, error) {
 }
 
 func (db *DB) ListTasksByStatus(status string) ([]Task, error) {
-	rows, err := db.Query("SELECT id, project_id, title, url, metadata, status, work_dir, created_at, updated_at FROM tasks WHERE status = ? ORDER BY id", status)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var tasks []Task
-	for rows.Next() {
-		var t Task
-		if err := rows.Scan(&t.ID, &t.ProjectID, &t.Title, &t.URL, &t.Metadata, &t.Status, &t.WorkDir, &t.CreatedAt, &t.UpdatedAt); err != nil {
-			return nil, err
-		}
-		tasks = append(tasks, t)
-	}
-	return tasks, rows.Err()
+	return db.ListTasks(0, status)
 }

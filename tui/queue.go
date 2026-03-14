@@ -16,14 +16,14 @@ type QueueModel struct {
 	cursor       int
 	width        int
 	height       int
-	database     *db.DB
+	database     db.QueryReader
 	message      string
 	dateFilter   string
 	detailAction *db.Action
 	detailScroll int
 }
 
-func NewQueueModel(database *db.DB, dateFilter string) QueueModel {
+func NewQueueModel(database db.QueryReader, dateFilter string) QueueModel {
 	return QueueModel{database: database, dateFilter: dateFilter}
 }
 

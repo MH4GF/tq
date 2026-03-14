@@ -32,7 +32,14 @@ func (db *DB) InsertSchedule(taskID int64, promptID, title, cronExpr, metadata s
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	db.emitEvent("schedule", id, "schedule.created", map[string]any{
+		"task_id": taskID, "prompt_id": promptID, "cron_expr": cronExpr,
+	})
+	return id, nil
 }
 
 func (db *DB) ListSchedules() ([]Schedule, error) {
@@ -71,6 +78,11 @@ func (db *DB) UpdateScheduleEnabled(id int64, enabled bool) error {
 
 func (db *DB) UpdateScheduleLastRunAt(id int64, t string) error {
 	_, err := db.Exec("UPDATE schedules SET last_run_at = ? WHERE id = ?", t, id)
+	if err == nil {
+		db.emitEvent("schedule", id, "schedule.ran", map[string]any{
+			"last_run_at": t,
+		})
+	}
 	return err
 }
 
@@ -106,6 +118,14 @@ func (db *DB) UpdateSchedule(id int64, title, cronExpr, metadata *string, taskID
 }
 
 func (db *DB) DeleteSchedule(id int64) error {
+	var taskID int64
+	db.QueryRow("SELECT task_id FROM schedules WHERE id = ?", id).Scan(&taskID)
+
 	_, err := db.Exec("DELETE FROM schedules WHERE id = ?", id)
+	if err == nil {
+		db.emitEvent("schedule", id, "schedule.deleted", map[string]any{
+			"task_id": taskID,
+		})
+	}
 	return err
 }

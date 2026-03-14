@@ -14,10 +14,15 @@ type Project struct {
 	CreatedAt       string
 }
 
+const projectColumns = "id, name, work_dir, metadata, dispatch_enabled, created_at"
+
+func (p *Project) scanFields() []any {
+	return []any{&p.ID, &p.Name, &p.WorkDir, &p.Metadata, &p.DispatchEnabled, &p.CreatedAt}
+}
+
 func (db *DB) GetProjectByName(name string) (*Project, error) {
-	row := db.QueryRow("SELECT id, name, work_dir, metadata, dispatch_enabled, created_at FROM projects WHERE name = ?", name)
 	p := &Project{}
-	err := row.Scan(&p.ID, &p.Name, &p.WorkDir, &p.Metadata, &p.DispatchEnabled, &p.CreatedAt)
+	err := db.QueryRow("SELECT "+projectColumns+" FROM projects WHERE name = ?", name).Scan(p.scanFields()...)
 	if err != nil {
 		return nil, err
 	}
@@ -25,9 +30,8 @@ func (db *DB) GetProjectByName(name string) (*Project, error) {
 }
 
 func (db *DB) GetProjectByID(id int64) (*Project, error) {
-	row := db.QueryRow("SELECT id, name, work_dir, metadata, dispatch_enabled, created_at FROM projects WHERE id = ?", id)
 	p := &Project{}
-	err := row.Scan(&p.ID, &p.Name, &p.WorkDir, &p.Metadata, &p.DispatchEnabled, &p.CreatedAt)
+	err := db.QueryRow("SELECT "+projectColumns+" FROM projects WHERE id = ?", id).Scan(p.scanFields()...)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +39,7 @@ func (db *DB) GetProjectByID(id int64) (*Project, error) {
 }
 
 func (db *DB) ListProjects() ([]Project, error) {
-	rows, err := db.Query("SELECT id, name, work_dir, metadata, dispatch_enabled, created_at FROM projects ORDER BY id")
+	rows, err := db.Query("SELECT " + projectColumns + " FROM projects ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +48,7 @@ func (db *DB) ListProjects() ([]Project, error) {
 	var projects []Project
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Name, &p.WorkDir, &p.Metadata, &p.DispatchEnabled, &p.CreatedAt); err != nil {
+		if err := rows.Scan(p.scanFields()...); err != nil {
 			return nil, err
 		}
 		projects = append(projects, p)
@@ -60,10 +64,20 @@ func (db *DB) InsertProject(name, workDir, metadata string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	db.emitEvent("project", id, "project.created", map[string]any{
+		"name": name, "work_dir": workDir,
+	})
+	return id, nil
 }
 
 func (db *DB) DeleteProject(id int64) error {
+	var name string
+	db.QueryRow("SELECT name FROM projects WHERE id = ?", id).Scan(&name)
+
 	res, err := db.Exec("DELETE FROM projects WHERE id = ?", id)
 	if err != nil {
 		return err
@@ -75,6 +89,9 @@ func (db *DB) DeleteProject(id int64) error {
 	if n == 0 {
 		return fmt.Errorf("project %d not found", id)
 	}
+	db.emitEvent("project", id, "project.deleted", map[string]any{
+		"name": name,
+	})
 	return nil
 }
 
@@ -94,6 +111,9 @@ func (db *DB) SetDispatchEnabled(projectID int64, enabled bool) error {
 	if n == 0 {
 		return fmt.Errorf("project %d not found", projectID)
 	}
+	db.emitEvent("project", projectID, "project.dispatch_changed", map[string]any{
+		"enabled": enabled,
+	})
 	return nil
 }
 

@@ -18,7 +18,7 @@ type SchedulesModel struct {
 	cursor    int
 	width     int
 	height    int
-	database  *db.DB
+	database  db.Store
 	message   string
 }
 
@@ -26,7 +26,7 @@ type schedulesLoadedMsg struct {
 	schedules []db.Schedule
 }
 
-func NewSchedulesModel(database *db.DB) SchedulesModel {
+func NewSchedulesModel(database db.Store) SchedulesModel {
 	return SchedulesModel{database: database}
 }
 

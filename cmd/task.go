@@ -174,7 +174,7 @@ var taskUpdateCmd = &cobra.Command{
 		}
 
 		if taskUpdateStatus != "" {
-			if err := database.UpdateTask(taskUpdateID, taskUpdateStatus); err != nil {
+			if err := database.UpdateTask(taskUpdateID, taskUpdateStatus, ""); err != nil {
 				return fmt.Errorf("update task: %w", err)
 			}
 			updates = append(updates, fmt.Sprintf("status: %s", taskUpdateStatus))

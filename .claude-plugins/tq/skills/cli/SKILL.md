@@ -45,3 +45,18 @@ tq action reset <action_id>      # failed/running/cancelled → pending
 tq prompt list    # 利用可能なプロンプトを表示
 ```
 
+## イベント履歴
+
+タスクやアクションの状態変更経緯を追跡するときに使う。
+「なぜこのタスクがarchivedされた？」「このアクションの状態遷移は？」といった調査に有用。
+
+```bash
+tq event list                                          # 直近50件
+tq event list --entity action --id <action_id>         # 特定アクションの全履歴
+tq event list --entity task --id <task_id>              # 特定タスクの全履歴
+tq event list --limit 100                              # 件数指定
+```
+
+- タスクのステータス変更理由は `task.status_changed` イベントの `reason` フィールドに記録される
+- アクションの完了結果は `action.status_changed` イベントの `result` フィールドで確認できる
+

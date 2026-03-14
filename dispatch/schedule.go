@@ -11,7 +11,7 @@ import (
 
 var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
-func CheckSchedules(database *db.DB, now time.Time) error {
+func CheckSchedules(database db.Store, now time.Time) error {
 	schedules, err := database.ListSchedules()
 	if err != nil {
 		return fmt.Errorf("list schedules: %w", err)

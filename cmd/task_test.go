@@ -220,7 +220,7 @@ func TestTaskList_StatusFilter(t *testing.T) {
 
 	d.InsertTask(1, "open task", "", "{}", "")
 	id2, _ := d.InsertTask(1, "done task", "", "{}", "")
-	d.UpdateTask(id2, "done")
+	d.UpdateTask(id2, "done", "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)

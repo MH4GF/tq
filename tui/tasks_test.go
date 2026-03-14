@@ -156,7 +156,7 @@ func TestTasksModel_DateFilter(t *testing.T) {
 
 	taskID2, _ := d.InsertTask(1, "Old task", "", "{}", "")
 	d.InsertAction("old-action", "old-action", taskID2, "{}", "pending")
-	d.UpdateTask(taskID2, "done")
+	d.UpdateTask(taskID2, "done", "")
 
 	// Set old-action and old task dates to a different date
 	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE prompt_id = 'old-action'")
@@ -224,7 +224,7 @@ func TestTasksModel_DateFilter_ArchivedTaskFiltered(t *testing.T) {
 	// Archived task with old dates — should be filtered out
 	taskID, _ := d.InsertTask(1, "Old archived", "", "{}", "")
 	d.InsertAction("old-action", "old-action", taskID, "{}", "pending")
-	d.UpdateTask(taskID, "archived")
+	d.UpdateTask(taskID, "archived", "")
 	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE prompt_id = 'old-action'")
 	d.Exec(fmt.Sprintf("UPDATE tasks SET created_at = '2025-01-01 00:00:00', updated_at = '2025-01-01 00:00:00' WHERE id = %d", taskID))
 
@@ -260,7 +260,7 @@ func TestTasksModel_ArchivedTaskCollapsed(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "Archived task", "", "{}", "")
 	d.InsertAction("check", "check", taskID, "{}", "pending")
-	d.UpdateTask(taskID, "archived")
+	d.UpdateTask(taskID, "archived", "")
 
 	m := NewTasksModel(d, "")
 	msg := m.Init()()
@@ -464,9 +464,9 @@ func TestTasksModel_SortOrder(t *testing.T) {
 	// Create tasks in order: open(1), archived(2), done(3)
 	d.InsertTask(1, "TaskA-open", "", "{}", "")
 	taskID2, _ := d.InsertTask(1, "TaskB-archived", "", "{}", "")
-	d.UpdateTask(taskID2, "archived")
+	d.UpdateTask(taskID2, "archived", "")
 	taskID3, _ := d.InsertTask(1, "TaskC-done", "", "{}", "")
-	d.UpdateTask(taskID3, "done")
+	d.UpdateTask(taskID3, "done", "")
 
 	m := NewTasksModel(d, "")
 	msg := m.Init()()

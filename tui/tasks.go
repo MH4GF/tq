@@ -35,7 +35,7 @@ type TasksModel struct {
 	lines      []treeLine
 	width      int
 	height     int
-	database   *db.DB
+	database   db.Store
 	message    string
 	dateFilter string
 
@@ -58,7 +58,7 @@ type tasksLoadedMsg struct {
 	trees []projectTree
 }
 
-func NewTasksModel(database *db.DB, dateFilter string) TasksModel {
+func NewTasksModel(database db.Store, dateFilter string) TasksModel {
 	return TasksModel{
 		database:   database,
 		expanded:   make(map[string]bool),

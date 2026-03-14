@@ -40,7 +40,7 @@ func TestUpdateTask(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := d.UpdateTask(id, "done"); err != nil {
+	if err := d.UpdateTask(id, "done", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -97,7 +97,7 @@ func TestListTasks(t *testing.T) {
 	d.InsertTask(1, "task A", "", "{}", "")
 	id2, _ := d.InsertTask(1, "task B", "", "{}", "")
 	d.InsertTask(2, "task C", "", "{}", "")
-	d.UpdateTask(id2, "done")
+	d.UpdateTask(id2, "done", "")
 
 	t.Run("no filter", func(t *testing.T) {
 		tasks, err := d.ListTasks(0, "")
@@ -239,7 +239,7 @@ func TestEnsureTask(t *testing.T) {
 	}
 
 	// Closing the task should cause a new one to be created
-	if err := d.UpdateTask(id1, "done"); err != nil {
+	if err := d.UpdateTask(id1, "done", ""); err != nil {
 		t.Fatal(err)
 	}
 	id3, err := d.EnsureTask(1, "my task")
@@ -257,7 +257,7 @@ func TestListTasksByStatus(t *testing.T) {
 
 	_, _ = d.InsertTask(1, "open task", "", "{}", "")
 	id2, _ := d.InsertTask(1, "done task", "", "{}", "")
-	d.UpdateTask(id2, "done")
+	d.UpdateTask(id2, "done", "")
 
 	tasks, err := d.ListTasksByStatus("open")
 	if err != nil {

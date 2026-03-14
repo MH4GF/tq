@@ -99,7 +99,14 @@ func (db *DB) InsertAction(title, promptID string, taskID int64, metadata string
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	db.emitEvent("action", id, "action.created", map[string]any{
+		"status": status, "prompt_id": promptID, "task_id": taskID, "title": title,
+	})
+	return id, nil
 }
 
 func (db *DB) HasActiveAction(taskID int64, promptID string) (bool, error) {
@@ -160,6 +167,9 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 		return nil, err
 	}
 
+	db.emitEvent("action", a.ID, "action.claimed", map[string]any{
+		"from": "pending", "to": "running",
+	})
 	a.Status = "running"
 	return a, nil
 }
@@ -196,31 +206,58 @@ func (db *DB) ClaimPending(ctx context.Context, id int64) (*Action, error) {
 		return nil, err
 	}
 
+	db.emitEvent("action", id, "action.claimed", map[string]any{
+		"from": "pending", "to": "running",
+	})
 	a.Status = "running"
 	return a, nil
 }
 
 func (db *DB) MarkDone(id int64, result string) error {
+	var from string
+	db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from)
+
 	_, err := db.Exec(
 		"UPDATE actions SET status = 'done', result = ?, completed_at = datetime('now') WHERE id = ?",
 		result, id,
 	)
+	if err == nil {
+		db.emitEvent("action", id, "action.status_changed", map[string]any{
+			"from": from, "to": "done", "result": result,
+		})
+	}
 	return err
 }
 
 func (db *DB) MarkFailed(id int64, result string) error {
+	var from string
+	db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from)
+
 	_, err := db.Exec(
 		"UPDATE actions SET status = 'failed', result = ?, completed_at = datetime('now') WHERE id = ?",
 		result, id,
 	)
+	if err == nil {
+		db.emitEvent("action", id, "action.status_changed", map[string]any{
+			"from": from, "to": "failed", "result": result,
+		})
+	}
 	return err
 }
 
 func (db *DB) MarkCancelled(id int64, result string) error {
+	var from string
+	db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from)
+
 	_, err := db.Exec(
 		"UPDATE actions SET status = 'cancelled', result = ?, completed_at = datetime('now') WHERE id = ?",
 		result, id,
 	)
+	if err == nil {
+		db.emitEvent("action", id, "action.status_changed", map[string]any{
+			"from": from, "to": "cancelled", "result": result,
+		})
+	}
 	return err
 }
 
@@ -239,6 +276,9 @@ func (db *DB) MarkDispatched(id int64) error {
 	if n == 0 {
 		return fmt.Errorf("action #%d is not running, cannot mark as dispatched", id)
 	}
+	db.emitEvent("action", id, "action.status_changed", map[string]any{
+		"from": "running", "to": "dispatched",
+	})
 	return nil
 }
 
@@ -321,10 +361,18 @@ func (db *DB) CountRunningInteractive() (int, error) {
 }
 
 func (db *DB) ResetToPending(id int64) error {
+	var from string
+	db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from)
+
 	_, err := db.Exec(
 		"UPDATE actions SET status = 'pending', started_at = NULL, session_id = NULL, tmux_pane = NULL WHERE id = ?",
 		id,
 	)
+	if err == nil {
+		db.emitEvent("action", id, "action.status_changed", map[string]any{
+			"from": from, "to": "pending",
+		})
+	}
 	return err
 }
 
@@ -333,6 +381,11 @@ func (db *DB) SetSessionInfo(id int64, sessionID, tmuxPane string) error {
 		"UPDATE actions SET session_id = ?, tmux_pane = ? WHERE id = ?",
 		sessionID, tmuxPane, id,
 	)
+	if err == nil {
+		db.emitEvent("action", id, "action.session_set", map[string]any{
+			"session_id": sessionID, "tmux_pane": tmuxPane,
+		})
+	}
 	return err
 }
 
@@ -359,6 +412,15 @@ func (db *DB) MergeActionMetadata(id int64, updates map[string]any) error {
 	}
 
 	_, err = db.Exec("UPDATE actions SET metadata = ? WHERE id = ?", string(data), id)
+	if err == nil {
+		keys := make([]string, 0, len(updates))
+		for k := range updates {
+			keys = append(keys, k)
+		}
+		db.emitEvent("action", id, "action.metadata_merged", map[string]any{
+			"keys_updated": keys,
+		})
+	}
 	return err
 }
 

@@ -41,7 +41,7 @@ func (c *ExecTmuxChecker) ListWindows(ctx context.Context, session string) ([]st
 // RalphConfig configures the Ralph Loop.
 type RalphConfig struct {
 	UserConfigDir      string
-	DB                 *db.DB
+	DB                 db.Store
 	MaxInteractive     int
 	PollInterval       time.Duration
 	NonInteractiveFunc func() Worker

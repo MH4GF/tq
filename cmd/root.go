@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	database         *db.DB
-	dbInjected       bool
+	database          db.Store
+	dbInjected        bool
 	configDirOverride string
 )
 
@@ -82,7 +82,7 @@ func GetRootCmd() *cobra.Command {
 	return rootCmd
 }
 
-func SetDB(d *db.DB) {
+func SetDB(d db.Store) {
 	database = d
 	dbInjected = true
 }
