@@ -1,6 +1,6 @@
 module github.com/MH4GF/tq
 
-go 1.24.10
+go 1.24.7
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0
