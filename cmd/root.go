@@ -65,9 +65,7 @@ func init() {
 	rootCmd.AddCommand(taskCmd)
 	rootCmd.AddCommand(actionCmd)
 	dispatchCmd.Hidden = true
-	runCmd.Hidden = true
 	rootCmd.AddCommand(dispatchCmd)
-	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(uiCmd)
 	rootCmd.AddCommand(projectCmd)
 	rootCmd.AddCommand(promptCmd)
