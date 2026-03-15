@@ -294,8 +294,8 @@ func TestTaskList_Empty(t *testing.T) {
 	}
 
 	out := buf.String()
-	if !contains(out, "no tasks found") {
-		t.Errorf("output = %q, want 'no tasks found'", out)
+	if !contains(out, "[]") {
+		t.Errorf("output = %q, want '[]'", out)
 	}
 }
 

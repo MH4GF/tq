@@ -10,9 +10,10 @@ import (
 )
 
 var attachCmd = &cobra.Command{
-	Use:   "attach <action_id>",
-	Short: "Attach to a running action's tmux window",
-	Args:  cobra.ExactArgs(1),
+	Use:     "attach <action_id>",
+	Short:   "Attach to a running action's tmux window",
+	Example: `  tq action attach 3`,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
@@ -23,7 +24,7 @@ var attachCmd = &cobra.Command{
 			return fmt.Errorf("get action: %w", err)
 		}
 		if !action.SessionID.Valid {
-			return fmt.Errorf("action #%d has no tmux session info", id)
+			return fmt.Errorf("action #%d has no tmux session info (action may not be running interactively)", id)
 		}
 		if os.Getenv("TMUX") == "" {
 			return fmt.Errorf("this command must be run inside a tmux session")

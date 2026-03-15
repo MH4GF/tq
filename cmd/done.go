@@ -17,7 +17,19 @@ func init() {
 var doneCmd = &cobra.Command{
 	Use:   "done ACTION_ID [RESULT]",
 	Short: "Mark action as done",
-	Args:  cobra.RangeArgs(1, 2),
+	Long: `Mark an action as done, optionally recording a result summary.
+Can be called on any non-terminal action (pending or running).
+
+RESULT is a free-form string. Triggers on_done hooks defined in the prompt template.
+
+RESULT serves as memory for future sessions. Write what a future worker needs to
+continue the work: what was done, what approach was taken, what failed, and what
+remains unfinished.`,
+	Example: `  tq action done 5
+  tq action done 5 "Refactored auth to use JWT. Changed auth/middleware.go and added
+  auth/token.go. Tried Redis session store first but reverted due to latency.
+  Still need to update API docs for new token format."`,
+	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
@@ -26,7 +38,7 @@ var doneCmd = &cobra.Command{
 
 		action, err := database.GetAction(id)
 		if err != nil {
-			return fmt.Errorf("action #%d not found: %w", id, err)
+			return fmt.Errorf("action #%d not found (see: tq action list): %w", id, err)
 		}
 
 		result := ""

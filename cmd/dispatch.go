@@ -75,14 +75,14 @@ func SetRemoteWorkerFactory(f func() dispatch.Worker) {
 var dispatchCmd = &cobra.Command{
 	Use:   "dispatch [action_id]",
 	Short: "Dispatch an action immediately (skip queue)",
-	Long: `Dispatch an action immediately, bypassing the normal queue order.
-Use this for interrupt tasks that need priority execution.
+	Long: `Dispatch a pending action immediately.
 
 If action_id is provided, that specific action is dispatched.
-If omitted, the next pending action in the queue is dispatched.
-
-The --session flag controls which tmux session the interactive worker runs in.`,
-	Args:  cobra.MaximumNArgs(1),
+If omitted, the next pending action in queue order is dispatched.`,
+	Example: `  tq dispatch
+  tq dispatch 42
+  tq dispatch --session work`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
@@ -104,7 +104,7 @@ The --session flag controls which tmux session the interactive worker runs in.`,
 				return fmt.Errorf("next pending: %w", err)
 			}
 			if action == nil {
-				fmt.Fprintln(cmd.OutOrStdout(), "no pending actions")
+				fmt.Fprintln(cmd.OutOrStdout(), "no pending actions (create one with: tq action create --help)")
 				return nil
 			}
 		}
@@ -119,7 +119,7 @@ The --session flag controls which tmux session the interactive worker runs in.`,
 
 		var af *dispatch.ActionFailedError
 		if errors.As(err, &af) {
-			fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed: %v\n", af.ActionID, af.Err)
+			fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed (%v)\n", af.ActionID, af.Err)
 			return nil
 		}
 		if err != nil {
@@ -129,9 +129,9 @@ The --session flag controls which tmux session the interactive worker runs in.`,
 		switch result.Mode {
 		case dispatch.ModeRemote:
 			url := strings.TrimPrefix(result.Output, dispatch.RemoteSessionPrefix)
-			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched remotely\nView: %s\n", action.ID, url)
+			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched remotely (view: %s)\n", action.ID, url)
 		case dispatch.ModeInteractive:
-			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched interactively: %s\n", action.ID, result.Output)
+			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched interactively (%s)\n", action.ID, result.Output)
 		default:
 			fmt.Fprintf(cmd.OutOrStdout(), "action #%d done\n", action.ID)
 		}

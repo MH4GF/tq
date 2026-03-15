@@ -123,8 +123,8 @@ func TestProjectList_Empty(t *testing.T) {
 	}
 
 	out := buf.String()
-	if !contains(out, "no projects found") {
-		t.Errorf("output = %q, want 'no projects found'", out)
+	if !contains(out, "[]") {
+		t.Errorf("output = %q, want '[]'", out)
 	}
 }
 

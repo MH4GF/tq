@@ -12,13 +12,19 @@ var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month 
 
 var scheduleCmd = &cobra.Command{
 	Use:   "schedule",
-	Short: "Schedule management",
+	Short: "Create and manage scheduled actions",
 }
 
 var scheduleCreateCmd = &cobra.Command{
 	Use:   "create <PROMPT_ID>",
 	Short: "Create a new schedule",
-	Args:  cobra.ExactArgs(1),
+	Long: `Create a scheduled action that runs on a cron schedule.
+
+--task and --cron are required. PROMPT_ID is the prompt template to use.
+--cron accepts standard 5-field cron expressions (minute hour dom month dow).`,
+	Example: `  tq schedule create daily-review --task 1 --cron "0 9 * * *" --title "Morning review"
+  tq schedule create sync-prs --task 2 --cron "*/30 * * * *"`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		promptID := args[0]
 		taskID, _ := cmd.Flags().GetInt64("task")
@@ -53,14 +59,14 @@ var scheduleCreateCmd = &cobra.Command{
 
 var scheduleListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List schedules",
+	Short: "List schedules (JSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		schedules, err := database.ListSchedules()
 		if err != nil {
 			return err
 		}
 		if len(schedules) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "no schedules found")
+			fmt.Fprintln(cmd.OutOrStdout(), "[]")
 			return nil
 		}
 
@@ -141,9 +147,11 @@ var scheduleDeleteCmd = &cobra.Command{
 }
 
 var scheduleUpdateCmd = &cobra.Command{
-	Use:   "update <ID>",
-	Short: "Update a schedule",
-	Args:  cobra.ExactArgs(1),
+	Use:     "update <ID>",
+	Short:   "Update a schedule",
+	Example: `  tq schedule update 1 --cron "0 10 * * *"
+  tq schedule update 2 --title "Weekly sync" --task 3`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := parseID(args[0])
 		if err != nil {
@@ -194,10 +202,10 @@ func parseID(s string) (int64, error) {
 }
 
 func init() {
-	scheduleCreateCmd.Flags().Int64("task", 0, "Task ID (required)")
+	scheduleCreateCmd.Flags().Int64("task", 0, "Task ID (required, see: tq task list)")
 	scheduleCreateCmd.Flags().String("title", "", "Schedule title (defaults to prompt ID)")
-	scheduleCreateCmd.Flags().String("cron", "", "Cron expression (required)")
-	scheduleCreateCmd.Flags().String("meta", "{}", "JSON metadata")
+	scheduleCreateCmd.Flags().String("cron", "", "Cron expression (required, e.g. \"0 9 * * *\")")
+	scheduleCreateCmd.Flags().String("meta", "{}", `JSON metadata (e.g. {"key":"value"})`)
 
 	scheduleCmd.AddCommand(scheduleCreateCmd)
 	scheduleCmd.AddCommand(scheduleListCmd)

@@ -10,7 +10,7 @@ import (
 
 var projectCmd = &cobra.Command{
 	Use:   "project",
-	Short: "Project management",
+	Short: "Create, list, and manage projects",
 }
 
 var projectCreateMeta string
@@ -18,7 +18,10 @@ var projectCreateMeta string
 var projectCreateCmd = &cobra.Command{
 	Use:   "create <NAME> <WORK_DIR>",
 	Short: "Create a new project",
-	Args:  cobra.ExactArgs(2),
+	Long: `Create a new project. NAME is a short identifier, WORK_DIR is the absolute path where tasks run.`,
+	Example: `  tq project create myapp ~/src/myapp
+  tq project create infra ~/src/infra --meta '{"team":"platform"}'`,
+	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name, workDir := args[0], args[1]
 		id, err := database.InsertProject(name, workDir, projectCreateMeta)
@@ -32,14 +35,14 @@ var projectCreateCmd = &cobra.Command{
 
 var projectListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List projects",
+	Short: "List projects (JSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projects, err := database.ListProjects()
 		if err != nil {
 			return fmt.Errorf("list projects: %w", err)
 		}
 		if len(projects) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "no projects found")
+			fmt.Fprintln(cmd.OutOrStdout(), "[]")
 			return nil
 		}
 
@@ -61,9 +64,10 @@ var projectListCmd = &cobra.Command{
 }
 
 var projectDeleteCmd = &cobra.Command{
-	Use:   "delete <ID>",
-	Short: "Delete a project",
-	Args:  cobra.ExactArgs(1),
+	Use:     "delete <ID>",
+	Short:   "Delete a project",
+	Example: `  tq project delete 2`,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := parseID(args[0])
 		if err != nil {
@@ -83,9 +87,11 @@ var (
 )
 
 var projectUpdateCmd = &cobra.Command{
-	Use:   "update <ID>",
-	Short: "Update a project",
-	Args:  cobra.ExactArgs(1),
+	Use:     "update <ID>",
+	Short:   "Update a project",
+	Example: `  tq project update 1 --dispatch-enabled true
+  tq project update 1 --work-dir ~/src/myapp-v2`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := parseID(args[0])
 		if err != nil {
@@ -96,8 +102,7 @@ var projectUpdateCmd = &cobra.Command{
 			return fmt.Errorf("at least one flag (--dispatch-enabled, --work-dir) is required")
 		}
 
-		p, err := database.GetProjectByID(id)
-		if err != nil {
+		if _, err := database.GetProjectByID(id); err != nil {
 			return fmt.Errorf("get project: %w", err)
 		}
 
@@ -113,14 +118,14 @@ var projectUpdateCmd = &cobra.Command{
 			if !enabled {
 				state = "disabled"
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s: dispatch %s\n", p.Name, state)
+			fmt.Fprintf(cmd.OutOrStdout(), "project #%d updated (dispatch: %s)\n", id, state)
 		}
 
 		if projectUpdateWorkDir != "" {
 			if err := database.SetWorkDir(id, projectUpdateWorkDir); err != nil {
 				return fmt.Errorf("set work_dir: %w", err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s: work_dir updated to %s\n", p.Name, projectUpdateWorkDir)
+			fmt.Fprintf(cmd.OutOrStdout(), "project #%d updated (work_dir: %s)\n", id, projectUpdateWorkDir)
 		}
 
 		return nil
@@ -128,7 +133,7 @@ var projectUpdateCmd = &cobra.Command{
 }
 
 func init() {
-	projectCreateCmd.Flags().StringVar(&projectCreateMeta, "meta", "{}", "Metadata JSON")
+	projectCreateCmd.Flags().StringVar(&projectCreateMeta, "meta", "{}", `JSON metadata (e.g. {"team":"platform"})`)
 	projectUpdateCmd.Flags().StringVar(&projectUpdateDispatchEnabled, "dispatch-enabled", "", "Enable or disable dispatch (true/false)")
 	projectUpdateCmd.Flags().StringVar(&projectUpdateWorkDir, "work-dir", "", "Set the working directory")
 

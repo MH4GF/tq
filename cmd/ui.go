@@ -20,7 +20,11 @@ var (
 
 var uiCmd = &cobra.Command{
 	Use:   "ui",
-	Short: "Launch interactive TUI with ralph loop",
+	Short: "Launch interactive TUI with queue worker",
+	Long: `Launch the terminal UI with a queue worker that auto-dispatches pending actions via tmux.`,
+	Example: `  tq ui
+  tq ui --max-interactive 5 --poll 30s
+  tq ui --session work`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logCh := make(chan tui.LogEntry, 100)
 
@@ -73,6 +77,6 @@ var uiCmd = &cobra.Command{
 
 func init() {
 	uiCmd.Flags().IntVar(&uiMaxInteractive, "max-interactive", 3, "Maximum concurrent interactive sessions")
-	uiCmd.Flags().DurationVar(&uiPollInterval, "poll", 10*time.Second, "Ralph loop poll interval")
+	uiCmd.Flags().DurationVar(&uiPollInterval, "poll", 10*time.Second, "Queue worker poll interval")
 	uiCmd.Flags().StringVar(&uiSession, "session", "main", "Target tmux session name")
 }

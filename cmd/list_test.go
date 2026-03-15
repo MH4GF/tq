@@ -130,8 +130,8 @@ func TestList_Empty(t *testing.T) {
 	}
 
 	out := buf.String()
-	if !contains(out, "no actions found") {
-		t.Errorf("output = %q, want 'no actions found'", out)
+	if !contains(out, "[]") {
+		t.Errorf("output = %q, want '[]'", out)
 	}
 }
 

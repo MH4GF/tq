@@ -43,6 +43,9 @@ func TestDispatch_NoPending(t *testing.T) {
 	if !contains(out, "no pending actions") {
 		t.Errorf("output = %q, want to contain 'no pending actions'", out)
 	}
+	if !contains(out, "tq action create --help") {
+		t.Errorf("output = %q, want to contain help hint", out)
+	}
 }
 
 func TestDispatch_Success(t *testing.T) {

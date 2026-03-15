@@ -15,6 +15,11 @@ var (
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List actions",
+	Long: `List actions, optionally filtered by status and/or task ID. Output is JSON.`,
+	Example: `  tq action list
+  tq action list --status pending
+  tq action list --task 3
+  tq action list --task 1 --status running`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var taskIDPtr *int64
 		if listTask > 0 {
@@ -27,7 +32,7 @@ var listCmd = &cobra.Command{
 		}
 
 		if len(actions) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "no actions found")
+			fmt.Fprintln(cmd.OutOrStdout(), "[]")
 			return nil
 		}
 
@@ -72,7 +77,7 @@ var listCmd = &cobra.Command{
 }
 
 func init() {
-	listCmd.Flags().StringVar(&listStatus, "status", "", "Filter by status")
-	listCmd.Flags().Int64Var(&listTask, "task", 0, "Filter by task ID")
+	listCmd.Flags().StringVar(&listStatus, "status", "", "Filter by status (pending, running, done, failed, cancelled)")
+	listCmd.Flags().Int64Var(&listTask, "task", 0, "Filter by task ID (see: tq task list)")
 	actionCmd.AddCommand(listCmd)
 }

@@ -11,7 +11,7 @@ import (
 
 var taskCmd = &cobra.Command{
 	Use:   "task",
-	Short: "Task management",
+	Short: "Create, list, and update tasks",
 }
 
 var (
@@ -25,12 +25,16 @@ var (
 var taskCreateCmd = &cobra.Command{
 	Use:   "create <TITLE>",
 	Short: "Create a new task",
-	Args:  cobra.ExactArgs(1),
+	Long: `Create a new task under a project. --project is required.
+--work-dir overrides the project's default working directory for this task.`,
+	Example: `  tq task create "Fix login bug" --project 1
+  tq task create "Review PR #99" --project 2 --url https://github.com/org/repo/pull/99`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		taskTitle = args[0]
 		project, err := database.GetProjectByID(taskProjectID)
 		if err != nil {
-			return fmt.Errorf("project %d not found: %w", taskProjectID, err)
+			return fmt.Errorf("project %d not found (see: tq project list): %w", taskProjectID, err)
 		}
 		workDir := taskWorkDir
 		if workDir == "" {
@@ -52,14 +56,18 @@ var (
 
 var taskListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List tasks",
+	Short: "List tasks (JSON output, includes nested actions)",
+	Example: `  tq task list
+  tq task list --project 1
+  tq task list --status open
+  tq task list --project 2 --status review`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		tasks, err := database.ListTasks(taskListProjectID, taskListStatus)
 		if err != nil {
 			return fmt.Errorf("list tasks: %w", err)
 		}
 		if len(tasks) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "no tasks found")
+			fmt.Fprintln(cmd.OutOrStdout(), "[]")
 			return nil
 		}
 
@@ -142,7 +150,12 @@ var (
 var taskUpdateCmd = &cobra.Command{
 	Use:   "update <ID>",
 	Short: "Update a task",
-	Args:  cobra.ExactArgs(1),
+	Long: `Update a task's status, project, or working directory.
+At least one of --status, --project, or --work-dir is required.`,
+	Example: `  tq task update 1 --status done
+  tq task update 3 --status review
+  tq task update 5 --project 2 --work-dir ~/src/other`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var err error
 		taskUpdateID, err = strconv.ParseInt(args[0], 10, 64)
@@ -158,7 +171,7 @@ var taskUpdateCmd = &cobra.Command{
 		if taskUpdateProjectID != 0 {
 			project, err := database.GetProjectByID(taskUpdateProjectID)
 			if err != nil {
-				return fmt.Errorf("project %d not found: %w", taskUpdateProjectID, err)
+				return fmt.Errorf("project %d not found (see: tq project list): %w", taskUpdateProjectID, err)
 			}
 			if err := database.UpdateTaskProject(taskUpdateID, project.ID); err != nil {
 				return fmt.Errorf("update task project: %w", err)
@@ -190,18 +203,18 @@ func joinUpdates(updates []string) string {
 }
 
 func init() {
-	taskCreateCmd.Flags().Int64Var(&taskProjectID, "project", 0, "Project ID (required)")
-	taskCreateCmd.Flags().StringVar(&taskURL, "url", "", "Related URL")
-	taskCreateCmd.Flags().StringVar(&taskMeta, "meta", "{}", "Metadata JSON")
+	taskCreateCmd.Flags().Int64Var(&taskProjectID, "project", 0, "Project ID (required, see: tq project list)")
+	taskCreateCmd.Flags().StringVar(&taskURL, "url", "", "Related URL (e.g. GitHub issue or PR)")
+	taskCreateCmd.Flags().StringVar(&taskMeta, "meta", "{}", `JSON metadata (e.g. {"key":"value"})`)
 	taskCreateCmd.Flags().StringVar(&taskWorkDir, "work-dir", "", "Working directory (defaults to project work_dir)")
 	taskCreateCmd.MarkFlagRequired("project")
 
-	taskUpdateCmd.Flags().StringVar(&taskUpdateStatus, "status", "", "New status (open|review|done|blocked|archived)")
+	taskUpdateCmd.Flags().StringVar(&taskUpdateStatus, "status", "", "New status (open, review, done, blocked, archived)")
 	taskUpdateCmd.Flags().Int64Var(&taskUpdateProjectID, "project", 0, "Project ID")
 	taskUpdateCmd.Flags().StringVar(&taskUpdateWorkDir, "work-dir", "", "Working directory")
 
-	taskListCmd.Flags().Int64Var(&taskListProjectID, "project", 0, "Filter by project ID")
-	taskListCmd.Flags().StringVar(&taskListStatus, "status", "", "Filter by status")
+	taskListCmd.Flags().Int64Var(&taskListProjectID, "project", 0, "Filter by project ID (see: tq project list)")
+	taskListCmd.Flags().StringVar(&taskListStatus, "status", "", "Filter by status (open, review, done, blocked, archived)")
 
 	taskCmd.AddCommand(taskListCmd)
 	taskCmd.AddCommand(taskCreateCmd)

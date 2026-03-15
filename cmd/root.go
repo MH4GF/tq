@@ -18,7 +18,24 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "tq",
-	Short: "Task Queue CLI",
+	Short: "AI-powered task queue for Claude Code workers",
+	Long: `Task queue backed by SQLite. Dispatch work to Claude Code workers via tmux.
+
+Data model: project → task → action.
+  - project: groups tasks, sets working directory
+  - task: unit of work (status: open, review, done, blocked, archived)
+  - action: dispatchable item linked to a prompt template (status: pending, running, done, failed, cancelled)
+
+Typical flow: create a task, then create actions under it.
+Pending actions are auto-dispatched by the queue worker (tq ui), or manually via tq dispatch.
+
+All list commands output JSON.`,
+	Example: `  # Quick start
+  tq project create myapp ~/src/myapp
+  tq task create "Implement feature X" --project 1
+  tq action create review-pr --task 1 --title "Review PR #42"
+  tq dispatch
+  tq ui`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if database != nil {
 			return nil

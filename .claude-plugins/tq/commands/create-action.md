@@ -1,76 +1,31 @@
 ---
-description: tqアクションを作成（プロンプト自動推測 or ユーザー選択）
-argument-hint: "<プロンプト名 or 実装指示>"
+description: Create a tq action (auto-infer prompt or let user choose)
+argument-hint: "<prompt or instruction>"
+allowed-tools: Bash(tq *)
 ---
 
-# tq action create（汎用）
+# tq action create
 
-ユーザーの指示やセッションのコンテキストからプロンプトを特定し、`tq action create` で worker が自動ピックアップする pending アクションを作成する。
+IMPORTANT: Run `tq action create --help` first to understand meta format and best practices.
 
-> **Tips**: 対象ファイルがある場合、`@ファイルパス` で添付するとファイル内容が instruction に埋め込まれ、worker がファイル探索なしで作業を開始できる。
+## Workflow
 
-## 手順
+### 1. Choose prompt
 
-### 1. プロンプトの特定
+Run `tq prompt list`, then infer the best prompt from `$ARGUMENTS` and session context.
+If unsure, present options to the user.
 
-まず `tq prompt list` で利用可能なプロンプト一覧を取得する。以下の優先順で決定する:
+### 2. Find task_id
 
-1. `$ARGUMENTS` とセッションのコンテキストから適切なプロンプトを推測する
-2. 推測できない場合 → ユーザーに選択肢を提示して選んでもらう
+Infer from session context and search `tq task list --status open`.
+If no matching task exists, create one with `tq task create`.
 
-### 2. task_id の特定
+### 3. Build metadata
 
-セッションの会話内容から関連するタスクを推測し、`tq task list --status open` で既存タスクを検索する。関連タスクが見つからなければ新規タスクを作成して紐付ける。
+Consult `tq action create --help` for instruction format guidance.
+Use only information from the current session — do not investigate files (that is the worker's job).
+For prompts that rely on task-level data (e.g. `{{.Task.URL}}`), metadata can be `{}`.
 
-### 3. metadata 構成
+### 4. Create
 
-プロンプトに応じて metadata を構成する:
-
-#### instruction が必要なプロンプト: `implement`, `implement-remote`, `generic`
-
-セッションのコンテキストと入力から、worker が実装しやすい構造化されたプロンプトを生成する。以下の項目を含める:
-
-- **目的・ゴール**: 何を実装するか
-- **関連コンテキスト**: セッション中に言及されたファイル・設計判断・技術的情報があれば記述
-- **制約・注意点**: 守るべきルール・避けるべきこと
-
-ファイル調査は行わない（worker に任せる）。セッション中の情報のみを使う。
-
-セッションコンテキストに `@ファイルパス` で添付されたファイル内容がある場合、「関連コンテキスト」セクションにファイルパスとその内容を含める。これにより worker はファイル探索をスキップできる。
-
-instruction を特定できない場合はユーザーに入力を求めて終了する。
-
-プロンプト例:
-```
-目的: 認証ミドルウェアの追加
-
-関連コンテキスト:
-- JWTベースの認証を採用する方針が決まっている
-- auth/ ディレクトリに既存のヘルパーがある
-- APIルートは cmd/server.go で定義
-
-制約:
-- 既存のテストを壊さないこと
-- ミドルウェアは個別ルートに適用（グローバルではない）
-```
-
-#### その他のプロンプト: `fix-ci`, `fix-conflict`, `self-review`, `respond-review`, `merge-pr`, `alert`
-
-metadata は `{}` で作成する（プロンプト側で `{{.Task.URL}}` 等を参照するため追加 metadata 不要）。
-
-### 4. アクション作成
-
-```bash
-tq action create <prompt> --title '<title>' --task <task_id> --meta '<json>'
-```
-
-- `--title '<title>'` は必須。1行で内容が理解できる簡潔なタイトルを設定する（最大100文字）
-- `--task <task_id>` は task_id が特定できた場合のみ付与する
-- `--meta` の JSON 内でプロンプト中の改行は `\n` にエスケープする
-
-### 5. 結果報告
-
-成功したら作成された action ID を報告する:
-「`<prompt>` action #<action_id> を pending で作成しました。」
-
-失敗したらエラー内容を報告する。
+`tq action create <prompt> --title '<title>' --task <task_id> --meta '<json>'`

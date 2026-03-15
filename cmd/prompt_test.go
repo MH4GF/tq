@@ -106,8 +106,8 @@ func TestPromptList_Empty(t *testing.T) {
 	}
 
 	out := buf.String()
-	if !contains(out, "no prompts found") {
-		t.Errorf("output = %q, want 'no prompts found'", out)
+	if !contains(out, "[]") {
+		t.Errorf("output = %q, want '[]'", out)
 	}
 }
 

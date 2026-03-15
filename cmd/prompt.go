@@ -10,12 +10,12 @@ import (
 
 var promptCmd = &cobra.Command{
 	Use:   "prompt",
-	Short: "Manage prompt templates",
+	Short: "List and inspect prompt templates",
 }
 
 var promptListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List available prompt templates",
+	Short: "List available prompt templates (JSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		userDir := resolvePromptsDir()
 		projectDir := "prompts"
@@ -26,7 +26,7 @@ var promptListCmd = &cobra.Command{
 		}
 
 		if len(prompts) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "no prompts found")
+			fmt.Fprintln(cmd.OutOrStdout(), "[]")
 			return nil
 		}
 
