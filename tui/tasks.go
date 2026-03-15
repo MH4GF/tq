@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os/exec"
 	"sort"
 	"strings"
 
@@ -46,12 +47,18 @@ type TasksModel struct {
 }
 
 type treeLine struct {
-	text      string
-	key       string
-	expandKey string
-	taskID    int64
-	projectID int64
-	action    *db.Action
+	text       string
+	key        string
+	expandKey  string
+	taskID     int64
+	projectID  int64
+	action     *db.Action
+	rightLabel string
+}
+
+type actionAttachedMsg struct {
+	id      int64
+	message string
 }
 
 type tasksLoadedMsg struct {
@@ -114,6 +121,11 @@ func (m TasksModel) Init() tea.Cmd {
 
 func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 	switch msg := msg.(type) {
+	case actionAttachedMsg:
+		if msg.message != "" {
+			m.message = msg.message
+		}
+		return m, nil
 	case tasksLoadedMsg:
 		m.trees = msg.trees
 		for _, pt := range m.trees {
@@ -172,6 +184,12 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 				m.mode = modeViewDetail
 			}
 		}
+	case key.Matches(msg, key.NewBinding(key.WithKeys("o"))):
+		if m.cursor >= 0 && m.cursor < len(m.lines) {
+			if a := m.lines[m.cursor].action; a != nil && a.SessionID.Valid {
+				return m, m.attachAction(a)
+			}
+		}
 	case key.Matches(msg, key.NewBinding(key.WithKeys("f"))):
 		if m.cursor >= 0 && m.cursor < len(m.lines) {
 			if pid := m.lines[m.cursor].projectID; pid > 0 && m.lines[m.cursor].taskID == 0 {
@@ -215,11 +233,13 @@ func (m *TasksModel) buildLines() {
 		if !pt.project.DispatchEnabled {
 			projLabel = styleMuted.Render("⊘ " + pt.project.Name)
 		}
+		rightLabel := pt.project.WorkDir
 		m.lines = append(m.lines, treeLine{
-			text:      fmt.Sprintf("%s %s", arrow, projLabel),
-			key:       projKey,
-			expandKey: projKey,
-			projectID: pt.project.ID,
+			text:       fmt.Sprintf("%s %s", arrow, projLabel),
+			key:        projKey,
+			expandKey:  projKey,
+			projectID:  pt.project.ID,
+			rightLabel: rightLabel,
 		})
 
 		if !m.expanded[projKey] {
@@ -265,7 +285,7 @@ func (m *TasksModel) buildLines() {
 }
 
 func (m TasksModel) visibleRange() visibleRange {
-	return calcVisibleRange(m.cursor, len(m.lines), m.height, 2)
+	return calcVisibleRange(m.cursor, len(m.lines), m.height, 3)
 }
 
 func (m TasksModel) View() string {
@@ -278,6 +298,8 @@ func (m TasksModel) View() string {
 	}
 
 	var b strings.Builder
+	b.WriteString(m.summaryLine() + "\n")
+
 	visible := m.visibleRange()
 	for i := visible.start; i < visible.end; i++ {
 		line := m.lines[i]
@@ -297,6 +319,13 @@ func (m TasksModel) View() string {
 			if remaining > 10 {
 				rendered += "  " + rst.Render(label+": "+truncateResult(line.action.Result.String, remaining))
 			}
+		} else if line.rightLabel != "" {
+			lineWidth := lipgloss.Width(rendered)
+			labelWidth := lipgloss.Width(line.rightLabel)
+			pad := m.width - lineWidth - labelWidth - 2
+			if pad > 0 {
+				rendered += strings.Repeat(" ", pad) + styleMuted.Render(line.rightLabel)
+			}
 		}
 
 		b.WriteString(rendered + "\n")
@@ -307,6 +336,40 @@ func (m TasksModel) View() string {
 	}
 
 	return b.String()
+}
+
+func (m TasksModel) attachAction(a *db.Action) tea.Cmd {
+	return func() tea.Msg {
+		target := fmt.Sprintf("%s:%s", a.SessionID.String, a.TmuxPane.String)
+		if err := exec.Command("tmux", "select-window", "-t", target).Run(); err != nil {
+			return actionAttachedMsg{id: a.ID, message: fmt.Sprintf("attach failed: %v", err)}
+		}
+		return actionAttachedMsg{id: a.ID}
+	}
+}
+
+func (m TasksModel) summaryLine() string {
+	var running, pending, done, failed int
+	for _, pt := range m.trees {
+		for _, tn := range pt.tasks {
+			for _, a := range tn.actions {
+				switch a.Status {
+				case "running":
+					running++
+				case "pending":
+					pending++
+				case "done":
+					done++
+				case "failed":
+					failed++
+				}
+			}
+		}
+	}
+	return styleRunning.Render("●") + fmt.Sprintf(" %d running  ", running) +
+		stylePending.Render("○") + fmt.Sprintf(" %d pending  ", pending) +
+		styleDone.Render("✓") + fmt.Sprintf(" %d done  ", done) +
+		styleFailed.Render("✗") + fmt.Sprintf(" %d failed", failed)
 }
 
 func taskStatusOrder(status string) int {
@@ -332,8 +395,13 @@ func (m TasksModel) HelpKeys() []HelpKey {
 		if line.expandKey != "" {
 			keys = append(keys, HelpKey{"enter", "expand"})
 		}
-		if line.action != nil && line.action.Result.Valid && line.action.Result.String != "" {
-			keys = append(keys, HelpKey{"v", "view result"})
+		if line.action != nil {
+			if line.action.SessionID.Valid {
+				keys = append(keys, HelpKey{"o", "attach"})
+			}
+			if line.action.Result.Valid && line.action.Result.String != "" {
+				keys = append(keys, HelpKey{"v", "view result"})
+			}
 		}
 		if line.projectID > 0 && line.taskID == 0 {
 			keys = append(keys, HelpKey{"f", "toggle focus"})

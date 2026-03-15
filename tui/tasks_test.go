@@ -409,12 +409,12 @@ func TestTasksModel_VisibleRange_Scroll(t *testing.T) {
 	}
 
 	m := NewTasksModel(d, "")
-	m = m.SetSize(80, 12) // height 12 → maxVisible=10
+	m = m.SetSize(80, 12) // height 12 → maxVisible=9 (headerRows=3 for summary line)
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	if len(m.lines) <= 10 {
-		t.Fatalf("need more than 10 lines for scroll test, got %d", len(m.lines))
+	if len(m.lines) <= 9 {
+		t.Fatalf("need more than 9 lines for scroll test, got %d", len(m.lines))
 	}
 
 	// Cursor at 0: start should be 0
@@ -422,8 +422,8 @@ func TestTasksModel_VisibleRange_Scroll(t *testing.T) {
 	if vr.start != 0 {
 		t.Errorf("cursor=0: start = %d, want 0", vr.start)
 	}
-	if vr.end-vr.start != 10 {
-		t.Errorf("cursor=0: window size = %d, want 10", vr.end-vr.start)
+	if vr.end-vr.start != 9 {
+		t.Errorf("cursor=0: window size = %d, want 9", vr.end-vr.start)
 	}
 
 	// Move cursor to middle
@@ -452,8 +452,8 @@ func TestTasksModel_VisibleRange_Scroll(t *testing.T) {
 	if vr.end != len(m.lines) {
 		t.Errorf("cursor at end: end = %d, want %d", vr.end, len(m.lines))
 	}
-	if vr.end-vr.start != 10 {
-		t.Errorf("cursor at end: window size = %d, want 10", vr.end-vr.start)
+	if vr.end-vr.start != 9 {
+		t.Errorf("cursor at end: window size = %d, want 9", vr.end-vr.start)
 	}
 }
 
@@ -632,3 +632,55 @@ func TestTasksModel_SetSize(t *testing.T) {
 		t.Errorf("size = %dx%d, want 100x50", m.width, m.height)
 	}
 }
+
+func TestTasksModel_SummaryLine(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
+	d.InsertAction("a1", "a1", taskID, "{}", "running")
+	d.InsertAction("a2", "a2", taskID, "{}", "pending")
+	id3, _ := d.InsertAction("a3", "a3", taskID, "{}", "running")
+	d.MarkDone(id3, "ok")
+	id4, _ := d.InsertAction("a4", "a4", taskID, "{}", "running")
+	d.MarkFailed(id4, "err")
+
+	m := NewTasksModel(d, "")
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	view := m.View()
+	if !strings.Contains(view, "1 running") {
+		t.Errorf("summary should show '1 running', got %q", view)
+	}
+	if !strings.Contains(view, "1 pending") {
+		t.Errorf("summary should show '1 pending', got %q", view)
+	}
+	if !strings.Contains(view, "1 done") {
+		t.Errorf("summary should show '1 done', got %q", view)
+	}
+	if !strings.Contains(view, "1 failed") {
+		t.Errorf("summary should show '1 failed', got %q", view)
+	}
+}
+
+func TestTasksModel_ProjectWorkDir(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "", "{}", "")
+	d.InsertAction("a", "a", taskID, "{}", "pending")
+
+	m := NewTasksModel(d, "")
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	view := m.View()
+	if !strings.Contains(view, "~/ghq/github.com/immedioinc/immedio") {
+		t.Errorf("project line should show work_dir, got %q", view)
+	}
+}
+
+

@@ -15,8 +15,7 @@ import (
 type tab int
 
 const (
-	tabQueue tab = iota
-	tabTasks
+	tabTasks tab = iota
 	tabSchedules
 )
 
@@ -26,7 +25,6 @@ type BackgroundFunc func(ctx context.Context) error
 
 type Model struct {
 	activeTab   tab
-	queue       QueueModel
 	tasks       TasksModel
 	schedules   SchedulesModel
 	width       int
@@ -55,8 +53,7 @@ type backgroundStatusMsg struct {
 func New(database db.Store, logCh <-chan LogEntry, backgrounds ...BackgroundFunc) Model {
 	today := time.Now().Format("2006-01-02")
 	return Model{
-		activeTab:   tabQueue,
-		queue:       NewQueueModel(database, today),
+		activeTab:   tabTasks,
 		tasks:       NewTasksModel(database, today),
 		schedules:   NewSchedulesModel(database),
 		backgrounds: backgrounds,
@@ -68,7 +65,7 @@ func (m Model) Init() tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
-	cmds := []tea.Cmd{m.queue.Init(), m.tasks.Init(), m.schedules.Init(), doTick()}
+	cmds := []tea.Cmd{m.tasks.Init(), m.schedules.Init(), doTick()}
 
 	if m.logCh != nil {
 		cmds = append(cmds, waitForLog(m.logCh))
@@ -91,13 +88,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		contentHeight := msg.Height - 14
-		m.queue = m.queue.SetSize(msg.Width, contentHeight)
 		m.tasks = m.tasks.SetSize(msg.Width, contentHeight)
 		m.schedules = m.schedules.SetSize(msg.Width, contentHeight)
 		return m, nil
 
 	case tickMsg:
-		return m, tea.Batch(m.queue.loadActions(), m.tasks.loadTasks(), m.schedules.loadSchedules(), doTick())
+		return m, tea.Batch(m.tasks.loadTasks(), m.schedules.loadSchedules(), doTick())
 
 	case logMsg:
 		m.logs = append(m.logs, LogEntry(msg))
@@ -113,12 +109,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		// When queue tab is in detail view, delegate all keys to it
-		if m.activeTab == tabQueue && m.queue.InDetailView() {
-			var cmd tea.Cmd
-			m.queue, cmd = m.queue.Update(msg)
-			return m, cmd
-		}
 		// When tasks tab is in a sub-mode, delegate all keys to it
 		if m.activeTab == tabTasks && m.tasks.Mode() != modeNormal {
 			var cmd tea.Cmd
@@ -135,21 +125,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
 			switch m.activeTab {
-			case tabQueue:
-				m.activeTab = tabTasks
 			case tabTasks:
 				m.activeTab = tabSchedules
 			default:
-				m.activeTab = tabQueue
+				m.activeTab = tabTasks
 			}
 			return m, nil
 		case key.Matches(msg, key.NewBinding(key.WithKeys("1"))):
-			m.activeTab = tabQueue
-			return m, nil
-		case key.Matches(msg, key.NewBinding(key.WithKeys("2"))):
 			m.activeTab = tabTasks
 			return m, nil
-		case key.Matches(msg, key.NewBinding(key.WithKeys("3"))):
+		case key.Matches(msg, key.NewBinding(key.WithKeys("2"))):
 			m.activeTab = tabSchedules
 			return m, nil
 		}
@@ -157,11 +142,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Data messages go to their owning model regardless of active tab
 	switch msg.(type) {
-	case actionsLoadedMsg, actionUpdatedMsg:
-		var cmd tea.Cmd
-		m.queue, cmd = m.queue.Update(msg)
-		return m, cmd
-	case tasksLoadedMsg:
+	case tasksLoadedMsg, actionAttachedMsg:
 		var cmd tea.Cmd
 		m.tasks, cmd = m.tasks.Update(msg)
 		return m, cmd
@@ -174,8 +155,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Key messages go to the active tab only
 	var cmd tea.Cmd
 	switch m.activeTab {
-	case tabQueue:
-		m.queue, cmd = m.queue.Update(msg)
 	case tabTasks:
 		m.tasks, cmd = m.tasks.Update(msg)
 	case tabSchedules:
@@ -195,8 +174,6 @@ func (m Model) View() string {
 	b.WriteString("\n\n")
 
 	switch m.activeTab {
-	case tabQueue:
-		b.WriteString(m.queue.View())
 	case tabTasks:
 		b.WriteString(m.tasks.View())
 	case tabSchedules:
@@ -219,9 +196,8 @@ func (m Model) renderTabs() string {
 		key   string
 		t     tab
 	}{
-		{"Queue", "1", tabQueue},
-		{"Tasks", "2", tabTasks},
-		{"Schedules", "3", tabSchedules},
+		{"Tasks", "1", tabTasks},
+		{"Schedules", "2", tabSchedules},
 	}
 
 	var parts []string
@@ -239,8 +215,6 @@ func (m Model) renderTabs() string {
 func (m Model) renderHelp() string {
 	var keys []HelpKey
 	switch m.activeTab {
-	case tabQueue:
-		keys = m.queue.HelpKeys()
 	case tabTasks:
 		keys = m.tasks.HelpKeys()
 	case tabSchedules:
@@ -270,10 +244,6 @@ func (m Model) renderActivity() string {
 
 func (m Model) ActiveTab() tab {
 	return m.activeTab
-}
-
-func (m Model) Queue() QueueModel {
-	return m.queue
 }
 
 func (m Model) Tasks() TasksModel {

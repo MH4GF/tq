@@ -13,8 +13,8 @@ func TestNew(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	m := New(d, nil)
-	if m.ActiveTab() != tabQueue {
-		t.Errorf("initial tab = %d, want tabQueue(0)", m.ActiveTab())
+	if m.ActiveTab() != tabTasks {
+		t.Errorf("initial tab = %d, want tabTasks(0)", m.ActiveTab())
 	}
 	if m.IsQuitting() {
 		t.Error("should not be quitting initially")
@@ -27,36 +27,31 @@ func TestTabSwitch(t *testing.T) {
 
 	m := New(d, nil)
 
-	// Tab key switches
+	// Tab key switches Tasks → Schedules
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = updated.(Model)
-	if m.ActiveTab() != tabTasks {
-		t.Errorf("after tab, active = %d, want tabTasks(1)", m.ActiveTab())
-	}
-
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	m = updated.(Model)
 	if m.ActiveTab() != tabSchedules {
-		t.Errorf("after 2nd tab, active = %d, want tabSchedules(2)", m.ActiveTab())
+		t.Errorf("after tab, active = %d, want tabSchedules(1)", m.ActiveTab())
 	}
 
+	// Schedules → Tasks
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = updated.(Model)
-	if m.ActiveTab() != tabQueue {
-		t.Errorf("after 3rd tab, active = %d, want tabQueue(0)", m.ActiveTab())
+	if m.ActiveTab() != tabTasks {
+		t.Errorf("after 2nd tab, active = %d, want tabTasks(0)", m.ActiveTab())
 	}
 
 	// Number keys
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
 	m = updated.(Model)
-	if m.ActiveTab() != tabTasks {
-		t.Errorf("after '2', active = %d, want tabTasks(1)", m.ActiveTab())
+	if m.ActiveTab() != tabSchedules {
+		t.Errorf("after '2', active = %d, want tabSchedules(1)", m.ActiveTab())
 	}
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
 	m = updated.(Model)
-	if m.ActiveTab() != tabQueue {
-		t.Errorf("after '1', active = %d, want tabQueue(0)", m.ActiveTab())
+	if m.ActiveTab() != tabTasks {
+		t.Errorf("after '1', active = %d, want tabTasks(0)", m.ActiveTab())
 	}
 }
 
@@ -109,11 +104,11 @@ func TestViewContainsTabs(t *testing.T) {
 
 	m := New(d, nil)
 	view := m.View()
-	if !strings.Contains(view, "Queue") {
-		t.Errorf("view should contain 'Queue', got %q", view)
-	}
 	if !strings.Contains(view, "Tasks") {
 		t.Errorf("view should contain 'Tasks', got %q", view)
+	}
+	if !strings.Contains(view, "Schedules") {
+		t.Errorf("view should contain 'Schedules', got %q", view)
 	}
 }
 
@@ -123,9 +118,6 @@ func TestApp_DateFilterDefault(t *testing.T) {
 
 	m := New(d, nil)
 
-	if m.queue.dateFilter == "" {
-		t.Error("initial queue dateFilter should be today's date, got empty")
-	}
 	if m.tasks.dateFilter == "" {
 		t.Error("initial tasks dateFilter should be today's date, got empty")
 	}
@@ -137,16 +129,11 @@ func TestHelpText(t *testing.T) {
 
 	m := New(d, nil)
 
-	// Queue tab help
+	// Tasks tab help (default tab)
 	view := m.View()
 	if !strings.Contains(view, "j/k: navigate") {
-		t.Errorf("queue help missing navigate, got %q", view)
+		t.Errorf("tasks help missing navigate, got %q", view)
 	}
-
-	// Tasks tab help — no tasks loaded, so only common keys shown
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	m = updated.(Model)
-	view = m.View()
 	if !strings.Contains(view, "tab: switch") {
 		t.Errorf("tasks help missing tab switch, got %q", view)
 	}
