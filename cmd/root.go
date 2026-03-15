@@ -61,7 +61,7 @@ func configDir() (string, error) {
 }
 
 func init() {
-	rootCmd.Version = buildVersion()
+	rootCmd.Version = version
 	rootCmd.AddCommand(taskCmd)
 	rootCmd.AddCommand(actionCmd)
 	dispatchCmd.Hidden = true
