@@ -69,7 +69,7 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 	tmpl := lr.Prompt
 
 	if len(lr.UnknownFields) > 0 {
-		CreateSelfImprovementAction(params.DB, action.PromptID, lr.UnknownFields)
+		CreateSelfImprovementAction(params.DB, params.PromptsDir, action.PromptID, lr.UnknownFields)
 	}
 
 	promptData, err := BuildPromptData(params.DB, action)

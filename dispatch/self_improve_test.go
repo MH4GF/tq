@@ -10,7 +10,7 @@ import (
 func TestCreateSelfImprovementAction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 
-	CreateSelfImprovementAction(d, "my-prompt", []string{"allowed_tools", "timeout"})
+	CreateSelfImprovementAction(d, "/tmp/prompts", "my-prompt", []string{"allowed_tools", "timeout"})
 
 	// Verify project was created
 	p, err := d.GetProjectByName(selfImprovementProjectName)
@@ -32,13 +32,22 @@ func TestCreateSelfImprovementAction(t *testing.T) {
 	if actions[0].PromptID != selfImprovementPromptID {
 		t.Errorf("prompt_id = %q, want %q", actions[0].PromptID, selfImprovementPromptID)
 	}
+
+	// Verify task work_dir was set
+	task, err := d.GetTask(actions[0].TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.WorkDir != "/tmp/prompts" {
+		t.Errorf("task work_dir = %q, want %q", task.WorkDir, "/tmp/prompts")
+	}
 }
 
 func TestCreateSelfImprovementAction_NoDuplicateForSamePrompt(t *testing.T) {
 	d := testutil.NewTestDB(t)
 
-	CreateSelfImprovementAction(d, "my-prompt", []string{"timeout"})
-	CreateSelfImprovementAction(d, "my-prompt", []string{"timeout"})
+	CreateSelfImprovementAction(d, "/tmp/prompts", "my-prompt", []string{"timeout"})
+	CreateSelfImprovementAction(d, "/tmp/prompts", "my-prompt", []string{"timeout"})
 
 	actions, err := d.ListActions(db.ActionStatusPending, nil)
 	if err != nil {
@@ -52,8 +61,8 @@ func TestCreateSelfImprovementAction_NoDuplicateForSamePrompt(t *testing.T) {
 func TestCreateSelfImprovementAction_DifferentPromptsGetSeparateActions(t *testing.T) {
 	d := testutil.NewTestDB(t)
 
-	CreateSelfImprovementAction(d, "prompt-a", []string{"timeout"})
-	CreateSelfImprovementAction(d, "prompt-b", []string{"allowed_tools"})
+	CreateSelfImprovementAction(d, "/tmp/prompts", "prompt-a", []string{"timeout"})
+	CreateSelfImprovementAction(d, "/tmp/prompts", "prompt-b", []string{"allowed_tools"})
 
 	actions, err := d.ListActions(db.ActionStatusPending, nil)
 	if err != nil {

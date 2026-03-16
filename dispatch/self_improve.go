@@ -12,7 +12,7 @@ const selfImprovementProjectName = "tq-improvement"
 const selfImprovementTaskTitle = "prompt maintenance"
 const selfImprovementPromptID = "internal:remove-unknown-frontmatter"
 
-func CreateSelfImprovementAction(database db.Store, promptID string, unknownFields []string) {
+func CreateSelfImprovementAction(database db.Store, promptsDir string, promptID string, unknownFields []string) {
 	projectID, err := database.EnsureProject(selfImprovementProjectName)
 	if err != nil {
 		slog.Error("ensure self-improvement project", "error", err)
@@ -22,6 +22,11 @@ func CreateSelfImprovementAction(database db.Store, promptID string, unknownFiel
 	taskID, err := database.EnsureTask(projectID, selfImprovementTaskTitle)
 	if err != nil {
 		slog.Error("ensure self-improvement task", "error", err)
+		return
+	}
+
+	if err := database.UpdateTaskWorkDir(taskID, promptsDir); err != nil {
+		slog.Error("set self-improvement task work_dir", "error", err)
 		return
 	}
 
