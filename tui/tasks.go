@@ -95,7 +95,7 @@ func (m TasksModel) loadTasks() tea.Cmd {
 					continue
 				}
 				if m.dateFilter != "" {
-					if t.Status == "done" || t.Status == "archived" {
+					if t.Status == db.TaskStatusDone || t.Status == db.TaskStatusArchived {
 						actions = db.FilterByDate(actions, m.dateFilter)
 						if len(actions) == 0 && !t.MatchesDate(m.dateFilter) {
 							continue

@@ -31,6 +31,7 @@ type Model struct {
 	height      int
 	quitting    bool
 	cancel      context.CancelFunc
+	bgCtx       context.Context
 	backgrounds []BackgroundFunc
 	statusLine  string
 	logCh       <-chan LogEntry
@@ -46,25 +47,24 @@ func doTick() tea.Cmd {
 }
 
 type backgroundStatusMsg struct {
-	name string
-	err  error
+	err error
 }
 
 func New(database db.Store, logCh <-chan LogEntry, backgrounds ...BackgroundFunc) Model {
 	today := time.Now().Format("2006-01-02")
+	ctx, cancel := context.WithCancel(context.Background())
 	return Model{
 		activeTab:   tabTasks,
 		tasks:       NewTasksModel(database, today),
 		schedules:   NewSchedulesModel(database),
 		backgrounds: backgrounds,
 		logCh:       logCh,
+		cancel:      cancel,
+		bgCtx:       ctx,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	ctx, cancel := context.WithCancel(context.Background())
-	m.cancel = cancel
-
 	cmds := []tea.Cmd{m.tasks.Init(), m.schedules.Init(), doTick()}
 
 	if m.logCh != nil {
@@ -74,7 +74,7 @@ func (m Model) Init() tea.Cmd {
 	for _, bg := range m.backgrounds {
 		bg := bg
 		cmds = append(cmds, func() tea.Msg {
-			err := bg(ctx)
+			err := bg(m.bgCtx)
 			return backgroundStatusMsg{err: err}
 		})
 	}

@@ -8,6 +8,7 @@ tq (Task Queue) — タスクとアクションをSQLiteで管理し、Claude Co
 
 - ビルド: `go build ./...`
 - テスト: `go test ./...`
+- Lint: `golangci-lint run`
 - インストール: `go install .`
 - 単一テスト: `go test ./db/ -run TestTaskCreate`
 

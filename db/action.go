@@ -66,7 +66,7 @@ func FilterForOpenTask(actions []Action, date string) []Action {
 	}
 	var filtered []Action
 	for _, a := range actions {
-		if a.Status == "pending" || a.Status == "running" || a.Status == "dispatched" {
+		if a.Status == ActionStatusPending || a.Status == ActionStatusRunning || a.Status == ActionStatusDispatched {
 			filtered = append(filtered, a)
 		} else if a.MatchesDate(date) {
 			filtered = append(filtered, a)
@@ -138,7 +138,7 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	a := &Action{}
 	err = tx.QueryRowContext(ctx,
@@ -168,9 +168,9 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 	}
 
 	db.emitEvent("action", a.ID, "action.claimed", map[string]any{
-		"from": "pending", "to": "running",
+		"from": ActionStatusPending, "to": ActionStatusRunning,
 	})
-	a.Status = "running"
+	a.Status = ActionStatusRunning
 	return a, nil
 }
 
@@ -179,7 +179,7 @@ func (db *DB) ClaimPending(ctx context.Context, id int64) (*Action, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	a := &Action{}
 	err = tx.QueryRowContext(ctx,
@@ -193,7 +193,7 @@ func (db *DB) ClaimPending(ctx context.Context, id int64) (*Action, error) {
 		return nil, err
 	}
 
-	if a.Status != "pending" {
+	if a.Status != ActionStatusPending {
 		return nil, fmt.Errorf("action #%d is not pending (current: %s)", id, a.Status)
 	}
 
@@ -207,55 +207,37 @@ func (db *DB) ClaimPending(ctx context.Context, id int64) (*Action, error) {
 	}
 
 	db.emitEvent("action", id, "action.claimed", map[string]any{
-		"from": "pending", "to": "running",
+		"from": ActionStatusPending, "to": ActionStatusRunning,
 	})
-	a.Status = "running"
+	a.Status = ActionStatusRunning
 	return a, nil
 }
 
 func (db *DB) MarkDone(id int64, result string) error {
-	var from string
-	db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from)
-
-	_, err := db.Exec(
-		"UPDATE actions SET status = 'done', result = ?, completed_at = datetime('now') WHERE id = ?",
-		result, id,
-	)
-	if err == nil {
-		db.emitEvent("action", id, "action.status_changed", map[string]any{
-			"from": from, "to": "done", "result": result,
-		})
-	}
-	return err
+	return db.markTerminal(id, ActionStatusDone, result)
 }
 
 func (db *DB) MarkFailed(id int64, result string) error {
-	var from string
-	db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from)
-
-	_, err := db.Exec(
-		"UPDATE actions SET status = 'failed', result = ?, completed_at = datetime('now') WHERE id = ?",
-		result, id,
-	)
-	if err == nil {
-		db.emitEvent("action", id, "action.status_changed", map[string]any{
-			"from": from, "to": "failed", "result": result,
-		})
-	}
-	return err
+	return db.markTerminal(id, ActionStatusFailed, result)
 }
 
 func (db *DB) MarkCancelled(id int64, result string) error {
+	return db.markTerminal(id, ActionStatusCancelled, result)
+}
+
+func (db *DB) markTerminal(id int64, status, result string) error {
 	var from string
-	db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from)
+	if err := db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from); err != nil {
+		return fmt.Errorf("get current status: %w", err)
+	}
 
 	_, err := db.Exec(
-		"UPDATE actions SET status = 'cancelled', result = ?, completed_at = datetime('now') WHERE id = ?",
-		result, id,
+		"UPDATE actions SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ?",
+		status, result, id,
 	)
 	if err == nil {
 		db.emitEvent("action", id, "action.status_changed", map[string]any{
-			"from": from, "to": "cancelled", "result": result,
+			"from": from, "to": status, "result": result,
 		})
 	}
 	return err
@@ -277,7 +259,7 @@ func (db *DB) MarkDispatched(id int64) error {
 		return fmt.Errorf("action #%d is not running, cannot mark as dispatched", id)
 	}
 	db.emitEvent("action", id, "action.status_changed", map[string]any{
-		"from": "running", "to": "dispatched",
+		"from": ActionStatusRunning, "to": ActionStatusDispatched,
 	})
 	return nil
 }
@@ -362,7 +344,9 @@ func (db *DB) CountRunningInteractive() (int, error) {
 
 func (db *DB) ResetToPending(id int64) error {
 	var from string
-	db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from)
+	if err := db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from); err != nil {
+		return fmt.Errorf("get current status: %w", err)
+	}
 
 	_, err := db.Exec(
 		"UPDATE actions SET status = 'pending', started_at = NULL, session_id = NULL, tmux_pane = NULL WHERE id = ?",
@@ -370,7 +354,7 @@ func (db *DB) ResetToPending(id int64) error {
 	)
 	if err == nil {
 		db.emitEvent("action", id, "action.status_changed", map[string]any{
-			"from": from, "to": "pending",
+			"from": from, "to": ActionStatusPending,
 		})
 	}
 	return err

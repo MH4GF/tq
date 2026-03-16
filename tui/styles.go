@@ -35,15 +35,15 @@ var (
 
 func StatusStyle(status string) lipgloss.Style {
 	switch status {
-	case "pending":
+	case db.ActionStatusPending:
 		return stylePending
-	case "running":
+	case db.ActionStatusRunning:
 		return styleRunning
-	case "done":
+	case db.ActionStatusDone:
 		return styleDone
-	case "failed":
+	case db.ActionStatusFailed:
 		return styleFailed
-	case "dispatched":
+	case db.ActionStatusDispatched:
 		return styleDispatched
 	default:
 		return styleMuted
@@ -107,15 +107,15 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 
 func StatusIcon(status string) string {
 	switch status {
-	case "pending":
+	case db.ActionStatusPending:
 		return "○"
-	case "running":
+	case db.ActionStatusRunning:
 		return "●"
-	case "done":
+	case db.ActionStatusDone:
 		return "✓"
-	case "failed":
+	case db.ActionStatusFailed:
 		return "✗"
-	case "dispatched":
+	case db.ActionStatusDispatched:
 		return "⇢"
 	default:
 		return "?"

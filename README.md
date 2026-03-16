@@ -1,145 +1,61 @@
 # tq — Task Queue
 
-タスクとアクションをSQLiteで管理し、Claude Codeワーカーで自動処理するタスクキュー。
+AI-powered task queue backed by SQLite. Dispatch work to Claude Code workers via tmux.
 
-## セットアップ
+## Features
+
+- **SQLite as single source of truth** — all state lives in `~/.config/tq/tq.db`
+- **Queue Worker** — automatically picks up pending actions and dispatches them to Claude Code sessions
+- **AI is hands only** — orchestration is in Go; AI just executes via `claude` CLI
+- **TUI is read-only** — humans monitor via TUI (`tq ui`); mutations go through CLI commands
+
+## Install
 
 ```bash
-cd tq && go install .
+go install github.com/MH4GF/tq@latest
 ```
 
-DB は `~/.config/tq/tq.db` に配置（固定）。プロンプトは `~/.config/tq/prompts/` に配置。
+Or download a binary from [GitHub Releases](https://github.com/MH4GF/tq/releases).
 
-### プロジェクト登録
-
-初回セットアップ時にプロジェクトを登録する:
+## Quick Start
 
 ```bash
-tq project create myapp ~/ghq/github.com/org/myapp --meta '{"gh_owner":"org","repos":["org/myapp"]}'
-```
+# Register a project (sets working directory for tasks)
+tq project create myapp ~/src/myapp
 
-登録済みプロジェクトの確認:
+# Create a task under the project
+tq task create "Implement feature X" --project 1
 
-```bash
-tq project list
-```
+# Create an action linked to a prompt template
+tq action create review-pr --task 1 --title "Review PR #42"
 
-## 人間向け: TUI (`tq ui`)
+# Dispatch the next pending action
+tq dispatch
 
-人間はTUIで状況を監視する。TUIは読み取り専用で、書き込み操作は Claude Code に指示して CLI 経由で行う。
-
-```bash
+# Launch the TUI (includes queue worker)
 tq ui
 ```
 
-バックグラウンドで以下が自動実行される:
-- **Queue Worker**: pending アクションを検出して自動ディスパッチ。スケジュール（cron）も Queue Worker が管理し、時刻到達時にアクションを自動生成する
+## Architecture
 
-### 実行状況を確認する
+### Data Model
 
-- **Tasks タブ** (`1`): Project → Task → Actions のツリービュー
-- **Schedules タブ** (`2`): スケジュール一覧。有効/無効の切替・削除
-
-### キーバインド
-
-| キー | Tasks タブ | Schedules タブ |
-|------|-----------|---------------|
-| `j`/`k` | カーソル移動 | カーソル移動 |
-| `enter` | 展開/折りたたみ | — |
-| `o` | tmux attach | — |
-| `v` | 結果表示 | — |
-| `e` | — | 有効/無効切替 |
-| `d` | — | 削除 |
-| `tab` / `1` / `2` | タブ切替 | タブ切替 |
-| `q` | 終了 | 終了 |
-
-## AI向け: CLI
-
-CLIはAIワーカー（Claude Code）がプログラムから操作するためのインターフェース。プロンプト内で呼び出される。
-
-### tq action done — アクション完了報告
-
-interactive worker が作業完了時に呼ぶ。全プロンプトに記載される。
-
-```bash
-tq action done {{.Action.ID}} '{"result":"<要約>"}'
+```
+project → task → action
 ```
 
-### tq action create — アクション作成
+- **project**: groups tasks, sets default working directory
+- **task**: unit of work (status: open, review, done, blocked, archived)
+- **action**: dispatchable item linked to a prompt template (status: pending, running, done, failed, cancelled)
 
-プロンプトやスケジュールから新しいアクションを生成する際に使う。
+### Design Principles
 
-```bash
-tq action create fix-ci --task 1 --title "CI修正" --meta '{"pr_url":"https://..."}'
-```
+- **SQLite is SSOT** — the database is the canonical state store
+- **Queue Worker** — processes one action at a time, keeping context fresh
+- **AI is hands only** — Go handles orchestration; AI executes as a `claude` worker
+- **TUI is read-only** — humans observe via TUI; operations are issued through CLI
 
-### tq task create / update — タスク操作
-
-classify プロンプトがタスクを生成・更新する際に使う。
-
-```bash
-tq task create "CI修正" --project hearable --url "https://..."
-tq task update 3 --status done
-```
-
-### tq project create / list / delete — プロジェクト管理
-
-```bash
-tq project create hearable ~/ghq/github.com/thehearableapp/hearable-app --meta '{"gh_owner":"thehearableapp","repos":["thehearableapp/hearable-app"]}'
-tq project list
-tq project delete 3
-```
-
-### tq schedule — スケジュール管理
-
-cron 式で定期実行するアクションを登録する。Queue Worker がスケジュールを監視し、時刻到達時にアクションを自動生成する。
-
-```bash
-# スケジュール登録
-tq schedule create watch-gh-notifications \
-  --task 181 \
-  --title "Watch GitHub notifications" \
-  --cron "*/5 * * * *"
-
-# 一覧
-tq schedule list
-
-# 無効化 / 有効化
-tq schedule disable <id>
-tq schedule enable <id>
-
-# 削除
-tq schedule delete <id>
-```
-
-### tq dispatch — 割り込み実行
-
-キューの順番を無視して特定アクションを即座にディスパッチする。優先実行したいアクションがある場合に使う。
-
-```bash
-tq dispatch <action_id>           # 指定アクションを即座にディスパッチ
-tq dispatch                       # 次のpendingアクションをディスパッチ
-tq dispatch --session worker2     # tmuxセッションを指定（デフォルト: main）
-```
-
-### その他
-
-```bash
-tq action list                   # アクション一覧（JSON）
-tq action reset <id>             # failed/running → pending
-tq task list                     # タスク一覧（JSON）
-```
-
-## アーキテクチャ
-
-### 設計原則
-
-- **SQLite が SSOT** — デイリーノートはビュー（読み取り専用）
-- **Queue Worker** — 1アクション処理 → セッション終了、コンテキスト常にフレッシュ
-- **AI は手足のみ** — オーケストレーションは Go、AI は `claude` ワーカー
-- **TUI は読み取り専用** — 人間は TUI で状況を監視する。操作は Claude Code に自然言語で指示し、CLI 経由で実行される
-
-### Action 状態遷移
+### Action State Machine
 
 ```
                           dispatch/claim
@@ -160,25 +76,25 @@ tq task list                     # タスク一覧（JSON）
                 └───────────────────────┘          │
                 └──────────────────────────────────┘
 
-  * running → pending: reset コマンド（tmux pane kill 付き）
-  * done は terminal だが on_done で新規アクションを生成可能
+  * running → pending: reset command (kills tmux pane)
+  * done is terminal, but on_done can spawn a new action
 ```
 
-### Worker の種類
+### Worker Types
 
-| auto | interactive | 実行方法 |
-|------|------------|---------|
-| true | false | `claude -p` — stdout capture、自動 done |
-| true | true | `claude --worktree --tmux` — fire-and-forget、worker が `tq action done` で報告 |
-| false | * | dispatch しない → `waiting_human` |
+| auto | interactive | Execution |
+|------|------------|-----------|
+| true | false | `claude -p` — captures stdout, auto-completes |
+| true | true | `claude --worktree --tmux` — fire-and-forget, worker reports via `tq action done` |
+| false | * | Not dispatched — waits for human |
 
-### プロンプト
+### Prompts
 
-`prompts/` に frontmatter 付き markdown で定義:
+Defined as frontmatter-annotated markdown in `~/.config/tq/prompts/`:
 
 ```markdown
 ---
-description: 汎用実装タスク
+description: Generic implementation task
 auto: true
 interactive: true
 max_retries: 0
@@ -186,13 +102,32 @@ on_done: review
 ---
 {{.Action.Meta.instruction}}
 
-完了したら: tq action done {{.Action.ID}} '{"result":"<要約>"}'
+When done: tq action done {{.Action.ID}} '{"result":"<summary>"}'
 ```
 
-利用可能な変数: `{{.Task.ID}}`, `{{.Task.Title}}`, `{{.Task.URL}}`, `{{.Project.Name}}`, `{{.Project.WorkDir}}`, `{{.Action.ID}}`, `{{.Action.Meta.<key>}}`
+Available template variables: `{{.Task.ID}}`, `{{.Task.Title}}`, `{{.Task.URL}}`, `{{.Project.Name}}`, `{{.Project.WorkDir}}`, `{{.Action.ID}}`, `{{.Action.Meta.<key>}}`
 
-## テスト
+## CLI Reference
 
-```bash
-go test ./...
-```
+| Command | Description |
+|---------|-------------|
+| `tq project create <NAME> <WORK_DIR>` | Register a project |
+| `tq project list` | List projects (JSON) |
+| `tq project delete <ID>` | Delete a project |
+| `tq task create <TITLE> --project <ID>` | Create a task |
+| `tq task list` | List tasks with nested actions (JSON) |
+| `tq task update <ID> --status <STATUS>` | Update task status |
+| `tq action create <PROMPT> --task <ID> --title <TITLE>` | Create an action |
+| `tq action list` | List actions (JSON) |
+| `tq action done <ID> '<RESULT_JSON>'` | Mark action as done |
+| `tq action reset <ID>` | Reset action to pending |
+| `tq dispatch <ACTION_ID>` | Dispatch a specific action |
+| `tq dispatch` | Dispatch next pending action |
+| `tq schedule create <PROMPT> --task <ID> --title <TITLE> --cron <EXPR>` | Create a schedule |
+| `tq schedule list` | List schedules |
+| `tq prompt list` | List available prompt templates |
+| `tq ui` | Launch TUI with queue worker |
+
+## License
+
+MIT

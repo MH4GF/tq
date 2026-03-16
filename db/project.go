@@ -76,18 +76,12 @@ func (db *DB) InsertProject(name, workDir, metadata string) (int64, error) {
 
 func (db *DB) DeleteProject(id int64) error {
 	var name string
-	db.QueryRow("SELECT name FROM projects WHERE id = ?", id).Scan(&name)
+	if err := db.QueryRow("SELECT name FROM projects WHERE id = ?", id).Scan(&name); err != nil {
+		return fmt.Errorf("get project name: %w", err)
+	}
 
-	res, err := db.Exec("DELETE FROM projects WHERE id = ?", id)
-	if err != nil {
+	if _, err := db.Exec("DELETE FROM projects WHERE id = ?", id); err != nil {
 		return err
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return fmt.Errorf("project %d not found", id)
 	}
 	db.emitEvent("project", id, "project.deleted", map[string]any{
 		"name": name,

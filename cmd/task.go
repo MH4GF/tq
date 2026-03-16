@@ -207,7 +207,9 @@ func init() {
 	taskCreateCmd.Flags().StringVar(&taskURL, "url", "", "Related URL (e.g. GitHub issue or PR)")
 	taskCreateCmd.Flags().StringVar(&taskMeta, "meta", "{}", `JSON metadata (e.g. {"key":"value"})`)
 	taskCreateCmd.Flags().StringVar(&taskWorkDir, "work-dir", "", "Working directory (defaults to project work_dir)")
-	taskCreateCmd.MarkFlagRequired("project")
+	if err := taskCreateCmd.MarkFlagRequired("project"); err != nil {
+		panic(err)
+	}
 
 	taskUpdateCmd.Flags().StringVar(&taskUpdateStatus, "status", "", "New status (open, review, done, blocked, archived)")
 	taskUpdateCmd.Flags().Int64Var(&taskUpdateProjectID, "project", 0, "Project ID")

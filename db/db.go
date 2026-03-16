@@ -83,7 +83,9 @@ func (db *DB) Migrate() error {
 	}
 
 	// Rename classify → classify-gh-notification in prompt_id (idempotent)
-	db.Exec(`UPDATE actions SET prompt_id = 'classify-gh-notification' WHERE prompt_id = 'classify'`)
+	if _, err := db.Exec(`UPDATE actions SET prompt_id = 'classify-gh-notification' WHERE prompt_id = 'classify'`); err != nil {
+		return err
+	}
 
 	// Drop source column from existing DBs (idempotent)
 	if has, err := db.hasColumn("actions", "source"); err != nil {

@@ -27,7 +27,7 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			slog.Warn("schedule: task lookup failed", "schedule_id", s.ID, "task_id", s.TaskID, "error", err)
 			continue
 		}
-		if task.Status == "done" || task.Status == "archived" {
+		if task.Status == db.TaskStatusDone || task.Status == db.TaskStatusArchived {
 			slog.Info("schedule: auto-disabling for closed task", "schedule_id", s.ID, "task_id", s.TaskID, "task_status", task.Status)
 			if err := database.UpdateScheduleEnabled(s.ID, false); err != nil {
 				slog.Error("schedule: auto-disable failed", "schedule_id", s.ID, "error", err)

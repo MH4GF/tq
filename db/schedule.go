@@ -119,7 +119,9 @@ func (db *DB) UpdateSchedule(id int64, title, cronExpr, metadata *string, taskID
 
 func (db *DB) DeleteSchedule(id int64) error {
 	var taskID int64
-	db.QueryRow("SELECT task_id FROM schedules WHERE id = ?", id).Scan(&taskID)
+	if err := db.QueryRow("SELECT task_id FROM schedules WHERE id = ?", id).Scan(&taskID); err != nil {
+		return fmt.Errorf("get schedule task_id: %w", err)
+	}
 
 	_, err := db.Exec("DELETE FROM schedules WHERE id = ?", id)
 	if err == nil {

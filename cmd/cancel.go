@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/dispatch"
 	"github.com/spf13/cobra"
 )
@@ -39,11 +40,11 @@ classification could be improved to avoid similar unnecessary actions.`,
 			return fmt.Errorf("action #%d not found (see: tq action list): %w", id, err)
 		}
 
-		if action.Status == "done" || action.Status == "cancelled" {
+		if action.Status == db.ActionStatusDone || action.Status == db.ActionStatusCancelled {
 			return fmt.Errorf("action #%d is already %q, cannot cancel (only pending, running, or failed actions can be cancelled)", id, action.Status)
 		}
 
-		if action.Status == "running" && action.TmuxPane.Valid {
+		if action.Status == db.ActionStatusRunning && action.TmuxPane.Valid {
 			_ = exec.Command("tmux", "kill-window", "-t", "main:"+dispatch.WindowName(id)).Run()
 		}
 

@@ -39,7 +39,7 @@ func triggerFollowUp(database db.Store, promptsDir string, action *db.Action, re
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	_, err = database.InsertAction(targetPromptID, targetPromptID, action.TaskID, string(metaJSON), "pending")
+	_, err = database.InsertAction(targetPromptID, targetPromptID, action.TaskID, string(metaJSON), db.ActionStatusPending)
 	if err != nil {
 		return fmt.Errorf("insert follow-up action: %w", err)
 	}

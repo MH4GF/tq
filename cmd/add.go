@@ -61,7 +61,7 @@ If instruction cannot be determined from context, ask the user.`,
 
 		status := addStatus
 		if status == "" {
-			status = "pending"
+			status = db.ActionStatusPending
 		}
 
 		if !addForce {
@@ -104,7 +104,9 @@ If instruction cannot be determined from context, ask the user.`,
 func init() {
 	addCmd.Flags().StringVar(&addTitle, "title", "", fmt.Sprintf("Action title (required, max %d chars)", maxActionTitleLength))
 	addCmd.Flags().Int64Var(&addTask, "task", 0, "Task ID (required, see: tq task list)")
-	addCmd.MarkFlagRequired("task")
+	if err := addCmd.MarkFlagRequired("task"); err != nil {
+		panic(err)
+	}
 	addCmd.Flags().StringVar(&addMeta, "meta", "{}", `JSON metadata (e.g. {"key":"value"})`)
 	addCmd.Flags().StringVar(&addStatus, "status", "", "Initial status (default: pending)")
 	addCmd.Flags().BoolVar(&addForce, "force", false, "Skip duplicate check")

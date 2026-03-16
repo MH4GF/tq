@@ -2,7 +2,13 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
+)
+
+const (
+	TaskStatusDone     = "done"
+	TaskStatusArchived = "archived"
 )
 
 type Task struct {
@@ -53,7 +59,9 @@ func (db *DB) InsertTask(projectID int64, title, url, metadata, workDir string) 
 
 func (db *DB) UpdateTask(id int64, status, reason string) error {
 	var from string
-	db.QueryRow("SELECT status FROM tasks WHERE id = ?", id).Scan(&from)
+	if err := db.QueryRow("SELECT status FROM tasks WHERE id = ?", id).Scan(&from); err != nil {
+		return fmt.Errorf("get current status: %w", err)
+	}
 
 	_, err := db.Exec(
 		"UPDATE tasks SET status = ?, updated_at = datetime('now') WHERE id = ?",
@@ -69,7 +77,9 @@ func (db *DB) UpdateTask(id int64, status, reason string) error {
 
 func (db *DB) UpdateTaskProject(id int64, projectID int64) error {
 	var from int64
-	db.QueryRow("SELECT project_id FROM tasks WHERE id = ?", id).Scan(&from)
+	if err := db.QueryRow("SELECT project_id FROM tasks WHERE id = ?", id).Scan(&from); err != nil {
+		return fmt.Errorf("get current project_id: %w", err)
+	}
 
 	_, err := db.Exec(
 		"UPDATE tasks SET project_id = ?, updated_at = datetime('now') WHERE id = ?",
@@ -85,7 +95,9 @@ func (db *DB) UpdateTaskProject(id int64, projectID int64) error {
 
 func (db *DB) UpdateTaskWorkDir(id int64, workDir string) error {
 	var from string
-	db.QueryRow("SELECT work_dir FROM tasks WHERE id = ?", id).Scan(&from)
+	if err := db.QueryRow("SELECT work_dir FROM tasks WHERE id = ?", id).Scan(&from); err != nil {
+		return fmt.Errorf("get current work_dir: %w", err)
+	}
 
 	_, err := db.Exec(
 		"UPDATE tasks SET work_dir = ?, updated_at = datetime('now') WHERE id = ?",
