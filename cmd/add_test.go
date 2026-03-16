@@ -162,6 +162,40 @@ Review.
 	}
 }
 
+func TestAdd_MissingMetaKey(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	tqDir := t.TempDir()
+	cmd.SetConfigDir(tqDir)
+	writeTestPrompt(t, tqDir, "implement", `---
+description: Implement
+---
+Instruction: {{index .Action.Meta "instruction"}}
+`)
+
+	d.InsertTask(1, "test task", "", "{}", "")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"action", "create", "implement", "--title", "impl task", "--task", "1"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error for missing meta key")
+	}
+	if !contains(err.Error(), "requires metadata not provided in --meta") {
+		t.Errorf("error = %q, want to contain 'requires metadata not provided in --meta'", err.Error())
+	}
+	if !contains(err.Error(), `missing metadata key "instruction"`) {
+		t.Errorf("error = %q, want to contain 'missing metadata key \"instruction\"'", err.Error())
+	}
+}
+
 func TestAdd_MissingTemplate(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

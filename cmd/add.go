@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"unicode/utf8"
 
+	"github.com/MH4GF/tq/db"
+	"github.com/MH4GF/tq/dispatch"
+	"github.com/MH4GF/tq/prompt"
 	"github.com/spf13/cobra"
 )
 
@@ -69,6 +72,24 @@ If instruction cannot be determined from context, ask the user.`,
 			if dup {
 				return fmt.Errorf("blocked: active action already exists for task %d prompt %s (use --force to override)", addTask, addPrompt)
 			}
+		}
+
+		lr, err := prompt.Load(resolvePromptsDir(), addPrompt)
+		if err != nil {
+			return fmt.Errorf("load prompt: %w", err)
+		}
+		tempAction := &db.Action{
+			TaskID:   addTask,
+			PromptID: addPrompt,
+			Metadata: addMeta,
+			Status:   status,
+		}
+		promptData, err := dispatch.BuildPromptData(database, tempAction)
+		if err != nil {
+			return fmt.Errorf("build prompt data: %w", err)
+		}
+		if _, err := lr.Prompt.Render(promptData); err != nil {
+			return fmt.Errorf("prompt %q requires metadata not provided in --meta: %w", addPrompt, err)
 		}
 
 		id, err := database.InsertAction(addTitle, addPrompt, addTask, addMeta, status)

@@ -3,6 +3,7 @@ package prompt
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -348,6 +349,45 @@ func TestLoad_InternalPrompt(t *testing.T) {
 	}
 	if lr.Prompt.ID != "internal:remove-unknown-frontmatter" {
 		t.Errorf("ID = %q, want %q", lr.Prompt.ID, "internal:remove-unknown-frontmatter")
+	}
+}
+
+func TestRender_MissingMetaKey(t *testing.T) {
+	p := &Prompt{
+		ID:   "test",
+		Body: `Instruction: {{index .Action.Meta "instruction"}}`,
+	}
+
+	data := PromptData{
+		Task:    TaskData{Meta: map[string]any{}},
+		Project: ProjectData{Meta: map[string]any{}},
+		Action:  ActionData{Meta: map[string]any{}},
+	}
+
+	_, err := p.Render(data)
+	if err == nil {
+		t.Fatal("expected error for missing meta key")
+	}
+	if !strings.Contains(err.Error(), `missing metadata key "instruction"`) {
+		t.Errorf("error = %q, want to contain 'missing metadata key \"instruction\"'", err.Error())
+	}
+}
+
+func TestRender_MissingMetaKey_DotSyntax(t *testing.T) {
+	p := &Prompt{
+		ID:   "test",
+		Body: `Instruction: {{.Action.Meta.instruction}}`,
+	}
+
+	data := PromptData{
+		Task:    TaskData{Meta: map[string]any{}},
+		Project: ProjectData{Meta: map[string]any{}},
+		Action:  ActionData{Meta: map[string]any{}},
+	}
+
+	_, err := p.Render(data)
+	if err == nil {
+		t.Fatal("expected error for missing meta key via dot syntax")
 	}
 }
 

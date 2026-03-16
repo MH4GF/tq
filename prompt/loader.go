@@ -177,7 +177,10 @@ func List(dirs ...string) ([]Prompt, error) {
 }
 
 func (p *Prompt) Render(data PromptData) (string, error) {
-	tmpl, err := template.New(p.ID).Parse(p.Body)
+	tmpl, err := template.New(p.ID).
+		Option("missingkey=error").
+		Funcs(template.FuncMap{"index": strictIndex}).
+		Parse(p.Body)
 	if err != nil {
 		return "", fmt.Errorf("prompt %q: parse error: %w", p.ID, err)
 	}
@@ -188,4 +191,25 @@ func (p *Prompt) Render(data PromptData) (string, error) {
 	}
 
 	return buf.String(), nil
+}
+
+func strictIndex(item any, keys ...any) (any, error) {
+	v := reflect.ValueOf(item)
+	for _, key := range keys {
+		switch v.Kind() {
+		case reflect.Map:
+			result := v.MapIndex(reflect.ValueOf(key))
+			if !result.IsValid() {
+				return nil, fmt.Errorf("missing metadata key %q", key)
+			}
+			v = result
+		default:
+			idx := int(reflect.ValueOf(key).Int())
+			if idx < 0 || idx >= v.Len() {
+				return nil, fmt.Errorf("index %d out of range", idx)
+			}
+			v = v.Index(idx)
+		}
+	}
+	return v.Interface(), nil
 }
