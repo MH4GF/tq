@@ -39,7 +39,7 @@ func setupPromptsDir(t *testing.T) string {
 	return tqDir
 }
 
-func writeTestPromptFull(t *testing.T, dir, name, mode, onDone, onCancel, onFail string) {
+func writeTestPromptFull(t *testing.T, dir, name, mode, onDone, onCancel string) {
 	t.Helper()
 	hooks := ""
 	if onDone != "" {
@@ -47,9 +47,6 @@ func writeTestPromptFull(t *testing.T, dir, name, mode, onDone, onCancel, onFail
 	}
 	if onCancel != "" {
 		hooks += fmt.Sprintf("on_cancel: %s\n", onCancel)
-	}
-	if onFail != "" {
-		hooks += fmt.Sprintf("on_fail: %s\n", onFail)
 	}
 	content := fmt.Sprintf(`---
 description: %s
@@ -64,7 +61,7 @@ Do %s for {{.Task.Title}}.
 
 func writeTestPromptWithMode(t *testing.T, dir, name, mode, onDone string) {
 	t.Helper()
-	writeTestPromptFull(t, dir, name, mode, onDone, "", "")
+	writeTestPromptFull(t, dir, name, mode, onDone, "")
 }
 
 func writeTestPrompt(t *testing.T, dir, name string, interactive bool) {
@@ -78,7 +75,7 @@ func writeTestPromptWithOnDone(t *testing.T, dir, name string, interactive bool,
 	if interactive {
 		mode = "interactive"
 	}
-	writeTestPromptFull(t, dir, name, mode, onDone, "", "")
+	writeTestPromptFull(t, dir, name, mode, onDone, "")
 }
 
 func TestRunWorker_ProcessesAndStops(t *testing.T) {
@@ -259,19 +256,14 @@ func TestRunWorker_OnDoneTriggersFollowUp(t *testing.T) {
 	}
 }
 
-func TestRunWorker_OnFailTriggersFollowUp(t *testing.T) {
+func TestRunWorker_FailureCreatesInvestigateAction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	tqDir := t.TempDir()
-	promptsDir := filepath.Join(tqDir, "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-
-	writeTestPromptFull(t, promptsDir, "failing-task", "noninteractive", "", "", "investigate")
-	writeTestPromptFull(t, promptsDir, "investigate", "noninteractive", "", "", "")
+	tqDir := setupPromptsDir(t)
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
-	d.InsertAction("failing-task", "failing-task", taskID, "{}", "pending")
+	d.InsertAction("check-pr-status", "check-pr-status", taskID, "{}", "pending")
 
 	worker := &countingWorker{err: fmt.Errorf("something went wrong")}
 
@@ -301,15 +293,18 @@ func TestRunWorker_OnFailTriggersFollowUp(t *testing.T) {
 		t.Errorf("action status = %q, want failed", action.Status)
 	}
 
-	// Follow-up investigate action should have been created
+	// Investigate-failure action should have been auto-created
 	actions, _ := d.ListActions("", nil)
 	if len(actions) < 2 {
 		t.Fatalf("expected at least 2 actions, got %d", len(actions))
 	}
 
 	investigate := actions[1]
-	if investigate.PromptID != "investigate" {
-		t.Errorf("follow-up prompt_id = %q, want investigate", investigate.PromptID)
+	if investigate.PromptID != "internal:investigate-failure" {
+		t.Errorf("follow-up prompt_id = %q, want internal:investigate-failure", investigate.PromptID)
+	}
+	if investigate.TaskID != taskID {
+		t.Errorf("follow-up task_id = %d, want %d", investigate.TaskID, taskID)
 	}
 }
 

@@ -65,15 +65,3 @@ func TriggerOnCancel(database db.Store, promptsDir string, action *db.Action, re
 	}
 	return triggerFollowUp(database, promptsDir, action, result, lr.Prompt.Config.OnCancel, "cancelled")
 }
-
-// TriggerOnFail creates a follow-up action if the failed action's prompt has on_fail configured.
-func TriggerOnFail(database db.Store, promptsDir string, action *db.Action, result string) error {
-	lr, err := prompt.Load(promptsDir, action.PromptID)
-	if err != nil {
-		// If we can't load the prompt (e.g. it was the prompt itself that caused the failure),
-		// log and return nil to avoid masking the original error.
-		slog.Warn("on_fail: cannot load source prompt", "prompt_id", action.PromptID, "error", err)
-		return nil
-	}
-	return triggerFollowUp(database, promptsDir, action, result, lr.Prompt.Config.OnFail, "failed")
-}

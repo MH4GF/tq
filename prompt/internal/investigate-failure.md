@@ -2,12 +2,13 @@
 description: Investigate why a previous action failed and suggest remediation
 mode: noninteractive
 ---
-Action #{{index .Action.Meta "triggered_by_action_id"}} failed with status "failed".
+Action #{{index .Action.Meta "failed_action_id"}} (prompt: {{index .Action.Meta "failed_prompt_id"}}) failed.
 
 ## Failed Action Details
 
-- **Action ID**: {{index .Action.Meta "triggered_by_action_id"}}
-- **Error/Result**: {{index .Action.Meta "predecessor_result"}}
+- **Action ID**: {{index .Action.Meta "failed_action_id"}}
+- **Prompt**: {{index .Action.Meta "failed_prompt_id"}}
+- **Error/Result**: {{index .Action.Meta "failure_result"}}
 
 ## Task Context
 
