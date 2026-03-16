@@ -38,35 +38,37 @@ var uiCmd = &cobra.Command{
 			return err
 		}
 
-		ralphBg := func(ctx context.Context) error {
-			cfg := dispatch.RalphConfig{
+		workerBg := func(ctx context.Context) error {
+			cfg := dispatch.WorkerConfig{
+				DispatchConfig: dispatch.DispatchConfig{
+					DB: database,
+					NonInteractiveFunc: func() dispatch.Worker {
+						return &dispatch.NonInteractiveWorker{
+							Runner: &dispatch.ExecRunner{},
+						}
+					},
+					InteractiveFunc: func() dispatch.Worker {
+						return &dispatch.InteractiveWorker{
+							Runner:  &dispatch.ExecRunner{},
+							Session: uiSession,
+						}
+					},
+					RemoteFunc: func() dispatch.Worker {
+						return &dispatch.RemoteWorker{
+							Runner: &dispatch.ExecRunner{},
+						}
+					},
+					TmuxSession: uiSession,
+				},
 				UserConfigDir:  cfgDir,
-				DB:             database,
 				MaxInteractive: uiMaxInteractive,
 				PollInterval:   uiPollInterval,
-				TmuxSession:    uiSession,
 				TmuxChecker:    &dispatch.ExecTmuxChecker{Runner: &dispatch.ExecRunner{}},
-				NonInteractiveFunc: func() dispatch.Worker {
-					return &dispatch.NonInteractiveWorker{
-						Runner: &dispatch.ExecRunner{},
-					}
-				},
-				InteractiveFunc: func() dispatch.Worker {
-					return &dispatch.InteractiveWorker{
-						Runner:  &dispatch.ExecRunner{},
-						Session: uiSession,
-					}
-				},
-				RemoteFunc: func() dispatch.Worker {
-					return &dispatch.RemoteWorker{
-						Runner: &dispatch.ExecRunner{},
-					}
-				},
 			}
-			return dispatch.RalphLoop(ctx, cfg)
+			return dispatch.RunWorker(ctx, cfg)
 		}
 
-		m := tui.New(database, logCh, ralphBg)
+		m := tui.New(database, logCh, workerBg)
 		p := tea.NewProgram(m, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("tui: %w", err)

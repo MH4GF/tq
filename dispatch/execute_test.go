@@ -78,12 +78,14 @@ func TestExecuteAction(t *testing.T) {
 			workerFunc := func() Worker { return worker }
 
 			result, err := ExecuteAction(context.Background(), ExecuteParams{
-				DB:                 d,
-				PromptsDir:         promptsDir,
-				NonInteractiveFunc: workerFunc,
-				InteractiveFunc:    workerFunc,
-				RemoteFunc:         workerFunc,
-				BeforeInteractive:  tc.beforeInteractive,
+				DispatchConfig: DispatchConfig{
+					DB:                 d,
+					NonInteractiveFunc: workerFunc,
+					InteractiveFunc:    workerFunc,
+					RemoteFunc:         workerFunc,
+				},
+				PromptsDir:        promptsDir,
+				BeforeInteractive: tc.beforeInteractive,
 			}, action)
 
 			switch tc.wantErrType {

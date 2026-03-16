@@ -78,7 +78,7 @@ func writeTestPromptWithOnDone(t *testing.T, dir, name string, interactive bool,
 	writeTestPromptFull(t, dir, name, mode, onDone, "")
 }
 
-func TestRalphLoop_ProcessesAndStops(t *testing.T) {
+func TestRunWorker_ProcessesAndStops(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -92,22 +92,24 @@ func TestRalphLoop_ProcessesAndStops(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	cfg := RalphConfig{
-		UserConfigDir:          tqDir,
-		DB:             d,
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB: d,
+			NonInteractiveFunc: func() Worker {
+				return worker
+			},
+			InteractiveFunc: func() Worker {
+				return worker
+			},
+		},
+		UserConfigDir:  tqDir,
 		MaxInteractive: 3,
 		PollInterval:   50 * time.Millisecond,
-		NonInteractiveFunc: func() Worker {
-			return worker
-		},
-		InteractiveFunc: func() Worker {
-			return worker
-		},
 	}
 
-	err := RalphLoop(ctx, cfg)
+	err := RunWorker(ctx, cfg)
 	if err != context.DeadlineExceeded {
-		t.Fatalf("RalphLoop error = %v, want context.DeadlineExceeded", err)
+		t.Fatalf("RunWorker error = %v, want context.DeadlineExceeded", err)
 	}
 
 	if worker.count != 1 {
@@ -120,7 +122,7 @@ func TestRalphLoop_ProcessesAndStops(t *testing.T) {
 	}
 }
 
-func TestRalphLoop_InteractiveLimitEnforced(t *testing.T) {
+func TestRunWorker_InteractiveLimitEnforced(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -138,27 +140,29 @@ func TestRalphLoop_InteractiveLimitEnforced(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	cfg := RalphConfig{
-		UserConfigDir:          tqDir,
-		DB:             d,
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB: d,
+			NonInteractiveFunc: func() Worker {
+				return &countingWorker{result: `{"ok":true}`}
+			},
+			InteractiveFunc: func() Worker {
+				return interactiveWorker
+			},
+		},
+		UserConfigDir:  tqDir,
 		MaxInteractive: 1,
 		PollInterval:   50 * time.Millisecond,
-		NonInteractiveFunc: func() Worker {
-			return &countingWorker{result: `{"ok":true}`}
-		},
-		InteractiveFunc: func() Worker {
-			return interactiveWorker
-		},
 	}
 
-	_ = RalphLoop(ctx, cfg)
+	_ = RunWorker(ctx, cfg)
 
 	if interactiveWorker.count != 0 {
 		t.Errorf("interactive worker called %d times, want 0 (limit reached)", interactiveWorker.count)
 	}
 }
 
-func TestRalphLoop_FailureEscalation(t *testing.T) {
+func TestRunWorker_FailureEscalation(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -172,20 +176,22 @@ func TestRalphLoop_FailureEscalation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	cfg := RalphConfig{
-		UserConfigDir:          tqDir,
-		DB:             d,
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB: d,
+			NonInteractiveFunc: func() Worker {
+				return worker
+			},
+			InteractiveFunc: func() Worker {
+				return worker
+			},
+		},
+		UserConfigDir:  tqDir,
 		MaxInteractive: 3,
 		PollInterval:   50 * time.Millisecond,
-		NonInteractiveFunc: func() Worker {
-			return worker
-		},
-		InteractiveFunc: func() Worker {
-			return worker
-		},
 	}
 
-	_ = RalphLoop(ctx, cfg)
+	_ = RunWorker(ctx, cfg)
 
 	action, _ := d.GetAction(1)
 	if action.Status != "failed" {
@@ -193,7 +199,7 @@ func TestRalphLoop_FailureEscalation(t *testing.T) {
 	}
 }
 
-func TestRalphLoop_OnDoneTriggersFollowUp(t *testing.T) {
+func TestRunWorker_OnDoneTriggersFollowUp(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -212,22 +218,24 @@ func TestRalphLoop_OnDoneTriggersFollowUp(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	cfg := RalphConfig{
-		UserConfigDir:          tqDir,
-		DB:             d,
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB: d,
+			NonInteractiveFunc: func() Worker {
+				return worker
+			},
+			InteractiveFunc: func() Worker {
+				return worker
+			},
+		},
+		UserConfigDir:  tqDir,
 		MaxInteractive: 3,
 		PollInterval:   50 * time.Millisecond,
-		NonInteractiveFunc: func() Worker {
-			return worker
-		},
-		InteractiveFunc: func() Worker {
-			return worker
-		},
 	}
 
-	err := RalphLoop(ctx, cfg)
+	err := RunWorker(ctx, cfg)
 	if err != context.DeadlineExceeded {
-		t.Fatalf("RalphLoop error = %v, want context.DeadlineExceeded", err)
+		t.Fatalf("RunWorker error = %v, want context.DeadlineExceeded", err)
 	}
 
 	// check-pr should be done
@@ -269,8 +277,8 @@ func TestReapStaleActions_DetectsStale(t *testing.T) {
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "other-window"}}
 
-	cfg := RalphConfig{
-		DB:               d,
+	cfg := WorkerConfig{
+		DispatchConfig:   DispatchConfig{DB: d},
 		TmuxChecker:      checker,
 		StaleGracePeriod: 30 * time.Second,
 	}
@@ -296,8 +304,8 @@ func TestReapStaleActions_SkipsLiveWindows(t *testing.T) {
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}}
 
-	cfg := RalphConfig{
-		DB:               d,
+	cfg := WorkerConfig{
+		DispatchConfig:   DispatchConfig{DB: d},
 		TmuxChecker:      checker,
 		StaleGracePeriod: 30 * time.Second,
 	}
@@ -321,8 +329,8 @@ func TestReapStaleActions_GracePeriod(t *testing.T) {
 
 	checker := &mockTmuxChecker{windows: []string{"zsh"}}
 
-	cfg := RalphConfig{
-		DB:               d,
+	cfg := WorkerConfig{
+		DispatchConfig:   DispatchConfig{DB: d},
 		TmuxChecker:      checker,
 		StaleGracePeriod: 30 * time.Second,
 	}
@@ -345,8 +353,8 @@ func TestReapStaleActions_TmuxError(t *testing.T) {
 
 	checker := &mockTmuxChecker{err: fmt.Errorf("tmux not available")}
 
-	cfg := RalphConfig{
-		DB:               d,
+	cfg := WorkerConfig{
+		DispatchConfig:   DispatchConfig{DB: d},
 		TmuxChecker:      checker,
 		StaleGracePeriod: 30 * time.Second,
 	}
@@ -367,9 +375,9 @@ func TestReapStaleActions_NilChecker(t *testing.T) {
 	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1' WHERE id = 1")
 
-	cfg := RalphConfig{
-		DB:          d,
-		TmuxChecker: nil,
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{DB: d},
+		TmuxChecker:    nil,
 	}
 
 	// Should not panic
@@ -381,7 +389,7 @@ func TestReapStaleActions_NilChecker(t *testing.T) {
 	}
 }
 
-func TestRalphLoop_RemoteDispatch(t *testing.T) {
+func TestRunWorker_RemoteDispatch(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -395,23 +403,25 @@ func TestRalphLoop_RemoteDispatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	cfg := RalphConfig{
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB: d,
+			NonInteractiveFunc: func() Worker {
+				return &countingWorker{result: `{"ok":true}`}
+			},
+			InteractiveFunc: func() Worker {
+				return &countingWorker{result: "interactive:action=1"}
+			},
+			RemoteFunc: func() Worker {
+				return remoteWorker
+			},
+		},
 		UserConfigDir:  tqDir,
-		DB:             d,
 		MaxInteractive: 1,
 		PollInterval:   50 * time.Millisecond,
-		NonInteractiveFunc: func() Worker {
-			return &countingWorker{result: `{"ok":true}`}
-		},
-		InteractiveFunc: func() Worker {
-			return &countingWorker{result: "interactive:action=1"}
-		},
-		RemoteFunc: func() Worker {
-			return remoteWorker
-		},
 	}
 
-	_ = RalphLoop(ctx, cfg)
+	_ = RunWorker(ctx, cfg)
 
 	if remoteWorker.count != 1 {
 		t.Errorf("remote worker called %d times, want 1", remoteWorker.count)
@@ -423,7 +433,7 @@ func TestRalphLoop_RemoteDispatch(t *testing.T) {
 	}
 }
 
-func TestRalphLoop_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
+func TestRunWorker_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -445,23 +455,25 @@ func TestRalphLoop_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	cfg := RalphConfig{
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB: d,
+			NonInteractiveFunc: func() Worker {
+				return &countingWorker{result: `{"ok":true}`}
+			},
+			InteractiveFunc: func() Worker {
+				return interactiveWorker
+			},
+			RemoteFunc: func() Worker {
+				return remoteWorker
+			},
+		},
 		UserConfigDir:  tqDir,
-		DB:             d,
 		MaxInteractive: 1,
 		PollInterval:   50 * time.Millisecond,
-		NonInteractiveFunc: func() Worker {
-			return &countingWorker{result: `{"ok":true}`}
-		},
-		InteractiveFunc: func() Worker {
-			return interactiveWorker
-		},
-		RemoteFunc: func() Worker {
-			return remoteWorker
-		},
 	}
 
-	_ = RalphLoop(ctx, cfg)
+	_ = RunWorker(ctx, cfg)
 
 	if remoteWorker.count != 1 {
 		t.Errorf("remote worker called %d times, want 1 (should not be limited)", remoteWorker.count)
@@ -481,10 +493,9 @@ func TestReapStaleActions_CustomSession(t *testing.T) {
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}}
 
-	cfg := RalphConfig{
-		DB:               d,
+	cfg := WorkerConfig{
+		DispatchConfig:   DispatchConfig{DB: d, TmuxSession: "work"},
 		TmuxChecker:      checker,
-		TmuxSession:      "work",
 		StaleGracePeriod: 30 * time.Second,
 	}
 
@@ -506,16 +517,18 @@ func TestDispatchOne_NoPending(t *testing.T) {
 
 	tqDir := setupPromptsDir(t)
 
-	cfg := RalphConfig{
-		UserConfigDir:        tqDir,
-		DB:           d,
-		PollInterval: 50 * time.Millisecond,
-		NonInteractiveFunc: func() Worker {
-			return &countingWorker{}
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB: d,
+			NonInteractiveFunc: func() Worker {
+				return &countingWorker{}
+			},
+			InteractiveFunc: func() Worker {
+				return &countingWorker{}
+			},
 		},
-		InteractiveFunc: func() Worker {
-			return &countingWorker{}
-		},
+		UserConfigDir: tqDir,
+		PollInterval:  50 * time.Millisecond,
 	}
 
 	dispatched, err := dispatchOne(context.Background(), cfg)

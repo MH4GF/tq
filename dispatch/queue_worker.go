@@ -38,23 +38,19 @@ func (c *ExecTmuxChecker) ListWindows(ctx context.Context, session string) ([]st
 	return names, nil
 }
 
-// RalphConfig configures the Ralph Loop.
-type RalphConfig struct {
-	UserConfigDir      string
-	DB                 db.Store
-	MaxInteractive     int
-	PollInterval       time.Duration
-	NonInteractiveFunc func() Worker
-	InteractiveFunc    func() Worker
-	RemoteFunc         func() Worker
-	TmuxChecker        TmuxChecker
-	StaleGracePeriod   time.Duration
-	TmuxSession        string
+// WorkerConfig configures the queue worker.
+type WorkerConfig struct {
+	DispatchConfig
+	UserConfigDir    string
+	MaxInteractive   int
+	PollInterval     time.Duration
+	TmuxChecker      TmuxChecker
+	StaleGracePeriod time.Duration
 }
 
-// RalphLoop continuously dispatches pending actions.
+// RunWorker continuously dispatches pending actions.
 // It processes one action per iteration, sleeping when idle.
-func RalphLoop(ctx context.Context, cfg RalphConfig) error {
+func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 	if cfg.MaxInteractive <= 0 {
 		cfg.MaxInteractive = 3
 	}
@@ -68,12 +64,12 @@ func RalphLoop(ctx context.Context, cfg RalphConfig) error {
 		cfg.TmuxSession = "main"
 	}
 
-	slog.Info("ralph loop started", "max_interactive", cfg.MaxInteractive, "poll_interval", cfg.PollInterval)
+	slog.Info("queue worker started", "max_interactive", cfg.MaxInteractive, "poll_interval", cfg.PollInterval)
 
 	for {
 		select {
 		case <-ctx.Done():
-			slog.Info("ralph loop stopped")
+			slog.Info("queue worker stopped")
 			return ctx.Err()
 		default:
 		}
@@ -99,7 +95,7 @@ func RalphLoop(ctx context.Context, cfg RalphConfig) error {
 	}
 }
 
-func reapStaleActions(ctx context.Context, cfg RalphConfig) {
+func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 	if cfg.TmuxChecker == nil {
 		return
 	}
@@ -147,7 +143,7 @@ func reapStaleActions(ctx context.Context, cfg RalphConfig) {
 	}
 }
 
-func dispatchOne(ctx context.Context, cfg RalphConfig) (bool, error) {
+func dispatchOne(ctx context.Context, cfg WorkerConfig) (bool, error) {
 	action, err := cfg.DB.NextPending(ctx)
 	if err != nil {
 		return false, fmt.Errorf("next pending: %w", err)
@@ -157,12 +153,8 @@ func dispatchOne(ctx context.Context, cfg RalphConfig) (bool, error) {
 	}
 
 	result, err := ExecuteAction(ctx, ExecuteParams{
-		DB:                 cfg.DB,
-		PromptsDir:         resolvePromptsDir(cfg.UserConfigDir),
-		NonInteractiveFunc: cfg.NonInteractiveFunc,
-		InteractiveFunc:    cfg.InteractiveFunc,
-		RemoteFunc:         cfg.RemoteFunc,
-		TmuxSession:        cfg.TmuxSession,
+		DispatchConfig: cfg.DispatchConfig,
+		PromptsDir:     resolvePromptsDir(cfg.UserConfigDir),
 		BeforeInteractive: func(a *db.Action) error {
 			running, err := cfg.DB.CountRunningInteractive()
 			if err != nil {

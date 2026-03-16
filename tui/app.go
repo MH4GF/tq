@@ -19,7 +19,7 @@ const (
 	tabSchedules
 )
 
-// BackgroundFunc is a function that runs in the background (ralph loop, watch, etc).
+// BackgroundFunc is a function that runs in the background (queue worker, watch, etc).
 // It receives a context that is cancelled when the TUI exits.
 type BackgroundFunc func(ctx context.Context) error
 

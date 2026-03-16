@@ -19,14 +19,19 @@ const (
 	ModeNonInteractive = "noninteractive"
 )
 
-type ExecuteParams struct {
+// DispatchConfig holds shared dispatch settings used by both WorkerConfig and ExecuteParams.
+type DispatchConfig struct {
 	DB                 db.Store
-	PromptsDir         string
 	NonInteractiveFunc func() Worker
 	InteractiveFunc    func() Worker
 	RemoteFunc         func() Worker
 	TmuxSession        string
-	BeforeInteractive  func(action *db.Action) error
+}
+
+type ExecuteParams struct {
+	DispatchConfig
+	PromptsDir        string
+	BeforeInteractive func(action *db.Action) error
 }
 
 type ExecuteResult struct {

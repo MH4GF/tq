@@ -110,11 +110,13 @@ If omitted, the next pending action in queue order is dispatched.`,
 		}
 
 		result, err := dispatch.ExecuteAction(ctx, dispatch.ExecuteParams{
-			DB:                 database,
-			PromptsDir:         resolvePromptsDir(),
-			NonInteractiveFunc: getWorkerFactory(),
-			InteractiveFunc:    getInteractiveWorkerFactory(),
-			RemoteFunc:         getRemoteWorkerFactory(),
+			DispatchConfig: dispatch.DispatchConfig{
+				DB:                 database,
+				NonInteractiveFunc: getWorkerFactory(),
+				InteractiveFunc:    getInteractiveWorkerFactory(),
+				RemoteFunc:         getRemoteWorkerFactory(),
+			},
+			PromptsDir: resolvePromptsDir(),
 		}, action)
 
 		var af *dispatch.ActionFailedError

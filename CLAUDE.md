@@ -17,10 +17,8 @@ tq (Task Queue) — タスクとアクションをSQLiteで管理し、Claude Co
 main.go          → エントリポイント
 cmd/             → cobra CLI コマンド定義
 db/              → SQLite データ層（schema.sql, CRUD操作）
-dispatch/        → アクションディスパッチ（interactive/noninteractive/ralph loop）
-tui/             → Bubble Tea TUI（queue タブ, tasks タブ）
-view/            → デイリーノート出力
-source/github/   → GitHub通知・PR取得
+dispatch/        → アクションディスパッチ（queue worker, interactive/noninteractive/remote, schedule）
+tui/             → Bubble Tea TUI（tasks タブ, schedules タブ）
 prompt/          → プロンプトローダー（frontmatter + Go template）
 testutil/        → テスト用ヘルパー（インメモリDB）
 ```
