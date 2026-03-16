@@ -44,8 +44,8 @@ var scheduleCreateCmd = &cobra.Command{
 		if title == "" {
 			title = promptID
 		}
-		if meta == "" {
-			meta = "{}"
+		if err := validateMetaJSON(meta); err != nil {
+			return err
 		}
 
 		id, err := database.InsertSchedule(taskID, promptID, title, cronExpr, meta)
@@ -174,6 +174,9 @@ var scheduleUpdateCmd = &cobra.Command{
 		}
 		if cmd.Flags().Changed("meta") {
 			v, _ := cmd.Flags().GetString("meta")
+			if err := validateMetaJSON(v); err != nil {
+				return err
+			}
 			meta = &v
 		}
 		if cmd.Flags().Changed("task") {

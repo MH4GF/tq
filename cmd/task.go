@@ -32,6 +32,9 @@ var taskCreateCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		taskTitle = args[0]
+		if err := validateMetaJSON(taskMeta); err != nil {
+			return err
+		}
 		project, err := database.GetProjectByID(taskProjectID)
 		if err != nil {
 			return fmt.Errorf("project %d not found (see: tq project list): %w", taskProjectID, err)

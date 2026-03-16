@@ -45,6 +45,26 @@ func TestTaskCreate(t *testing.T) {
 	}
 }
 
+func TestTaskCreate_InvalidMeta(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"task", "create", "test task", "--project", "1", "--meta", "{invalid}"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error for invalid JSON meta")
+	}
+	if !contains(err.Error(), "invalid JSON for --meta (must be a JSON object)") {
+		t.Errorf("error = %q, want to contain 'invalid JSON for --meta (must be a JSON object)'", err.Error())
+	}
+}
+
 func TestTaskCreate_MissingProject(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

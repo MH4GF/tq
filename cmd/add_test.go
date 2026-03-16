@@ -196,6 +196,36 @@ Instruction: {{index .Action.Meta "instruction"}}
 	}
 }
 
+func TestAdd_InvalidMeta(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	tqDir := t.TempDir()
+	cmd.SetConfigDir(tqDir)
+	writeTestPrompt(t, tqDir, "review-pr", `---
+description: Review PR
+---
+Review.
+`)
+
+	d.InsertTask(1, "test task", "", "{}", "")
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"action", "create", "review-pr", "--title", "review-pr", "--task", "1", "--meta", "{invalid}"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error for invalid JSON meta")
+	}
+	if !contains(err.Error(), "invalid JSON for --meta (must be a JSON object)") {
+		t.Errorf("error = %q, want to contain 'invalid JSON for --meta (must be a JSON object)'", err.Error())
+	}
+}
+
 func TestAdd_MissingTemplate(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

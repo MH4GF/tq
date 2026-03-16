@@ -591,7 +591,7 @@ func TestTasksModel_ProjectsWithoutTasks(t *testing.T) {
 	}
 }
 
-func TestTasksModel_DetailViewEscIgnored(t *testing.T) {
+func TestTasksModel_DetailViewEscBack(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -614,10 +614,10 @@ func TestTasksModel_DetailViewEscIgnored(t *testing.T) {
 		t.Fatal("should be in detail view")
 	}
 
-	// Press esc — should be ignored
+	// Press esc — should return to normal mode
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if m.mode != modeViewDetail {
-		t.Error("esc should be ignored in detail view")
+	if m.mode != modeNormal {
+		t.Error("esc should return to normal mode from detail view")
 	}
 }
 

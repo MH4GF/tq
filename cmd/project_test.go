@@ -41,6 +41,25 @@ func TestProjectCreate(t *testing.T) {
 	}
 }
 
+func TestProjectCreate_InvalidMeta(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"project", "create", "myapp", "/tmp/myapp", "--meta", "{invalid}"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error for invalid JSON meta")
+	}
+	if !contains(err.Error(), "invalid JSON for --meta (must be a JSON object)") {
+		t.Errorf("error = %q, want to contain 'invalid JSON for --meta (must be a JSON object)'", err.Error())
+	}
+}
+
 func TestProjectCreate_MissingArgs(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	cmd.SetDB(d)

@@ -64,6 +64,10 @@ If instruction cannot be determined from context, ask the user.`,
 			status = db.ActionStatusPending
 		}
 
+		if err := validateMetaJSON(addMeta); err != nil {
+			return err
+		}
+
 		if !addForce {
 			dup, err := database.HasActiveAction(addTask, addPrompt)
 			if err != nil {

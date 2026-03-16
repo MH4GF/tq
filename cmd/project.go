@@ -24,6 +24,9 @@ var projectCreateCmd = &cobra.Command{
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name, workDir := args[0], args[1]
+		if err := validateMetaJSON(projectCreateMeta); err != nil {
+			return err
+		}
 		id, err := database.InsertProject(name, workDir, projectCreateMeta)
 		if err != nil {
 			return fmt.Errorf("insert project: %w", err)

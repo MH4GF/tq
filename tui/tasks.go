@@ -207,7 +207,7 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 
 func (m TasksModel) updateViewDetail(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("q"))):
+	case key.Matches(msg, key.NewBinding(key.WithKeys("q", "esc"))):
 		m.detailAction = nil
 		m.detailScroll = 0
 		m.mode = modeNormal

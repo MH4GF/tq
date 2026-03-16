@@ -10,7 +10,7 @@ type HelpKey struct {
 func detailHelpKeys() []HelpKey {
 	return []HelpKey{
 		{"j/k", "scroll"},
-		{"q", "back"},
+		{"esc/q", "back"},
 	}
 }
 
