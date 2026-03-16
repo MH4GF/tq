@@ -22,12 +22,8 @@ func (m *mockWorker) Execute(ctx context.Context, prompt string, cfg prompt.Conf
 	return m.result, m.err
 }
 
-func TestDispatch_NoPending(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
+func TestDispatch_NoArgs(t *testing.T) {
 	cmd.ResetForTest()
-	cmd.SetConfigDir(t.TempDir())
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -35,16 +31,9 @@ func TestDispatch_NoPending(t *testing.T) {
 	root.SetErr(buf)
 	root.SetArgs([]string{"dispatch"})
 
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	out := buf.String()
-	if !contains(out, "no pending actions") {
-		t.Errorf("output = %q, want to contain 'no pending actions'", out)
-	}
-	if !contains(out, "tq action create --help") {
-		t.Errorf("output = %q, want to contain help hint", out)
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error when no args provided")
 	}
 }
 
@@ -78,7 +67,7 @@ Review PR for {{.Task.Title}}.
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"dispatch"})
+	root.SetArgs([]string{"dispatch", "1"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -208,7 +197,7 @@ Do something.
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"dispatch"})
+	root.SetArgs([]string{"dispatch", "1"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)

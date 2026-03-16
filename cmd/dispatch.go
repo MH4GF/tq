@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/dispatch"
 	"github.com/spf13/cobra"
 )
@@ -73,40 +72,22 @@ func SetRemoteWorkerFactory(f func() dispatch.Worker) {
 }
 
 var dispatchCmd = &cobra.Command{
-	Use:   "dispatch [action_id]",
+	Use:   "dispatch <action_id>",
 	Short: "Dispatch an action immediately (skip queue)",
-	Long: `Dispatch a pending action immediately.
-
-If action_id is provided, that specific action is dispatched.
-If omitted, the next pending action in queue order is dispatched.`,
-	Example: `  tq dispatch
-  tq dispatch 42
-  tq dispatch --session work`,
-	Args: cobra.MaximumNArgs(1),
+	Long:  `Dispatch a pending action immediately by its ID.`,
+	Example: `  tq dispatch 42
+  tq dispatch 42 --session work`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
-		var action *db.Action
-		var err error
-
-		if len(args) == 1 {
-			id, parseErr := strconv.ParseInt(args[0], 10, 64)
-			if parseErr != nil {
-				return fmt.Errorf("invalid action ID %q: %w", args[0], parseErr)
-			}
-			action, err = database.ClaimPending(ctx, id)
-			if err != nil {
-				return err
-			}
-		} else {
-			action, err = database.NextPending(ctx)
-			if err != nil {
-				return fmt.Errorf("next pending: %w", err)
-			}
-			if action == nil {
-				fmt.Fprintln(cmd.OutOrStdout(), "no pending actions (create one with: tq action create --help)")
-				return nil
-			}
+		id, parseErr := strconv.ParseInt(args[0], 10, 64)
+		if parseErr != nil {
+			return fmt.Errorf("invalid action ID %q: %w", args[0], parseErr)
+		}
+		action, err := database.ClaimPending(ctx, id)
+		if err != nil {
+			return err
 		}
 
 		result, err := dispatch.ExecuteAction(ctx, dispatch.ExecuteParams{
