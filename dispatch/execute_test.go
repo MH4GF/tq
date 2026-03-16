@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -116,5 +117,130 @@ func TestExecuteAction(t *testing.T) {
 				t.Errorf("status = %q, want %q", a.Status, tc.wantStatus)
 			}
 		})
+	}
+}
+
+func TestExecuteAction_PromptLoadError_CreatesFixAction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	promptsDir := filepath.Join(t.TempDir(), "prompts")
+	os.MkdirAll(promptsDir, 0o755)
+
+	// Create action referencing a nonexistent prompt
+	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
+	actionID, _ := d.InsertAction("test", "nonexistent-prompt", taskID, "{}", "pending")
+
+	action, _ := d.GetAction(actionID)
+
+	worker := &countingWorker{result: "ok"}
+	workerFunc := func() Worker { return worker }
+
+	_, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+		PromptsDir: promptsDir,
+	}, action)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	// Verify a fix action was created
+	actions, _ := d.ListActions(db.ActionStatusPending, nil)
+	var fixAction *db.Action
+	for i := range actions {
+		if actions[i].PromptID == parseErrorFixPromptID {
+			fixAction = &actions[i]
+			break
+		}
+	}
+	if fixAction == nil {
+		t.Fatal("expected fix-parse-error action to be created")
+	}
+
+	var meta map[string]any
+	json.Unmarshal([]byte(fixAction.Metadata), &meta)
+	if meta["prompt_id"] != "nonexistent-prompt" {
+		t.Errorf("meta prompt_id = %q, want %q", meta["prompt_id"], "nonexistent-prompt")
+	}
+}
+
+func TestExecuteAction_RenderError_CreatesFixAction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	promptsDir := filepath.Join(t.TempDir(), "prompts")
+	os.MkdirAll(promptsDir, 0o755)
+
+	// Write a prompt with a template that references a missing metadata key
+	content := "---\ndescription: test\nmode: noninteractive\n---\n{{index .Action.Meta \"missing_key\"}}"
+	os.WriteFile(filepath.Join(promptsDir, "bad-template.md"), []byte(content), 0o644)
+
+	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
+	actionID, _ := d.InsertAction("test", "bad-template", taskID, "{}", "pending")
+
+	action, _ := d.GetAction(actionID)
+
+	worker := &countingWorker{result: "ok"}
+	workerFunc := func() Worker { return worker }
+
+	_, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+		PromptsDir: promptsDir,
+	}, action)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	// Verify a fix action was created
+	actions, _ := d.ListActions(db.ActionStatusPending, nil)
+	var fixAction *db.Action
+	for i := range actions {
+		if actions[i].PromptID == parseErrorFixPromptID {
+			fixAction = &actions[i]
+			break
+		}
+	}
+	if fixAction == nil {
+		t.Fatal("expected fix-parse-error action to be created")
+	}
+}
+
+func TestExecuteAction_FixParseErrorPrompt_NoInfiniteLoop(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	promptsDir := filepath.Join(t.TempDir(), "prompts")
+	os.MkdirAll(promptsDir, 0o755)
+
+	// Create action with fix-parse-error prompt ID
+	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
+	actionID, _ := d.InsertAction("fix", parseErrorFixPromptID, taskID, `{"source_action_id":"1","prompt_id":"broken","error_message":"err"}`, "pending")
+
+	// Verify CreateParseErrorFixAction skips when promptID is fix-parse-error
+	CreateParseErrorFixAction(d, promptsDir, actionID, parseErrorFixPromptID, "some error")
+
+	actions, _ := d.ListActions(db.ActionStatusPending, nil)
+	fixCount := 0
+	for _, a := range actions {
+		// Skip the original action we inserted
+		if a.ID == actionID {
+			continue
+		}
+		if a.PromptID == parseErrorFixPromptID {
+			fixCount++
+		}
+	}
+	if fixCount != 0 {
+		t.Errorf("expected 0 additional fix actions (infinite loop prevention), got %d", fixCount)
 	}
 }

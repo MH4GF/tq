@@ -64,6 +64,7 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 	lr, err := prompt.Load(params.PromptsDir, action.PromptID)
 	if err != nil {
 		_ = params.DB.MarkFailed(action.ID, fmt.Sprintf("prompt load error: %v", err))
+		CreateParseErrorFixAction(params.DB, params.PromptsDir, action.ID, action.PromptID, fmt.Sprintf("prompt load error: %v", err))
 		return nil, fmt.Errorf("load prompt %q: %w", action.PromptID, err)
 	}
 	tmpl := lr.Prompt
@@ -75,12 +76,14 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 	promptData, err := BuildPromptData(params.DB, action)
 	if err != nil {
 		_ = params.DB.MarkFailed(action.ID, fmt.Sprintf("build prompt data: %v", err))
+		CreateParseErrorFixAction(params.DB, params.PromptsDir, action.ID, action.PromptID, fmt.Sprintf("build prompt data: %v", err))
 		return nil, fmt.Errorf("build prompt data: %w", err)
 	}
 
 	rendered, err := tmpl.Render(promptData)
 	if err != nil {
 		_ = params.DB.MarkFailed(action.ID, fmt.Sprintf("render error: %v", err))
+		CreateParseErrorFixAction(params.DB, params.PromptsDir, action.ID, action.PromptID, fmt.Sprintf("render error: %v", err))
 		return nil, fmt.Errorf("render prompt: %w", err)
 	}
 

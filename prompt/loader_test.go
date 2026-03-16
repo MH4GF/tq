@@ -352,6 +352,19 @@ func TestLoad_InternalPrompt(t *testing.T) {
 	}
 }
 
+func TestLoad_InternalFixParseErrorPrompt(t *testing.T) {
+	lr, err := Load("", "internal:fix-parse-error")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lr.Prompt.Config.Mode != "interactive" {
+		t.Errorf("Mode = %q, want %q", lr.Prompt.Config.Mode, "interactive")
+	}
+	if lr.Prompt.ID != "internal:fix-parse-error" {
+		t.Errorf("ID = %q, want %q", lr.Prompt.ID, "internal:fix-parse-error")
+	}
+}
+
 func TestRender_MissingMetaKey(t *testing.T) {
 	p := &Prompt{
 		ID:   "test",
