@@ -63,7 +63,11 @@ func WindowName(actionID int64) string {
 func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action) (*ExecuteResult, error) {
 	lr, err := prompt.Load(params.PromptsDir, action.PromptID)
 	if err != nil {
-		_ = params.DB.MarkFailed(action.ID, fmt.Sprintf("prompt load error: %v", err))
+		failMsg := fmt.Sprintf("prompt load error: %v", err)
+		_ = params.DB.MarkFailed(action.ID, failMsg)
+		if triggerErr := TriggerOnFail(params.DB, params.PromptsDir, action, failMsg); triggerErr != nil {
+			slog.Warn("on_fail trigger failed", "action_id", action.ID, "error", triggerErr)
+		}
 		return nil, fmt.Errorf("load prompt %q: %w", action.PromptID, err)
 	}
 	tmpl := lr.Prompt
@@ -74,13 +78,21 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 
 	promptData, err := BuildPromptData(params.DB, action)
 	if err != nil {
-		_ = params.DB.MarkFailed(action.ID, fmt.Sprintf("build prompt data: %v", err))
+		failMsg := fmt.Sprintf("build prompt data: %v", err)
+		_ = params.DB.MarkFailed(action.ID, failMsg)
+		if triggerErr := TriggerOnFail(params.DB, params.PromptsDir, action, failMsg); triggerErr != nil {
+			slog.Warn("on_fail trigger failed", "action_id", action.ID, "error", triggerErr)
+		}
 		return nil, fmt.Errorf("build prompt data: %w", err)
 	}
 
 	rendered, err := tmpl.Render(promptData)
 	if err != nil {
-		_ = params.DB.MarkFailed(action.ID, fmt.Sprintf("render error: %v", err))
+		failMsg := fmt.Sprintf("render error: %v", err)
+		_ = params.DB.MarkFailed(action.ID, failMsg)
+		if triggerErr := TriggerOnFail(params.DB, params.PromptsDir, action, failMsg); triggerErr != nil {
+			slog.Warn("on_fail trigger failed", "action_id", action.ID, "error", triggerErr)
+		}
 		return nil, fmt.Errorf("render prompt: %w", err)
 	}
 
@@ -100,6 +112,9 @@ func executeRemote(ctx context.Context, params ExecuteParams, action *db.Action,
 	result, err := worker.Execute(ctx, rendered, cfg, workDir, action.ID, action.TaskID)
 	if err != nil {
 		_ = params.DB.MarkFailed(action.ID, err.Error())
+		if triggerErr := TriggerOnFail(params.DB, params.PromptsDir, action, err.Error()); triggerErr != nil {
+			slog.Warn("on_fail trigger failed", "action_id", action.ID, "error", triggerErr)
+		}
 		return nil, &ActionFailedError{ActionID: action.ID, Err: err}
 	}
 
@@ -131,6 +146,9 @@ func executeInteractive(ctx context.Context, params ExecuteParams, action *db.Ac
 	result, err := worker.Execute(ctx, rendered, cfg, workDir, action.ID, action.TaskID)
 	if err != nil {
 		_ = params.DB.MarkFailed(action.ID, err.Error())
+		if triggerErr := TriggerOnFail(params.DB, params.PromptsDir, action, err.Error()); triggerErr != nil {
+			slog.Warn("on_fail trigger failed", "action_id", action.ID, "error", triggerErr)
+		}
 		return nil, &ActionFailedError{ActionID: action.ID, Err: err}
 	}
 
@@ -149,6 +167,9 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 	result, err := worker.Execute(ctx, rendered, cfg, workDir, action.ID, action.TaskID)
 	if err != nil {
 		_ = params.DB.MarkFailed(action.ID, err.Error())
+		if triggerErr := TriggerOnFail(params.DB, params.PromptsDir, action, err.Error()); triggerErr != nil {
+			slog.Warn("on_fail trigger failed", "action_id", action.ID, "error", triggerErr)
+		}
 		return nil, &ActionFailedError{ActionID: action.ID, Err: err}
 	}
 

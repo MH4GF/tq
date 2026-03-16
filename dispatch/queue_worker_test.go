@@ -39,7 +39,7 @@ func setupPromptsDir(t *testing.T) string {
 	return tqDir
 }
 
-func writeTestPromptFull(t *testing.T, dir, name, mode, onDone, onCancel string) {
+func writeTestPromptFull(t *testing.T, dir, name, mode, onDone, onCancel, onFail string) {
 	t.Helper()
 	hooks := ""
 	if onDone != "" {
@@ -47,6 +47,9 @@ func writeTestPromptFull(t *testing.T, dir, name, mode, onDone, onCancel string)
 	}
 	if onCancel != "" {
 		hooks += fmt.Sprintf("on_cancel: %s\n", onCancel)
+	}
+	if onFail != "" {
+		hooks += fmt.Sprintf("on_fail: %s\n", onFail)
 	}
 	content := fmt.Sprintf(`---
 description: %s
@@ -61,7 +64,7 @@ Do %s for {{.Task.Title}}.
 
 func writeTestPromptWithMode(t *testing.T, dir, name, mode, onDone string) {
 	t.Helper()
-	writeTestPromptFull(t, dir, name, mode, onDone, "")
+	writeTestPromptFull(t, dir, name, mode, onDone, "", "")
 }
 
 func writeTestPrompt(t *testing.T, dir, name string, interactive bool) {
@@ -75,7 +78,7 @@ func writeTestPromptWithOnDone(t *testing.T, dir, name string, interactive bool,
 	if interactive {
 		mode = "interactive"
 	}
-	writeTestPromptFull(t, dir, name, mode, onDone, "")
+	writeTestPromptFull(t, dir, name, mode, onDone, "", "")
 }
 
 func TestRunWorker_ProcessesAndStops(t *testing.T) {
@@ -253,6 +256,60 @@ func TestRunWorker_OnDoneTriggersFollowUp(t *testing.T) {
 	review := actions[1]
 	if review.PromptID != "review" {
 		t.Errorf("follow-up template = %q, want review", review.PromptID)
+	}
+}
+
+func TestRunWorker_OnFailTriggersFollowUp(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	tqDir := t.TempDir()
+	promptsDir := filepath.Join(tqDir, "prompts")
+	os.MkdirAll(promptsDir, 0o755)
+
+	writeTestPromptFull(t, promptsDir, "failing-task", "noninteractive", "", "", "investigate")
+	writeTestPromptFull(t, promptsDir, "investigate", "noninteractive", "", "", "")
+
+	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
+	d.InsertAction("failing-task", "failing-task", taskID, "{}", "pending")
+
+	worker := &countingWorker{err: fmt.Errorf("something went wrong")}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB: d,
+			NonInteractiveFunc: func() Worker {
+				return worker
+			},
+			InteractiveFunc: func() Worker {
+				return worker
+			},
+		},
+		UserConfigDir:  tqDir,
+		MaxInteractive: 3,
+		PollInterval:   50 * time.Millisecond,
+	}
+
+	_ = RunWorker(ctx, cfg)
+
+	// Original action should be failed
+	action, _ := d.GetAction(1)
+	if action.Status != "failed" {
+		t.Errorf("action status = %q, want failed", action.Status)
+	}
+
+	// Follow-up investigate action should have been created
+	actions, _ := d.ListActions("", nil)
+	if len(actions) < 2 {
+		t.Fatalf("expected at least 2 actions, got %d", len(actions))
+	}
+
+	investigate := actions[1]
+	if investigate.PromptID != "investigate" {
+		t.Errorf("follow-up prompt_id = %q, want investigate", investigate.PromptID)
 	}
 }
 

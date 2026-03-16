@@ -140,6 +140,11 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 			continue
 		}
 		slog.Warn("reaped stale action", "action_id", a.ID, "window", windowName)
+
+		promptsDir := resolvePromptsDir(cfg.UserConfigDir)
+		if triggerErr := TriggerOnFail(cfg.DB, promptsDir, &a, result); triggerErr != nil {
+			slog.Warn("on_fail trigger failed for stale action", "action_id", a.ID, "error", triggerErr)
+		}
 	}
 }
 
