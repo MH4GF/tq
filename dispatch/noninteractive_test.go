@@ -10,29 +10,12 @@ import (
 	"github.com/MH4GF/tq/prompt"
 )
 
-type MockRunner struct {
-	Output  []byte
-	Err     error
-	GotName string
-	GotArgs []string
-	GotDir  string
-	GotEnv  []string
-	GotCtx  context.Context
-}
-
-
-func (m *MockRunner) Run(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, error) {
-	m.GotCtx = ctx
-	m.GotName = name
-	m.GotArgs = args
-	m.GotDir = dir
-	m.GotEnv = env
-	return m.Output, m.Err
-}
-
 func TestNonInteractiveWorker_Execute(t *testing.T) {
-	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"success","result":"{\"result\":\"ok\"}","cost_usd":0.01}`)}
-	w := &NonInteractiveWorker{Runner: mock}
+	runner := &mockRunner{
+		output: []byte(`{"type":"result","subtype":"success","result":"{\"result\":\"ok\"}","cost_usd":0.01}`),
+		failAt: -1,
+	}
+	w := &NonInteractiveWorker{Runner: runner}
 
 	cfg := prompt.Config{}
 
@@ -45,27 +28,32 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 		t.Errorf("result = %q, want %q", result, `{"result":"ok"}`)
 	}
 
-	if mock.GotName != "claude" {
-		t.Errorf("name = %q, want %q", mock.GotName, "claude")
+	if len(runner.calls) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(runner.calls))
+	}
+
+	c := runner.calls[0]
+	if c.name != "claude" {
+		t.Errorf("name = %q, want %q", c.name, "claude")
 	}
 
 	wantArgs := []string{"-p", "do something", "--output-format", "json"}
-	if len(mock.GotArgs) != len(wantArgs) {
-		t.Fatalf("args len = %d, want %d", len(mock.GotArgs), len(wantArgs))
+	if len(c.args) != len(wantArgs) {
+		t.Fatalf("args len = %d, want %d", len(c.args), len(wantArgs))
 	}
 	for i, a := range wantArgs {
-		if mock.GotArgs[i] != a {
-			t.Errorf("args[%d] = %q, want %q", i, mock.GotArgs[i], a)
+		if c.args[i] != a {
+			t.Errorf("args[%d] = %q, want %q", i, c.args[i], a)
 		}
 	}
 
-	if mock.GotDir != "/work" {
-		t.Errorf("dir = %q, want %q", mock.GotDir, "/work")
+	if c.dir != "/work" {
+		t.Errorf("dir = %q, want %q", c.dir, "/work")
 	}
 
 	foundActionID := false
 	foundTaskID := false
-	for _, e := range mock.GotEnv {
+	for _, e := range c.env {
 		if e == "TQ_ACTION_ID=1" {
 			foundActionID = true
 		}
@@ -74,16 +62,42 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 		}
 	}
 	if !foundActionID {
-		t.Errorf("env missing TQ_ACTION_ID=1, got %v", mock.GotEnv)
+		t.Errorf("env missing TQ_ACTION_ID=1, got %v", c.env)
 	}
 	if !foundTaskID {
-		t.Errorf("env missing TQ_TASK_ID=10, got %v", mock.GotEnv)
+		t.Errorf("env missing TQ_TASK_ID=10, got %v", c.env)
+	}
+}
+
+func TestNonInteractiveWorker_Execute_PermissionMode(t *testing.T) {
+	runner := &mockRunner{
+		output: []byte(`{"type":"result","subtype":"success","result":"ok"}`),
+		failAt: -1,
+	}
+	w := &NonInteractiveWorker{Runner: runner}
+
+	cfg := prompt.Config{PermissionMode: "plan"}
+
+	_, err := w.Execute(context.Background(), "plan something", cfg, "/work", 1, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	c := runner.calls[0]
+	wantArgs := []string{"-p", "plan something", "--output-format", "json", "--permission-mode", "plan"}
+	if len(c.args) != len(wantArgs) {
+		t.Fatalf("args len = %d, want %d: %v", len(c.args), len(wantArgs), c.args)
+	}
+	for i, a := range wantArgs {
+		if c.args[i] != a {
+			t.Errorf("args[%d] = %q, want %q", i, c.args[i], a)
+		}
 	}
 }
 
 func TestNonInteractiveWorker_Execute_Error(t *testing.T) {
-	mock := &MockRunner{Err: errors.New("command failed")}
-	w := &NonInteractiveWorker{Runner: mock}
+	runner := &mockRunner{err: errors.New("command failed"), failAt: 0}
+	w := &NonInteractiveWorker{Runner: runner}
 
 	cfg := prompt.Config{}
 
@@ -97,8 +111,11 @@ func TestNonInteractiveWorker_Execute_Error(t *testing.T) {
 }
 
 func TestNonInteractiveWorker_Execute_Timeout(t *testing.T) {
-	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"success","result":"ok"}`)}
-	w := &NonInteractiveWorker{Runner: mock}
+	runner := &mockRunner{
+		output: []byte(`{"type":"result","subtype":"success","result":"ok"}`),
+		failAt: -1,
+	}
+	w := &NonInteractiveWorker{Runner: runner}
 
 	cfg := prompt.Config{}
 
@@ -107,7 +124,7 @@ func TestNonInteractiveWorker_Execute_Timeout(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	deadline, ok := mock.GotCtx.Deadline()
+	deadline, ok := runner.calls[0].ctx.Deadline()
 	if !ok {
 		t.Fatal("context has no deadline")
 	}
@@ -122,8 +139,8 @@ func TestNonInteractiveWorker_Execute_Timeout(t *testing.T) {
 func TestNonInteractiveWorker_Execute_Output(t *testing.T) {
 	want := `{"status":"success","data":[1,2,3]}`
 	wrapperJSON := `{"type":"result","subtype":"success","result":"{\"status\":\"success\",\"data\":[1,2,3]}"}`
-	mock := &MockRunner{Output: []byte(wrapperJSON)}
-	w := &NonInteractiveWorker{Runner: mock}
+	runner := &mockRunner{output: []byte(wrapperJSON), failAt: -1}
+	w := &NonInteractiveWorker{Runner: runner}
 
 	cfg := prompt.Config{}
 
@@ -137,8 +154,11 @@ func TestNonInteractiveWorker_Execute_Output(t *testing.T) {
 }
 
 func TestNonInteractiveWorker_Execute_ErrorSubtype(t *testing.T) {
-	mock := &MockRunner{Output: []byte(`{"type":"result","subtype":"error","result":"model refused"}`)}
-	w := &NonInteractiveWorker{Runner: mock}
+	runner := &mockRunner{
+		output: []byte(`{"type":"result","subtype":"error","result":"model refused"}`),
+		failAt: -1,
+	}
+	w := &NonInteractiveWorker{Runner: runner}
 
 	cfg := prompt.Config{}
 
@@ -152,8 +172,8 @@ func TestNonInteractiveWorker_Execute_ErrorSubtype(t *testing.T) {
 }
 
 func TestNonInteractiveWorker_Execute_MalformedJSON(t *testing.T) {
-	mock := &MockRunner{Output: []byte(`not json at all`)}
-	w := &NonInteractiveWorker{Runner: mock}
+	runner := &mockRunner{output: []byte(`not json at all`), failAt: -1}
+	w := &NonInteractiveWorker{Runner: runner}
 
 	cfg := prompt.Config{}
 

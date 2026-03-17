@@ -100,7 +100,7 @@ If instruction cannot be determined from context, ask the user.`,
 		if err != nil {
 			return fmt.Errorf("insert action: %w", err)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "action #%d created (status: %s)\n", id, status)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d created (status: %s)\n", id, status)
 		return nil
 	},
 }

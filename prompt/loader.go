@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"text/template"
@@ -19,10 +20,11 @@ import (
 var internalPrompts embed.FS
 
 type Config struct {
-	Description string `yaml:"description"`
-	Mode        string `yaml:"mode"` // "interactive" (default) | "noninteractive" | "remote"
-	OnDone      string `yaml:"on_done"`
-	OnCancel    string `yaml:"on_cancel"`
+	Description    string `yaml:"description"`
+	Mode           string `yaml:"mode"` // "interactive" (default) | "noninteractive" | "remote"
+	PermissionMode string `yaml:"permission_mode"`
+	OnDone         string `yaml:"on_done"`
+	OnCancel       string `yaml:"on_cancel"`
 }
 
 func (c Config) IsInteractive() bool    { return c.Mode == "interactive" }
@@ -50,6 +52,8 @@ var knownFrontmatterKeys = func() map[string]bool {
 	}
 	return m
 }()
+
+var validPermissionMode = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
 
 type PromptData struct {
 	Task    TaskData
@@ -130,6 +134,10 @@ func Load(promptsDir, promptID string) (*LoadResult, error) {
 		cfg.Mode = "interactive"
 	}
 
+	if cfg.PermissionMode != "" && !validPermissionMode.MatchString(cfg.PermissionMode) {
+		return nil, fmt.Errorf("prompt %q: invalid permission_mode %q (must be alphanumeric/hyphens)", promptID, cfg.PermissionMode)
+	}
+
 	return &LoadResult{
 		Prompt: &Prompt{
 			ID:     promptID,
@@ -159,7 +167,7 @@ func List(dirs ...string) ([]Prompt, error) {
 			id := strings.TrimSuffix(e.Name(), ".md")
 			result, err := Load(dir, id)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", filepath.Join(dir, e.Name()), err)
+				_, _ = fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", filepath.Join(dir, e.Name()), err)
 				continue
 			}
 			seen[id] = *result.Prompt

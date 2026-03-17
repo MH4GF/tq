@@ -93,6 +93,47 @@ Body.
 	}
 }
 
+func TestLoad_PermissionMode(t *testing.T) {
+	dir := t.TempDir()
+	writePrompt(t, dir, "plan", `---
+description: Plan prompt
+mode: interactive
+permission_mode: plan
+on_done: implement
+---
+Body.
+`)
+
+	lr, err := Load(dir, "plan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lr.Prompt.Config.PermissionMode != "plan" {
+		t.Errorf("PermissionMode = %q, want %q", lr.Prompt.Config.PermissionMode, "plan")
+	}
+	if len(lr.UnknownFields) != 0 {
+		t.Errorf("UnknownFields = %v, want empty", lr.UnknownFields)
+	}
+}
+
+func TestLoad_InvalidPermissionMode(t *testing.T) {
+	dir := t.TempDir()
+	writePrompt(t, dir, "bad-perm", `---
+description: Bad permission mode
+permission_mode: "plan; rm -rf /"
+---
+Body.
+`)
+
+	_, err := Load(dir, "bad-perm")
+	if err == nil {
+		t.Fatal("expected error for invalid permission_mode")
+	}
+	if !strings.Contains(err.Error(), "invalid permission_mode") {
+		t.Errorf("error = %q, want to contain 'invalid permission_mode'", err.Error())
+	}
+}
+
 func TestLoad_ModeRemote(t *testing.T) {
 	dir := t.TempDir()
 	writePrompt(t, dir, "rem", `---

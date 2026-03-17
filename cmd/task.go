@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/MH4GF/tq/db"
 	"github.com/spf13/cobra"
 )
 
@@ -47,7 +48,7 @@ var taskCreateCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("insert task: %w", err)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "task #%d created (project: %s)\n", id, project.Name)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "task #%d created (project: %s)\n", id, project.Name)
 		return nil
 	},
 }
@@ -70,7 +71,7 @@ var taskListCmd = &cobra.Command{
 			return fmt.Errorf("list tasks: %w", err)
 		}
 		if len(tasks) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "[]")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
 			return nil
 		}
 
@@ -93,10 +94,10 @@ var taskListCmd = &cobra.Command{
 				"metadata":   t.Metadata,
 				"status":     t.Status,
 				"work_dir":   t.WorkDir,
-				"created_at": t.CreatedAt,
+				"created_at": db.FormatLocal(t.CreatedAt),
 			}
 			if t.UpdatedAt.Valid {
-				row["updated_at"] = t.UpdatedAt.String
+				row["updated_at"] = db.FormatLocal(t.UpdatedAt.String)
 			} else {
 				row["updated_at"] = nil
 			}
@@ -109,7 +110,7 @@ var taskListCmd = &cobra.Command{
 					"prompt_id":  a.PromptID,
 					"metadata":   a.Metadata,
 					"status":     a.Status,
-					"created_at": a.CreatedAt,
+					"created_at": db.FormatLocal(a.CreatedAt),
 				}
 				ar["task_id"] = a.TaskID
 				if a.Result.Valid {
@@ -123,12 +124,12 @@ var taskListCmd = &cobra.Command{
 					ar["session_id"] = nil
 				}
 				if a.StartedAt.Valid {
-					ar["started_at"] = a.StartedAt.String
+					ar["started_at"] = db.FormatLocal(a.StartedAt.String)
 				} else {
 					ar["started_at"] = nil
 				}
 				if a.CompletedAt.Valid {
-					ar["completed_at"] = a.CompletedAt.String
+					ar["completed_at"] = db.FormatLocal(a.CompletedAt.String)
 				} else {
 					ar["completed_at"] = nil
 				}
@@ -196,7 +197,7 @@ At least one of --status, --project, or --work-dir is required.`,
 			updates = append(updates, fmt.Sprintf("status: %s", taskUpdateStatus))
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "task #%d updated (%s)\n", taskUpdateID, joinUpdates(updates))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "task #%d updated (%s)\n", taskUpdateID, joinUpdates(updates))
 		return nil
 	},
 }

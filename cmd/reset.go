@@ -33,7 +33,7 @@ var resetCmd = &cobra.Command{
 		if err := database.ResetToPending(id); err != nil {
 			return fmt.Errorf("reset to pending: %w", err)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "action #%d reset to pending\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d reset to pending\n", id)
 		return nil
 	},
 }

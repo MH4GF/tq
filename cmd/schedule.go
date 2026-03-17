@@ -4,11 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/robfig/cron/v3"
+	"github.com/MH4GF/tq/db"
 	"github.com/spf13/cobra"
 )
-
-var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
 var scheduleCmd = &cobra.Command{
 	Use:   "schedule",
@@ -38,7 +36,7 @@ var scheduleCreateCmd = &cobra.Command{
 		if cronExpr == "" {
 			return fmt.Errorf("--cron is required")
 		}
-		if _, err := cronParser.Parse(cronExpr); err != nil {
+		if _, err := db.CronParser.Parse(cronExpr); err != nil {
 			return fmt.Errorf("invalid cron expression %q: %w", cronExpr, err)
 		}
 		if title == "" {
@@ -52,7 +50,7 @@ var scheduleCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d created\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d created\n", id)
 		return nil
 	},
 }
@@ -66,7 +64,7 @@ var scheduleListCmd = &cobra.Command{
 			return err
 		}
 		if len(schedules) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "[]")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
 			return nil
 		}
 
@@ -82,11 +80,11 @@ var scheduleListCmd = &cobra.Command{
 				"enabled":   s.Enabled,
 			}
 			if s.LastRunAt.Valid {
-				row["last_run_at"] = s.LastRunAt.String
+				row["last_run_at"] = db.FormatLocal(s.LastRunAt.String)
 			} else {
 				row["last_run_at"] = nil
 			}
-			row["created_at"] = s.CreatedAt
+			row["created_at"] = db.FormatLocal(s.CreatedAt)
 			rows[i] = row
 		}
 		enc := json.NewEncoder(cmd.OutOrStdout())
@@ -107,7 +105,7 @@ var scheduleEnableCmd = &cobra.Command{
 		if err := database.UpdateScheduleEnabled(id, true); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d enabled\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d enabled\n", id)
 		return nil
 	},
 }
@@ -124,7 +122,7 @@ var scheduleDisableCmd = &cobra.Command{
 		if err := database.UpdateScheduleEnabled(id, false); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d disabled\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d disabled\n", id)
 		return nil
 	},
 }
@@ -141,7 +139,7 @@ var scheduleDeleteCmd = &cobra.Command{
 		if err := database.DeleteSchedule(id); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d deleted\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d deleted\n", id)
 		return nil
 	},
 }
@@ -167,7 +165,7 @@ var scheduleUpdateCmd = &cobra.Command{
 		}
 		if cmd.Flags().Changed("cron") {
 			v, _ := cmd.Flags().GetString("cron")
-			if _, err := cronParser.Parse(v); err != nil {
+			if _, err := db.CronParser.Parse(v); err != nil {
 				return fmt.Errorf("invalid cron expression %q: %w", v, err)
 			}
 			cronExpr = &v
@@ -191,7 +189,7 @@ var scheduleUpdateCmd = &cobra.Command{
 		if err := database.UpdateSchedule(id, title, cronExpr, meta, taskID); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d updated\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d updated\n", id)
 		return nil
 	},
 }

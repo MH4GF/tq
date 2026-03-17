@@ -44,7 +44,7 @@ Use --entity and --id together to filter events for a specific entity.`,
 		}
 
 		if len(events) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "[]")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
 			return nil
 		}
 

@@ -154,6 +154,32 @@ func TestCheckSchedules_TaskArchivedAutoDisable(t *testing.T) {
 	}
 }
 
+func TestCheckSchedules_LastRunAtStoredAsUTC(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
+	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
+
+	// Simulate calling CheckSchedules with a JST time (UTC+9)
+	jst := time.FixedZone("JST", 9*3600)
+	now := time.Date(2026, 3, 12, 19, 0, 0, 0, jst) // 19:00 JST = 10:00 UTC
+
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	s, _ := d.GetSchedule(1)
+	if !s.LastRunAt.Valid {
+		t.Fatal("expected last_run_at to be set")
+	}
+	// last_run_at should be stored as UTC (10:00), not JST (19:00)
+	if s.LastRunAt.String != "2026-03-12 10:00:00" {
+		t.Errorf("last_run_at = %q, want UTC %q", s.LastRunAt.String, "2026-03-12 10:00:00")
+	}
+}
+
 func TestCheckSchedules_UsesLastRunAt(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

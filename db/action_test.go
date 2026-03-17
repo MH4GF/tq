@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
@@ -387,6 +388,10 @@ func TestSetSessionInfo(t *testing.T) {
 	}
 }
 
+func localDate(utcStr string) string {
+	return db.FormatLocal(utcStr)[:10]
+}
+
 func TestAction_MatchesDate(t *testing.T) {
 	tests := []struct {
 		name string
@@ -397,7 +402,7 @@ func TestAction_MatchesDate(t *testing.T) {
 		{
 			name: "match by created_at",
 			a:    db.Action{CreatedAt: "2026-01-15 10:00:00"},
-			date: "2026-01-15",
+			date: localDate("2026-01-15 10:00:00"),
 			want: true,
 		},
 		{
@@ -406,7 +411,7 @@ func TestAction_MatchesDate(t *testing.T) {
 				CreatedAt: "2026-01-01 00:00:00",
 				StartedAt: sql.NullString{String: "2026-02-20 09:00:00", Valid: true},
 			},
-			date: "2026-02-20",
+			date: localDate("2026-02-20 09:00:00"),
 			want: true,
 		},
 		{
@@ -415,7 +420,7 @@ func TestAction_MatchesDate(t *testing.T) {
 				CreatedAt:   "2026-01-01 00:00:00",
 				CompletedAt: sql.NullString{String: "2026-03-01 18:00:00", Valid: true},
 			},
-			date: "2026-03-01",
+			date: localDate("2026-03-01 18:00:00"),
 			want: true,
 		},
 		{
@@ -427,7 +432,7 @@ func TestAction_MatchesDate(t *testing.T) {
 		{
 			name: "null started_at and completed_at",
 			a:    db.Action{CreatedAt: "2026-01-15 10:00:00"},
-			date: "2026-01-15",
+			date: localDate("2026-01-15 10:00:00"),
 			want: true,
 		},
 		{
@@ -448,7 +453,24 @@ func TestAction_MatchesDate(t *testing.T) {
 	}
 }
 
+func TestAction_MatchesDate_UTCLocalConversion(t *testing.T) {
+	_, offset := time.Now().Zone()
+	if offset == 0 {
+		t.Skip("test only meaningful in non-UTC timezone")
+	}
+
+	// UTC timestamp near midnight; in a positive-offset timezone this is the next day
+	utcStr := "2026-03-16 23:30:00"
+	localDate := db.FormatLocal(utcStr)[:10]
+
+	a := db.Action{CreatedAt: utcStr}
+	if !a.MatchesDate(localDate) {
+		t.Errorf("MatchesDate(%q) = false for CreatedAt=%q, expected true after local conversion", localDate, utcStr)
+	}
+}
+
 func TestFilterForOpenTask(t *testing.T) {
+	targetDate := localDate("2026-03-04 10:00:00")
 	actions := []db.Action{
 		{ID: 1, Status: "pending", CreatedAt: "2026-01-01 00:00:00"},
 		{ID: 2, Status: "running", CreatedAt: "2026-01-01 00:00:00"},
@@ -458,7 +480,7 @@ func TestFilterForOpenTask(t *testing.T) {
 		{ID: 6, Status: "done", CreatedAt: "2026-03-04 09:00:00"},
 	}
 
-	filtered := db.FilterForOpenTask(actions, "2026-03-04")
+	filtered := db.FilterForOpenTask(actions, targetDate)
 
 	ids := make(map[int64]bool)
 	for _, a := range filtered {

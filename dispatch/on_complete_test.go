@@ -107,6 +107,9 @@ func TestTriggerOnDone(t *testing.T) {
 				if meta["predecessor_status"] != tc.wantStatus {
 					t.Errorf("predecessor_status = %v, want %q", meta["predecessor_status"], tc.wantStatus)
 				}
+				if meta["instruction"] != result {
+					t.Errorf("instruction = %v, want %q", meta["instruction"], result)
+				}
 			}
 		})
 	}

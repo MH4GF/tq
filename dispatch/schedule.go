@@ -6,10 +6,7 @@ import (
 	"time"
 
 	"github.com/MH4GF/tq/db"
-	"github.com/robfig/cron/v3"
 )
-
-var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
 func CheckSchedules(database db.Store, now time.Time) error {
 	schedules, err := database.ListSchedules()
@@ -35,7 +32,7 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			continue
 		}
 
-		sched, err := cronParser.Parse(s.CronExpr)
+		sched, err := db.CronParser.Parse(s.CronExpr)
 		if err != nil {
 			slog.Warn("schedule: invalid cron expr", "schedule_id", s.ID, "cron_expr", s.CronExpr, "error", err)
 			continue
@@ -45,7 +42,7 @@ func CheckSchedules(database db.Store, now time.Time) error {
 		if s.LastRunAt.Valid {
 			baseTime = s.LastRunAt.String
 		}
-		base, err := time.Parse("2006-01-02 15:04:05", baseTime)
+		base, err := time.Parse(db.TimeLayout, baseTime)
 		if err != nil {
 			slog.Warn("schedule: parse base time failed", "schedule_id", s.ID, "base_time", baseTime, "error", err)
 			continue
@@ -72,7 +69,7 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			continue
 		}
 
-		if err := database.UpdateScheduleLastRunAt(s.ID, now.Format("2006-01-02 15:04:05")); err != nil {
+		if err := database.UpdateScheduleLastRunAt(s.ID, now.UTC().Format(db.TimeLayout)); err != nil {
 			slog.Error("schedule: update last_run_at failed", "schedule_id", s.ID, "error", err)
 		}
 

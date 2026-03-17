@@ -33,6 +33,7 @@ func triggerFollowUp(database db.Store, promptsDir string, action *db.Action, re
 		"triggered_by_action_id": action.ID,
 		"predecessor_result":     result,
 		"predecessor_status":     predecessorStatus,
+		"instruction":            result,
 	}
 	metaJSON, err := json.Marshal(meta)
 	if err != nil {

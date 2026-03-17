@@ -8,10 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/MH4GF/tq/db"
-	"github.com/robfig/cron/v3"
 )
-
-var tuiCronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
 type SchedulesModel struct {
 	schedules []db.Schedule
@@ -123,7 +120,7 @@ func (m SchedulesModel) View() string {
 
 		lastRun := "-"
 		if s.LastRunAt.Valid {
-			lastRun = s.LastRunAt.String[:16]
+			lastRun = db.FormatLocal(s.LastRunAt.String)[:16]
 		}
 
 		line := fmt.Sprintf("%s%-4d %s  %-20s %-16s %-20s %s",
@@ -144,7 +141,7 @@ func (m SchedulesModel) View() string {
 }
 
 func (m SchedulesModel) computeNextRun(s db.Schedule) string {
-	sched, err := tuiCronParser.Parse(s.CronExpr)
+	sched, err := db.CronParser.Parse(s.CronExpr)
 	if err != nil {
 		return "invalid"
 	}
@@ -152,12 +149,12 @@ func (m SchedulesModel) computeNextRun(s db.Schedule) string {
 	if s.LastRunAt.Valid {
 		baseTime = s.LastRunAt.String
 	}
-	base, err := time.Parse("2006-01-02 15:04:05", baseTime)
+	base, err := time.Parse(db.TimeLayout, baseTime)
 	if err != nil {
 		return "?"
 	}
 	next := sched.Next(base)
-	return next.Format("2006-01-02 15:04")
+	return next.Local().Format("2006-01-02 15:04")
 }
 
 func (m SchedulesModel) visibleRange() visibleRange {

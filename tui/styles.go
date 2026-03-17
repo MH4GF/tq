@@ -65,13 +65,13 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 	b.WriteString(styleMuted.Render(strings.Repeat("─", min(width, 80))) + "\n")
 
 	st := StatusStyle(a.Status)
-	b.WriteString(fmt.Sprintf("  ID:        %d\n", a.ID))
-	b.WriteString(fmt.Sprintf("  Status:    %s\n", st.Render(a.Status)))
-	b.WriteString(fmt.Sprintf("  Title:     %s\n", a.Title))
-	b.WriteString(fmt.Sprintf("  Prompt:    %s\n", a.PromptID))
-	b.WriteString(fmt.Sprintf("  Task:      #%d\n", a.TaskID))
+	fmt.Fprintf(&b, "  ID:        %d\n", a.ID)
+	fmt.Fprintf(&b, "  Status:    %s\n", st.Render(a.Status))
+	fmt.Fprintf(&b, "  Title:     %s\n", a.Title)
+	fmt.Fprintf(&b, "  Prompt:    %s\n", a.PromptID)
+	fmt.Fprintf(&b, "  Task:      #%d\n", a.TaskID)
 	if a.CompletedAt.Valid {
-		b.WriteString(fmt.Sprintf("  Completed: %s\n", a.CompletedAt.String))
+		fmt.Fprintf(&b, "  Completed: %s\n", db.FormatLocal(a.CompletedAt.String))
 	}
 	b.WriteString(styleMuted.Render(strings.Repeat("─", min(width, 80))) + "\n")
 
