@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/MH4GF/tq/db"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +46,7 @@ var listCmd = &cobra.Command{
 				"task_id":    a.TaskID,
 				"metadata":   a.Metadata,
 				"status":     a.Status,
-				"created_at": a.CreatedAt,
+				"created_at": db.FormatLocal(a.CreatedAt),
 			}
 			if a.Result.Valid {
 				row["result"] = a.Result.String
@@ -58,12 +59,12 @@ var listCmd = &cobra.Command{
 				row["session_id"] = nil
 			}
 			if a.StartedAt.Valid {
-				row["started_at"] = a.StartedAt.String
+				row["started_at"] = db.FormatLocal(a.StartedAt.String)
 			} else {
 				row["started_at"] = nil
 			}
 			if a.CompletedAt.Valid {
-				row["completed_at"] = a.CompletedAt.String
+				row["completed_at"] = db.FormatLocal(a.CompletedAt.String)
 			} else {
 				row["completed_at"] = nil
 			}

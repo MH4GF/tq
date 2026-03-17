@@ -123,7 +123,7 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 	now := time.Now()
 	for _, a := range actions {
 		if a.StartedAt.Valid {
-			started, err := time.Parse("2006-01-02 15:04:05", a.StartedAt.String)
+			started, err := time.Parse(db.TimeLayout, a.StartedAt.String)
 			if err == nil && now.Sub(started) < cfg.StaleGracePeriod {
 				continue
 			}

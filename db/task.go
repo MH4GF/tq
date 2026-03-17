@@ -3,7 +3,6 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 )
 
 const (
@@ -30,10 +29,10 @@ func (t *Task) scanFields() []any {
 }
 
 func (t Task) MatchesDate(date string) bool {
-	if strings.HasPrefix(t.CreatedAt, date) {
+	if matchesDateLocal(t.CreatedAt, date) {
 		return true
 	}
-	if t.UpdatedAt.Valid && strings.HasPrefix(t.UpdatedAt.String, date) {
+	if t.UpdatedAt.Valid && matchesDateLocal(t.UpdatedAt.String, date) {
 		return true
 	}
 	return false

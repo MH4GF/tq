@@ -48,13 +48,13 @@ func (a *Action) scanFields() []any {
 }
 
 func (a Action) MatchesDate(date string) bool {
-	if strings.HasPrefix(a.CreatedAt, date) {
+	if matchesDateLocal(a.CreatedAt, date) {
 		return true
 	}
-	if a.StartedAt.Valid && strings.HasPrefix(a.StartedAt.String, date) {
+	if a.StartedAt.Valid && matchesDateLocal(a.StartedAt.String, date) {
 		return true
 	}
-	if a.CompletedAt.Valid && strings.HasPrefix(a.CompletedAt.String, date) {
+	if a.CompletedAt.Valid && matchesDateLocal(a.CompletedAt.String, date) {
 		return true
 	}
 	return false

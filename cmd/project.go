@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/MH4GF/tq/db"
 	"github.com/spf13/cobra"
 )
 
@@ -57,7 +58,7 @@ var projectListCmd = &cobra.Command{
 				"work_dir":         p.WorkDir,
 				"metadata":         p.Metadata,
 				"dispatch_enabled": p.DispatchEnabled,
-				"created_at":       p.CreatedAt,
+				"created_at":       db.FormatLocal(p.CreatedAt),
 			}
 		}
 		enc := json.NewEncoder(cmd.OutOrStdout())

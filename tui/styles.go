@@ -71,7 +71,7 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 	b.WriteString(fmt.Sprintf("  Prompt:    %s\n", a.PromptID))
 	b.WriteString(fmt.Sprintf("  Task:      #%d\n", a.TaskID))
 	if a.CompletedAt.Valid {
-		b.WriteString(fmt.Sprintf("  Completed: %s\n", a.CompletedAt.String))
+		b.WriteString(fmt.Sprintf("  Completed: %s\n", db.FormatLocal(a.CompletedAt.String)))
 	}
 	b.WriteString(styleMuted.Render(strings.Repeat("─", min(width, 80))) + "\n")
 
