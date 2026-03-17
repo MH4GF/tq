@@ -2,3 +2,5 @@
 vPrefix = true
 releaseBranch = main
 versionFile = cmd/version.go,.claude-plugins/tq/.claude-plugin/plugin.json
+release = false
+changelog = true
