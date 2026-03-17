@@ -393,6 +393,39 @@ func TestLoad_InternalPrompt(t *testing.T) {
 	}
 }
 
+func TestLoad_InternalWatchLinearNotifications(t *testing.T) {
+	lr, err := Load("", "internal:watch-linear-notifications")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lr.Prompt.Config.Mode != "noninteractive" {
+		t.Errorf("Mode = %q, want %q", lr.Prompt.Config.Mode, "noninteractive")
+	}
+	if lr.Prompt.Config.PermissionMode != "plan" {
+		t.Errorf("PermissionMode = %q, want %q", lr.Prompt.Config.PermissionMode, "plan")
+	}
+	if lr.Prompt.ID != "internal:watch-linear-notifications" {
+		t.Errorf("ID = %q, want %q", lr.Prompt.ID, "internal:watch-linear-notifications")
+	}
+	if len(lr.UnknownFields) != 0 {
+		t.Errorf("UnknownFields = %v, want empty", lr.UnknownFields)
+	}
+
+	// Verify template renders with task data
+	data := PromptData{
+		Task:    TaskData{ID: 42, Meta: map[string]any{}},
+		Project: ProjectData{Meta: map[string]any{}},
+		Action:  ActionData{Meta: map[string]any{}},
+	}
+	result, err := lr.Prompt.Render(data)
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+	if !strings.Contains(result, "--task 42") {
+		t.Errorf("rendered prompt should contain task ID, got:\n%s", result)
+	}
+}
+
 func TestRender_MissingMetaKey(t *testing.T) {
 	p := &Prompt{
 		ID:   "test",
