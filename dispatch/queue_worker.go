@@ -140,6 +140,8 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 			continue
 		}
 		slog.Warn("reaped stale action", "action_id", a.ID, "window", windowName)
+
+		CreateInvestigateFailureAction(cfg.DB, &a, result)
 	}
 }
 

@@ -256,6 +256,58 @@ func TestRunWorker_OnDoneTriggersFollowUp(t *testing.T) {
 	}
 }
 
+func TestRunWorker_FailureCreatesInvestigateAction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	tqDir := setupPromptsDir(t)
+
+	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
+	d.InsertAction("check-pr-status", "check-pr-status", taskID, "{}", "pending")
+
+	worker := &countingWorker{err: fmt.Errorf("something went wrong")}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB: d,
+			NonInteractiveFunc: func() Worker {
+				return worker
+			},
+			InteractiveFunc: func() Worker {
+				return worker
+			},
+		},
+		UserConfigDir:  tqDir,
+		MaxInteractive: 3,
+		PollInterval:   50 * time.Millisecond,
+	}
+
+	_ = RunWorker(ctx, cfg)
+
+	// Original action should be failed
+	action, _ := d.GetAction(1)
+	if action.Status != "failed" {
+		t.Errorf("action status = %q, want failed", action.Status)
+	}
+
+	// Investigate-failure action should have been auto-created
+	actions, _ := d.ListActions("", nil)
+	if len(actions) < 2 {
+		t.Fatalf("expected at least 2 actions, got %d", len(actions))
+	}
+
+	investigate := actions[1]
+	if investigate.PromptID != "internal:investigate-failure" {
+		t.Errorf("follow-up prompt_id = %q, want internal:investigate-failure", investigate.PromptID)
+	}
+	if investigate.TaskID != taskID {
+		t.Errorf("follow-up task_id = %d, want %d", investigate.TaskID, taskID)
+	}
+}
+
 type mockTmuxChecker struct {
 	windows       []string
 	err           error
