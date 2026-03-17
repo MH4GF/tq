@@ -14,7 +14,7 @@ func TestScheduleCreate_InvalidMeta(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "test task", "", "{}", "")
+	d.InsertTask(1, "test task", "{}", "")
 
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
@@ -36,7 +36,7 @@ func TestScheduleUpdate_InvalidMeta(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
 	d.InsertSchedule(taskID, "daily-review", "daily", "0 9 * * *", "{}")
 
 	root := cmd.GetRootCmd()

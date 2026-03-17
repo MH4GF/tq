@@ -10,7 +10,7 @@ func TestInsertSchedule(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
 	id, err := d.InsertSchedule(taskID, "inbox-zero", "Inbox Zero", "0 */3 * * *", "{}")
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ func TestListSchedules(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertSchedule(taskID, "a", "A", "* * * * *", "{}")
 	d.InsertSchedule(taskID, "b", "B", "0 * * * *", "{}")
 
@@ -61,7 +61,7 @@ func TestUpdateScheduleEnabled(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertSchedule(taskID, "test", "Test", "* * * * *", "{}")
 
 	if err := d.UpdateScheduleEnabled(id, false); err != nil {
@@ -85,7 +85,7 @@ func TestUpdateScheduleLastRunAt(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertSchedule(taskID, "test", "Test", "* * * * *", "{}")
 
 	if err := d.UpdateScheduleLastRunAt(id, "2026-03-12 10:00:00"); err != nil {
@@ -101,7 +101,7 @@ func TestDeleteSchedule(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertSchedule(taskID, "test", "Test", "* * * * *", "{}")
 
 	if err := d.DeleteSchedule(id); err != nil {
@@ -118,8 +118,8 @@ func TestUpdateSchedule(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
-	taskID2, _ := d.InsertTask(1, "test2", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	taskID2, _ := d.InsertTask(1, "test2", "{}", "")
 	id, _ := d.InsertSchedule(taskID, "test", "Original", "* * * * *", "{}")
 
 	newTitle := "Updated"

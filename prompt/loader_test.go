@@ -283,7 +283,7 @@ Body.
 func TestRender_AllVariables(t *testing.T) {
 	p := &Prompt{
 		ID: "test",
-		Body: `Task: {{.Task.ID}} {{.Task.Title}} {{.Task.URL}} {{.Task.Status}}
+		Body: `Task: {{.Task.ID}} {{.Task.Title}} {{.Task.Status}}
 Project: {{.Project.ID}} {{.Project.Name}} {{.Project.WorkDir}}
 Action: {{.Action.ID}} {{.Action.PromptID}} {{.Action.Status}}
 TaskMeta: {{index .Task.Meta "key"}}
@@ -295,7 +295,6 @@ ActionMeta: {{index .Action.Meta "key"}}`,
 		Task: TaskData{
 			ID:     1,
 			Title:  "Test Task",
-			URL:    "https://example.com/1",
 			Status: "open",
 			Meta:   map[string]any{"key": "tval"},
 		},
@@ -318,7 +317,7 @@ ActionMeta: {{index .Action.Meta "key"}}`,
 		t.Fatal(err)
 	}
 
-	expected := `Task: 1 Test Task https://example.com/1 open
+	expected := `Task: 1 Test Task open
 Project: 2 MyProject /tmp/proj
 Action: 3 implement pending
 TaskMeta: tval
@@ -327,6 +326,45 @@ ActionMeta: aval`
 
 	if result != expected {
 		t.Errorf("Render result:\n%s\nwant:\n%s", result, expected)
+	}
+}
+
+func TestLoad_DeprecatedPatterns(t *testing.T) {
+	dir := t.TempDir()
+	writePrompt(t, dir, "old-style", `---
+description: Uses deprecated URL
+mode: interactive
+---
+URL: {{.Task.URL}}
+`)
+
+	lr, err := Load(dir, "old-style")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lr.DeprecatedPatterns) != 1 {
+		t.Fatalf("DeprecatedPatterns = %v, want 1 entry", lr.DeprecatedPatterns)
+	}
+	if lr.DeprecatedPatterns[0] != "{{.Task.URL}}" {
+		t.Errorf("DeprecatedPatterns[0] = %q, want %q", lr.DeprecatedPatterns[0], "{{.Task.URL}}")
+	}
+}
+
+func TestLoad_NoDeprecatedPatterns(t *testing.T) {
+	dir := t.TempDir()
+	writePrompt(t, dir, "new-style", `---
+description: Uses metadata URL
+mode: interactive
+---
+URL: {{index .Task.Meta "url"}}
+`)
+
+	lr, err := Load(dir, "new-style")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lr.DeprecatedPatterns) != 0 {
+		t.Errorf("DeprecatedPatterns = %v, want empty", lr.DeprecatedPatterns)
 	}
 }
 
