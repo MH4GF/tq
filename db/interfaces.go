@@ -16,7 +16,7 @@ type CommandWriter interface {
 	NextPending(ctx context.Context) (*Action, error)
 	ClaimPending(ctx context.Context, id int64) (*Action, error)
 	// Task commands
-	InsertTask(projectID int64, title, url, metadata, workDir string) (int64, error)
+	InsertTask(projectID int64, title, metadata, workDir string) (int64, error)
 	UpdateTask(id int64, status, reason string) error
 	UpdateTaskProject(id int64, projectID int64) error
 	UpdateTaskWorkDir(id int64, workDir string) error

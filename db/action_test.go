@@ -15,7 +15,7 @@ func TestInsertAction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
 	id, err := d.InsertAction("review-pr", "review-pr", taskID, `{"pr":123}`, "pending")
 	if err != nil {
 		t.Fatal(err)
@@ -40,7 +40,7 @@ func TestHasActiveAction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
 
 	has, err := d.HasActiveAction(taskID, "review-pr")
@@ -64,7 +64,7 @@ func TestHasActiveAction_DoneNotActive(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertAction("implement", "implement", taskID, "{}", "done")
 
 	has, err := d.HasActiveAction(taskID, "implement")
@@ -80,7 +80,7 @@ func TestNextPending(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
 	d.InsertAction("first", "first", taskID, "{}", "pending")
 	d.InsertAction("second", "second", taskID, "{}", "pending")
 	d.InsertAction("third", "third", taskID, "{}", "pending")
@@ -124,10 +124,10 @@ func TestNextPending_SkipsDisabledProject(t *testing.T) {
 	// Disable project 1 (immedio)
 	d.SetDispatchEnabled(1, false)
 
-	taskID, _ := d.InsertTask(1, "disabled task", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "disabled task", "{}", "")
 	d.InsertAction("disabled-action", "disabled-action", taskID, "{}", "pending")
 
-	taskID2, _ := d.InsertTask(2, "enabled task", "", "{}", "")
+	taskID2, _ := d.InsertTask(2, "enabled task", "{}", "")
 	d.InsertAction("enabled-action", "enabled-action", taskID2, "{}", "pending")
 
 	ctx := context.Background()
@@ -150,7 +150,7 @@ func TestNextPending_AllDisabled(t *testing.T) {
 	// Disable all projects
 	d.SetAllDispatchEnabled(false)
 
-	taskID, _ := d.InsertTask(1, "disabled task", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "disabled task", "{}", "")
 	d.InsertAction("disabled-action", "disabled-action", taskID, "{}", "pending")
 
 	ctx := context.Background()
@@ -180,7 +180,7 @@ func TestMarkDone(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
 	if err := d.MarkDone(id, "success"); err != nil {
 		t.Fatal(err)
@@ -202,7 +202,7 @@ func TestMarkFailed(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
 	if err := d.MarkFailed(id, "error occurred"); err != nil {
 		t.Fatal(err)
@@ -221,8 +221,8 @@ func TestListActions(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID1, _ := d.InsertTask(1, "task1", "", "{}", "")
-	taskID2, _ := d.InsertTask(1, "task2", "", "{}", "")
+	taskID1, _ := d.InsertTask(1, "task1", "{}", "")
+	taskID2, _ := d.InsertTask(1, "task2", "{}", "")
 	d.InsertAction("a", "a", taskID1, "{}", "pending")
 	d.InsertAction("b", "b", taskID2, "{}", "running")
 	d.InsertAction("c", "c", taskID1, "{}", "pending")
@@ -268,7 +268,7 @@ func TestCountByStatus(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertAction("a", "a", taskID, "{}", "pending")
 	d.InsertAction("b", "b", taskID, "{}", "pending")
 	d.InsertAction("c", "c", taskID, "{}", "running")
@@ -293,7 +293,7 @@ func TestListRunningInteractive(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 
 	// running with session_id → should be returned
 	d.InsertAction("a", "a", taskID, "{}", "running")
@@ -327,7 +327,7 @@ func TestCountRunningInteractive(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertAction("a", "a", taskID, "{}", "running")
 	d.InsertAction("b", "b", taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'sess-1' WHERE id = 1")
@@ -345,7 +345,7 @@ func TestResetToPending(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertAction("a", "a", taskID, "{}", "running")
 	d.Exec("UPDATE actions SET session_id = 'sess-1', tmux_pane = 'tq-action-1' WHERE id = ?", id)
 
@@ -372,7 +372,7 @@ func TestSetSessionInfo(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
 
 	if err := d.SetSessionInfo(id, "main", "tq-action-1"); err != nil {
@@ -521,7 +521,7 @@ func TestClaimPending(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertAction("first", "first", taskID, "{}", "pending")
 	d.InsertAction("second", "second", taskID, "{}", "pending")
 
@@ -567,7 +567,7 @@ func TestClaimPending_NotPending(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 
 	tests := []struct {
 		name   string
@@ -599,9 +599,9 @@ func TestListActionsByTaskIDs(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID1, _ := d.InsertTask(1, "task1", "", "{}", "")
-	taskID2, _ := d.InsertTask(1, "task2", "", "{}", "")
-	taskID3, _ := d.InsertTask(1, "task3 no actions", "", "{}", "")
+	taskID1, _ := d.InsertTask(1, "task1", "{}", "")
+	taskID2, _ := d.InsertTask(1, "task2", "{}", "")
+	taskID3, _ := d.InsertTask(1, "task3 no actions", "{}", "")
 
 	d.InsertAction("a1", "a1", taskID1, "{}", "pending")
 	d.InsertAction("a2", "a2", taskID1, "{}", "done")
@@ -638,7 +638,7 @@ func TestInsertAction_InvalidStatus(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
 
 	tests := []struct {
 		name   string
@@ -666,7 +666,7 @@ func TestMarkDispatched(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
 
 	if err := d.MarkDispatched(id); err != nil {
@@ -683,7 +683,7 @@ func TestMarkDispatched_NotRunning(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 
 	tests := []struct {
 		name   string
@@ -713,7 +713,7 @@ func TestHasActiveAction_Dispatched(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertAction("impl", "impl", taskID, "{}", "running")
 	d.MarkDispatched(id)
 
@@ -730,7 +730,7 @@ func TestMarkDone_FromDispatched(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
 	d.MarkDispatched(id)
 
@@ -748,7 +748,7 @@ func TestMarkCancelled_FromDispatched(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
 	d.MarkDispatched(id)
 
@@ -776,7 +776,7 @@ func TestInsertAction_Title(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
 	id, err := d.InsertAction("Review PR #123", "review-pr", taskID, `{"pr":123}`, "pending")
 	if err != nil {
 		t.Fatal(err)
@@ -799,7 +799,7 @@ func TestMigrate_AddTitleColumn(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	// Insert action then simulate old DB state (empty title)
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertAction("my-prompt", "my-prompt", taskID, "{}", "pending")
 	d.Exec("UPDATE actions SET title = '' WHERE id = 1")
 

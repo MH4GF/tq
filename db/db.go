@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	_ "embed"
+	"encoding/json"
 
 	_ "modernc.org/sqlite"
 )
@@ -131,6 +132,58 @@ func (db *DB) Migrate() error {
 
 	if _, err := db.Exec("DELETE FROM actions WHERE task_id IS NULL"); err != nil {
 		return err
+	}
+
+	// Migrate url column values into metadata JSON, then drop the column (idempotent)
+	if has, err := db.hasColumn("tasks", "url"); err != nil {
+		return err
+	} else if has {
+		rows, err := db.Query("SELECT id, url, metadata FROM tasks WHERE url IS NOT NULL AND url != ''")
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		type row struct {
+			id       int64
+			url      string
+			metadata string
+		}
+		var toUpdate []row
+		for rows.Next() {
+			var r row
+			if err := rows.Scan(&r.id, &r.url, &r.metadata); err != nil {
+				return err
+			}
+			toUpdate = append(toUpdate, r)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		rows.Close()
+
+		for _, r := range toUpdate {
+			m := make(map[string]any)
+			if r.metadata != "" && r.metadata != "{}" {
+				if err := json.Unmarshal([]byte(r.metadata), &m); err != nil {
+					continue
+				}
+			}
+			if _, exists := m["url"]; exists {
+				continue
+			}
+			m["url"] = r.url
+			newMeta, err := json.Marshal(m)
+			if err != nil {
+				continue
+			}
+			if _, err := db.Exec("UPDATE tasks SET metadata = ? WHERE id = ?", string(newMeta), r.id); err != nil {
+				return err
+			}
+		}
+
+		if _, err := db.Exec("ALTER TABLE tasks DROP COLUMN url"); err != nil {
+			return err
+		}
 	}
 
 	return nil

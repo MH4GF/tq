@@ -78,9 +78,14 @@ If instruction cannot be determined from context, ask the user.`,
 			}
 		}
 
-		lr, err := prompt.Load(resolvePromptsDir(), addPrompt)
+		promptsDir := resolvePromptsDir()
+		lr, err := prompt.Load(promptsDir, addPrompt)
 		if err != nil {
 			return fmt.Errorf("load prompt: %w", err)
+		}
+		if len(lr.DeprecatedPatterns) > 0 {
+			dispatch.CreateParseErrorFixAction(database, promptsDir, addPrompt, lr.DeprecatedPatterns)
+			return fmt.Errorf("prompt %q uses deprecated patterns: %v — a fix action has been created", addPrompt, lr.DeprecatedPatterns)
 		}
 		tempAction := &db.Action{
 			TaskID:   addTask,

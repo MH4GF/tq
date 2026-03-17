@@ -69,7 +69,7 @@ func TestExecuteAction(t *testing.T) {
 			promptName := "test-" + tc.promptMode
 			writeTestPromptWithMode(t, promptsDir, promptName, tc.promptMode, "")
 
-			taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
+			taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 			d.InsertAction(promptName, promptName, taskID, "{}", "pending")
 
 			action, _ := d.NextPending(context.Background())
