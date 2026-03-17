@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"text/template"
@@ -19,10 +20,11 @@ import (
 var internalPrompts embed.FS
 
 type Config struct {
-	Description string `yaml:"description"`
-	Mode        string `yaml:"mode"` // "interactive" (default) | "noninteractive" | "remote"
-	OnDone      string `yaml:"on_done"`
-	OnCancel    string `yaml:"on_cancel"`
+	Description    string `yaml:"description"`
+	Mode           string `yaml:"mode"` // "interactive" (default) | "noninteractive" | "remote"
+	PermissionMode string `yaml:"permission_mode"`
+	OnDone         string `yaml:"on_done"`
+	OnCancel       string `yaml:"on_cancel"`
 }
 
 func (c Config) IsInteractive() bool    { return c.Mode == "interactive" }
@@ -50,6 +52,8 @@ var knownFrontmatterKeys = func() map[string]bool {
 	}
 	return m
 }()
+
+var validPermissionMode = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
 
 type PromptData struct {
 	Task    TaskData
@@ -128,6 +132,10 @@ func Load(promptsDir, promptID string) (*LoadResult, error) {
 
 	if cfg.Mode == "" {
 		cfg.Mode = "interactive"
+	}
+
+	if cfg.PermissionMode != "" && !validPermissionMode.MatchString(cfg.PermissionMode) {
+		return nil, fmt.Errorf("prompt %q: invalid permission_mode %q (must be alphanumeric/hyphens)", promptID, cfg.PermissionMode)
 	}
 
 	return &LoadResult{

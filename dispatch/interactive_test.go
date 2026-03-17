@@ -8,30 +8,6 @@ import (
 	"github.com/MH4GF/tq/prompt"
 )
 
-type mockCall struct {
-	name string
-	args []string
-	dir  string
-	env  []string
-}
-
-type mockRunner struct {
-	calls  []mockCall
-	output []byte
-	err    error
-	// failAt indicates which call index should return the error (0-based). -1 means no failure.
-	failAt int
-}
-
-func (m *mockRunner) Run(_ context.Context, name string, args []string, dir string, env []string) ([]byte, error) {
-	idx := len(m.calls)
-	m.calls = append(m.calls, mockCall{name: name, args: args, dir: dir, env: env})
-	if m.failAt >= 0 && idx == m.failAt {
-		return m.output, m.err
-	}
-	return m.output, nil
-}
-
 func TestInteractiveWorker_Execute(t *testing.T) {
 	runner := &mockRunner{output: []byte("ok"), failAt: -1}
 	w := &InteractiveWorker{
@@ -92,6 +68,9 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 	}
 	if strings.Contains(argsStr, "--tmux") {
 		t.Errorf("call[1] args = %v, must NOT contain --tmux", c.args)
+	}
+	if strings.Contains(argsStr, "--permission-mode") {
+		t.Errorf("call[1] args = %v, must NOT contain --permission-mode when not configured", c.args)
 	}
 	if !strings.Contains(argsStr, "Fix the bug") {
 		t.Errorf("call[1] args = %v, want to contain prompt text 'Fix the bug'", c.args)
@@ -170,6 +149,25 @@ func TestInteractiveWorker_CustomSession(t *testing.T) {
 	argsStr = strings.Join(runner.calls[2].args, " ")
 	if !strings.Contains(argsStr, "work:tq-action-7") {
 		t.Errorf("call[2] args = %v, want to contain work:tq-action-7", runner.calls[2].args)
+	}
+}
+
+func TestInteractiveWorker_PermissionMode(t *testing.T) {
+	runner := &mockRunner{output: []byte("ok"), failAt: -1}
+	w := &InteractiveWorker{
+		Runner: runner,
+	}
+
+	cfg := prompt.Config{PermissionMode: "plan"}
+
+	_, err := w.Execute(context.Background(), "Plan the feature", cfg, "/work/dir", 50, 10)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	argsStr := strings.Join(runner.calls[1].args, " ")
+	if !strings.Contains(argsStr, "--permission-mode 'plan'") {
+		t.Errorf("call[1] args = %v, want to contain \"--permission-mode 'plan'\"", runner.calls[1].args)
 	}
 }
 
