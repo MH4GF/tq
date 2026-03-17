@@ -133,6 +133,12 @@ func (db *DB) Migrate() error {
 		return err
 	}
 
+	// Fix any actions with invalid "open" status (a task status, not a valid action status).
+	// These were created before InsertAction validation was added.
+	if _, err := db.Exec("UPDATE actions SET status = 'cancelled', completed_at = datetime('now') WHERE status = 'open'"); err != nil {
+		return err
+	}
+
 	return nil
 }
 
