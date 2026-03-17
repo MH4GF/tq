@@ -67,7 +67,7 @@ remains unfinished.`,
 			slog.Warn("on_done trigger failed", "action_id", id, "error", err)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "action #%d done\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d done\n", id)
 		return nil
 	},
 }

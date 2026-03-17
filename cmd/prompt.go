@@ -26,7 +26,7 @@ var promptListCmd = &cobra.Command{
 		}
 
 		if len(prompts) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "[]")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
 			return nil
 		}
 

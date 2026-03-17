@@ -23,7 +23,7 @@ func (w *RemoteWorker) Execute(ctx context.Context, prompt string, cfg prompt.Co
 	remotePrompt := prompt + remoteRules(actionID)
 
 	debugFile := filepath.Join(os.TempDir(), fmt.Sprintf("tq-remote-debug-%d.log", actionID))
-	defer os.Remove(debugFile)
+	defer func() { _ = os.Remove(debugFile) }()
 
 	// claude --remote requires a TTY (without one, claude switches to --print mode).
 	// Use `script -q /dev/null` to allocate a PTY.

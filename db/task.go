@@ -137,7 +137,7 @@ func (db *DB) ListTasks(projectID int64, status string) ([]Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var tasks []Task
 	for rows.Next() {

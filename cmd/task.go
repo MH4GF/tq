@@ -48,7 +48,7 @@ var taskCreateCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("insert task: %w", err)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "task #%d created (project: %s)\n", id, project.Name)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "task #%d created (project: %s)\n", id, project.Name)
 		return nil
 	},
 }
@@ -71,7 +71,7 @@ var taskListCmd = &cobra.Command{
 			return fmt.Errorf("list tasks: %w", err)
 		}
 		if len(tasks) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "[]")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
 			return nil
 		}
 
@@ -197,7 +197,7 @@ At least one of --status, --project, or --work-dir is required.`,
 			updates = append(updates, fmt.Sprintf("status: %s", taskUpdateStatus))
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "task #%d updated (%s)\n", taskUpdateID, joinUpdates(updates))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "task #%d updated (%s)\n", taskUpdateID, joinUpdates(updates))
 		return nil
 	},
 }
