@@ -33,7 +33,7 @@ var listCmd = &cobra.Command{
 		}
 
 		if len(actions) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "[]")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
 			return nil
 		}
 

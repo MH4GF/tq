@@ -22,7 +22,7 @@ func (e *Event) scanFields() []any {
 }
 
 func scanEvents(rows *sql.Rows) ([]Event, error) {
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var events []Event
 	for rows.Next() {
 		var e Event

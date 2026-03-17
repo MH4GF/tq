@@ -102,7 +102,7 @@ var dispatchCmd = &cobra.Command{
 
 		var af *dispatch.ActionFailedError
 		if errors.As(err, &af) {
-			fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed (%v)\n", af.ActionID, af.Err)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed (%v)\n", af.ActionID, af.Err)
 			return nil
 		}
 		if err != nil {
@@ -112,11 +112,11 @@ var dispatchCmd = &cobra.Command{
 		switch result.Mode {
 		case dispatch.ModeRemote:
 			url := strings.TrimPrefix(result.Output, dispatch.RemoteSessionPrefix)
-			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched remotely (view: %s)\n", action.ID, url)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched remotely (view: %s)\n", action.ID, url)
 		case dispatch.ModeInteractive:
-			fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched interactively (%s)\n", action.ID, result.Output)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched interactively (%s)\n", action.ID, result.Output)
 		default:
-			fmt.Fprintf(cmd.OutOrStdout(), "action #%d done\n", action.ID)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d done\n", action.ID)
 		}
 		return nil
 	},

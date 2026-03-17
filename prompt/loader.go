@@ -167,7 +167,7 @@ func List(dirs ...string) ([]Prompt, error) {
 			id := strings.TrimSuffix(e.Name(), ".md")
 			result, err := Load(dir, id)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", filepath.Join(dir, e.Name()), err)
+				_, _ = fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", filepath.Join(dir, e.Name()), err)
 				continue
 			}
 			seen[id] = *result.Prompt
