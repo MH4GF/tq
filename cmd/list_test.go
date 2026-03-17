@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -16,9 +17,9 @@ func TestList(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "task1", "", "{}", "")
-	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
+	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
 	taskID2, _ := d.InsertTask(1, "task2", "", "{}", "")
-	d.InsertAction("deploy", "deploy", taskID2, "{}", "running")
+	d.InsertAction("deploy", "deploy", taskID2, "{}", db.ActionStatusRunning)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -53,8 +54,8 @@ func TestList_StatusFilter(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
-	d.InsertAction("a", "a", taskID, "{}", "pending")
-	d.InsertAction("b", "b", taskID, "{}", "running")
+	d.InsertAction("a", "a", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("b", "b", taskID, "{}", db.ActionStatusRunning)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -87,8 +88,8 @@ func TestList_TaskFilter(t *testing.T) {
 
 	taskID1, _ := d.InsertTask(1, "task1", "", "{}", "")
 	taskID2, _ := d.InsertTask(1, "task2", "", "{}", "")
-	d.InsertAction("a", "a", taskID1, "{}", "pending")
-	d.InsertAction("b", "b", taskID2, "{}", "pending")
+	d.InsertAction("a", "a", taskID1, "{}", db.ActionStatusPending)
+	d.InsertAction("b", "b", taskID2, "{}", db.ActionStatusPending)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -142,7 +143,7 @@ func TestList_JSON(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
-	actionID, _ := d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
+	actionID, _ := d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
 
 	longResult := "Line 1\nLine 2\nThis is a very long result string that exceeds sixty characters and should NOT be truncated in JSON output"
 	d.MarkDone(actionID, longResult)
@@ -174,8 +175,8 @@ func TestList_JSON(t *testing.T) {
 	if row["result"] != longResult {
 		t.Errorf("result should contain full text including newlines, got %v", row["result"])
 	}
-	if row["status"] != "done" {
-		t.Errorf("status = %v, want %q", row["status"], "done")
+	if row["status"] != db.ActionStatusDone {
+		t.Errorf("status = %v, want %q", row["status"], db.ActionStatusDone)
 	}
 	if row["task_id"] != float64(taskID) {
 		t.Errorf("task_id = %v, want %v", row["task_id"], taskID)
@@ -192,7 +193,7 @@ func TestList_JSON_MissingResult(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
-	d.InsertAction("implement", "implement", taskID, "{}", "pending")
+	d.InsertAction("implement", "implement", taskID, "{}", db.ActionStatusPending)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)

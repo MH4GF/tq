@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -15,11 +16,11 @@ func TestReset(t *testing.T) {
 		wantOut   string
 		wantErr   bool
 	}{
-		{"failed to pending", "failed", "action #1 reset to pending", false},
-		{"done is rejected", "done", "", true},
-		{"running to pending", "running", "action #1 reset to pending", false},
-		{"pending is rejected", "pending", "", true},
-		{"cancelled to pending", "cancelled", "action #1 reset to pending", false},
+		{"failed to pending", db.ActionStatusFailed, "action #1 reset to pending", false},
+		{"done is rejected", db.ActionStatusDone, "", true},
+		{"running to pending", db.ActionStatusRunning, "action #1 reset to pending", false},
+		{"pending is rejected", db.ActionStatusPending, "", true},
+		{"cancelled to pending", db.ActionStatusCancelled, "action #1 reset to pending", false},
 	}
 
 	for _, tc := range tests {
@@ -58,8 +59,8 @@ func TestReset(t *testing.T) {
 			if err != nil {
 				t.Fatalf("get action: %v", err)
 			}
-			if a.Status != "pending" {
-				t.Errorf("status = %q, want %q", a.Status, "pending")
+			if a.Status != db.ActionStatusPending {
+				t.Errorf("status = %q, want %q", a.Status, db.ActionStatusPending)
 			}
 		})
 	}
@@ -73,7 +74,7 @@ func TestReset_UnknownStatus(t *testing.T) {
 
 	// Simulate an action with invalid status (e.g. "open") stuck in the DB
 	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
-	d.InsertAction("test", "test", taskID, "{}", "pending")
+	d.InsertAction("test", "test", taskID, "{}", db.ActionStatusPending)
 	d.Exec("UPDATE actions SET status = 'open' WHERE id = 1")
 
 	root := cmd.GetRootCmd()
@@ -91,8 +92,8 @@ func TestReset_UnknownStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get action: %v", err)
 	}
-	if a.Status != "pending" {
-		t.Errorf("status = %q, want %q", a.Status, "pending")
+	if a.Status != db.ActionStatusPending {
+		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusPending)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -36,7 +37,7 @@ func TestAttach(t *testing.T) {
 			cmd.ResetForTest()
 
 			taskID, _ := d.InsertTask(1, "test", "", "{}", "")
-			id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
+			id, _ := d.InsertAction("test", "test", taskID, "{}", db.ActionStatusRunning)
 			if tc.sessionID != "" {
 				d.SetSessionInfo(id, tc.sessionID, "tq-action-1")
 			}

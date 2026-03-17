@@ -136,7 +136,7 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 			for _, tn := range pt.tasks {
 				taskKey := fmt.Sprintf("t:%d", tn.task.ID)
 				if _, ok := m.expanded[taskKey]; !ok {
-					m.expanded[taskKey] = tn.task.Status != "done" && tn.task.Status != "archived"
+					m.expanded[taskKey] = tn.task.Status != db.TaskStatusDone && tn.task.Status != db.TaskStatusArchived
 				}
 			}
 		}
@@ -354,13 +354,13 @@ func (m TasksModel) summaryLine() string {
 		for _, tn := range pt.tasks {
 			for _, a := range tn.actions {
 				switch a.Status {
-				case "running":
+				case db.ActionStatusRunning:
 					running++
-				case "pending":
+				case db.ActionStatusPending:
 					pending++
-				case "done":
+				case db.ActionStatusDone:
 					done++
-				case "failed":
+				case db.ActionStatusFailed:
 					failed++
 				}
 			}
@@ -374,11 +374,11 @@ func (m TasksModel) summaryLine() string {
 
 func taskStatusOrder(status string) int {
 	switch status {
-	case "done":
+	case db.TaskStatusDone:
 		return 1
-	case "open":
+	case db.TaskStatusOpen:
 		return 2
-	case "archived":
+	case db.TaskStatusArchived:
 		return 3
 	default:
 		return 2

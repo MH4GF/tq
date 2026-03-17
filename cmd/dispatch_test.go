@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/dispatch"
 	"github.com/MH4GF/tq/prompt"
 	"github.com/MH4GF/tq/testutil"
@@ -56,7 +57,7 @@ Review PR for {{.Task.Title}}.
 `), 0644)
 
 	taskID, _ := d.InsertTask(1, "Fix bug", "https://github.com/test/1", "{}", "")
-	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
+	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{result: `{"review":"approved"}`}
@@ -82,8 +83,8 @@ Review PR for {{.Task.Title}}.
 	if err != nil {
 		t.Fatalf("get action: %v", err)
 	}
-	if a.Status != "done" {
-		t.Errorf("status = %q, want %q", a.Status, "done")
+	if a.Status != db.ActionStatusDone {
+		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusDone)
 	}
 	if !a.Result.Valid || a.Result.String != `{"review":"approved"}` {
 		t.Errorf("result = %v, want %q", a.Result, `{"review":"approved"}`)
@@ -109,8 +110,8 @@ Review PR for {{.Task.Title}}.
 `), 0644)
 
 	taskID, _ := d.InsertTask(1, "Fix bug", "https://github.com/test/1", "{}", "")
-	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
-	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
+	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{result: `{"review":"approved"}`}
@@ -134,13 +135,13 @@ Review PR for {{.Task.Title}}.
 
 	// action 2 should be done
 	a2, _ := d.GetAction(2)
-	if a2.Status != "done" {
+	if a2.Status != db.ActionStatusDone {
 		t.Errorf("action 2 status = %q, want done", a2.Status)
 	}
 
 	// action 1 should still be pending
 	a1, _ := d.GetAction(1)
-	if a1.Status != "pending" {
+	if a1.Status != db.ActionStatusPending {
 		t.Errorf("action 1 status = %q, want pending", a1.Status)
 	}
 }
@@ -186,7 +187,7 @@ Do something.
 `), 0644)
 
 	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
-	d.InsertAction("test", "test", taskID, "{}", "pending")
+	d.InsertAction("test", "test", taskID, "{}", db.ActionStatusPending)
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{err: context.DeadlineExceeded}
@@ -212,7 +213,7 @@ Do something.
 	if err != nil {
 		t.Fatalf("get action: %v", err)
 	}
-	if a.Status != "failed" {
-		t.Errorf("status = %q, want %q", a.Status, "failed")
+	if a.Status != db.ActionStatusFailed {
+		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusFailed)
 	}
 }

@@ -20,7 +20,7 @@ func TestExecuteAction(t *testing.T) {
 		beforeInteractive func(*db.Action) error
 		wantMode          string
 		wantStatus        string
-		wantErrType       string // "failed", "deferred", or ""
+		wantErrType       string // db.ActionStatusFailed, "deferred", or ""
 		wantWorkerCount   int
 	}{
 		{
@@ -28,15 +28,15 @@ func TestExecuteAction(t *testing.T) {
 			promptMode:      "noninteractive",
 			workerResult:    `{"ok":true}`,
 			wantMode:        ModeNonInteractive,
-			wantStatus:      "done",
+			wantStatus:      db.ActionStatusDone,
 			wantWorkerCount: 1,
 		},
 		{
 			name:            "noninteractive worker failure",
 			promptMode:      "noninteractive",
 			workerErr:       context.DeadlineExceeded,
-			wantStatus:      "failed",
-			wantErrType:     "failed",
+			wantStatus:      db.ActionStatusFailed,
+			wantErrType:     db.ActionStatusFailed,
 			wantWorkerCount: 1,
 		},
 		{
@@ -45,7 +45,7 @@ func TestExecuteAction(t *testing.T) {
 			beforeInteractive: func(a *db.Action) error {
 				return ErrInteractiveDeferred
 			},
-			wantStatus:      "pending",
+			wantStatus:      db.ActionStatusPending,
 			wantErrType:     "deferred",
 			wantWorkerCount: 0,
 		},
@@ -54,7 +54,7 @@ func TestExecuteAction(t *testing.T) {
 			promptMode:      "remote",
 			workerResult:    "remote:session=https://example.com/session/abc",
 			wantMode:        ModeRemote,
-			wantStatus:      "dispatched",
+			wantStatus:      db.ActionStatusDispatched,
 			wantWorkerCount: 1,
 		},
 	}
@@ -70,7 +70,7 @@ func TestExecuteAction(t *testing.T) {
 			writeTestPromptWithMode(t, promptsDir, promptName, tc.promptMode, "")
 
 			taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
-			d.InsertAction(promptName, promptName, taskID, "{}", "pending")
+			d.InsertAction(promptName, promptName, taskID, "{}", db.ActionStatusPending)
 
 			action, _ := d.NextPending(context.Background())
 
@@ -89,7 +89,7 @@ func TestExecuteAction(t *testing.T) {
 			}, action)
 
 			switch tc.wantErrType {
-			case "failed":
+			case db.ActionStatusFailed:
 				var af *ActionFailedError
 				if !errors.As(err, &af) {
 					t.Fatalf("expected ActionFailedError, got %v", err)

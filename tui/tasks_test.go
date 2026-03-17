@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -25,8 +26,8 @@ func TestTasksModel_LoadAndExpand(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Fix bug", "https://example.com", "{}", "")
-	d.InsertAction("check-pr", "check-pr", taskID, "{}", "pending")
-	d.InsertAction("fix-ci", "fix-ci", taskID, "{}", "running")
+	d.InsertAction("check-pr", "check-pr", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("fix-ci", "fix-ci", taskID, "{}", db.ActionStatusRunning)
 
 	m := NewTasksModel(d, "")
 	msg := m.Init()()
@@ -53,9 +54,9 @@ func TestTasksModel_Navigation(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID1, _ := d.InsertTask(1, "Task A", "", "{}", "")
-	d.InsertAction("a", "a", taskID1, "{}", "pending")
+	d.InsertAction("a", "a", taskID1, "{}", db.ActionStatusPending)
 	taskID2, _ := d.InsertTask(2, "Task B", "", "{}", "")
-	d.InsertAction("b", "b", taskID2, "{}", "pending")
+	d.InsertAction("b", "b", taskID2, "{}", db.ActionStatusPending)
 
 	m := NewTasksModel(d, "")
 	msg := m.Init()()
@@ -95,7 +96,7 @@ func TestTasksModel_CollapseExpand(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "", "{}", "")
-	d.InsertAction("a", "a", taskID, "{}", "pending")
+	d.InsertAction("a", "a", taskID, "{}", db.ActionStatusPending)
 
 	m := NewTasksModel(d, "")
 	msg := m.Init()()
@@ -135,7 +136,7 @@ func TestTasksModel_Reload(t *testing.T) {
 	}
 
 	taskID, _ := d.InsertTask(1, "New Task", "", "{}", "")
-	d.InsertAction("x", "x", taskID, "{}", "pending")
+	d.InsertAction("x", "x", taskID, "{}", db.ActionStatusPending)
 
 	// Reload via loadTasks (auto-reload on tick)
 	reloadMsg := m.loadTasks()()
@@ -152,11 +153,11 @@ func TestTasksModel_DateFilter(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID1, _ := d.InsertTask(1, "Today task", "", "{}", "")
-	d.InsertAction("today-action", "today-action", taskID1, "{}", "pending")
+	d.InsertAction("today-action", "today-action", taskID1, "{}", db.ActionStatusPending)
 
 	taskID2, _ := d.InsertTask(1, "Old task", "", "{}", "")
-	d.InsertAction("old-action", "old-action", taskID2, "{}", "pending")
-	d.UpdateTask(taskID2, "done", "")
+	d.InsertAction("old-action", "old-action", taskID2, "{}", db.ActionStatusPending)
+	d.UpdateTask(taskID2, db.TaskStatusDone, "")
 
 	// Set old-action and old task dates to a different date
 	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE prompt_id = 'old-action'")
@@ -204,7 +205,7 @@ func TestTasksModel_DateFilter_NonDoneTaskShown(t *testing.T) {
 
 	// Open task with action on a different date
 	taskID, _ := d.InsertTask(1, "Open no-match task", "", "{}", "")
-	d.InsertAction("old-action", "old-action", taskID, "{}", "pending")
+	d.InsertAction("old-action", "old-action", taskID, "{}", db.ActionStatusPending)
 	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE prompt_id = 'old-action'")
 
 	m := NewTasksModel(d, "2026-03-03")
@@ -223,14 +224,14 @@ func TestTasksModel_DateFilter_ArchivedTaskFiltered(t *testing.T) {
 
 	// Archived task with old dates — should be filtered out
 	taskID, _ := d.InsertTask(1, "Old archived", "", "{}", "")
-	d.InsertAction("old-action", "old-action", taskID, "{}", "pending")
-	d.UpdateTask(taskID, "archived", "")
+	d.InsertAction("old-action", "old-action", taskID, "{}", db.ActionStatusPending)
+	d.UpdateTask(taskID, db.TaskStatusArchived, "")
 	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE prompt_id = 'old-action'")
 	d.Exec(fmt.Sprintf("UPDATE tasks SET created_at = '2025-01-01 00:00:00', updated_at = '2025-01-01 00:00:00' WHERE id = %d", taskID))
 
 	// Open task — should always appear
 	taskID2, _ := d.InsertTask(1, "Open task", "", "{}", "")
-	d.InsertAction("open-action", "open-action", taskID2, "{}", "pending")
+	d.InsertAction("open-action", "open-action", taskID2, "{}", db.ActionStatusPending)
 
 	actions, _ := d.ListActions("", nil)
 	var todayDate string
@@ -259,8 +260,8 @@ func TestTasksModel_ArchivedTaskCollapsed(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Archived task", "", "{}", "")
-	d.InsertAction("check", "check", taskID, "{}", "pending")
-	d.UpdateTask(taskID, "archived", "")
+	d.InsertAction("check", "check", taskID, "{}", db.ActionStatusPending)
+	d.UpdateTask(taskID, db.TaskStatusArchived, "")
 
 	m := NewTasksModel(d, "")
 	msg := m.Init()()
@@ -277,7 +278,7 @@ func TestTasksModel_InlineResult(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
-	id, _ := d.InsertAction("check", "check", taskID, "{}", "running")
+	id, _ := d.InsertAction("check", "check", taskID, "{}", db.ActionStatusRunning)
 	d.MarkDone(id, "all passed")
 
 	m := NewTasksModel(d, "")
@@ -300,7 +301,7 @@ func TestTasksModel_DetailView(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
-	id, _ := d.InsertAction("check", "check", taskID, "{}", "running")
+	id, _ := d.InsertAction("check", "check", taskID, "{}", db.ActionStatusRunning)
 	d.MarkDone(id, "detailed output\nline 2")
 
 	m := NewTasksModel(d, "")
@@ -342,7 +343,7 @@ func TestTasksModel_DetailViewNoResultNoOp(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
-	d.InsertAction("check", "check", taskID, "{}", "pending")
+	d.InsertAction("check", "check", taskID, "{}", db.ActionStatusPending)
 
 	m := NewTasksModel(d, "")
 	m = m.SetSize(120, 40)
@@ -365,7 +366,7 @@ func TestTasksModel_DetailViewOnProjectLineNoOp(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
-	id, _ := d.InsertAction("check", "check", taskID, "{}", "running")
+	id, _ := d.InsertAction("check", "check", taskID, "{}", db.ActionStatusRunning)
 	d.MarkDone(id, "some result")
 
 	m := NewTasksModel(d, "")
@@ -385,7 +386,7 @@ func TestTasksModel_VisibleRange_AllVisible(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "", "{}", "")
-	d.InsertAction("a", "a", taskID, "{}", "pending")
+	d.InsertAction("a", "a", taskID, "{}", db.ActionStatusPending)
 
 	m := NewTasksModel(d, "")
 	m = m.SetSize(80, 40) // height 40 → maxVisible=38, plenty of room
@@ -405,7 +406,7 @@ func TestTasksModel_VisibleRange_Scroll(t *testing.T) {
 	// Create enough lines to exceed viewport: 1 project + 30 tasks + 30 actions = 61 lines
 	for i := 0; i < 30; i++ {
 		taskID, _ := d.InsertTask(1, fmt.Sprintf("Task %d", i), "", "{}", "")
-		d.InsertAction("a", "a", taskID, "{}", "pending")
+		d.InsertAction("a", "a", taskID, "{}", db.ActionStatusPending)
 	}
 
 	m := NewTasksModel(d, "")
@@ -464,9 +465,9 @@ func TestTasksModel_SortOrder(t *testing.T) {
 	// Create tasks in order: open(1), archived(2), done(3)
 	d.InsertTask(1, "TaskA-open", "", "{}", "")
 	taskID2, _ := d.InsertTask(1, "TaskB-archived", "", "{}", "")
-	d.UpdateTask(taskID2, "archived", "")
+	d.UpdateTask(taskID2, db.TaskStatusArchived, "")
 	taskID3, _ := d.InsertTask(1, "TaskC-done", "", "{}", "")
-	d.UpdateTask(taskID3, "done", "")
+	d.UpdateTask(taskID3, db.TaskStatusDone, "")
 
 	m := NewTasksModel(d, "")
 	msg := m.Init()()
@@ -481,14 +482,14 @@ func TestTasksModel_SortOrder(t *testing.T) {
 	if len(tasks) != 3 {
 		t.Fatalf("tasks = %d, want 3", len(tasks))
 	}
-	if tasks[0].task.Status != "done" {
-		t.Errorf("tasks[0].status = %q, want done", tasks[0].task.Status)
+	if tasks[0].task.Status != db.TaskStatusDone {
+		t.Errorf("tasks[0].status = %q, want %q", tasks[0].task.Status, db.TaskStatusDone)
 	}
-	if tasks[1].task.Status != "open" {
-		t.Errorf("tasks[1].status = %q, want open", tasks[1].task.Status)
+	if tasks[1].task.Status != db.TaskStatusOpen {
+		t.Errorf("tasks[1].status = %q, want %q", tasks[1].task.Status, db.TaskStatusOpen)
 	}
-	if tasks[2].task.Status != "archived" {
-		t.Errorf("tasks[2].status = %q, want archived", tasks[2].task.Status)
+	if tasks[2].task.Status != db.TaskStatusArchived {
+		t.Errorf("tasks[2].status = %q, want %q", tasks[2].task.Status, db.TaskStatusArchived)
 	}
 }
 
@@ -500,7 +501,7 @@ func TestTasksModel_DisabledProjectDisplay(t *testing.T) {
 	d.SetDispatchEnabled(3, false)
 
 	taskID, _ := d.InsertTask(3, "Works task", "", "{}", "")
-	d.InsertAction("a", "a", taskID, "{}", "pending")
+	d.InsertAction("a", "a", taskID, "{}", db.ActionStatusPending)
 
 	m := NewTasksModel(d, "")
 	msg := m.Init()()
@@ -520,7 +521,7 @@ func TestTasksModel_ToggleFocus(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "", "{}", "")
-	d.InsertAction("a", "a", taskID, "{}", "pending")
+	d.InsertAction("a", "a", taskID, "{}", db.ActionStatusPending)
 
 	m := NewTasksModel(d, "")
 	msg := m.Init()()
@@ -555,7 +556,7 @@ func TestTasksModel_ToggleFocusOnlyOnProjectLine(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "", "{}", "")
-	d.InsertAction("a", "a", taskID, "{}", "pending")
+	d.InsertAction("a", "a", taskID, "{}", db.ActionStatusPending)
 
 	m := NewTasksModel(d, "")
 	msg := m.Init()()
@@ -596,7 +597,7 @@ func TestTasksModel_DetailViewEscBack(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
-	id, _ := d.InsertAction("check", "check", taskID, "{}", "running")
+	id, _ := d.InsertAction("check", "check", taskID, "{}", db.ActionStatusRunning)
 	d.MarkDone(id, "some result")
 
 	m := NewTasksModel(d, "")
@@ -638,11 +639,11 @@ func TestTasksModel_SummaryLine(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "", "{}", "")
-	d.InsertAction("a1", "a1", taskID, "{}", "running")
-	d.InsertAction("a2", "a2", taskID, "{}", "pending")
-	id3, _ := d.InsertAction("a3", "a3", taskID, "{}", "running")
+	d.InsertAction("a1", "a1", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("a2", "a2", taskID, "{}", db.ActionStatusPending)
+	id3, _ := d.InsertAction("a3", "a3", taskID, "{}", db.ActionStatusRunning)
 	d.MarkDone(id3, "ok")
-	id4, _ := d.InsertAction("a4", "a4", taskID, "{}", "running")
+	id4, _ := d.InsertAction("a4", "a4", taskID, "{}", db.ActionStatusRunning)
 	d.MarkFailed(id4, "err")
 
 	m := NewTasksModel(d, "")
@@ -670,7 +671,7 @@ func TestTasksModel_ProjectWorkDir(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", "", "{}", "")
-	d.InsertAction("a", "a", taskID, "{}", "pending")
+	d.InsertAction("a", "a", taskID, "{}", db.ActionStatusPending)
 
 	m := NewTasksModel(d, "")
 	m = m.SetSize(120, 40)

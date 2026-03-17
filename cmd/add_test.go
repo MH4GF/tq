@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -80,7 +81,7 @@ Review.
 `)
 
 	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
-	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
+	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -115,7 +116,7 @@ Review.
 `)
 
 	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
-	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
+	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)

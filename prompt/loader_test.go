@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/MH4GF/tq/db"
 )
 
 func writePrompt(t *testing.T, dir, name, content string) {
@@ -296,7 +298,7 @@ ActionMeta: {{index .Action.Meta "key"}}`,
 			ID:     1,
 			Title:  "Test Task",
 			URL:    "https://example.com/1",
-			Status: "open",
+			Status: db.TaskStatusOpen,
 			Meta:   map[string]any{"key": "tval"},
 		},
 		Project: ProjectData{
@@ -308,7 +310,7 @@ ActionMeta: {{index .Action.Meta "key"}}`,
 		Action: ActionData{
 			ID:       3,
 			PromptID: "implement",
-			Status:   "pending",
+			Status:   db.ActionStatusPending,
 			Meta:     map[string]any{"key": "aval"},
 		},
 	}

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -18,7 +19,7 @@ func TestDone(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
-	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
+	id, _ := d.InsertAction("test", "test", taskID, "{}", db.ActionStatusRunning)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -39,8 +40,8 @@ func TestDone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get action: %v", err)
 	}
-	if a.Status != "done" {
-		t.Errorf("status = %q, want %q", a.Status, "done")
+	if a.Status != db.ActionStatusDone {
+		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusDone)
 	}
 	if !a.Result.Valid || a.Result.String != `{"status":"ok"}` {
 		t.Errorf("result = %v, want %q", a.Result, `{"status":"ok"}`)
@@ -54,7 +55,7 @@ func TestDone_NoResult(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
-	d.InsertAction("test", "test", taskID, "{}", "running")
+	d.InsertAction("test", "test", taskID, "{}", db.ActionStatusRunning)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -109,7 +110,7 @@ func TestDone_TriggersOnDone(t *testing.T) {
 	cmd.SetConfigDir(tqDir)
 
 	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
-	d.InsertAction("check-pr", "check-pr", taskID, "{}", "running")
+	d.InsertAction("check-pr", "check-pr", taskID, "{}", db.ActionStatusRunning)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -130,7 +131,7 @@ func TestDone_TriggersOnDone(t *testing.T) {
 	if followUp.PromptID != "review" {
 		t.Errorf("template_id = %q, want review", followUp.PromptID)
 	}
-	if followUp.Status != "pending" {
+	if followUp.Status != db.ActionStatusPending {
 		t.Errorf("status = %q, want pending", followUp.Status)
 	}
 }
