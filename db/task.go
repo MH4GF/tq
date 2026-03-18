@@ -14,7 +14,6 @@ type Task struct {
 	ID        int64
 	ProjectID int64
 	Title     string
-	URL       string
 	Metadata  string
 	Status    string
 	WorkDir   string
@@ -22,10 +21,10 @@ type Task struct {
 	UpdatedAt sql.NullString
 }
 
-const taskColumns = "id, project_id, title, url, metadata, status, work_dir, created_at, updated_at"
+const taskColumns = "id, project_id, title, metadata, status, work_dir, created_at, updated_at"
 
 func (t *Task) scanFields() []any {
-	return []any{&t.ID, &t.ProjectID, &t.Title, &t.URL, &t.Metadata, &t.Status, &t.WorkDir, &t.CreatedAt, &t.UpdatedAt}
+	return []any{&t.ID, &t.ProjectID, &t.Title, &t.Metadata, &t.Status, &t.WorkDir, &t.CreatedAt, &t.UpdatedAt}
 }
 
 func (t Task) MatchesDate(date string) bool {
@@ -38,10 +37,10 @@ func (t Task) MatchesDate(date string) bool {
 	return false
 }
 
-func (db *DB) InsertTask(projectID int64, title, url, metadata, workDir string) (int64, error) {
+func (db *DB) InsertTask(projectID int64, title, metadata, workDir string) (int64, error) {
 	res, err := db.Exec(
-		"INSERT INTO tasks (project_id, title, url, metadata, work_dir) VALUES (?, ?, ?, ?, ?)",
-		projectID, title, url, metadata, workDir,
+		"INSERT INTO tasks (project_id, title, metadata, work_dir) VALUES (?, ?, ?, ?)",
+		projectID, title, metadata, workDir,
 	)
 	if err != nil {
 		return 0, err
@@ -170,7 +169,7 @@ func (db *DB) EnsureTask(projectID int64, title string) (int64, error) {
 	if err != sql.ErrNoRows {
 		return 0, err
 	}
-	return db.InsertTask(projectID, title, "", "{}", "")
+	return db.InsertTask(projectID, title, "{}", "")
 }
 
 func (db *DB) ListTasksByStatus(status string) ([]Task, error) {

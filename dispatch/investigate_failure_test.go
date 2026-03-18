@@ -14,7 +14,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		d := testutil.NewTestDB(t)
 		testutil.SeedTestProjects(t, d)
 
-		taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
+		taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 		actionID, _ := d.InsertAction("my-prompt", "my-prompt", taskID, "{}", "failed")
 		action, _ := d.GetAction(actionID)
 
@@ -55,7 +55,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		d := testutil.NewTestDB(t)
 		testutil.SeedTestProjects(t, d)
 
-		taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
+		taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 		actionID, _ := d.InsertAction("my-prompt", "my-prompt", taskID, "{}", "failed")
 		action, _ := d.GetAction(actionID)
 
@@ -80,7 +80,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		d := testutil.NewTestDB(t)
 		testutil.SeedTestProjects(t, d)
 
-		taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
+		taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 		action1ID, _ := d.InsertAction("prompt-a", "prompt-a", taskID, "{}", "failed")
 		action1, _ := d.GetAction(action1ID)
 		action2ID, _ := d.InsertAction("prompt-b", "prompt-b", taskID, "{}", "failed")
@@ -105,7 +105,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		d := testutil.NewTestDB(t)
 		testutil.SeedTestProjects(t, d)
 
-		taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
+		taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 		actionID, _ := d.InsertAction("deploy", "deploy", taskID, "{}", "failed")
 		action, _ := d.GetAction(actionID)
 
@@ -124,7 +124,7 @@ func TestCreateInvestigateFailureAction_SkipsInvestigateFailurePrompt(t *testing
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
+	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 	actionID, _ := d.InsertAction("internal:investigate-failure", "internal:investigate-failure", taskID, "{}", "failed")
 	action, _ := d.GetAction(actionID)
 

@@ -74,6 +74,21 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 		CreateSelfImprovementAction(params.DB, params.PromptsDir, action.PromptID, lr.UnknownFields)
 	}
 
+	if len(lr.DeprecatedPatterns) > 0 {
+		created, ferr := CreateParseErrorFixAction(params.DB, params.PromptsDir, action.PromptID, lr.DeprecatedPatterns)
+		var msg string
+		switch {
+		case ferr != nil:
+			msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v (failed to create fix action: %v)", action.PromptID, lr.DeprecatedPatterns, ferr)
+		case created:
+			msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v — a fix action has been created", action.PromptID, lr.DeprecatedPatterns)
+		default:
+			msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v", action.PromptID, lr.DeprecatedPatterns)
+		}
+		_ = params.DB.MarkFailed(action.ID, msg)
+		return nil, fmt.Errorf("prompt %q uses deprecated patterns: %v", action.PromptID, lr.DeprecatedPatterns)
+	}
+
 	promptData, err := BuildPromptData(params.DB, action)
 	if err != nil {
 		failMsg := fmt.Sprintf("build prompt data: %v", err)
@@ -209,7 +224,6 @@ func BuildPromptData(database db.Store, action *db.Action) (prompt.PromptData, e
 	data.Task = prompt.TaskData{
 		ID:      task.ID,
 		Title:   task.Title,
-		URL:     task.URL,
 		Status:  task.Status,
 		WorkDir: task.WorkDir,
 		Meta:    taskMeta,

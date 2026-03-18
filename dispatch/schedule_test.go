@@ -12,7 +12,7 @@ func TestCheckSchedules_ActionCreated(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", `{"key":"val"}`)
 
 	// Set created_at to 2 minutes ago so cron is due
@@ -48,7 +48,7 @@ func TestCheckSchedules_NotDueYet(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "0 */3 * * *", "{}")
 
 	// created_at is now, next run is 3 hours later
@@ -69,7 +69,7 @@ func TestCheckSchedules_DuplicateSkipped(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
 	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
 
@@ -91,7 +91,7 @@ func TestCheckSchedules_DisabledSkipped(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
 	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = ?", id)
 	d.UpdateScheduleEnabled(id, false)
@@ -111,7 +111,7 @@ func TestCheckSchedules_TaskDoneAutoDisable(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.UpdateTask(taskID, "done", "")
 	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
 	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = ?", id)
@@ -138,7 +138,7 @@ func TestCheckSchedules_TaskArchivedAutoDisable(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.UpdateTask(taskID, "archived", "")
 	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
 	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = ?", id)
@@ -158,7 +158,7 @@ func TestCheckSchedules_LastRunAtStoredAsUTC(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
 	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
 
@@ -184,7 +184,7 @@ func TestCheckSchedules_UsesLastRunAt(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "0 */3 * * *", "{}")
 
 	// Set created_at far in the past, last_run_at to recent

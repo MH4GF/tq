@@ -38,8 +38,9 @@ type Prompt struct {
 }
 
 type LoadResult struct {
-	Prompt        *Prompt
-	UnknownFields []string
+	Prompt             *Prompt
+	UnknownFields      []string
+	DeprecatedPatterns []string
 }
 
 var knownFrontmatterKeys = func() map[string]bool {
@@ -54,6 +55,7 @@ var knownFrontmatterKeys = func() map[string]bool {
 }()
 
 var validPermissionMode = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
+var deprecatedTaskURLPattern = regexp.MustCompile(`\{\{\s*\.Task\.URL\s*\}\}`)
 
 type PromptData struct {
 	Task    TaskData
@@ -64,7 +66,6 @@ type PromptData struct {
 type TaskData struct {
 	ID      int64
 	Title   string
-	URL     string
 	Status  string
 	WorkDir string
 	Meta    map[string]any
@@ -138,13 +139,19 @@ func Load(promptsDir, promptID string) (*LoadResult, error) {
 		return nil, fmt.Errorf("prompt %q: invalid permission_mode %q (must be alphanumeric/hyphens)", promptID, cfg.PermissionMode)
 	}
 
+	var deprecatedPatterns []string
+	if deprecatedTaskURLPattern.MatchString(body) {
+		deprecatedPatterns = append(deprecatedPatterns, "{{.Task.URL}}")
+	}
+
 	return &LoadResult{
 		Prompt: &Prompt{
 			ID:     promptID,
 			Config: cfg,
 			Body:   body,
 		},
-		UnknownFields: unknownFields,
+		UnknownFields:      unknownFields,
+		DeprecatedPatterns: deprecatedPatterns,
 	}, nil
 }
 

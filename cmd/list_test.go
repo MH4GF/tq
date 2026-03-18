@@ -15,9 +15,9 @@ func TestList(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	taskID, _ := d.InsertTask(1, "task1", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "task1", "{}", "")
 	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
-	taskID2, _ := d.InsertTask(1, "task2", "", "{}", "")
+	taskID2, _ := d.InsertTask(1, "task2", "{}", "")
 	d.InsertAction("deploy", "deploy", taskID2, "{}", "running")
 
 	root := cmd.GetRootCmd()
@@ -52,7 +52,7 @@ func TestList_StatusFilter(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertAction("a", "a", taskID, "{}", "pending")
 	d.InsertAction("b", "b", taskID, "{}", "running")
 
@@ -85,8 +85,8 @@ func TestList_TaskFilter(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	taskID1, _ := d.InsertTask(1, "task1", "", "{}", "")
-	taskID2, _ := d.InsertTask(1, "task2", "", "{}", "")
+	taskID1, _ := d.InsertTask(1, "task1", "{}", "")
+	taskID2, _ := d.InsertTask(1, "task2", "{}", "")
 	d.InsertAction("a", "a", taskID1, "{}", "pending")
 	d.InsertAction("b", "b", taskID2, "{}", "pending")
 
@@ -141,7 +141,7 @@ func TestList_JSON(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
 	actionID, _ := d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
 
 	longResult := "Line 1\nLine 2\nThis is a very long result string that exceeds sixty characters and should NOT be truncated in JSON output"
@@ -191,7 +191,7 @@ func TestList_JSON_MissingResult(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertAction("implement", "implement", taskID, "{}", "pending")
 
 	root := cmd.GetRootCmd()
