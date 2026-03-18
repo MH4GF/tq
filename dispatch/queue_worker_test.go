@@ -262,7 +262,7 @@ func TestRunWorker_FailureCreatesInvestigateAction(t *testing.T) {
 
 	tqDir := setupPromptsDir(t)
 
-	taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
+	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 	d.InsertAction("check-pr-status", "check-pr-status", taskID, "{}", "pending")
 
 	worker := &countingWorker{err: fmt.Errorf("something went wrong")}

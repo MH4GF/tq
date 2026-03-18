@@ -142,7 +142,7 @@ func (db *DB) Migrate() error {
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		type row struct {
 			id       int64
 			url      string
@@ -159,7 +159,7 @@ func (db *DB) Migrate() error {
 		if err := rows.Err(); err != nil {
 			return err
 		}
-		rows.Close()
+		_ = rows.Close()
 
 		for _, r := range toUpdate {
 			m := make(map[string]any)
