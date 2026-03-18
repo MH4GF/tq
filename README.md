@@ -102,10 +102,12 @@ on_done: review
 ---
 {{.Action.Meta.instruction}}
 
-When done: tq action done {{.Action.ID}} '{"result":"<summary>"}'
+When done: tq action done {{.Action.ID}} "<summary of what was done>"
 ```
 
 Available template variables: `{{.Task.ID}}`, `{{.Task.Title}}`, `{{.Task.URL}}`, `{{.Project.Name}}`, `{{.Project.WorkDir}}`, `{{.Action.ID}}`, `{{.Action.Meta.<key>}}`
+
+> **Result format**: The second argument to `tq action done` is a free-form string (not necessarily JSON). If the prompt has `on_done` configured, the result is passed to the follow-up action as `{{.Action.Meta.predecessor_result}}`. Include any information the next action needs — for example, a PR URL if the action created one.
 
 ## CLI Reference
 
@@ -119,7 +121,7 @@ Available template variables: `{{.Task.ID}}`, `{{.Task.Title}}`, `{{.Task.URL}}`
 | `tq task update <ID> --status <STATUS>` | Update task status |
 | `tq action create <PROMPT> --task <ID> --title <TITLE>` | Create an action |
 | `tq action list` | List actions (JSON) |
-| `tq action done <ID> '<RESULT_JSON>'` | Mark action as done |
+| `tq action done <ID> [RESULT]` | Mark action as done |
 | `tq action reset <ID>` | Reset action to pending |
 | `tq dispatch <ACTION_ID>` | Dispatch a specific action |
 | `tq dispatch` | Dispatch next pending action |

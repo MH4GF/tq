@@ -20,11 +20,16 @@ var doneCmd = &cobra.Command{
 	Long: `Mark an action as done, optionally recording a result summary.
 Can be called on any non-terminal action (pending or running).
 
-RESULT is a free-form string. Triggers on_done hooks defined in the prompt template.
+RESULT is a free-form string (positional argument, not a flag).
+Triggers on_done hooks defined in the prompt template.
 
 RESULT serves as memory for future sessions. Write what a future worker needs to
 continue the work: what was done, what approach was taken, what failed, and what
-remains unfinished.`,
+remains unfinished.
+
+If the prompt has on_done configured, RESULT is passed to the follow-up action as
+predecessor_result metadata. Include any context the next action needs — for example,
+a PR URL if the action created one.`,
 	Example: `  tq action done 5
   tq action done 5 "Refactored auth to use JWT. Changed auth/middleware.go and added
   auth/token.go. Tried Redis session store first but reverted due to latency.
