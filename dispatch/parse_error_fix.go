@@ -10,32 +10,28 @@ import (
 
 const parseErrorFixPromptID = "internal:fix-deprecated-patterns"
 
-func CreateParseErrorFixAction(database db.Store, promptsDir string, promptID string, deprecatedPatterns []string) {
+func CreateParseErrorFixAction(database db.Store, promptsDir string, promptID string, deprecatedPatterns []string) (bool, error) {
 	projectID, err := database.EnsureProject(selfImprovementProjectName)
 	if err != nil {
-		slog.Error("ensure self-improvement project", "error", err)
-		return
+		return false, fmt.Errorf("ensure self-improvement project: %w", err)
 	}
 
 	taskID, err := database.EnsureTask(projectID, selfImprovementTaskTitle)
 	if err != nil {
-		slog.Error("ensure self-improvement task", "error", err)
-		return
+		return false, fmt.Errorf("ensure self-improvement task: %w", err)
 	}
 
 	if err := database.UpdateTaskWorkDir(taskID, promptsDir); err != nil {
-		slog.Error("set self-improvement task work_dir", "error", err)
-		return
+		return false, fmt.Errorf("set self-improvement task work_dir: %w", err)
 	}
 
 	has, err := database.HasActiveActionWithMeta(taskID, parseErrorFixPromptID, "prompt_id", promptID)
 	if err != nil {
-		slog.Error("check active parse-error-fix action", "error", err)
-		return
+		return false, fmt.Errorf("check active parse-error-fix action: %w", err)
 	}
 	if has {
 		slog.Info("parse-error-fix action already exists", "prompt_id", promptID)
-		return
+		return false, nil
 	}
 
 	meta := map[string]any{
@@ -44,16 +40,15 @@ func CreateParseErrorFixAction(database db.Store, promptsDir string, promptID st
 	}
 	metaJSON, err := json.Marshal(meta)
 	if err != nil {
-		slog.Error("marshal parse-error-fix metadata", "error", err)
-		return
+		return false, fmt.Errorf("marshal parse-error-fix metadata: %w", err)
 	}
 
 	title := fmt.Sprintf("Fix deprecated patterns in %q", promptID)
 	_, err = database.InsertAction(title, parseErrorFixPromptID, taskID, string(metaJSON), db.ActionStatusPending)
 	if err != nil {
-		slog.Error("create parse-error-fix action", "error", err)
-		return
+		return false, fmt.Errorf("create parse-error-fix action: %w", err)
 	}
 
 	slog.Info("parse-error-fix action created", "prompt_id", promptID, "deprecated_patterns", deprecatedPatterns)
+	return true, nil
 }

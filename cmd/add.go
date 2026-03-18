@@ -84,8 +84,14 @@ If instruction cannot be determined from context, ask the user.`,
 			return fmt.Errorf("load prompt: %w", err)
 		}
 		if len(lr.DeprecatedPatterns) > 0 {
-			dispatch.CreateParseErrorFixAction(database, promptsDir, addPrompt, lr.DeprecatedPatterns)
-			return fmt.Errorf("prompt %q uses deprecated patterns: %v — a fix action has been created", addPrompt, lr.DeprecatedPatterns)
+			created, ferr := dispatch.CreateParseErrorFixAction(database, promptsDir, addPrompt, lr.DeprecatedPatterns)
+			if ferr != nil {
+				return fmt.Errorf("prompt %q uses deprecated patterns: %v (failed to create fix action: %w)", addPrompt, lr.DeprecatedPatterns, ferr)
+			}
+			if created {
+				return fmt.Errorf("prompt %q uses deprecated patterns: %v — a fix action has been created", addPrompt, lr.DeprecatedPatterns)
+			}
+			return fmt.Errorf("prompt %q uses deprecated patterns: %v", addPrompt, lr.DeprecatedPatterns)
 		}
 		tempAction := &db.Action{
 			TaskID:   addTask,

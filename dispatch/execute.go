@@ -75,8 +75,17 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 	}
 
 	if len(lr.DeprecatedPatterns) > 0 {
-		CreateParseErrorFixAction(params.DB, params.PromptsDir, action.PromptID, lr.DeprecatedPatterns)
-		_ = params.DB.MarkFailed(action.ID, fmt.Sprintf("prompt %q uses deprecated patterns: %v — a fix action has been created", action.PromptID, lr.DeprecatedPatterns))
+		created, ferr := CreateParseErrorFixAction(params.DB, params.PromptsDir, action.PromptID, lr.DeprecatedPatterns)
+		var msg string
+		switch {
+		case ferr != nil:
+			msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v (failed to create fix action: %v)", action.PromptID, lr.DeprecatedPatterns, ferr)
+		case created:
+			msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v — a fix action has been created", action.PromptID, lr.DeprecatedPatterns)
+		default:
+			msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v", action.PromptID, lr.DeprecatedPatterns)
+		}
+		_ = params.DB.MarkFailed(action.ID, msg)
 		return nil, fmt.Errorf("prompt %q uses deprecated patterns: %v", action.PromptID, lr.DeprecatedPatterns)
 	}
 

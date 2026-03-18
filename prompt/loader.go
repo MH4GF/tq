@@ -55,6 +55,7 @@ var knownFrontmatterKeys = func() map[string]bool {
 }()
 
 var validPermissionMode = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
+var deprecatedTaskURLPattern = regexp.MustCompile(`\{\{\s*\.Task\.URL\s*\}\}`)
 
 type PromptData struct {
 	Task    TaskData
@@ -139,7 +140,7 @@ func Load(promptsDir, promptID string) (*LoadResult, error) {
 	}
 
 	var deprecatedPatterns []string
-	if strings.Contains(body, ".Task.URL") {
+	if deprecatedTaskURLPattern.MatchString(body) {
 		deprecatedPatterns = append(deprecatedPatterns, "{{.Task.URL}}")
 	}
 
