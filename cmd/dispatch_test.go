@@ -56,7 +56,7 @@ mode: noninteractive
 Review PR for {{.Task.Title}}.
 `), 0644)
 
-	taskID, _ := d.InsertTask(1, "Fix bug", "https://github.com/test/1", "{}", "")
+	taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
 	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
@@ -109,7 +109,7 @@ mode: noninteractive
 Review PR for {{.Task.Title}}.
 `), 0644)
 
-	taskID, _ := d.InsertTask(1, "Fix bug", "https://github.com/test/1", "{}", "")
+	taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
 	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
 	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
 
@@ -186,7 +186,7 @@ mode: noninteractive
 Do something.
 `), 0644)
 
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertAction("test", "test", taskID, "{}", db.ActionStatusPending)
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {

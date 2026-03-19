@@ -18,7 +18,6 @@ var taskCmd = &cobra.Command{
 var (
 	taskProjectID int64
 	taskTitle     string
-	taskURL       string
 	taskMeta      string
 	taskWorkDir   string
 )
@@ -27,9 +26,10 @@ var taskCreateCmd = &cobra.Command{
 	Use:   "create <TITLE>",
 	Short: "Create a new task",
 	Long: `Create a new task under a project. --project is required.
---work-dir overrides the project's default working directory for this task.`,
+--work-dir overrides the project's default working directory for this task.
+URL and other extra data can be stored in --meta (e.g. --meta '{"url":"https://..."}').`,
 	Example: `  tq task create "Fix login bug" --project 1
-  tq task create "Review PR #99" --project 2 --url https://github.com/org/repo/pull/99`,
+  tq task create "Review PR #99" --project 2 --meta '{"url":"https://github.com/org/repo/pull/99"}'`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		taskTitle = args[0]
@@ -44,11 +44,11 @@ var taskCreateCmd = &cobra.Command{
 		if workDir == "" {
 			workDir = project.WorkDir
 		}
-		id, err := database.InsertTask(project.ID, taskTitle, taskURL, taskMeta, workDir)
+		id, err := database.InsertTask(project.ID, taskTitle, taskMeta, workDir)
 		if err != nil {
 			return fmt.Errorf("insert task: %w", err)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "task #%d created (project: %s)\n", id, project.Name)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "task #%d created (project: %s)\n", id, project.Name)
 		return nil
 	},
 }
@@ -71,7 +71,7 @@ var taskListCmd = &cobra.Command{
 			return fmt.Errorf("list tasks: %w", err)
 		}
 		if len(tasks) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "[]")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
 			return nil
 		}
 
@@ -90,7 +90,6 @@ var taskListCmd = &cobra.Command{
 				"id":         t.ID,
 				"project_id": t.ProjectID,
 				"title":      t.Title,
-				"url":        t.URL,
 				"metadata":   t.Metadata,
 				"status":     t.Status,
 				"work_dir":   t.WorkDir,
@@ -197,7 +196,7 @@ At least one of --status, --project, or --work-dir is required.`,
 			updates = append(updates, fmt.Sprintf("status: %s", taskUpdateStatus))
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "task #%d updated (%s)\n", taskUpdateID, joinUpdates(updates))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "task #%d updated (%s)\n", taskUpdateID, joinUpdates(updates))
 		return nil
 	},
 }
@@ -208,8 +207,7 @@ func joinUpdates(updates []string) string {
 
 func init() {
 	taskCreateCmd.Flags().Int64Var(&taskProjectID, "project", 0, "Project ID (required, see: tq project list)")
-	taskCreateCmd.Flags().StringVar(&taskURL, "url", "", "Related URL (e.g. GitHub issue or PR)")
-	taskCreateCmd.Flags().StringVar(&taskMeta, "meta", "{}", `JSON metadata (e.g. {"key":"value"})`)
+	taskCreateCmd.Flags().StringVar(&taskMeta, "meta", "{}", `JSON metadata (e.g. {"url":"https://...","key":"value"})`)
 	taskCreateCmd.Flags().StringVar(&taskWorkDir, "work-dir", "", "Working directory (defaults to project work_dir)")
 	if err := taskCreateCmd.MarkFlagRequired("project"); err != nil {
 		panic(err)

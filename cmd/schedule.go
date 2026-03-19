@@ -50,7 +50,7 @@ var scheduleCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d created\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d created\n", id)
 		return nil
 	},
 }
@@ -64,7 +64,7 @@ var scheduleListCmd = &cobra.Command{
 			return err
 		}
 		if len(schedules) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "[]")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
 			return nil
 		}
 
@@ -105,7 +105,7 @@ var scheduleEnableCmd = &cobra.Command{
 		if err := database.UpdateScheduleEnabled(id, true); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d enabled\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d enabled\n", id)
 		return nil
 	},
 }
@@ -122,7 +122,7 @@ var scheduleDisableCmd = &cobra.Command{
 		if err := database.UpdateScheduleEnabled(id, false); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d disabled\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d disabled\n", id)
 		return nil
 	},
 }
@@ -139,7 +139,7 @@ var scheduleDeleteCmd = &cobra.Command{
 		if err := database.DeleteSchedule(id); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d deleted\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d deleted\n", id)
 		return nil
 	},
 }
@@ -189,7 +189,7 @@ var scheduleUpdateCmd = &cobra.Command{
 		if err := database.UpdateSchedule(id, title, cronExpr, meta, taskID); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d updated\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d updated\n", id)
 		return nil
 	},
 }

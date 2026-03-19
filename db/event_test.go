@@ -10,7 +10,7 @@ func TestListEvents(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
 
 	events, err := d.ListEvents("task", taskID)
 	if err != nil {
@@ -31,8 +31,8 @@ func TestListEvents_FiltersByEntity(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	taskID1, _ := d.InsertTask(1, "task1", "", "{}", "")
-	taskID2, _ := d.InsertTask(1, "task2", "", "{}", "")
+	taskID1, _ := d.InsertTask(1, "task1", "{}", "")
+	taskID2, _ := d.InsertTask(1, "task2", "{}", "")
 
 	events1, _ := d.ListEvents("task", taskID1)
 	events2, _ := d.ListEvents("task", taskID2)
@@ -49,9 +49,9 @@ func TestListRecentEvents(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	d.InsertTask(1, "task1", "", "{}", "")
-	d.InsertTask(1, "task2", "", "{}", "")
-	d.InsertTask(1, "task3", "", "{}", "")
+	d.InsertTask(1, "task1", "{}", "")
+	d.InsertTask(1, "task2", "{}", "")
+	d.InsertTask(1, "task3", "{}", "")
 
 	events, err := d.ListRecentEvents(2)
 	if err != nil {

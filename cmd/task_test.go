@@ -20,7 +20,7 @@ func TestTaskCreate(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"task", "create", "test task", "--project", "1", "--url", "https://example.com"})
+	root.SetArgs([]string{"task", "create", "test task", "--project", "1", "--meta", `{"url":"https://example.com"}`})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -41,8 +41,8 @@ func TestTaskCreate(t *testing.T) {
 	if task.Title != "test task" {
 		t.Errorf("title = %q, want %q", task.Title, "test task")
 	}
-	if task.URL != "https://example.com" {
-		t.Errorf("url = %q, want %q", task.URL, "https://example.com")
+	if !contains(task.Metadata, "https://example.com") {
+		t.Errorf("metadata = %q, want to contain URL", task.Metadata)
 	}
 }
 
@@ -120,8 +120,8 @@ func TestTaskList(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "task A", "https://example.com/a", "{}", "")
-	d.InsertTask(1, "task B", "", "{}", "")
+	d.InsertTask(1, "task A", `{"url":"https://example.com/a"}`, "")
+	d.InsertTask(1, "task B", "{}", "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -155,7 +155,7 @@ func TestTaskList_JSON(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "test task", "https://example.com", `{"key":"value"}`, "")
+	d.InsertTask(1, "test task", `{"key":"value","url":"https://example.com"}`, "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -186,11 +186,8 @@ func TestTaskList_JSON(t *testing.T) {
 	if row["title"] != "test task" {
 		t.Errorf("title = %v, want %q", row["title"], "test task")
 	}
-	if row["url"] != "https://example.com" {
-		t.Errorf("url = %v, want %q", row["url"], "https://example.com")
-	}
-	if row["metadata"] != `{"key":"value"}` {
-		t.Errorf("metadata = %v, want %q", row["metadata"], `{"key":"value"}`)
+	if row["metadata"] != `{"key":"value","url":"https://example.com"}` {
+		t.Errorf("metadata = %v, want %q", row["metadata"], `{"key":"value","url":"https://example.com"}`)
 	}
 	if row["status"] != db.TaskStatusOpen {
 		t.Errorf("status = %v, want %q", row["status"], db.TaskStatusOpen)
@@ -206,7 +203,7 @@ func TestTaskList_JSON_NullFields(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "new task", "", "{}", "")
+	d.InsertTask(1, "new task", "{}", "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -239,8 +236,8 @@ func TestTaskList_StatusFilter(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "open task", "", "{}", "")
-	id2, _ := d.InsertTask(1, "done task", "", "{}", "")
+	d.InsertTask(1, "open task", "{}", "")
+	id2, _ := d.InsertTask(1, "done task", "{}", "")
 	d.UpdateTask(id2, db.TaskStatusDone, "")
 
 	root := cmd.GetRootCmd()
@@ -272,8 +269,8 @@ func TestTaskList_ProjectFilter(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "immedio task", "", "{}", "")
-	d.InsertTask(2, "hearable task", "", "{}", "")
+	d.InsertTask(1, "immedio task", "{}", "")
+	d.InsertTask(2, "hearable task", "{}", "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -326,7 +323,7 @@ func TestTaskUpdate_ProjectOnly(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "task to move", "", "{}", "")
+	d.InsertTask(1, "task to move", "{}", "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -358,7 +355,7 @@ func TestTaskUpdate_StatusAndProject(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "task to update", "", "{}", "")
+	d.InsertTask(1, "task to update", "{}", "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -396,7 +393,7 @@ func TestTaskUpdate_UnknownProject(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "task", "", "{}", "")
+	d.InsertTask(1, "task", "{}", "")
 
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
@@ -414,7 +411,7 @@ func TestTaskUpdate_NeitherStatusNorProject(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	d.InsertTask(1, "task", "", "{}", "")
+	d.InsertTask(1, "task", "{}", "")
 
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
@@ -432,8 +429,8 @@ func TestTaskList_WithActions(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	taskID1, _ := d.InsertTask(1, "task with actions", "", "{}", "")
-	taskID2, _ := d.InsertTask(1, "task without actions", "", "{}", "")
+	taskID1, _ := d.InsertTask(1, "task with actions", "{}", "")
+	taskID2, _ := d.InsertTask(1, "task without actions", "{}", "")
 	d.InsertAction("review-pr", "review-pr", taskID1, `{"pr":1}`, db.ActionStatusPending)
 	d.InsertAction("implement", "implement", taskID1, "{}", db.ActionStatusDone)
 	_ = taskID2

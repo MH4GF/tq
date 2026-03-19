@@ -32,7 +32,7 @@ var projectCreateCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("insert project: %w", err)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "project #%d created (%s)\n", id, name)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "project #%d created (%s)\n", id, name)
 		return nil
 	},
 }
@@ -46,7 +46,7 @@ var projectListCmd = &cobra.Command{
 			return fmt.Errorf("list projects: %w", err)
 		}
 		if len(projects) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "[]")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
 			return nil
 		}
 
@@ -80,7 +80,7 @@ var projectDeleteCmd = &cobra.Command{
 		if err := database.DeleteProject(id); err != nil {
 			return fmt.Errorf("delete project: %w", err)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "project #%d deleted\n", id)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "project #%d deleted\n", id)
 		return nil
 	},
 }
@@ -122,14 +122,14 @@ var projectUpdateCmd = &cobra.Command{
 			if !enabled {
 				state = "disabled"
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "project #%d updated (dispatch: %s)\n", id, state)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "project #%d updated (dispatch: %s)\n", id, state)
 		}
 
 		if projectUpdateWorkDir != "" {
 			if err := database.SetWorkDir(id, projectUpdateWorkDir); err != nil {
 				return fmt.Errorf("set work_dir: %w", err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "project #%d updated (work_dir: %s)\n", id, projectUpdateWorkDir)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "project #%d updated (work_dir: %s)\n", id, projectUpdateWorkDir)
 		}
 
 		return nil

@@ -30,7 +30,7 @@ func TestReset(t *testing.T) {
 			cmd.SetDB(d)
 			cmd.ResetForTest()
 
-			taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+			taskID, _ := d.InsertTask(1, "test", "{}", "")
 			d.InsertAction("test", "test", taskID, "{}", tc.status)
 
 			root := cmd.GetRootCmd()
@@ -73,7 +73,7 @@ func TestReset_UnknownStatus(t *testing.T) {
 	cmd.ResetForTest()
 
 	// Simulate an action with invalid status (e.g. "open") stuck in the DB
-	taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertAction("test", "test", taskID, "{}", db.ActionStatusPending)
 	d.Exec("UPDATE actions SET status = 'open' WHERE id = 1")
 

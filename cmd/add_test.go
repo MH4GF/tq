@@ -34,7 +34,7 @@ description: Review PR
 Review this PR.
 `)
 
-	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -80,7 +80,7 @@ description: Review PR
 Review.
 `)
 
-	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
 	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
 
 	root := cmd.GetRootCmd()
@@ -115,7 +115,7 @@ description: Review PR
 Review.
 `)
 
-	taskID, _ := d.InsertTask(1, "test task", "", "{}", "")
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
 	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
 
 	root := cmd.GetRootCmd()
@@ -177,7 +177,7 @@ description: Implement
 Instruction: {{index .Action.Meta "instruction"}}
 `)
 
-	d.InsertTask(1, "test task", "", "{}", "")
+	d.InsertTask(1, "test task", "{}", "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -211,7 +211,7 @@ description: Review PR
 Review.
 `)
 
-	d.InsertTask(1, "test task", "", "{}", "")
+	d.InsertTask(1, "test task", "{}", "")
 
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))

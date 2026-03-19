@@ -36,7 +36,7 @@ func TestAttach(t *testing.T) {
 			cmd.SetDB(d)
 			cmd.ResetForTest()
 
-			taskID, _ := d.InsertTask(1, "test", "", "{}", "")
+			taskID, _ := d.InsertTask(1, "test", "{}", "")
 			id, _ := d.InsertAction("test", "test", taskID, "{}", db.ActionStatusRunning)
 			if tc.sessionID != "" {
 				d.SetSessionInfo(id, tc.sessionID, "tq-action-1")

@@ -285,7 +285,7 @@ func (db *DB) ListActions(status string, taskID *int64) ([]Action, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var actions []Action
 	for rows.Next() {
@@ -303,7 +303,7 @@ func (db *DB) CountByStatus() (map[string]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	counts := make(map[string]int)
 	for rows.Next() {
@@ -325,7 +325,7 @@ func (db *DB) ListRunningInteractive() ([]Action, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var actions []Action
 	for rows.Next() {
@@ -435,7 +435,7 @@ func (db *DB) ListActionsByTaskIDs(taskIDs []int64) (map[int64][]Action, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var a Action

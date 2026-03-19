@@ -3,6 +3,8 @@ package db
 import (
 	"database/sql"
 	_ "embed"
+	"encoding/json"
+	"fmt"
 
 	_ "modernc.org/sqlite"
 )
@@ -20,11 +22,11 @@ func Open(dsn string) (*DB, error) {
 		return nil, err
 	}
 	if _, err := sqlDB.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		sqlDB.Close()
+		_ = sqlDB.Close()
 		return nil, err
 	}
 	if _, err := sqlDB.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		sqlDB.Close()
+		_ = sqlDB.Close()
 		return nil, err
 	}
 	return &DB{sqlDB}, nil
@@ -35,7 +37,7 @@ func (db *DB) hasColumn(table, column string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var cid int
@@ -131,6 +133,58 @@ func (db *DB) Migrate() error {
 
 	if _, err := db.Exec("DELETE FROM actions WHERE task_id IS NULL"); err != nil {
 		return err
+	}
+
+	// Migrate url column values into metadata JSON, then drop the column (idempotent)
+	if has, err := db.hasColumn("tasks", "url"); err != nil {
+		return fmt.Errorf("migrate url: check column: %w", err)
+	} else if has {
+		rows, err := db.Query("SELECT id, url, metadata FROM tasks WHERE url IS NOT NULL AND url != ''")
+		if err != nil {
+			return fmt.Errorf("migrate url: query tasks: %w", err)
+		}
+		defer func() { _ = rows.Close() }()
+		type row struct {
+			id       int64
+			url      string
+			metadata string
+		}
+		var toUpdate []row
+		for rows.Next() {
+			var r row
+			if err := rows.Scan(&r.id, &r.url, &r.metadata); err != nil {
+				return fmt.Errorf("migrate url: scan task: %w", err)
+			}
+			toUpdate = append(toUpdate, r)
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("migrate url: iterate tasks: %w", err)
+		}
+		_ = rows.Close()
+
+		for _, r := range toUpdate {
+			m := make(map[string]any)
+			if r.metadata != "" && r.metadata != "{}" {
+				if err := json.Unmarshal([]byte(r.metadata), &m); err != nil {
+					return fmt.Errorf("migrate url: parse metadata for task %d: %w", r.id, err)
+				}
+			}
+			if _, exists := m["url"]; exists {
+				continue
+			}
+			m["url"] = r.url
+			newMeta, err := json.Marshal(m)
+			if err != nil {
+				return fmt.Errorf("migrate url: marshal metadata for task %d: %w", r.id, err)
+			}
+			if _, err := db.Exec("UPDATE tasks SET metadata = ? WHERE id = ?", string(newMeta), r.id); err != nil {
+				return fmt.Errorf("migrate url: update task %d: %w", r.id, err)
+			}
+		}
+
+		if _, err := db.Exec("ALTER TABLE tasks DROP COLUMN url"); err != nil {
+			return fmt.Errorf("migrate url: drop column: %w", err)
+		}
 	}
 
 	return nil

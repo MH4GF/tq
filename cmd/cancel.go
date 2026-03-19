@@ -63,9 +63,9 @@ classification could be improved to avoid similar unnecessary actions.`,
 		}
 
 		if reason != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "action #%d cancelled (reason: %s)\n", id, strings.TrimSpace(reason))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d cancelled (reason: %s)\n", id, strings.TrimSpace(reason))
 		} else {
-			fmt.Fprintf(cmd.OutOrStdout(), "action #%d cancelled\n", id)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d cancelled\n", id)
 		}
 		return nil
 	},

@@ -52,7 +52,7 @@ func TestTriggerOnDone(t *testing.T) {
 				writeTestPromptFull(t, promptsDir, tc.onDone, "interactive", "", "")
 			}
 
-			taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
+			taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 
 			if tc.existingActive {
 				d.InsertAction(tc.onDone, tc.onDone, taskID, "{}", db.ActionStatusPending)
@@ -147,7 +147,7 @@ func TestTriggerOnCancel(t *testing.T) {
 				writeTestPromptFull(t, promptsDir, tc.onCancel, "interactive", "", "")
 			}
 
-			taskID, _ := d.InsertTask(1, "Test task", "https://example.com", "{}", "")
+			taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 			actionID, _ := d.InsertAction("check-pr", "check-pr", taskID, "{}", db.ActionStatusCancelled)
 			action, _ := d.GetAction(actionID)
 
