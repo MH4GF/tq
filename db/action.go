@@ -112,9 +112,8 @@ func (db *DB) InsertAction(title, promptID string, taskID int64, metadata string
 func (db *DB) HasActiveAction(taskID int64, promptID string) (bool, error) {
 	var count int
 	err := db.QueryRow(
-		fmt.Sprintf("SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN ('%s', '%s', '%s')",
-			ActionStatusPending, ActionStatusRunning, ActionStatusDispatched),
-		taskID, promptID,
+		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN (?, ?, ?)",
+		taskID, promptID, ActionStatusPending, ActionStatusRunning, ActionStatusDispatched,
 	).Scan(&count)
 	if err != nil {
 		return false, err
@@ -125,9 +124,8 @@ func (db *DB) HasActiveAction(taskID int64, promptID string) (bool, error) {
 func (db *DB) HasActiveActionWithMeta(taskID int64, promptID, metaKey, metaValue string) (bool, error) {
 	var count int
 	err := db.QueryRow(
-		fmt.Sprintf("SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN ('%s', '%s', '%s') AND json_extract(metadata, '$.' || ?) = ?",
-			ActionStatusPending, ActionStatusRunning, ActionStatusDispatched),
-		taskID, promptID, metaKey, metaValue,
+		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN (?, ?, ?) AND json_extract(metadata, '$.' || ?) = ?",
+		taskID, promptID, ActionStatusPending, ActionStatusRunning, ActionStatusDispatched, metaKey, metaValue,
 	).Scan(&count)
 	if err != nil {
 		return false, err
