@@ -12,6 +12,13 @@ import (
 	"github.com/MH4GF/tq/db"
 )
 
+const (
+	DefaultMaxInteractive   = 3
+	DefaultStaleThreshold   = 30 * time.Second
+	DefaultPollInterval     = 10 * time.Second
+	DefaultStaleGracePeriod = 30 * time.Second
+)
+
 // TmuxChecker checks for the existence of tmux windows.
 type TmuxChecker interface {
 	ListWindows(ctx context.Context, session string) ([]string, error)
@@ -52,13 +59,13 @@ type WorkerConfig struct {
 // It processes one action per iteration, sleeping when idle.
 func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 	if cfg.MaxInteractive <= 0 {
-		cfg.MaxInteractive = 3
+		cfg.MaxInteractive = DefaultMaxInteractive
 	}
 	if cfg.PollInterval <= 0 {
-		cfg.PollInterval = 10 * time.Second
+		cfg.PollInterval = DefaultPollInterval
 	}
 	if cfg.StaleGracePeriod <= 0 {
-		cfg.StaleGracePeriod = 30 * time.Second
+		cfg.StaleGracePeriod = DefaultStaleGracePeriod
 	}
 	if cfg.TmuxSession == "" {
 		cfg.TmuxSession = "main"
@@ -66,12 +73,20 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 
 	slog.Info("queue worker started", "max_interactive", cfg.MaxInteractive, "poll_interval", cfg.PollInterval)
 
+	var lastHeartbeat time.Time
 	for {
 		select {
 		case <-ctx.Done():
 			slog.Info("queue worker stopped")
 			return ctx.Err()
 		default:
+		}
+
+		if time.Since(lastHeartbeat) >= cfg.PollInterval {
+			if err := cfg.DB.UpdateWorkerHeartbeat(); err != nil {
+				slog.Error("update worker heartbeat", "error", err)
+			}
+			lastHeartbeat = time.Now()
 		}
 
 		reapStaleActions(ctx, cfg)
