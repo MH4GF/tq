@@ -124,11 +124,11 @@ func TestList_JQ(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 lines, got %d: %q", len(lines), out)
 	}
-	if lines[0] != "review-pr" {
-		t.Errorf("line 0 = %q, want %q", lines[0], "review-pr")
+	if lines[0] != "deploy" {
+		t.Errorf("line 0 = %q, want %q", lines[0], "deploy")
 	}
-	if lines[1] != "deploy" {
-		t.Errorf("line 1 = %q, want %q", lines[1], "deploy")
+	if lines[1] != "review-pr" {
+		t.Errorf("line 1 = %q, want %q", lines[1], "review-pr")
 	}
 }
 

@@ -8,10 +8,11 @@ import (
 	"github.com/MH4GF/tq/db"
 )
 
-var scheduleListLimit int
-var scheduleListJQ string
-
-var scheduleListFields = []string{"id", "task_id", "prompt_id", "title", "cron_expr", "metadata", "enabled", "last_run_at", "created_at"}
+var (
+	scheduleListLimit  int
+	scheduleListJQ     string
+	scheduleListFields = []string{"id", "task_id", "prompt_id", "title", "cron_expr", "metadata", "enabled", "last_run_at", "created_at"}
+)
 
 var scheduleCmd = &cobra.Command{
 	Use:   "schedule",
