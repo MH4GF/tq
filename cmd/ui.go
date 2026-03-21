@@ -78,7 +78,7 @@ var uiCmd = &cobra.Command{
 }
 
 func init() {
-	uiCmd.Flags().IntVar(&uiMaxInteractive, "max-interactive", 3, "Maximum concurrent interactive sessions")
-	uiCmd.Flags().DurationVar(&uiPollInterval, "poll", 10*time.Second, "Queue worker poll interval")
+	uiCmd.Flags().IntVar(&uiMaxInteractive, "max-interactive", dispatch.DefaultMaxInteractive, "Maximum concurrent interactive sessions")
+	uiCmd.Flags().DurationVar(&uiPollInterval, "poll", dispatch.DefaultPollInterval, "Queue worker poll interval")
 	uiCmd.Flags().StringVar(&uiSession, "session", "main", "Target tmux session name")
 }

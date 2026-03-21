@@ -54,6 +54,12 @@ Review this PR.
 	if !contains(out, "status: pending") {
 		t.Errorf("output = %q, want to contain 'status: pending'", out)
 	}
+	if !contains(out, "no worker detected") {
+		t.Errorf("output = %q, want to contain 'no worker detected'", out)
+	}
+	if !contains(out, "queue: 1 pending") {
+		t.Errorf("output = %q, want to contain 'queue: 1 pending'", out)
+	}
 
 	a, err := d.GetAction(1)
 	if err != nil {

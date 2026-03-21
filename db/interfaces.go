@@ -1,6 +1,9 @@
 package db
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // CommandWriter defines all write operations.
 type CommandWriter interface {
@@ -29,6 +32,8 @@ type CommandWriter interface {
 	SetWorkDir(projectID int64, workDir string) error
 	SetAllDispatchEnabled(enabled bool) error
 	EnsureProject(name string) (int64, error)
+	// Worker commands
+	UpdateWorkerHeartbeat() error
 	// Schedule commands
 	InsertSchedule(taskID int64, promptID, title, cronExpr, metadata string) (int64, error)
 	UpdateSchedule(id int64, title, cronExpr, metadata *string, taskID *int64) error
@@ -63,6 +68,8 @@ type QueryReader interface {
 	// Schedule queries
 	GetSchedule(id int64) (*Schedule, error)
 	ListSchedules() ([]Schedule, error)
+	// Worker queries
+	IsWorkerRunning(staleThreshold time.Duration) (bool, error)
 	// Event queries
 	ListEvents(entityType string, entityID int64) ([]Event, error)
 	ListRecentEvents(limit int) ([]Event, error)
