@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,7 +21,7 @@ func writeTestPrompt(t *testing.T, dir, name, content string) {
 	}
 }
 
-func TestAdd(t *testing.T) {
+func TestAdd_PromptFlag(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
@@ -40,7 +41,7 @@ Review this PR.
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "review-pr", "--title", "review-pr", "--task", "1"})
+	root.SetArgs([]string{"action", "create", "--prompt", "review-pr", "--title", "review-pr", "--task", "1"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -66,6 +67,169 @@ Review this PR.
 	}
 }
 
+func TestAdd_InstructionOnly(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	tqDir := t.TempDir()
+	cmd.SetConfigDir(tqDir)
+
+	d.InsertTask(1, "test task", "{}", "")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"action", "create", "--task", "1", "--title", "Review PR", "--instruction", "/github-pr review this"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !contains(out, "action #1 created") {
+		t.Errorf("output = %q, want to contain 'action #1 created'", out)
+	}
+
+	a, err := d.GetAction(1)
+	if err != nil {
+		t.Fatalf("get action: %v", err)
+	}
+	if a.PromptID != "" {
+		t.Errorf("prompt_id = %q, want empty", a.PromptID)
+	}
+
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(a.Metadata), &meta); err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+	if meta["instruction"] != "/github-pr review this" {
+		t.Errorf("instruction = %v, want %q", meta["instruction"], "/github-pr review this")
+	}
+}
+
+func TestAdd_PromptAndInstruction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	tqDir := t.TempDir()
+	cmd.SetConfigDir(tqDir)
+	writeTestPrompt(t, tqDir, "implement", `---
+description: Implement
+---
+Instruction: {{index .Action.Meta "instruction"}}
+`)
+
+	d.InsertTask(1, "test task", "{}", "")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"action", "create", "--prompt", "implement", "--task", "1", "--title", "Add auth", "--instruction", "Add JWT middleware"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	a, err := d.GetAction(1)
+	if err != nil {
+		t.Fatalf("get action: %v", err)
+	}
+	if a.PromptID != "implement" {
+		t.Errorf("prompt_id = %q, want %q", a.PromptID, "implement")
+	}
+
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(a.Metadata), &meta); err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+	if meta["instruction"] != "Add JWT middleware" {
+		t.Errorf("instruction = %v, want %q", meta["instruction"], "Add JWT middleware")
+	}
+}
+
+func TestAdd_NoPromptNoInstruction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "test task", "{}", "")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"action", "create", "--task", "1", "--title", "test"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error for missing --prompt and --instruction")
+	}
+	if !contains(err.Error(), "at least one of --prompt or --instruction") {
+		t.Errorf("error = %q, want to contain 'at least one of --prompt or --instruction'", err.Error())
+	}
+}
+
+func TestAdd_InstructionMergesMeta(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	tqDir := t.TempDir()
+	cmd.SetConfigDir(tqDir)
+
+	d.InsertTask(1, "test task", "{}", "")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"action", "create", "--task", "1", "--title", "test", "--instruction", "do something", "--meta", `{"mode":"noninteractive"}`})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	a, err := d.GetAction(1)
+	if err != nil {
+		t.Fatalf("get action: %v", err)
+	}
+
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(a.Metadata), &meta); err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+	if meta["instruction"] != "do something" {
+		t.Errorf("instruction = %v, want %q", meta["instruction"], "do something")
+	}
+	if meta["mode"] != "noninteractive" {
+		t.Errorf("mode = %v, want %q", meta["mode"], "noninteractive")
+	}
+}
+
+func TestAdd_PositionalArgRejected(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"action", "create", "review-pr", "--task", "1", "--title", "test"})
+
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected error for positional argument")
+	}
+}
+
 func TestAdd_DuplicateBlocked(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -87,7 +251,7 @@ Review.
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "review-pr", "--title", "review-pr", "--task", "1"})
+	root.SetArgs([]string{"action", "create", "--prompt", "review-pr", "--title", "review-pr", "--task", "1"})
 
 	err := root.Execute()
 	if err == nil {
@@ -128,7 +292,7 @@ Review.
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "review-pr", "--title", "review-pr", "--task", "1", "--force"})
+	root.SetArgs([]string{"action", "create", "--prompt", "review-pr", "--title", "review-pr", "--task", "1", "--force"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -158,7 +322,7 @@ Review.
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "review-pr", "--title", "review-pr"})
+	root.SetArgs([]string{"action", "create", "--prompt", "review-pr", "--title", "review-pr"})
 
 	err := root.Execute()
 	if err == nil {
@@ -189,7 +353,7 @@ Instruction: {{index .Action.Meta "instruction"}}
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "implement", "--title", "impl task", "--task", "1"})
+	root.SetArgs([]string{"action", "create", "--prompt", "implement", "--title", "impl task", "--task", "1"})
 
 	err := root.Execute()
 	if err == nil {
@@ -222,7 +386,7 @@ Review.
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"action", "create", "review-pr", "--title", "review-pr", "--task", "1", "--meta", "{invalid}"})
+	root.SetArgs([]string{"action", "create", "--prompt", "review-pr", "--title", "review-pr", "--task", "1", "--meta", "{invalid}"})
 
 	err := root.Execute()
 	if err == nil {
@@ -242,9 +406,9 @@ func TestAdd_MissingTemplate(t *testing.T) {
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"action", "create"})
+	root.SetArgs([]string{"action", "create", "--task", "1", "--title", "test"})
 
 	if err := root.Execute(); err == nil {
-		t.Fatal("expected error for missing prompt argument")
+		t.Fatal("expected error for missing prompt and instruction")
 	}
 }
