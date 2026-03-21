@@ -46,7 +46,7 @@ type CommandWriter interface {
 type QueryReader interface {
 	// Action queries
 	GetAction(id int64) (*Action, error)
-	ListActions(status string, taskID *int64) ([]Action, error)
+	ListActions(status string, taskID *int64, limit int) ([]Action, error)
 	HasActiveAction(taskID int64, promptID string) (bool, error)
 	GetActiveAction(taskID int64, promptID string) (*Action, error)
 	HasActiveActionWithMeta(taskID int64, promptID, metaKey, metaValue string) (bool, error)
@@ -56,18 +56,18 @@ type QueryReader interface {
 	ListActionsByTaskIDs(taskIDs []int64) (map[int64][]Action, error)
 	// Task queries
 	GetTask(id int64) (*Task, error)
-	ListTasks(projectID int64, status string) ([]Task, error)
+	ListTasks(projectID int64, status string, limit int) ([]Task, error)
 	ListTasksByProject(projectID int64) ([]Task, error)
 	ListTasksByStatus(status string) ([]Task, error)
 	GetOrCreateTriageTask(projectID int64) (int64, error)
 	// Project queries
 	GetProjectByID(id int64) (*Project, error)
 	GetProjectByName(name string) (*Project, error)
-	ListProjects() ([]Project, error)
+	ListProjects(limit int) ([]Project, error)
 	EnsureNotificationsProject() (int64, error)
 	// Schedule queries
 	GetSchedule(id int64) (*Schedule, error)
-	ListSchedules() ([]Schedule, error)
+	ListSchedules(limit int) ([]Schedule, error)
 	// Worker queries
 	IsWorkerRunning(staleThreshold time.Duration) (bool, error)
 	// Event queries

@@ -48,12 +48,20 @@ func TestListSchedules(t *testing.T) {
 	d.InsertSchedule(taskID, "a", "A", "* * * * *", "{}")
 	d.InsertSchedule(taskID, "b", "B", "0 * * * *", "{}")
 
-	schedules, err := d.ListSchedules()
+	schedules, err := d.ListSchedules(0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(schedules) != 2 {
 		t.Errorf("expected 2 schedules, got %d", len(schedules))
+	}
+
+	limited, err := d.ListSchedules(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(limited) != 1 {
+		t.Errorf("expected 1 schedule with limit=1, got %d", len(limited))
 	}
 }
 
@@ -108,7 +116,7 @@ func TestDeleteSchedule(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	schedules, _ := d.ListSchedules()
+	schedules, _ := d.ListSchedules(0)
 	if len(schedules) != 0 {
 		t.Errorf("expected 0 schedules after delete, got %d", len(schedules))
 	}

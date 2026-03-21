@@ -56,6 +56,7 @@ URL and other extra data can be stored in --meta (e.g. --meta '{"url":"https://.
 var (
 	taskListProjectID int64
 	taskListStatus    string
+	taskListLimit     int
 )
 
 var taskListCmd = &cobra.Command{
@@ -66,7 +67,7 @@ var taskListCmd = &cobra.Command{
   tq task list --status open
   tq task list --project 2 --status review`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tasks, err := database.ListTasks(taskListProjectID, taskListStatus)
+		tasks, err := database.ListTasks(taskListProjectID, taskListStatus, taskListLimit)
 		if err != nil {
 			return fmt.Errorf("list tasks: %w", err)
 		}
@@ -233,6 +234,7 @@ func init() {
 
 	taskListCmd.Flags().Int64Var(&taskListProjectID, "project", 0, "Filter by project ID (see: tq project list)")
 	taskListCmd.Flags().StringVar(&taskListStatus, "status", "", "Filter by status (open, review, done, blocked, archived)")
+	taskListCmd.Flags().IntVar(&taskListLimit, "limit", 0, "Limit number of results (0 = no limit)")
 
 	taskCmd.AddCommand(taskListCmd)
 	taskCmd.AddCommand(taskCreateCmd)

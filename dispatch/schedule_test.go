@@ -24,7 +24,7 @@ func TestCheckSchedules_ActionCreated(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actions, _ := d.ListActions(db.ActionStatusPending, nil)
+	actions, _ := d.ListActions(db.ActionStatusPending, nil, 0)
 	if len(actions) != 1 {
 		t.Fatalf("expected 1 action, got %d", len(actions))
 	}
@@ -60,7 +60,7 @@ func TestCheckSchedules_NotDueYet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actions, _ := d.ListActions("", nil)
+	actions, _ := d.ListActions("", nil, 0)
 	if len(actions) != 0 {
 		t.Errorf("expected 0 actions, got %d", len(actions))
 	}
@@ -82,7 +82,7 @@ func TestCheckSchedules_DuplicateSkipped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actions, _ := d.ListActions(db.ActionStatusPending, nil)
+	actions, _ := d.ListActions(db.ActionStatusPending, nil, 0)
 	if len(actions) != 1 {
 		t.Errorf("expected 1 action (existing only), got %d", len(actions))
 	}
@@ -102,7 +102,7 @@ func TestCheckSchedules_DisabledSkipped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actions, _ := d.ListActions("", nil)
+	actions, _ := d.ListActions("", nil, 0)
 	if len(actions) != 0 {
 		t.Errorf("expected 0 actions, got %d", len(actions))
 	}
@@ -123,7 +123,7 @@ func TestCheckSchedules_TaskDoneAutoDisable(t *testing.T) {
 	}
 
 	// No action created
-	actions, _ := d.ListActions("", nil)
+	actions, _ := d.ListActions("", nil, 0)
 	if len(actions) != 0 {
 		t.Errorf("expected 0 actions, got %d", len(actions))
 	}
@@ -197,7 +197,7 @@ func TestCheckSchedules_UsesLastRunAt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actions, _ := d.ListActions("", nil)
+	actions, _ := d.ListActions("", nil, 0)
 	if len(actions) != 0 {
 		t.Errorf("expected 0 actions (not due yet from last_run_at), got %d", len(actions))
 	}

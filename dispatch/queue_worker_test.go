@@ -246,12 +246,12 @@ func TestRunWorker_OnDoneTriggersFollowUp(t *testing.T) {
 	}
 
 	// review should have been auto-created as pending
-	actions, _ := d.ListActions("", nil)
+	actions, _ := d.ListActions("", nil, 0)
 	if len(actions) < 2 {
 		t.Fatalf("expected at least 2 actions, got %d", len(actions))
 	}
 
-	review := actions[1]
+	review := actions[0]
 	if review.PromptID != "review" {
 		t.Errorf("follow-up template = %q, want review", review.PromptID)
 	}
@@ -295,12 +295,12 @@ func TestRunWorker_FailureCreatesInvestigateAction(t *testing.T) {
 	}
 
 	// Investigate-failure action should have been auto-created
-	actions, _ := d.ListActions("", nil)
+	actions, _ := d.ListActions("", nil, 0)
 	if len(actions) < 2 {
 		t.Fatalf("expected at least 2 actions, got %d", len(actions))
 	}
 
-	investigate := actions[1]
+	investigate := actions[0]
 	if investigate.PromptID != "internal:investigate-failure" {
 		t.Errorf("follow-up prompt_id = %q, want internal:investigate-failure", investigate.PromptID)
 	}

@@ -14,7 +14,10 @@ var projectCmd = &cobra.Command{
 	Short: "Create, list, and manage projects",
 }
 
-var projectCreateMeta string
+var (
+	projectCreateMeta string
+	projectListLimit  int
+)
 
 var projectCreateCmd = &cobra.Command{
 	Use:   "create <NAME> <WORK_DIR>",
@@ -41,7 +44,7 @@ var projectListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List projects (JSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projects, err := database.ListProjects()
+		projects, err := database.ListProjects(projectListLimit)
 		if err != nil {
 			return fmt.Errorf("list projects: %w", err)
 		}
@@ -140,6 +143,7 @@ func init() {
 	projectCreateCmd.Flags().StringVar(&projectCreateMeta, "meta", "{}", `JSON metadata (e.g. {"team":"platform"})`)
 	projectUpdateCmd.Flags().StringVar(&projectUpdateDispatchEnabled, "dispatch-enabled", "", "Enable or disable dispatch (true/false)")
 	projectUpdateCmd.Flags().StringVar(&projectUpdateWorkDir, "work-dir", "", "Set the working directory")
+	projectListCmd.Flags().IntVar(&projectListLimit, "limit", 0, "Limit number of results (0 = no limit)")
 
 	projectCmd.AddCommand(projectCreateCmd)
 	projectCmd.AddCommand(projectListCmd)

@@ -122,12 +122,12 @@ func TestDone_TriggersOnDone(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	actions, _ := d.ListActions("", nil)
+	actions, _ := d.ListActions("", nil, 0)
 	if len(actions) != 2 {
 		t.Fatalf("expected 2 actions, got %d", len(actions))
 	}
 
-	followUp := actions[1]
+	followUp := actions[0]
 	if followUp.PromptID != "review" {
 		t.Errorf("template_id = %q, want review", followUp.PromptID)
 	}

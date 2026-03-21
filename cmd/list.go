@@ -11,6 +11,7 @@ import (
 var (
 	listStatus string
 	listTask   int64
+	listLimit  int
 )
 
 var listCmd = &cobra.Command{
@@ -27,7 +28,7 @@ var listCmd = &cobra.Command{
 			taskIDPtr = &listTask
 		}
 
-		actions, err := database.ListActions(listStatus, taskIDPtr)
+		actions, err := database.ListActions(listStatus, taskIDPtr, listLimit)
 		if err != nil {
 			return fmt.Errorf("list actions: %w", err)
 		}
@@ -83,5 +84,6 @@ func actionToMap(a db.Action) map[string]any {
 func init() {
 	listCmd.Flags().StringVar(&listStatus, "status", "", "Filter by status (pending, running, done, failed, cancelled)")
 	listCmd.Flags().Int64Var(&listTask, "task", 0, "Filter by task ID (see: tq task list)")
+	listCmd.Flags().IntVar(&listLimit, "limit", 0, "Limit number of results (0 = no limit)")
 	actionCmd.AddCommand(listCmd)
 }

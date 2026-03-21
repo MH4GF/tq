@@ -22,7 +22,7 @@ func TestCreateSelfImprovementAction(t *testing.T) {
 	}
 
 	// Verify action was created
-	actions, err := d.ListActions(db.ActionStatusPending, nil)
+	actions, err := d.ListActions(db.ActionStatusPending, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestCreateSelfImprovementAction_NoDuplicateForSamePrompt(t *testing.T) {
 	CreateSelfImprovementAction(d, "/tmp/prompts", "my-prompt", []string{"timeout"})
 	CreateSelfImprovementAction(d, "/tmp/prompts", "my-prompt", []string{"timeout"})
 
-	actions, err := d.ListActions(db.ActionStatusPending, nil)
+	actions, err := d.ListActions(db.ActionStatusPending, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestCreateSelfImprovementAction_DifferentPromptsGetSeparateActions(t *testi
 	CreateSelfImprovementAction(d, "/tmp/prompts", "prompt-a", []string{"timeout"})
 	CreateSelfImprovementAction(d, "/tmp/prompts", "prompt-b", []string{"allowed_tools"})
 
-	actions, err := d.ListActions(db.ActionStatusPending, nil)
+	actions, err := d.ListActions(db.ActionStatusPending, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -38,8 +38,11 @@ func (db *DB) GetProjectByID(id int64) (*Project, error) {
 	return p, nil
 }
 
-func (db *DB) ListProjects() ([]Project, error) {
-	rows, err := db.Query("SELECT " + projectColumns + " FROM projects ORDER BY id")
+func (db *DB) ListProjects(limit int) ([]Project, error) {
+	query := "SELECT " + projectColumns + " FROM projects"
+	var args []any
+	query, args = appendOrderLimit(query, args, limit)
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

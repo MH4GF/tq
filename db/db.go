@@ -193,3 +193,12 @@ func (db *DB) Migrate() error {
 func (db *DB) Close() error {
 	return db.DB.Close()
 }
+
+func appendOrderLimit(query string, args []any, limit int) (string, []any) {
+	query += " ORDER BY id DESC"
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
+	return query, args
+}

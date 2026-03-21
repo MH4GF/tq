@@ -228,7 +228,7 @@ func TestListActions(t *testing.T) {
 	d.InsertAction("c", "c", taskID1, "{}", db.ActionStatusPending)
 
 	// No filter
-	all, err := d.ListActions("", nil)
+	all, err := d.ListActions("", nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func TestListActions(t *testing.T) {
 	}
 
 	// Status filter
-	pending, err := d.ListActions(db.ActionStatusPending, nil)
+	pending, err := d.ListActions(db.ActionStatusPending, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestListActions(t *testing.T) {
 	}
 
 	// Task filter
-	task1Actions, err := d.ListActions("", &taskID1)
+	task1Actions, err := d.ListActions("", &taskID1, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,12 +255,24 @@ func TestListActions(t *testing.T) {
 	}
 
 	// Both filters
-	both, err := d.ListActions(db.ActionStatusPending, &taskID1)
+	both, err := d.ListActions(db.ActionStatusPending, &taskID1, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(both) != 2 {
 		t.Errorf("expected 2 pending actions for task1, got %d", len(both))
+	}
+
+	// Limit
+	limited, err := d.ListActions("", nil, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(limited) != 2 {
+		t.Errorf("expected 2 actions with limit=2, got %d", len(limited))
+	}
+	if limited[0].ID < limited[1].ID {
+		t.Errorf("expected DESC order: first ID %d should be > second ID %d", limited[0].ID, limited[1].ID)
 	}
 }
 
