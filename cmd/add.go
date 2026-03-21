@@ -3,6 +3,8 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"unicode/utf8"
 
 	"github.com/MH4GF/tq/db"
@@ -89,6 +91,7 @@ If instruction cannot be determined from context, ask the user.`,
 			meta = merged
 		}
 
+		isInteractive := false
 		if addPrompt != "" {
 			if !addForce {
 				existing, err := database.GetActiveAction(addTask, addPrompt)
@@ -106,6 +109,7 @@ If instruction cannot be determined from context, ask the user.`,
 			if err != nil {
 				return fmt.Errorf("load prompt: %w", err)
 			}
+			isInteractive = lr.Prompt.Config.IsInteractive()
 			if len(lr.DeprecatedPatterns) > 0 {
 				created, ferr := dispatch.CreateParseErrorFixAction(database, promptsDir, addPrompt, lr.DeprecatedPatterns)
 				if ferr != nil {
@@ -135,7 +139,11 @@ If instruction cannot be determined from context, ask the user.`,
 		if err != nil {
 			return fmt.Errorf("insert action: %w", err)
 		}
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d created (status: %s)\n", id, status)
+		w := cmd.OutOrStdout()
+		_, _ = fmt.Fprintf(w, "action #%d created (status: %s)\n", id, status)
+		if status == db.ActionStatusPending {
+			printQueueStatus(w, id, isInteractive)
+		}
 		return nil
 	},
 }
@@ -153,6 +161,41 @@ func mergeInstruction(metaJSON, instruction string) (string, error) {
 		return "", fmt.Errorf("marshal metadata: %w", err)
 	}
 	return string(data), nil
+}
+
+func printQueueStatus(w io.Writer, actionID int64, isInteractive bool) {
+	pendingCount := 0
+	if counts, err := database.CountByStatus(); err != nil {
+		slog.Error("count by status", "error", err)
+	} else {
+		pendingCount = counts[db.ActionStatusPending]
+	}
+	workerRunning, err := database.IsWorkerRunning(dispatch.DefaultStaleThreshold)
+	if err != nil {
+		slog.Error("check worker status", "error", err)
+	}
+
+	if !workerRunning {
+		_, _ = fmt.Fprintf(w, "  queue: %d pending — no worker detected\n", pendingCount)
+		_, _ = fmt.Fprintf(w, "  [agent hint] ask the user to run 'tq ui', or run 'tq dispatch %d' to execute immediately\n", actionID)
+		return
+	}
+	if !isInteractive {
+		_, _ = fmt.Fprintf(w, "  queue: %d pending — worker running, will be dispatched automatically\n", pendingCount)
+		return
+	}
+	runningInteractive, err := database.CountRunningInteractive()
+	if err != nil {
+		slog.Error("count running interactive", "error", err)
+	}
+	if runningInteractive >= dispatch.DefaultMaxInteractive {
+		_, _ = fmt.Fprintf(w, "  queue: %d pending — worker running, but interactive slots full (%d/%d)\n",
+			pendingCount, runningInteractive, dispatch.DefaultMaxInteractive)
+		_, _ = fmt.Fprintf(w, "  [agent hint] ask the user before running 'tq dispatch %d' to execute immediately\n", actionID)
+	} else {
+		_, _ = fmt.Fprintf(w, "  queue: %d pending — worker running, will be dispatched automatically (interactive: %d/%d)\n",
+			pendingCount, runningInteractive, dispatch.DefaultMaxInteractive)
+	}
 }
 
 func init() {
