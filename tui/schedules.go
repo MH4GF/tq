@@ -30,7 +30,7 @@ func NewSchedulesModel(database db.Store) SchedulesModel {
 
 func (m SchedulesModel) loadSchedules() tea.Cmd {
 	return func() tea.Msg {
-		schedules, err := m.database.ListSchedules()
+		schedules, err := m.database.ListSchedules(0)
 		if err != nil {
 			return schedulesLoadedMsg{}
 		}

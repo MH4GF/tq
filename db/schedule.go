@@ -42,8 +42,11 @@ func (db *DB) InsertSchedule(taskID int64, promptID, title, cronExpr, metadata s
 	return id, nil
 }
 
-func (db *DB) ListSchedules() ([]Schedule, error) {
-	rows, err := db.Query("SELECT " + scheduleColumns + " FROM schedules ORDER BY id")
+func (db *DB) ListSchedules(limit int) ([]Schedule, error) {
+	query := "SELECT " + scheduleColumns + " FROM schedules"
+	var args []any
+	query, args = appendOrderLimit(query, args, limit)
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

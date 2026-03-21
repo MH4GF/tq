@@ -101,7 +101,7 @@ func TestListTasks(t *testing.T) {
 	d.UpdateTask(id2, db.TaskStatusDone, "")
 
 	t.Run("no filter", func(t *testing.T) {
-		tasks, err := d.ListTasks(0, "")
+		tasks, err := d.ListTasks(0, "", 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -111,7 +111,7 @@ func TestListTasks(t *testing.T) {
 	})
 
 	t.Run("filter by project", func(t *testing.T) {
-		tasks, err := d.ListTasks(1, "")
+		tasks, err := d.ListTasks(1, "", 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -121,7 +121,7 @@ func TestListTasks(t *testing.T) {
 	})
 
 	t.Run("filter by status", func(t *testing.T) {
-		tasks, err := d.ListTasks(0, db.TaskStatusOpen)
+		tasks, err := d.ListTasks(0, db.TaskStatusOpen, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -131,12 +131,25 @@ func TestListTasks(t *testing.T) {
 	})
 
 	t.Run("filter by project and status", func(t *testing.T) {
-		tasks, err := d.ListTasks(1, db.TaskStatusDone)
+		tasks, err := d.ListTasks(1, db.TaskStatusDone, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(tasks) != 1 {
 			t.Errorf("expected 1 done task for project 1, got %d", len(tasks))
+		}
+	})
+
+	t.Run("limit", func(t *testing.T) {
+		tasks, err := d.ListTasks(0, "", 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(tasks) != 2 {
+			t.Errorf("expected 2 tasks with limit=2, got %d", len(tasks))
+		}
+		if tasks[0].ID < tasks[1].ID {
+			t.Errorf("expected DESC order: first ID %d should be > second ID %d", tasks[0].ID, tasks[1].ID)
 		}
 	})
 }

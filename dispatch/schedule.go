@@ -9,7 +9,7 @@ import (
 )
 
 func CheckSchedules(database db.Store, now time.Time) error {
-	schedules, err := database.ListSchedules()
+	schedules, err := database.ListSchedules(0)
 	if err != nil {
 		return fmt.Errorf("list schedules: %w", err)
 	}

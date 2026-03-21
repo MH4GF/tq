@@ -20,12 +20,12 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 
 		CreateInvestigateFailureAction(d, action, "worker error: timeout")
 
-		actions, _ := d.ListActions("", nil)
+		actions, _ := d.ListActions("", nil, 0)
 		if len(actions) != 2 {
 			t.Fatalf("expected 2 actions, got %d", len(actions))
 		}
 
-		investigate := actions[1]
+		investigate := actions[0]
 		if investigate.PromptID != "internal:investigate-failure" {
 			t.Errorf("prompt_id = %q, want internal:investigate-failure", investigate.PromptID)
 		}
@@ -64,7 +64,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		// Try to create a duplicate
 		CreateInvestigateFailureAction(d, action, "error 1")
 
-		actions, _ := d.ListActions("", nil)
+		actions, _ := d.ListActions("", nil, 0)
 		investigateCount := 0
 		for _, a := range actions {
 			if a.PromptID == "internal:investigate-failure" {
@@ -89,7 +89,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		CreateInvestigateFailureAction(d, action1, "error 1")
 		CreateInvestigateFailureAction(d, action2, "error 2")
 
-		actions, _ := d.ListActions("", nil)
+		actions, _ := d.ListActions("", nil, 0)
 		investigateCount := 0
 		for _, a := range actions {
 			if a.PromptID == "internal:investigate-failure" {
@@ -111,8 +111,8 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 
 		CreateInvestigateFailureAction(d, action, "deploy failed")
 
-		actions, _ := d.ListActions("", nil)
-		investigate := actions[1]
+		actions, _ := d.ListActions("", nil, 0)
+		investigate := actions[0]
 		expectedTitle := fmt.Sprintf("Investigate failure of action #%d (deploy)", actionID)
 		if investigate.Title != expectedTitle {
 			t.Errorf("title = %q, want %q", investigate.Title, expectedTitle)
@@ -130,7 +130,7 @@ func TestCreateInvestigateFailureAction_SkipsInvestigateFailurePrompt(t *testing
 
 	CreateInvestigateFailureAction(d, action, "investigation itself failed")
 
-	actions, _ := d.ListActions("", nil)
+	actions, _ := d.ListActions("", nil, 0)
 	// Should NOT create a new investigation action to prevent infinite loops
 	pendingCount := 0
 	for _, a := range actions {

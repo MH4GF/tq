@@ -9,6 +9,8 @@ import (
 	"github.com/MH4GF/tq/db"
 )
 
+var scheduleListLimit int
+
 var scheduleCmd = &cobra.Command{
 	Use:   "schedule",
 	Short: "Create and manage scheduled actions",
@@ -60,7 +62,7 @@ var scheduleListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List schedules (JSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		schedules, err := database.ListSchedules()
+		schedules, err := database.ListSchedules(scheduleListLimit)
 		if err != nil {
 			return err
 		}
@@ -208,6 +210,8 @@ func init() {
 	scheduleCreateCmd.Flags().String("title", "", "Schedule title (defaults to prompt ID)")
 	scheduleCreateCmd.Flags().String("cron", "", "Cron expression (required, e.g. \"0 9 * * *\")")
 	scheduleCreateCmd.Flags().String("meta", "{}", `JSON metadata (e.g. {"key":"value"})`)
+
+	scheduleListCmd.Flags().IntVar(&scheduleListLimit, "limit", 0, "Limit number of results (0 = no limit)")
 
 	scheduleCmd.AddCommand(scheduleCreateCmd)
 	scheduleCmd.AddCommand(scheduleListCmd)

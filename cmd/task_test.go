@@ -143,11 +143,11 @@ func TestTaskList(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
-	if rows[0]["title"] != "task A" {
-		t.Errorf("first row title = %v, want %q", rows[0]["title"], "task A")
+	if rows[0]["title"] != "task B" {
+		t.Errorf("first row title = %v, want %q", rows[0]["title"], "task B")
 	}
-	if rows[1]["title"] != "task B" {
-		t.Errorf("second row title = %v, want %q", rows[1]["title"], "task B")
+	if rows[1]["title"] != "task A" {
+		t.Errorf("second row title = %v, want %q", rows[1]["title"], "task A")
 	}
 }
 
@@ -589,10 +589,19 @@ func TestTaskList_WithActions(t *testing.T) {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 
-	// Task with actions
-	actions1, ok := rows[0]["actions"].([]any)
+	// Task without actions (task2, higher ID = first in DESC) — should be empty array, not null
+	actions2, ok := rows[0]["actions"].([]any)
 	if !ok {
-		t.Fatalf("actions field missing or wrong type for task 1: %v", rows[0]["actions"])
+		t.Fatalf("actions field missing or wrong type for task 2: %v", rows[0]["actions"])
+	}
+	if len(actions2) != 0 {
+		t.Errorf("task 2 actions = %d, want 0", len(actions2))
+	}
+
+	// Task with actions (task1, lower ID = second in DESC)
+	actions1, ok := rows[1]["actions"].([]any)
+	if !ok {
+		t.Fatalf("actions field missing or wrong type for task 1: %v", rows[1]["actions"])
 	}
 	if len(actions1) != 2 {
 		t.Errorf("task 1 actions = %d, want 2", len(actions1))
@@ -600,15 +609,6 @@ func TestTaskList_WithActions(t *testing.T) {
 	firstAction := actions1[0].(map[string]any)
 	if firstAction["prompt_id"] != "review-pr" {
 		t.Errorf("first action prompt_id = %v, want %q", firstAction["prompt_id"], "review-pr")
-	}
-
-	// Task without actions — should be empty array, not null
-	actions2, ok := rows[1]["actions"].([]any)
-	if !ok {
-		t.Fatalf("actions field missing or wrong type for task 2: %v", rows[1]["actions"])
-	}
-	if len(actions2) != 0 {
-		t.Errorf("task 2 actions = %d, want 0", len(actions2))
 	}
 }
 

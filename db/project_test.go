@@ -36,12 +36,23 @@ func TestListProjects(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	projects, err := d.ListProjects()
+	projects, err := d.ListProjects(0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(projects) != 3 {
 		t.Errorf("expected 3 projects, got %d", len(projects))
+	}
+
+	limited, err := d.ListProjects(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(limited) != 2 {
+		t.Errorf("expected 2 projects with limit=2, got %d", len(limited))
+	}
+	if limited[0].ID < limited[1].ID {
+		t.Errorf("expected DESC order: first ID %d should be > second ID %d", limited[0].ID, limited[1].ID)
 	}
 }
 
@@ -206,7 +217,7 @@ func TestEnsureProject(t *testing.T) {
 		t.Errorf("EnsureProject returned different IDs: %d vs %d", id1, id2)
 	}
 
-	projects, err := d.ListProjects()
+	projects, err := d.ListProjects(0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +234,7 @@ func TestSetAllDispatchEnabled(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	projects, err := d.ListProjects()
+	projects, err := d.ListProjects(0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +248,7 @@ func TestSetAllDispatchEnabled(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	projects, err = d.ListProjects()
+	projects, err = d.ListProjects(0)
 	if err != nil {
 		t.Fatal(err)
 	}

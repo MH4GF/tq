@@ -40,11 +40,11 @@ func TestList(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
-	if rows[0]["prompt_id"] != "review-pr" {
-		t.Errorf("first row prompt_id = %v, want %q", rows[0]["prompt_id"], "review-pr")
+	if rows[0]["prompt_id"] != "deploy" {
+		t.Errorf("first row prompt_id = %v, want %q", rows[0]["prompt_id"], "deploy")
 	}
-	if rows[1]["prompt_id"] != "deploy" {
-		t.Errorf("second row prompt_id = %v, want %q", rows[1]["prompt_id"], "deploy")
+	if rows[1]["prompt_id"] != "review-pr" {
+		t.Errorf("second row prompt_id = %v, want %q", rows[1]["prompt_id"], "review-pr")
 	}
 }
 

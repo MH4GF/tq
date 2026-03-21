@@ -74,7 +74,7 @@ func TestTriggerOnDone(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			actions, _ := d.ListActions("", nil)
+			actions, _ := d.ListActions("", nil, 0)
 			expectedCount := 1
 			if tc.existingActive {
 				expectedCount++
@@ -87,7 +87,7 @@ func TestTriggerOnDone(t *testing.T) {
 			}
 
 			if tc.wantFollowUp {
-				followUp := actions[len(actions)-1]
+				followUp := actions[0]
 				if followUp.PromptID != tc.onDone {
 					t.Errorf("prompt_id = %q, want %q", followUp.PromptID, tc.onDone)
 				}
@@ -130,7 +130,7 @@ func TestTriggerOnDone_NoPromptID(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	actions, _ := d.ListActions("", nil)
+	actions, _ := d.ListActions("", nil, 0)
 	if len(actions) != 1 {
 		t.Errorf("expected 1 action (no follow-up), got %d", len(actions))
 	}
@@ -150,7 +150,7 @@ func TestTriggerOnCancel_NoPromptID(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	actions, _ := d.ListActions("", nil)
+	actions, _ := d.ListActions("", nil, 0)
 	if len(actions) != 1 {
 		t.Errorf("expected 1 action (no follow-up), got %d", len(actions))
 	}
@@ -197,7 +197,7 @@ func TestTriggerOnCancel(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			actions, _ := d.ListActions("", nil)
+			actions, _ := d.ListActions("", nil, 0)
 			expectedCount := 1
 			if tc.wantFollowUp {
 				expectedCount++
@@ -207,7 +207,7 @@ func TestTriggerOnCancel(t *testing.T) {
 			}
 
 			if tc.wantFollowUp {
-				followUp := actions[1]
+				followUp := actions[0]
 				if followUp.PromptID != tc.onCancel {
 					t.Errorf("prompt_id = %q, want %q", followUp.PromptID, tc.onCancel)
 				}

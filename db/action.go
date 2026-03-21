@@ -284,7 +284,7 @@ func (db *DB) MarkDispatched(id int64) error {
 	return nil
 }
 
-func (db *DB) ListActions(status string, taskID *int64) ([]Action, error) {
+func (db *DB) ListActions(status string, taskID *int64, limit int) ([]Action, error) {
 	query := "SELECT " + actionColumns + " FROM actions WHERE 1=1"
 	var args []any
 
@@ -296,7 +296,7 @@ func (db *DB) ListActions(status string, taskID *int64) ([]Action, error) {
 		query += " AND task_id = ?"
 		args = append(args, *taskID)
 	}
-	query += " ORDER BY id"
+	query, args = appendOrderLimit(query, args, limit)
 
 	rows, err := db.Query(query, args...)
 	if err != nil {

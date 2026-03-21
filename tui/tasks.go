@@ -76,10 +76,11 @@ func NewTasksModel(database db.Store, dateFilter string) TasksModel {
 
 func (m TasksModel) loadTasks() tea.Cmd {
 	return func() tea.Msg {
-		projects, err := m.database.ListProjects()
+		projects, err := m.database.ListProjects(0)
 		if err != nil {
 			return tasksLoadedMsg{}
 		}
+		sort.Slice(projects, func(i, j int) bool { return projects[i].ID < projects[j].ID })
 
 		var trees []projectTree
 		for _, p := range projects {
@@ -91,7 +92,7 @@ func (m TasksModel) loadTasks() tea.Cmd {
 			var nodes []taskNode
 			for _, t := range tasks {
 				taskID := t.ID
-				actions, err := m.database.ListActions("", &taskID)
+				actions, err := m.database.ListActions("", &taskID, 0)
 				if err != nil {
 					continue
 				}

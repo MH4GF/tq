@@ -165,7 +165,7 @@ func TestTasksModel_DateFilter(t *testing.T) {
 	d.Exec(fmt.Sprintf("UPDATE tasks SET created_at = '2025-01-01 00:00:00', updated_at = '2025-01-01 00:00:00' WHERE id = %d", taskID2))
 
 	// Get today's date from the first action
-	actions, _ := d.ListActions("", nil)
+	actions, _ := d.ListActions("", nil, 0)
 	var todayDate string
 	for _, a := range actions {
 		if a.PromptID == "today-action" {
@@ -234,7 +234,7 @@ func TestTasksModel_DateFilter_ArchivedTaskFiltered(t *testing.T) {
 	taskID2, _ := d.InsertTask(1, "Open task", "{}", "")
 	d.InsertAction("open-action", "open-action", taskID2, "{}", db.ActionStatusPending)
 
-	actions, _ := d.ListActions("", nil)
+	actions, _ := d.ListActions("", nil, 0)
 	var todayDate string
 	for _, a := range actions {
 		if a.PromptID == "open-action" {

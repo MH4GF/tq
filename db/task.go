@@ -157,7 +157,7 @@ func (db *DB) GetTask(id int64) (*Task, error) {
 	return t, nil
 }
 
-func (db *DB) ListTasks(projectID int64, status string) ([]Task, error) {
+func (db *DB) ListTasks(projectID int64, status string, limit int) ([]Task, error) {
 	query := "SELECT " + taskColumns + " FROM tasks WHERE 1=1"
 	var args []any
 
@@ -169,7 +169,7 @@ func (db *DB) ListTasks(projectID int64, status string) ([]Task, error) {
 		query += " AND status = ?"
 		args = append(args, status)
 	}
-	query += " ORDER BY id"
+	query, args = appendOrderLimit(query, args, limit)
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
@@ -189,7 +189,7 @@ func (db *DB) ListTasks(projectID int64, status string) ([]Task, error) {
 }
 
 func (db *DB) ListTasksByProject(projectID int64) ([]Task, error) {
-	return db.ListTasks(projectID, "")
+	return db.ListTasks(projectID, "", 0)
 }
 
 func (db *DB) GetOrCreateTriageTask(projectID int64) (int64, error) {
@@ -212,5 +212,5 @@ func (db *DB) EnsureTask(projectID int64, title string) (int64, error) {
 }
 
 func (db *DB) ListTasksByStatus(status string) ([]Task, error) {
-	return db.ListTasks(0, status)
+	return db.ListTasks(0, status, 0)
 }
