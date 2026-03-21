@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"maps"
 )
 
 const (
@@ -75,7 +76,7 @@ func (db *DB) UpdateTask(id int64, status, reason string) error {
 	return err
 }
 
-func (db *DB) UpdateTaskProject(id int64, projectID int64) error {
+func (db *DB) UpdateTaskProject(id, projectID int64) error {
 	var from int64
 	if err := db.QueryRow("SELECT project_id FROM tasks WHERE id = ?", id).Scan(&from); err != nil {
 		return fmt.Errorf("get current project_id: %w", err)
@@ -124,9 +125,7 @@ func (db *DB) MergeTaskMetadata(id int64, updates map[string]any) error {
 			return fmt.Errorf("parse existing metadata: %w", err)
 		}
 	}
-	for k, v := range updates {
-		merged[k] = v
-	}
+	maps.Copy(merged, updates)
 
 	data, err := json.Marshal(merged)
 	if err != nil {

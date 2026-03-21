@@ -1,8 +1,44 @@
 version: "2"
 
+formatters:
+  enable:
+    - gofumpt
+    - gci
+
+  settings:
+    gofumpt:
+      extra-rules: true
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/MH4GF/tq)
+
 linters:
+  enable:
+    - staticcheck
+    - gosec
+    - revive
+    - govet
+    - modernize
+
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+    gosec:
+      excludes:
+        - G204 # subprocess with variable — expected for tmux/CLI dispatch
+        - G301 # directory permissions 0750 — 0755 is standard
+        - G304 # file inclusion via variable — expected for prompt loader
+        - G306 # file write permissions 0600 — 0644 is standard
+
   exclusions:
     rules:
       - path: _test\.go
         linters:
           - errcheck
+          - gosec

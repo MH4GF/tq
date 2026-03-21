@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 )
 
@@ -88,7 +89,7 @@ func FilterByDate(actions []Action, date string) []Action {
 	return filtered
 }
 
-func (db *DB) InsertAction(title, promptID string, taskID int64, metadata string, status string) (int64, error) {
+func (db *DB) InsertAction(title, promptID string, taskID int64, metadata, status string) (int64, error) {
 	if !ValidActionStatuses[status] {
 		return 0, fmt.Errorf("invalid action status %q: must be one of pending, running, dispatched, done, failed, cancelled", status)
 	}
@@ -404,9 +405,7 @@ func (db *DB) MergeActionMetadata(id int64, updates map[string]any) error {
 			return fmt.Errorf("parse existing metadata: %w", err)
 		}
 	}
-	for k, v := range updates {
-		merged[k] = v
-	}
+	maps.Copy(merged, updates)
 
 	data, err := json.Marshal(merged)
 	if err != nil {

@@ -11,10 +11,10 @@ import (
 
 func TestReset(t *testing.T) {
 	tests := []struct {
-		name      string
-		status    string
-		wantOut   string
-		wantErr   bool
+		name    string
+		status  string
+		wantOut string
+		wantErr bool
 	}{
 		{"failed to pending", db.ActionStatusFailed, "action #1 reset to pending", false},
 		{"done is rejected", db.ActionStatusDone, "", true},

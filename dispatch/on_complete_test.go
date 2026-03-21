@@ -118,21 +118,21 @@ func TestTriggerOnDone(t *testing.T) {
 
 func TestTriggerOnCancel(t *testing.T) {
 	tests := []struct {
-		name          string
-		onCancel      string
+		name         string
+		onCancel     string
 		wantFollowUp bool
-		wantStatus    string
+		wantStatus   string
 	}{
 		{
-			name:          "no on_cancel configured",
-			onCancel:      "",
+			name:         "no on_cancel configured",
+			onCancel:     "",
 			wantFollowUp: false,
 		},
 		{
-			name:          "creates follow-up",
-			onCancel:      "improve",
+			name:         "creates follow-up",
+			onCancel:     "improve",
 			wantFollowUp: true,
-			wantStatus:    db.ActionStatusCancelled,
+			wantStatus:   db.ActionStatusCancelled,
 		},
 	}
 

@@ -45,7 +45,7 @@ type LoadResult struct {
 
 var knownFrontmatterKeys = func() map[string]bool {
 	m := make(map[string]bool)
-	t := reflect.TypeOf(Config{})
+	t := reflect.TypeFor[Config]()
 	for i := range t.NumField() {
 		if tag := t.Field(i).Tag.Get("yaml"); tag != "" {
 			m[tag] = true
@@ -54,8 +54,10 @@ var knownFrontmatterKeys = func() map[string]bool {
 	return m
 }()
 
-var validPermissionMode = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
-var deprecatedTaskURLPattern = regexp.MustCompile(`\{\{\s*\.Task\.URL\s*\}\}`)
+var (
+	validPermissionMode      = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
+	deprecatedTaskURLPattern = regexp.MustCompile(`\{\{\s*\.Task\.URL\s*\}\}`)
+)
 
 type PromptData struct {
 	Task    TaskData
@@ -89,8 +91,8 @@ func Load(promptsDir, promptID string) (*LoadResult, error) {
 	var data []byte
 	var err error
 
-	if strings.HasPrefix(promptID, "internal:") {
-		name := strings.TrimPrefix(promptID, "internal:")
+	if after, ok := strings.CutPrefix(promptID, "internal:"); ok {
+		name := after
 		data, err = internalPrompts.ReadFile("internal/" + name + ".md")
 		if err != nil {
 			return nil, fmt.Errorf("internal prompt %q not found: %w", promptID, err)

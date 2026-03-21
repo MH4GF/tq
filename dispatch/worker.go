@@ -37,7 +37,7 @@ func filteredEnv() []string {
 	return filtered
 }
 
-func buildTQEnv(actionID int64, taskID int64) []string {
+func buildTQEnv(actionID, taskID int64) []string {
 	return []string{
 		fmt.Sprintf("TQ_ACTION_ID=%d", actionID),
 		fmt.Sprintf("TQ_TASK_ID=%d", taskID),
@@ -46,5 +46,5 @@ func buildTQEnv(actionID int64, taskID int64) []string {
 
 // Worker executes a rendered prompt.
 type Worker interface {
-	Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID int64) (string, error)
+	Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID, taskID int64) (string, error)
 }

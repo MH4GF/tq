@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/MH4GF/tq/db"
 )
 
@@ -72,7 +73,6 @@ func (m Model) Init() tea.Cmd {
 	}
 
 	for _, bg := range m.backgrounds {
-		bg := bg
 		cmds = append(cmds, func() tea.Msg {
 			err := bg(m.bgCtx)
 			return backgroundStatusMsg{err: err}

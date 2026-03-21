@@ -19,7 +19,7 @@ type mockWorker struct {
 	err    error
 }
 
-func (m *mockWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID int64) (string, error) {
+func (m *mockWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID, taskID int64) (string, error) {
 	return m.result, m.err
 }
 
@@ -48,13 +48,13 @@ func TestDispatch_Success(t *testing.T) {
 	cmd.SetConfigDir(tqDir)
 
 	promptsDir := filepath.Join(tqDir, "prompts")
-	os.MkdirAll(promptsDir, 0755)
+	os.MkdirAll(promptsDir, 0o755)
 	os.WriteFile(filepath.Join(promptsDir, "review-pr.md"), []byte(`---
 description: Review PR
 mode: noninteractive
 ---
 Review PR for {{.Task.Title}}.
-`), 0644)
+`), 0o644)
 
 	taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
 	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
@@ -101,13 +101,13 @@ func TestDispatch_WithActionID(t *testing.T) {
 	cmd.SetConfigDir(tqDir)
 
 	promptsDir := filepath.Join(tqDir, "prompts")
-	os.MkdirAll(promptsDir, 0755)
+	os.MkdirAll(promptsDir, 0o755)
 	os.WriteFile(filepath.Join(promptsDir, "review-pr.md"), []byte(`---
 description: Review PR
 mode: noninteractive
 ---
 Review PR for {{.Task.Title}}.
-`), 0644)
+`), 0o644)
 
 	taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
 	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
@@ -178,13 +178,13 @@ func TestDispatch_WorkerError(t *testing.T) {
 	cmd.SetConfigDir(tqDir)
 
 	promptsDir := filepath.Join(tqDir, "prompts")
-	os.MkdirAll(promptsDir, 0755)
+	os.MkdirAll(promptsDir, 0o755)
 	os.WriteFile(filepath.Join(promptsDir, "test.md"), []byte(`---
 description: Test
 mode: noninteractive
 ---
 Do something.
-`), 0644)
+`), 0o644)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertAction("test", "test", taskID, "{}", db.ActionStatusPending)

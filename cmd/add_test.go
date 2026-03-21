@@ -14,8 +14,8 @@ import (
 func writeTestPrompt(t *testing.T, dir, name, content string) {
 	t.Helper()
 	promptsDir := filepath.Join(dir, "prompts")
-	os.MkdirAll(promptsDir, 0755)
-	if err := os.WriteFile(filepath.Join(promptsDir, name+".md"), []byte(content), 0644); err != nil {
+	os.MkdirAll(promptsDir, 0o755)
+	if err := os.WriteFile(filepath.Join(promptsDir, name+".md"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

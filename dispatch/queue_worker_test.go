@@ -20,7 +20,7 @@ type countingWorker struct {
 	err    error
 }
 
-func (w *countingWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID int64) (string, error) {
+func (w *countingWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID, taskID int64) (string, error) {
 	w.count++
 	return w.result, w.err
 }

@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/MH4GF/tq/db"
 	"github.com/spf13/cobra"
+
+	"github.com/MH4GF/tq/db"
 )
 
 var scheduleCmd = &cobra.Command{
@@ -145,8 +146,8 @@ var scheduleDeleteCmd = &cobra.Command{
 }
 
 var scheduleUpdateCmd = &cobra.Command{
-	Use:     "update <ID>",
-	Short:   "Update a schedule",
+	Use:   "update <ID>",
+	Short: "Update a schedule",
 	Example: `  tq schedule update 1 --cron "0 10 * * *"
   tq schedule update 2 --title "Weekly sync" --task 3`,
 	Args: cobra.ExactArgs(1),

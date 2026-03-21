@@ -728,9 +728,9 @@ func TestHasActiveAction_Dispatched(t *testing.T) {
 
 func TestGetActiveAction(t *testing.T) {
 	tests := []struct {
-		name     string
-		status   string
-		wantNil  bool
+		name    string
+		status  string
+		wantNil bool
 	}{
 		{"pending is active", db.ActionStatusPending, false},
 		{"running is active", db.ActionStatusRunning, false},

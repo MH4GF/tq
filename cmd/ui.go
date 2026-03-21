@@ -7,9 +7,10 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/cobra"
+
 	"github.com/MH4GF/tq/dispatch"
 	"github.com/MH4GF/tq/tui"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -21,7 +22,7 @@ var (
 var uiCmd = &cobra.Command{
 	Use:   "ui",
 	Short: "Launch interactive TUI with queue worker",
-	Long: `Launch the terminal UI with a queue worker that auto-dispatches pending actions via tmux.`,
+	Long:  `Launch the terminal UI with a queue worker that auto-dispatches pending actions via tmux.`,
 	Example: `  tq ui
   tq ui --max-interactive 5 --poll 30s
   tq ui --session work`,

@@ -5,25 +5,26 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/MH4GF/tq/db"
 )
 
 var (
-	colorPending      = lipgloss.Color("3")  // yellow
-	colorRunning      = lipgloss.Color("4")  // blue
-	colorDone         = lipgloss.Color("2")  // green
-	colorFailed       = lipgloss.Color("1")  // red
+	colorPending = lipgloss.Color("3")  // yellow
+	colorRunning = lipgloss.Color("4")  // blue
+	colorDone    = lipgloss.Color("2")  // green
+	colorFailed  = lipgloss.Color("1")  // red
 	colorWarning = lipgloss.Color("5")  // magenta
 	colorMuted   = lipgloss.Color("8")  // gray
-	colorAccent       = lipgloss.Color("14") // cyan
+	colorAccent  = lipgloss.Color("14") // cyan
 
-	stylePending      = lipgloss.NewStyle().Foreground(colorPending)
-	styleRunning      = lipgloss.NewStyle().Foreground(colorRunning)
-	styleDispatched   = lipgloss.NewStyle().Foreground(colorAccent)
-	styleDone         = lipgloss.NewStyle().Foreground(colorDone)
-	styleFailed       = lipgloss.NewStyle().Foreground(colorFailed)
-	styleWarning = lipgloss.NewStyle().Foreground(colorWarning)
-	styleMuted   = lipgloss.NewStyle().Foreground(colorMuted)
+	stylePending    = lipgloss.NewStyle().Foreground(colorPending)
+	styleRunning    = lipgloss.NewStyle().Foreground(colorRunning)
+	styleDispatched = lipgloss.NewStyle().Foreground(colorAccent)
+	styleDone       = lipgloss.NewStyle().Foreground(colorDone)
+	styleFailed     = lipgloss.NewStyle().Foreground(colorFailed)
+	styleWarning    = lipgloss.NewStyle().Foreground(colorWarning)
+	styleMuted      = lipgloss.NewStyle().Foreground(colorMuted)
 
 	styleTabActive   = lipgloss.NewStyle().Bold(true).Foreground(colorAccent).Underline(true)
 	styleTabInactive = lipgloss.NewStyle().Foreground(colorMuted)
@@ -91,10 +92,7 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 		scroll = max(0, len(lines)-bodyHeight)
 	}
 
-	end := scroll + bodyHeight
-	if end > len(lines) {
-		end = len(lines)
-	}
+	end := min(scroll+bodyHeight, len(lines))
 
 	for _, line := range lines[scroll:end] {
 		b.WriteString("  " + line + "\n")

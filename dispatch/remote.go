@@ -19,7 +19,7 @@ type RemoteWorker struct {
 	Runner CommandRunner
 }
 
-func (w *RemoteWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID int64) (string, error) {
+func (w *RemoteWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID, taskID int64) (string, error) {
 	remotePrompt := prompt + remoteRules(actionID)
 
 	debugFile := filepath.Join(os.TempDir(), fmt.Sprintf("tq-remote-debug-%d.log", actionID))
@@ -58,7 +58,7 @@ func extractDiagnosis(debugFile string) string {
 	}
 
 	var errors []string
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		if strings.Contains(line, "[ERROR]") {
 			errors = append(errors, strings.TrimSpace(line))
 		}
@@ -76,7 +76,7 @@ func stripANSI(s string) string {
 }
 
 func parseSessionURL(output string) string {
-	for _, line := range strings.Split(output, "\n") {
+	for line := range strings.SplitSeq(output, "\n") {
 		line = strings.TrimSpace(line)
 		if idx := strings.Index(line, "https://"); idx >= 0 {
 			return line[idx:]
