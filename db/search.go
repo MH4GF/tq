@@ -66,27 +66,40 @@ func runeIndex(haystack, needle []rune) int {
 	return -1
 }
 
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
 func (db *DB) Search(keyword string) ([]SearchResult, error) {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return []SearchResult{}, nil
+	}
+	escaped := escapeLike(keyword)
+
 	query := `
 		SELECT 'task' AS entity_type, t.id AS entity_id, t.id AS task_id, 'title' AS field, t.title AS value, t.status, t.created_at
-		FROM tasks t WHERE t.title LIKE '%' || ? || '%'
+		FROM tasks t WHERE t.title LIKE '%' || ? || '%' ESCAPE '\'
 		UNION ALL
 		SELECT 'task', t.id, t.id, 'metadata', t.metadata, t.status, t.created_at
-		FROM tasks t WHERE t.metadata LIKE '%' || ? || '%'
+		FROM tasks t WHERE t.metadata LIKE '%' || ? || '%' ESCAPE '\'
 		UNION ALL
 		SELECT 'action', a.id, a.task_id, 'title', a.title, a.status, a.created_at
-		FROM actions a WHERE a.title LIKE '%' || ? || '%'
+		FROM actions a WHERE a.title LIKE '%' || ? || '%' ESCAPE '\'
 		UNION ALL
 		SELECT 'action', a.id, a.task_id, 'result', COALESCE(a.result, ''), a.status, a.created_at
-		FROM actions a WHERE COALESCE(a.result, '') LIKE '%' || ? || '%'
+		FROM actions a WHERE COALESCE(a.result, '') LIKE '%' || ? || '%' ESCAPE '\'
 		UNION ALL
 		SELECT 'action', a.id, a.task_id, 'metadata', a.metadata, a.status, a.created_at
-		FROM actions a WHERE a.metadata LIKE '%' || ? || '%'
+		FROM actions a WHERE a.metadata LIKE '%' || ? || '%' ESCAPE '\'
 		ORDER BY task_id DESC, entity_id DESC
 		LIMIT 500
 	`
 
-	rows, err := db.Query(query, keyword, keyword, keyword, keyword, keyword)
+	rows, err := db.Query(query, escaped, escaped, escaped, escaped, escaped)
 	if err != nil {
 		return nil, fmt.Errorf("search: %w", err)
 	}

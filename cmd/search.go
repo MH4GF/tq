@@ -17,7 +17,7 @@ var searchCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		results, err := database.Search(args[0])
 		if err != nil {
-			return err
+			return fmt.Errorf("search: %w", err)
 		}
 
 		if len(results) == 0 {

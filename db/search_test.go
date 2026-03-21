@@ -185,6 +185,45 @@ func TestSearch(t *testing.T) {
 			},
 			wantLen: 2,
 		},
+		{
+			name:    "empty keyword returns empty",
+			keyword: "",
+			setup: func(d *db.DB) {
+				d.InsertTask(1, "Something", "{}", "")
+			},
+			wantLen: 0,
+		},
+		{
+			name:    "whitespace-only keyword returns empty",
+			keyword: "   ",
+			setup: func(d *db.DB) {
+				d.InsertTask(1, "Something", "{}", "")
+			},
+			wantLen: 0,
+		},
+		{
+			name:    "LIKE wildcards in keyword are escaped",
+			keyword: "100%",
+			setup: func(d *db.DB) {
+				d.InsertTask(1, "100% complete", "{}", "")
+				d.InsertTask(1, "1000 items", "{}", "")
+			},
+			wantLen: 1,
+			check: func(t *testing.T, results []db.SearchResult) {
+				if results[0].Snippet != "100% complete" {
+					t.Errorf("snippet = %q, want %q", results[0].Snippet, "100% complete")
+				}
+			},
+		},
+		{
+			name:    "underscore in keyword is escaped",
+			keyword: "foo_bar",
+			setup: func(d *db.DB) {
+				d.InsertTask(1, "foo_bar_baz", "{}", "")
+				d.InsertTask(1, "fooXbar", "{}", "")
+			},
+			wantLen: 1,
+		},
 	}
 
 	for _, tt := range tests {
