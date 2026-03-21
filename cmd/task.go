@@ -58,7 +58,10 @@ var (
 	taskListProjectID int64
 	taskListStatus    string
 	taskListLimit     int
+	taskListJQ        string
 )
+
+var taskListFields = []string{"id", "project_id", "title", "metadata", "status", "work_dir", "created_at", "updated_at", "actions"}
 
 var taskListCmd = &cobra.Command{
 	Use:   "list",
@@ -72,11 +75,6 @@ var taskListCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("list tasks: %w", err)
 		}
-		if len(tasks) == 0 {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
-			return nil
-		}
-
 		taskIDs := make([]int64, len(tasks))
 		for i, t := range tasks {
 			taskIDs[i] = t.ID
@@ -90,9 +88,7 @@ var taskListCmd = &cobra.Command{
 		for i, t := range tasks {
 			rows[i] = taskToMap(t, actionsByTask[t.ID])
 		}
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(rows)
+		return WriteJSON(cmd.OutOrStdout(), rows, taskListJQ, taskListFields)
 	},
 }
 
@@ -236,6 +232,7 @@ func init() {
 	taskListCmd.Flags().Int64Var(&taskListProjectID, "project", 0, "Filter by project ID (see: tq project list)")
 	taskListCmd.Flags().StringVar(&taskListStatus, "status", "", "Filter by status (open, review, done, blocked, archived)")
 	taskListCmd.Flags().IntVar(&taskListLimit, "limit", 0, "Limit number of results (0 = no limit)")
+	taskListCmd.Flags().StringVar(&taskListJQ, "jq", "", jqFlagUsage(taskListFields))
 
 	taskCmd.AddCommand(taskListCmd)
 	taskCmd.AddCommand(taskCreateCmd)

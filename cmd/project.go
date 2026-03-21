@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -9,6 +8,10 @@ import (
 
 	"github.com/MH4GF/tq/db"
 )
+
+var projectListJQ string
+
+var projectListFields = []string{"id", "name", "work_dir", "metadata", "dispatch_enabled", "created_at"}
 
 var projectCmd = &cobra.Command{
 	Use:   "project",
@@ -49,10 +52,6 @@ var projectListCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("list projects: %w", err)
 		}
-		if len(projects) == 0 {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
-			return nil
-		}
 
 		rows := make([]map[string]any, len(projects))
 		for i, p := range projects {
@@ -65,9 +64,7 @@ var projectListCmd = &cobra.Command{
 				"created_at":       db.FormatLocal(p.CreatedAt),
 			}
 		}
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(rows)
+		return WriteJSON(cmd.OutOrStdout(), rows, projectListJQ, projectListFields)
 	},
 }
 
@@ -145,6 +142,7 @@ func init() {
 	projectUpdateCmd.Flags().StringVar(&projectUpdateDispatchEnabled, "dispatch-enabled", "", "Enable or disable dispatch (true/false)")
 	projectUpdateCmd.Flags().StringVar(&projectUpdateWorkDir, "work-dir", "", "Set the working directory")
 	projectListCmd.Flags().IntVar(&projectListLimit, "limit", 0, "Limit number of results (0 = no limit)")
+	projectListCmd.Flags().StringVar(&projectListJQ, "jq", "", jqFlagUsage(projectListFields))
 
 	projectCmd.AddCommand(projectCreateCmd)
 	projectCmd.AddCommand(projectListCmd)

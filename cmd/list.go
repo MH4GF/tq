@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -13,7 +12,10 @@ var (
 	listStatus string
 	listTask   int64
 	listLimit  int
+	listJQ     string
 )
+
+var listFields = []string{"id", "title", "prompt_id", "task_id", "metadata", "status", "result", "session_id", "started_at", "completed_at", "created_at"}
 
 var listCmd = &cobra.Command{
 	Use:   "list",
@@ -34,18 +36,11 @@ var listCmd = &cobra.Command{
 			return fmt.Errorf("list actions: %w", err)
 		}
 
-		if len(actions) == 0 {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
-			return nil
-		}
-
 		rows := make([]map[string]any, len(actions))
 		for i, a := range actions {
 			rows[i] = actionToMap(a)
 		}
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(rows)
+		return WriteJSON(cmd.OutOrStdout(), rows, listJQ, listFields)
 	},
 }
 
@@ -86,5 +81,6 @@ func init() {
 	listCmd.Flags().StringVar(&listStatus, "status", "", "Filter by status (pending, running, done, failed, cancelled)")
 	listCmd.Flags().Int64Var(&listTask, "task", 0, "Filter by task ID (see: tq task list)")
 	listCmd.Flags().IntVar(&listLimit, "limit", 0, "Limit number of results (0 = no limit)")
+	listCmd.Flags().StringVar(&listJQ, "jq", "", jqFlagUsage(listFields))
 	actionCmd.AddCommand(listCmd)
 }
