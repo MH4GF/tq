@@ -50,6 +50,20 @@ func TestExtractSnippet(t *testing.T) {
 			contextChars: 10,
 			want:         "AAAAAAAAAAAAAAAAAAAA...",
 		},
+		{
+			name:         "multibyte characters not corrupted at boundary",
+			value:        "あいうえおかきくけこさしすせそログインたちつてとなにぬねのはひふへほ",
+			keyword:      "ログイン",
+			contextChars: 5,
+			want:         "...さしすせそログインたちつてと...",
+		},
+		{
+			name:         "multibyte no match truncated cleanly",
+			value:        "あいうえおかきくけこさしすせそたちつてとなにぬねの",
+			keyword:      "notfound",
+			contextChars: 5,
+			want:         "あいうえおかきくけこ...",
+		},
 	}
 
 	for _, tt := range tests {

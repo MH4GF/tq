@@ -15,19 +15,22 @@ type SearchResult struct {
 	CreatedAt  string `json:"created_at"`
 }
 
-func extractSnippet(value, lowerKeyword string, keywordLen, contextChars int) string {
+func extractSnippet(value, lowerKeyword string, keywordRuneLen, contextChars int) string {
 	normalized := strings.ReplaceAll(value, "\n", " ")
-	lower := strings.ToLower(normalized)
-	idx := strings.Index(lower, lowerKeyword)
+	runes := []rune(normalized)
+	lowerRunes := []rune(strings.ToLower(normalized))
+	kwRunes := []rune(lowerKeyword)
+
+	idx := runeIndex(lowerRunes, kwRunes)
 	if idx < 0 {
-		if len(normalized) > contextChars*2 {
-			return normalized[:contextChars*2] + "..."
+		if len(runes) > contextChars*2 {
+			return string(runes[:contextChars*2]) + "..."
 		}
 		return normalized
 	}
 
 	start := idx - contextChars
-	end := idx + keywordLen + contextChars
+	end := idx + keywordRuneLen + contextChars
 
 	var prefix, suffix string
 	if start < 0 {
@@ -35,13 +38,32 @@ func extractSnippet(value, lowerKeyword string, keywordLen, contextChars int) st
 	} else {
 		prefix = "..."
 	}
-	if end > len(normalized) {
-		end = len(normalized)
+	if end > len(runes) {
+		end = len(runes)
 	} else {
 		suffix = "..."
 	}
 
-	return prefix + normalized[start:end] + suffix
+	return prefix + string(runes[start:end]) + suffix
+}
+
+func runeIndex(haystack, needle []rune) int {
+	if len(needle) == 0 {
+		return 0
+	}
+	for i := 0; i <= len(haystack)-len(needle); i++ {
+		match := true
+		for j := range needle {
+			if haystack[i+j] != needle[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return i
+		}
+	}
+	return -1
 }
 
 func (db *DB) Search(keyword string) ([]SearchResult, error) {
@@ -71,7 +93,7 @@ func (db *DB) Search(keyword string) ([]SearchResult, error) {
 	defer func() { _ = rows.Close() }()
 
 	lowerKeyword := strings.ToLower(keyword)
-	keywordLen := len(keyword)
+	keywordLen := len([]rune(keyword))
 	var results []SearchResult
 	for rows.Next() {
 		var r SearchResult
