@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -134,7 +135,7 @@ func (db *DB) EnsureProject(name string) (int64, error) {
 	if err == nil {
 		return p.ID, nil
 	}
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return 0, fmt.Errorf("get %s project: %w", name, err)
 	}
 	return db.InsertProject(name, "", "{}")
