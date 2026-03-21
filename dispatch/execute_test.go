@@ -20,7 +20,7 @@ func TestExecuteAction(t *testing.T) {
 		beforeInteractive func(*db.Action) error
 		wantMode          string
 		wantStatus        string
-		wantErrType       string // db.ActionStatusFailed, "deferred", or ""
+		wantErrType       string // "failed", "deferred", or ""
 		wantWorkerCount   int
 	}{
 		{
@@ -36,7 +36,7 @@ func TestExecuteAction(t *testing.T) {
 			promptMode:      "noninteractive",
 			workerErr:       context.DeadlineExceeded,
 			wantStatus:      db.ActionStatusFailed,
-			wantErrType:     db.ActionStatusFailed,
+			wantErrType:     "failed",
 			wantWorkerCount: 1,
 		},
 		{
@@ -89,7 +89,7 @@ func TestExecuteAction(t *testing.T) {
 			}, action)
 
 			switch tc.wantErrType {
-			case db.ActionStatusFailed:
+			case "failed":
 				var af *ActionFailedError
 				if !errors.As(err, &af) {
 					t.Fatalf("expected ActionFailedError, got %v", err)

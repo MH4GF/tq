@@ -644,7 +644,7 @@ func TestInsertAction_InvalidStatus(t *testing.T) {
 		name   string
 		status string
 	}{
-		{"open is invalid", db.TaskStatusOpen},
+		{"open is invalid", "open"},
 		{"arbitrary string", "bogus"},
 		{"empty string", ""},
 	}
