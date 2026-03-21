@@ -10,6 +10,30 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-edit-protect.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/post-edit-lint.sh",
+            "timeout": 60
+          }
+        ]
+      }
     ]
   }
 }
