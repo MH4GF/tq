@@ -110,6 +110,9 @@ func (db *DB) InsertAction(title, promptID string, taskID int64, metadata string
 }
 
 func (db *DB) HasActiveAction(taskID int64, promptID string) (bool, error) {
+	if promptID == "" {
+		return false, nil
+	}
 	var count int
 	err := db.QueryRow(
 		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN (?, ?, ?)",
