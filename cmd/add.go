@@ -69,12 +69,13 @@ If instruction cannot be determined from context, ask the user.`,
 		}
 
 		if !addForce {
-			dup, err := database.HasActiveAction(addTask, addPrompt)
+			existing, err := database.GetActiveAction(addTask, addPrompt)
 			if err != nil {
 				return fmt.Errorf("check duplicates: %w", err)
 			}
-			if dup {
-				return fmt.Errorf("blocked: active action already exists for task %d prompt %s (use --force to override)", addTask, addPrompt)
+			if existing != nil {
+				return fmt.Errorf("blocked: active action exists for task %d prompt %s\n  → action #%d %q (status: %s, created: %s)\n  hint: cancel it first: tq action cancel %d\n  hint: or create a second action with --force (both will be dispatched)",
+					addTask, addPrompt, existing.ID, existing.Title, existing.Status, existing.CreatedAt, existing.ID)
 			}
 		}
 
