@@ -470,6 +470,63 @@ func TestRender_MissingMetaKey_DotSyntax(t *testing.T) {
 	}
 }
 
+func TestRender_SoftIndex_MissingKey(t *testing.T) {
+	p := &Prompt{
+		ID:   "test",
+		Body: `URL: {{get .Task.Meta "url"}}`,
+	}
+	data := PromptData{
+		Task:    TaskData{Meta: map[string]any{}},
+		Project: ProjectData{Meta: map[string]any{}},
+		Action:  ActionData{Meta: map[string]any{}},
+	}
+	result, err := p.Render(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "URL: " {
+		t.Errorf("Render = %q, want %q", result, "URL: ")
+	}
+}
+
+func TestRender_SoftIndex_KeyExists(t *testing.T) {
+	p := &Prompt{
+		ID:   "test",
+		Body: `URL: {{get .Task.Meta "url"}}`,
+	}
+	data := PromptData{
+		Task:    TaskData{Meta: map[string]any{"url": "https://example.com"}},
+		Project: ProjectData{Meta: map[string]any{}},
+		Action:  ActionData{Meta: map[string]any{}},
+	}
+	result, err := p.Render(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "URL: https://example.com" {
+		t.Errorf("Render = %q, want %q", result, "URL: https://example.com")
+	}
+}
+
+func TestRender_SoftIndex_IfGuard(t *testing.T) {
+	p := &Prompt{
+		ID:   "test",
+		Body: `{{if get .Task.Meta "url"}}URL: {{get .Task.Meta "url"}}{{end}}done`,
+	}
+	data := PromptData{
+		Task:    TaskData{Meta: map[string]any{}},
+		Project: ProjectData{Meta: map[string]any{}},
+		Action:  ActionData{Meta: map[string]any{}},
+	}
+	result, err := p.Render(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "done" {
+		t.Errorf("Render = %q, want %q", result, "done")
+	}
+}
+
 func TestRender_EmptyMeta(t *testing.T) {
 	p := &Prompt{
 		ID:   "simple",

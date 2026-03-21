@@ -13,7 +13,7 @@ Action #{{index .Action.Meta "failed_action_id"}} (prompt: {{index .Action.Meta 
 ## Task Context
 
 - **Task**: {{.Task.Title}}
-- **Task URL**: {{index .Task.Meta "url"}}
+- **Task URL**: {{get .Task.Meta "url"}}
 
 ## Instructions
 
