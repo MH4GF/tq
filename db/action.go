@@ -112,8 +112,8 @@ func (db *DB) InsertAction(title, promptID string, taskID int64, metadata string
 func (db *DB) HasActiveAction(taskID int64, promptID string) (bool, error) {
 	var count int
 	err := db.QueryRow(
-		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN ('pending', 'running', 'dispatched')",
-		taskID, promptID,
+		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN (?, ?, ?)",
+		taskID, promptID, ActionStatusPending, ActionStatusRunning, ActionStatusDispatched,
 	).Scan(&count)
 	if err != nil {
 		return false, err
@@ -124,8 +124,8 @@ func (db *DB) HasActiveAction(taskID int64, promptID string) (bool, error) {
 func (db *DB) HasActiveActionWithMeta(taskID int64, promptID, metaKey, metaValue string) (bool, error) {
 	var count int
 	err := db.QueryRow(
-		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN ('pending', 'running', 'dispatched') AND json_extract(metadata, '$.' || ?) = ?",
-		taskID, promptID, metaKey, metaValue,
+		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN (?, ?, ?) AND json_extract(metadata, '$.' || ?) = ?",
+		taskID, promptID, ActionStatusPending, ActionStatusRunning, ActionStatusDispatched, metaKey, metaValue,
 	).Scan(&count)
 	if err != nil {
 		return false, err
@@ -147,9 +147,10 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 		 FROM actions a
 		 INNER JOIN tasks t ON a.task_id = t.id
 		 INNER JOIN projects p ON t.project_id = p.id
-		 WHERE a.status = 'pending'
+		 WHERE a.status = ?
 		   AND p.dispatch_enabled = 1
 		 ORDER BY a.id ASC LIMIT 1`,
+		ActionStatusPending,
 	).Scan(a.scanFields()...)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -158,7 +159,7 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 		return nil, err
 	}
 
-	_, err = tx.ExecContext(ctx, "UPDATE actions SET status = 'running', started_at = datetime('now') WHERE id = ?", a.ID)
+	_, err = tx.ExecContext(ctx, "UPDATE actions SET status = ?, started_at = datetime('now') WHERE id = ?", ActionStatusRunning, a.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +198,7 @@ func (db *DB) ClaimPending(ctx context.Context, id int64) (*Action, error) {
 		return nil, fmt.Errorf("action #%d is not pending (current: %s)", id, a.Status)
 	}
 
-	_, err = tx.ExecContext(ctx, "UPDATE actions SET status = 'running', started_at = datetime('now') WHERE id = ?", id)
+	_, err = tx.ExecContext(ctx, "UPDATE actions SET status = ?, started_at = datetime('now') WHERE id = ?", ActionStatusRunning, id)
 	if err != nil {
 		return nil, err
 	}
@@ -245,8 +246,8 @@ func (db *DB) markTerminal(id int64, status, result string) error {
 
 func (db *DB) MarkDispatched(id int64) error {
 	res, err := db.Exec(
-		"UPDATE actions SET status = 'dispatched' WHERE id = ? AND status = 'running'",
-		id,
+		"UPDATE actions SET status = ? WHERE id = ? AND status = ?",
+		ActionStatusDispatched, id, ActionStatusRunning,
 	)
 	if err != nil {
 		return err
@@ -316,7 +317,8 @@ func (db *DB) CountByStatus() (map[string]int, error) {
 
 func (db *DB) ListRunningInteractive() ([]Action, error) {
 	rows, err := db.Query(
-		"SELECT "+actionColumns+" FROM actions WHERE status = 'running' AND session_id IS NOT NULL ORDER BY id",
+		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND session_id IS NOT NULL ORDER BY id",
+		ActionStatusRunning,
 	)
 	if err != nil {
 		return nil, err
@@ -337,7 +339,8 @@ func (db *DB) ListRunningInteractive() ([]Action, error) {
 func (db *DB) CountRunningInteractive() (int, error) {
 	var count int
 	err := db.QueryRow(
-		"SELECT COUNT(*) FROM actions WHERE status = 'running' AND session_id IS NOT NULL",
+		"SELECT COUNT(*) FROM actions WHERE status = ? AND session_id IS NOT NULL",
+		ActionStatusRunning,
 	).Scan(&count)
 	return count, err
 }
@@ -349,8 +352,8 @@ func (db *DB) ResetToPending(id int64) error {
 	}
 
 	_, err := db.Exec(
-		"UPDATE actions SET status = 'pending', started_at = NULL, session_id = NULL, tmux_pane = NULL WHERE id = ?",
-		id,
+		"UPDATE actions SET status = ?, started_at = NULL, session_id = NULL, tmux_pane = NULL WHERE id = ?",
+		ActionStatusPending, id,
 	)
 	if err == nil {
 		db.emitEvent("action", id, "action.status_changed", map[string]any{

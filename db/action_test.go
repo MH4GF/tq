@@ -16,7 +16,7 @@ func TestInsertAction(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-	id, err := d.InsertAction("review-pr", "review-pr", taskID, `{"pr":123}`, "pending")
+	id, err := d.InsertAction("review-pr", "review-pr", taskID, `{"pr":123}`, db.ActionStatusPending)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestHasActiveAction(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("review-pr", "review-pr", taskID, "{}", "pending")
+	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
 
 	has, err := d.HasActiveAction(taskID, "review-pr")
 	if err != nil {
@@ -65,7 +65,7 @@ func TestHasActiveAction_DoneNotActive(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("implement", "implement", taskID, "{}", "done")
+	d.InsertAction("implement", "implement", taskID, "{}", db.ActionStatusDone)
 
 	has, err := d.HasActiveAction(taskID, "implement")
 	if err != nil {
@@ -81,9 +81,9 @@ func TestNextPending(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-	d.InsertAction("first", "first", taskID, "{}", "pending")
-	d.InsertAction("second", "second", taskID, "{}", "pending")
-	d.InsertAction("third", "third", taskID, "{}", "pending")
+	d.InsertAction("first", "first", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("second", "second", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("third", "third", taskID, "{}", db.ActionStatusPending)
 
 	ctx := context.Background()
 
@@ -97,13 +97,13 @@ func TestNextPending(t *testing.T) {
 	if a.PromptID != "first" {
 		t.Errorf("expected first (lowest ID), got %s", a.PromptID)
 	}
-	if a.Status != "running" {
+	if a.Status != db.ActionStatusRunning {
 		t.Errorf("expected status running, got %s", a.Status)
 	}
 
 	// Verify it's persisted as running
 	fetched, _ := d.GetAction(a.ID)
-	if fetched.Status != "running" {
+	if fetched.Status != db.ActionStatusRunning {
 		t.Errorf("expected persisted status running, got %s", fetched.Status)
 	}
 
@@ -125,10 +125,10 @@ func TestNextPending_SkipsDisabledProject(t *testing.T) {
 	d.SetDispatchEnabled(1, false)
 
 	taskID, _ := d.InsertTask(1, "disabled task", "{}", "")
-	d.InsertAction("disabled-action", "disabled-action", taskID, "{}", "pending")
+	d.InsertAction("disabled-action", "disabled-action", taskID, "{}", db.ActionStatusPending)
 
 	taskID2, _ := d.InsertTask(2, "enabled task", "{}", "")
-	d.InsertAction("enabled-action", "enabled-action", taskID2, "{}", "pending")
+	d.InsertAction("enabled-action", "enabled-action", taskID2, "{}", db.ActionStatusPending)
 
 	ctx := context.Background()
 	a, err := d.NextPending(ctx)
@@ -151,7 +151,7 @@ func TestNextPending_AllDisabled(t *testing.T) {
 	d.SetAllDispatchEnabled(false)
 
 	taskID, _ := d.InsertTask(1, "disabled task", "{}", "")
-	d.InsertAction("disabled-action", "disabled-action", taskID, "{}", "pending")
+	d.InsertAction("disabled-action", "disabled-action", taskID, "{}", db.ActionStatusPending)
 
 	ctx := context.Background()
 	a, err := d.NextPending(ctx)
@@ -181,13 +181,13 @@ func TestMarkDone(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
+	id, _ := d.InsertAction("test", "test", taskID, "{}", db.ActionStatusRunning)
 	if err := d.MarkDone(id, "success"); err != nil {
 		t.Fatal(err)
 	}
 
 	a, _ := d.GetAction(id)
-	if a.Status != "done" {
+	if a.Status != db.ActionStatusDone {
 		t.Errorf("expected status done, got %s", a.Status)
 	}
 	if !a.CompletedAt.Valid {
@@ -203,13 +203,13 @@ func TestMarkFailed(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
+	id, _ := d.InsertAction("test", "test", taskID, "{}", db.ActionStatusRunning)
 	if err := d.MarkFailed(id, "error occurred"); err != nil {
 		t.Fatal(err)
 	}
 
 	a, _ := d.GetAction(id)
-	if a.Status != "failed" {
+	if a.Status != db.ActionStatusFailed {
 		t.Errorf("expected status failed, got %s", a.Status)
 	}
 	if !a.Result.Valid || a.Result.String != "error occurred" {
@@ -223,9 +223,9 @@ func TestListActions(t *testing.T) {
 
 	taskID1, _ := d.InsertTask(1, "task1", "{}", "")
 	taskID2, _ := d.InsertTask(1, "task2", "{}", "")
-	d.InsertAction("a", "a", taskID1, "{}", "pending")
-	d.InsertAction("b", "b", taskID2, "{}", "running")
-	d.InsertAction("c", "c", taskID1, "{}", "pending")
+	d.InsertAction("a", "a", taskID1, "{}", db.ActionStatusPending)
+	d.InsertAction("b", "b", taskID2, "{}", db.ActionStatusRunning)
+	d.InsertAction("c", "c", taskID1, "{}", db.ActionStatusPending)
 
 	// No filter
 	all, err := d.ListActions("", nil)
@@ -237,7 +237,7 @@ func TestListActions(t *testing.T) {
 	}
 
 	// Status filter
-	pending, err := d.ListActions("pending", nil)
+	pending, err := d.ListActions(db.ActionStatusPending, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +255,7 @@ func TestListActions(t *testing.T) {
 	}
 
 	// Both filters
-	both, err := d.ListActions("pending", &taskID1)
+	both, err := d.ListActions(db.ActionStatusPending, &taskID1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,23 +269,23 @@ func TestCountByStatus(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("a", "a", taskID, "{}", "pending")
-	d.InsertAction("b", "b", taskID, "{}", "pending")
-	d.InsertAction("c", "c", taskID, "{}", "running")
-	d.InsertAction("d", "d", taskID, "{}", "done")
+	d.InsertAction("a", "a", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("b", "b", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("c", "c", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("d", "d", taskID, "{}", db.ActionStatusDone)
 
 	counts, err := d.CountByStatus()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if counts["pending"] != 2 {
-		t.Errorf("pending = %d, want 2", counts["pending"])
+	if counts[db.ActionStatusPending] != 2 {
+		t.Errorf("pending = %d, want 2", counts[db.ActionStatusPending])
 	}
-	if counts["running"] != 1 {
-		t.Errorf("running = %d, want 1", counts["running"])
+	if counts[db.ActionStatusRunning] != 1 {
+		t.Errorf("running = %d, want 1", counts[db.ActionStatusRunning])
 	}
-	if counts["done"] != 1 {
-		t.Errorf("done = %d, want 1", counts["done"])
+	if counts[db.ActionStatusDone] != 1 {
+		t.Errorf("done = %d, want 1", counts[db.ActionStatusDone])
 	}
 }
 
@@ -296,17 +296,17 @@ func TestListRunningInteractive(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 
 	// running with session_id → should be returned
-	d.InsertAction("a", "a", taskID, "{}", "running")
+	d.InsertAction("a", "a", taskID, "{}", db.ActionStatusRunning)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1' WHERE id = 1")
 
 	// running without session_id → should NOT be returned
-	d.InsertAction("b", "b", taskID, "{}", "running")
+	d.InsertAction("b", "b", taskID, "{}", db.ActionStatusRunning)
 
 	// pending → should NOT be returned
-	d.InsertAction("c", "c", taskID, "{}", "pending")
+	d.InsertAction("c", "c", taskID, "{}", db.ActionStatusPending)
 
 	// done → should NOT be returned
-	d.InsertAction("d", "d", taskID, "{}", "done")
+	d.InsertAction("d", "d", taskID, "{}", db.ActionStatusDone)
 
 	actions, err := d.ListRunningInteractive()
 	if err != nil {
@@ -328,8 +328,8 @@ func TestCountRunningInteractive(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("a", "a", taskID, "{}", "running")
-	d.InsertAction("b", "b", taskID, "{}", "running")
+	d.InsertAction("a", "a", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("b", "b", taskID, "{}", db.ActionStatusRunning)
 	d.Exec("UPDATE actions SET session_id = 'sess-1' WHERE id = 1")
 
 	count, err := d.CountRunningInteractive()
@@ -346,7 +346,7 @@ func TestResetToPending(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("a", "a", taskID, "{}", "running")
+	id, _ := d.InsertAction("a", "a", taskID, "{}", db.ActionStatusRunning)
 	d.Exec("UPDATE actions SET session_id = 'sess-1', tmux_pane = 'tq-action-1' WHERE id = ?", id)
 
 	if err := d.ResetToPending(id); err != nil {
@@ -354,7 +354,7 @@ func TestResetToPending(t *testing.T) {
 	}
 
 	a, _ := d.GetAction(id)
-	if a.Status != "pending" {
+	if a.Status != db.ActionStatusPending {
 		t.Errorf("status = %q, want pending", a.Status)
 	}
 	if a.StartedAt.Valid {
@@ -373,7 +373,7 @@ func TestSetSessionInfo(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
+	id, _ := d.InsertAction("test", "test", taskID, "{}", db.ActionStatusRunning)
 
 	if err := d.SetSessionInfo(id, "main", "tq-action-1"); err != nil {
 		t.Fatal(err)
@@ -472,12 +472,12 @@ func TestAction_MatchesDate_UTCLocalConversion(t *testing.T) {
 func TestFilterForOpenTask(t *testing.T) {
 	targetDate := localDate("2026-03-04 10:00:00")
 	actions := []db.Action{
-		{ID: 1, Status: "pending", CreatedAt: "2026-01-01 00:00:00"},
-		{ID: 2, Status: "running", CreatedAt: "2026-01-01 00:00:00"},
-		{ID: 3, Status: "dispatched", CreatedAt: "2026-01-01 00:00:00"},
-		{ID: 4, Status: "done", CreatedAt: "2026-01-01 00:00:00", CompletedAt: sql.NullString{String: "2026-03-04 10:00:00", Valid: true}},
-		{ID: 5, Status: "failed", CreatedAt: "2026-01-01 00:00:00", CompletedAt: sql.NullString{String: "2026-01-01 12:00:00", Valid: true}},
-		{ID: 6, Status: "done", CreatedAt: "2026-03-04 09:00:00"},
+		{ID: 1, Status: db.ActionStatusPending, CreatedAt: "2026-01-01 00:00:00"},
+		{ID: 2, Status: db.ActionStatusRunning, CreatedAt: "2026-01-01 00:00:00"},
+		{ID: 3, Status: db.ActionStatusDispatched, CreatedAt: "2026-01-01 00:00:00"},
+		{ID: 4, Status: db.ActionStatusDone, CreatedAt: "2026-01-01 00:00:00", CompletedAt: sql.NullString{String: "2026-03-04 10:00:00", Valid: true}},
+		{ID: 5, Status: db.ActionStatusFailed, CreatedAt: "2026-01-01 00:00:00", CompletedAt: sql.NullString{String: "2026-01-01 12:00:00", Valid: true}},
+		{ID: 6, Status: db.ActionStatusDone, CreatedAt: "2026-03-04 09:00:00"},
 	}
 
 	filtered := db.FilterForOpenTask(actions, targetDate)
@@ -509,7 +509,7 @@ func TestFilterForOpenTask(t *testing.T) {
 
 func TestFilterForOpenTask_EmptyDate(t *testing.T) {
 	actions := []db.Action{
-		{ID: 1, Status: "done", CreatedAt: "2026-01-01 00:00:00"},
+		{ID: 1, Status: db.ActionStatusDone, CreatedAt: "2026-01-01 00:00:00"},
 	}
 	filtered := db.FilterForOpenTask(actions, "")
 	if len(filtered) != 1 {
@@ -522,8 +522,8 @@ func TestClaimPending(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("first", "first", taskID, "{}", "pending")
-	d.InsertAction("second", "second", taskID, "{}", "pending")
+	d.InsertAction("first", "first", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("second", "second", taskID, "{}", db.ActionStatusPending)
 
 	ctx := context.Background()
 
@@ -534,18 +534,18 @@ func TestClaimPending(t *testing.T) {
 	if a.PromptID != "second" {
 		t.Errorf("expected second, got %s", a.PromptID)
 	}
-	if a.Status != "running" {
+	if a.Status != db.ActionStatusRunning {
 		t.Errorf("expected status running, got %s", a.Status)
 	}
 
 	fetched, _ := d.GetAction(2)
-	if fetched.Status != "running" {
+	if fetched.Status != db.ActionStatusRunning {
 		t.Errorf("expected persisted status running, got %s", fetched.Status)
 	}
 
 	// first should still be pending
 	first, _ := d.GetAction(1)
-	if first.Status != "pending" {
+	if first.Status != db.ActionStatusPending {
 		t.Errorf("expected first to remain pending, got %s", first.Status)
 	}
 }
@@ -573,9 +573,9 @@ func TestClaimPending_NotPending(t *testing.T) {
 		name   string
 		status string
 	}{
-		{"running", "running"},
-		{"done", "done"},
-		{"failed", "failed"},
+		{"running", db.ActionStatusRunning},
+		{"done", db.ActionStatusDone},
+		{"failed", db.ActionStatusFailed},
 	}
 
 	for _, tt := range tests {
@@ -603,9 +603,9 @@ func TestListActionsByTaskIDs(t *testing.T) {
 	taskID2, _ := d.InsertTask(1, "task2", "{}", "")
 	taskID3, _ := d.InsertTask(1, "task3 no actions", "{}", "")
 
-	d.InsertAction("a1", "a1", taskID1, "{}", "pending")
-	d.InsertAction("a2", "a2", taskID1, "{}", "done")
-	d.InsertAction("b1", "b1", taskID2, "{}", "running")
+	d.InsertAction("a1", "a1", taskID1, "{}", db.ActionStatusPending)
+	d.InsertAction("a2", "a2", taskID1, "{}", db.ActionStatusDone)
+	d.InsertAction("b1", "b1", taskID2, "{}", db.ActionStatusRunning)
 
 	t.Run("multiple tasks", func(t *testing.T) {
 		result, err := d.ListActionsByTaskIDs([]int64{taskID1, taskID2, taskID3})
@@ -667,14 +667,14 @@ func TestMarkDispatched(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
+	id, _ := d.InsertAction("test", "test", taskID, "{}", db.ActionStatusRunning)
 
 	if err := d.MarkDispatched(id); err != nil {
 		t.Fatal(err)
 	}
 
 	a, _ := d.GetAction(id)
-	if a.Status != "dispatched" {
+	if a.Status != db.ActionStatusDispatched {
 		t.Errorf("status = %q, want dispatched", a.Status)
 	}
 }
@@ -689,10 +689,10 @@ func TestMarkDispatched_NotRunning(t *testing.T) {
 		name   string
 		status string
 	}{
-		{"pending", "pending"},
-		{"done", "done"},
-		{"failed", "failed"},
-		{"cancelled", "cancelled"},
+		{"pending", db.ActionStatusPending},
+		{"done", db.ActionStatusDone},
+		{"failed", db.ActionStatusFailed},
+		{"cancelled", db.ActionStatusCancelled},
 	}
 
 	for _, tt := range tests {
@@ -714,7 +714,7 @@ func TestHasActiveAction_Dispatched(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("impl", "impl", taskID, "{}", "running")
+	id, _ := d.InsertAction("impl", "impl", taskID, "{}", db.ActionStatusRunning)
 	d.MarkDispatched(id)
 
 	has, err := d.HasActiveAction(taskID, "impl")
@@ -731,7 +731,7 @@ func TestMarkDone_FromDispatched(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
+	id, _ := d.InsertAction("test", "test", taskID, "{}", db.ActionStatusRunning)
 	d.MarkDispatched(id)
 
 	if err := d.MarkDone(id, "pr merged"); err != nil {
@@ -739,7 +739,7 @@ func TestMarkDone_FromDispatched(t *testing.T) {
 	}
 
 	a, _ := d.GetAction(id)
-	if a.Status != "done" {
+	if a.Status != db.ActionStatusDone {
 		t.Errorf("status = %q, want done", a.Status)
 	}
 }
@@ -749,7 +749,7 @@ func TestMarkCancelled_FromDispatched(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", "test", taskID, "{}", "running")
+	id, _ := d.InsertAction("test", "test", taskID, "{}", db.ActionStatusRunning)
 	d.MarkDispatched(id)
 
 	if err := d.MarkCancelled(id, "no longer needed"); err != nil {
@@ -757,7 +757,7 @@ func TestMarkCancelled_FromDispatched(t *testing.T) {
 	}
 
 	a, _ := d.GetAction(id)
-	if a.Status != "cancelled" {
+	if a.Status != db.ActionStatusCancelled {
 		t.Errorf("status = %q, want cancelled", a.Status)
 	}
 }
@@ -777,7 +777,7 @@ func TestInsertAction_Title(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-	id, err := d.InsertAction("Review PR #123", "review-pr", taskID, `{"pr":123}`, "pending")
+	id, err := d.InsertAction("Review PR #123", "review-pr", taskID, `{"pr":123}`, db.ActionStatusPending)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -800,7 +800,7 @@ func TestMigrate_AddTitleColumn(t *testing.T) {
 
 	// Insert action then simulate old DB state (empty title)
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("my-prompt", "my-prompt", taskID, "{}", "pending")
+	d.InsertAction("my-prompt", "my-prompt", taskID, "{}", db.ActionStatusPending)
 	d.Exec("UPDATE actions SET title = '' WHERE id = 1")
 
 	// Verify title is empty

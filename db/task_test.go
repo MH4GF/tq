@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -26,7 +27,7 @@ func TestInsertTask(t *testing.T) {
 	if task.Title != "test task" {
 		t.Errorf("expected title 'test task', got %s", task.Title)
 	}
-	if task.Status != "open" {
+	if task.Status != db.TaskStatusOpen {
 		t.Errorf("expected status 'open', got %s", task.Status)
 	}
 }
@@ -40,7 +41,7 @@ func TestUpdateTask(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := d.UpdateTask(id, "done", ""); err != nil {
+	if err := d.UpdateTask(id, db.TaskStatusDone, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -48,7 +49,7 @@ func TestUpdateTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if task.Status != "done" {
+	if task.Status != db.TaskStatusDone {
 		t.Errorf("expected status 'done', got %s", task.Status)
 	}
 	if !task.UpdatedAt.Valid {
@@ -97,7 +98,7 @@ func TestListTasks(t *testing.T) {
 	d.InsertTask(1, "task A", "{}", "")
 	id2, _ := d.InsertTask(1, "task B", "{}", "")
 	d.InsertTask(2, "task C", "{}", "")
-	d.UpdateTask(id2, "done", "")
+	d.UpdateTask(id2, db.TaskStatusDone, "")
 
 	t.Run("no filter", func(t *testing.T) {
 		tasks, err := d.ListTasks(0, "")
@@ -120,7 +121,7 @@ func TestListTasks(t *testing.T) {
 	})
 
 	t.Run("filter by status", func(t *testing.T) {
-		tasks, err := d.ListTasks(0, "open")
+		tasks, err := d.ListTasks(0, db.TaskStatusOpen)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -130,7 +131,7 @@ func TestListTasks(t *testing.T) {
 	})
 
 	t.Run("filter by project and status", func(t *testing.T) {
-		tasks, err := d.ListTasks(1, "done")
+		tasks, err := d.ListTasks(1, db.TaskStatusDone)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -239,7 +240,7 @@ func TestEnsureTask(t *testing.T) {
 	}
 
 	// Closing the task should cause a new one to be created
-	if err := d.UpdateTask(id1, "done", ""); err != nil {
+	if err := d.UpdateTask(id1, db.TaskStatusDone, ""); err != nil {
 		t.Fatal(err)
 	}
 	id3, err := d.EnsureTask(1, "my task")
@@ -257,9 +258,9 @@ func TestListTasksByStatus(t *testing.T) {
 
 	_, _ = d.InsertTask(1, "open task", "{}", "")
 	id2, _ := d.InsertTask(1, "done task", "{}", "")
-	d.UpdateTask(id2, "done", "")
+	d.UpdateTask(id2, db.TaskStatusDone, "")
 
-	tasks, err := d.ListTasksByStatus("open")
+	tasks, err := d.ListTasksByStatus(db.TaskStatusOpen)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +268,7 @@ func TestListTasksByStatus(t *testing.T) {
 		t.Errorf("expected 1 open task, got %d", len(tasks))
 	}
 
-	tasks, err = d.ListTasksByStatus("done")
+	tasks, err = d.ListTasksByStatus(db.TaskStatusDone)
 	if err != nil {
 		t.Fatal(err)
 	}

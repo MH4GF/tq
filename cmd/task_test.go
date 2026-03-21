@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -188,8 +189,8 @@ func TestTaskList_JSON(t *testing.T) {
 	if row["metadata"] != `{"key":"value","url":"https://example.com"}` {
 		t.Errorf("metadata = %v, want %q", row["metadata"], `{"key":"value","url":"https://example.com"}`)
 	}
-	if row["status"] != "open" {
-		t.Errorf("status = %v, want %q", row["status"], "open")
+	if row["status"] != db.TaskStatusOpen {
+		t.Errorf("status = %v, want %q", row["status"], db.TaskStatusOpen)
 	}
 	if row["created_at"] == nil {
 		t.Error("created_at should not be null")
@@ -237,7 +238,7 @@ func TestTaskList_StatusFilter(t *testing.T) {
 
 	d.InsertTask(1, "open task", "{}", "")
 	id2, _ := d.InsertTask(1, "done task", "{}", "")
-	d.UpdateTask(id2, "done", "")
+	d.UpdateTask(id2, db.TaskStatusDone, "")
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -381,8 +382,8 @@ func TestTaskUpdate_StatusAndProject(t *testing.T) {
 	if task.ProjectID != 2 {
 		t.Errorf("project_id = %d, want 2", task.ProjectID)
 	}
-	if task.Status != "done" {
-		t.Errorf("status = %q, want %q", task.Status, "done")
+	if task.Status != db.TaskStatusDone {
+		t.Errorf("status = %q, want %q", task.Status, db.TaskStatusDone)
 	}
 }
 
@@ -430,8 +431,8 @@ func TestTaskList_WithActions(t *testing.T) {
 
 	taskID1, _ := d.InsertTask(1, "task with actions", "{}", "")
 	taskID2, _ := d.InsertTask(1, "task without actions", "{}", "")
-	d.InsertAction("review-pr", "review-pr", taskID1, `{"pr":1}`, "pending")
-	d.InsertAction("implement", "implement", taskID1, "{}", "done")
+	d.InsertAction("review-pr", "review-pr", taskID1, `{"pr":1}`, db.ActionStatusPending)
+	d.InsertAction("implement", "implement", taskID1, "{}", db.ActionStatusDone)
 	_ = taskID2
 
 	root := cmd.GetRootCmd()

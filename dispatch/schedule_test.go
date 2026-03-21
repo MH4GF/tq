@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/dispatch"
 	"github.com/MH4GF/tq/testutil"
 )
@@ -23,7 +24,7 @@ func TestCheckSchedules_ActionCreated(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actions, _ := d.ListActions("pending", nil)
+	actions, _ := d.ListActions(db.ActionStatusPending, nil)
 	if len(actions) != 1 {
 		t.Fatalf("expected 1 action, got %d", len(actions))
 	}
@@ -74,14 +75,14 @@ func TestCheckSchedules_DuplicateSkipped(t *testing.T) {
 	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
 
 	// Insert an active action for the same task/prompt
-	d.InsertAction("existing", "my-prompt", taskID, "{}", "pending")
+	d.InsertAction("existing", "my-prompt", taskID, "{}", db.ActionStatusPending)
 
 	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
 	if err := dispatch.CheckSchedules(d, now); err != nil {
 		t.Fatal(err)
 	}
 
-	actions, _ := d.ListActions("pending", nil)
+	actions, _ := d.ListActions(db.ActionStatusPending, nil)
 	if len(actions) != 1 {
 		t.Errorf("expected 1 action (existing only), got %d", len(actions))
 	}
@@ -112,7 +113,7 @@ func TestCheckSchedules_TaskDoneAutoDisable(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.UpdateTask(taskID, "done", "")
+	d.UpdateTask(taskID, db.TaskStatusDone, "")
 	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
 	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = ?", id)
 
@@ -139,7 +140,7 @@ func TestCheckSchedules_TaskArchivedAutoDisable(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.UpdateTask(taskID, "archived", "")
+	d.UpdateTask(taskID, db.TaskStatusArchived, "")
 	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
 	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = ?", id)
 

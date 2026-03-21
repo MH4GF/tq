@@ -6,6 +6,7 @@ import (
 )
 
 const (
+	TaskStatusOpen     = "open"
 	TaskStatusDone     = "done"
 	TaskStatusArchived = "archived"
 )
@@ -160,8 +161,8 @@ func (db *DB) GetOrCreateTriageTask(projectID int64) (int64, error) {
 func (db *DB) EnsureTask(projectID int64, title string) (int64, error) {
 	var id int64
 	err := db.QueryRow(
-		"SELECT id FROM tasks WHERE project_id = ? AND title = ? AND status = 'open' ORDER BY id ASC LIMIT 1",
-		projectID, title,
+		"SELECT id FROM tasks WHERE project_id = ? AND title = ? AND status = ? ORDER BY id ASC LIMIT 1",
+		projectID, title, TaskStatusOpen,
 	).Scan(&id)
 	if err == nil {
 		return id, nil

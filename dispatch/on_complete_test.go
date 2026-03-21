@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -25,7 +26,7 @@ func TestTriggerOnDone(t *testing.T) {
 			name:         "creates follow-up",
 			onDone:       "review",
 			wantFollowUp: true,
-			wantStatus:   "done",
+			wantStatus:   db.ActionStatusDone,
 		},
 		{
 			name:           "duplicate skipped",
@@ -54,10 +55,10 @@ func TestTriggerOnDone(t *testing.T) {
 			taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 
 			if tc.existingActive {
-				d.InsertAction(tc.onDone, tc.onDone, taskID, "{}", "pending")
+				d.InsertAction(tc.onDone, tc.onDone, taskID, "{}", db.ActionStatusPending)
 			}
 
-			actionID, _ := d.InsertAction("check-pr", "check-pr", taskID, "{}", "done")
+			actionID, _ := d.InsertAction("check-pr", "check-pr", taskID, "{}", db.ActionStatusDone)
 			action, _ := d.GetAction(actionID)
 
 			result := `{"status":"merged"}`
@@ -90,8 +91,8 @@ func TestTriggerOnDone(t *testing.T) {
 				if followUp.PromptID != tc.onDone {
 					t.Errorf("prompt_id = %q, want %q", followUp.PromptID, tc.onDone)
 				}
-				if followUp.Status != "pending" {
-					t.Errorf("status = %q, want %q", followUp.Status, "pending")
+				if followUp.Status != db.ActionStatusPending {
+					t.Errorf("status = %q, want %q", followUp.Status, db.ActionStatusPending)
 				}
 
 				var meta map[string]any
@@ -131,7 +132,7 @@ func TestTriggerOnCancel(t *testing.T) {
 			name:          "creates follow-up",
 			onCancel:      "improve",
 			wantFollowUp: true,
-			wantStatus:    "cancelled",
+			wantStatus:    db.ActionStatusCancelled,
 		},
 	}
 
@@ -147,7 +148,7 @@ func TestTriggerOnCancel(t *testing.T) {
 			}
 
 			taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-			actionID, _ := d.InsertAction("check-pr", "check-pr", taskID, "{}", "cancelled")
+			actionID, _ := d.InsertAction("check-pr", "check-pr", taskID, "{}", db.ActionStatusCancelled)
 			action, _ := d.GetAction(actionID)
 
 			reason := "cancelled with feedback"
@@ -170,8 +171,8 @@ func TestTriggerOnCancel(t *testing.T) {
 				if followUp.PromptID != tc.onCancel {
 					t.Errorf("prompt_id = %q, want %q", followUp.PromptID, tc.onCancel)
 				}
-				if followUp.Status != "pending" {
-					t.Errorf("status = %q, want %q", followUp.Status, "pending")
+				if followUp.Status != db.ActionStatusPending {
+					t.Errorf("status = %q, want %q", followUp.Status, db.ActionStatusPending)
 				}
 
 				var meta map[string]any
