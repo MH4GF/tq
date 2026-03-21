@@ -88,7 +88,7 @@ var taskListCmd = &cobra.Command{
 		for i, t := range tasks {
 			rows[i] = taskToMap(t, actionsByTask[t.ID])
 		}
-		return writeJSON(cmd.OutOrStdout(), rows, taskListJQ, taskListFields)
+		return WriteJSON(cmd.OutOrStdout(), rows, taskListJQ, taskListFields)
 	},
 }
 

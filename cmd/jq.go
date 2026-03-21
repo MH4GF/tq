@@ -13,7 +13,7 @@ func jqFlagUsage(fields []string) string {
 	return fmt.Sprintf("Filter JSON output using a jq expression (fields: %s)", strings.Join(fields, ", "))
 }
 
-func writeJSON(w io.Writer, data any, jqExpr string, fields []string) error {
+func WriteJSON(w io.Writer, data any, jqExpr string, fields []string) error {
 	if jqExpr == "" {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
@@ -71,6 +71,3 @@ func writeJSON(w io.Writer, data any, jqExpr string, fields []string) error {
 	}
 	return nil
 }
-
-// WriteJSON is exported for testing.
-var WriteJSON = writeJSON

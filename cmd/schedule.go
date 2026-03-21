@@ -88,7 +88,7 @@ var scheduleListCmd = &cobra.Command{
 			row["created_at"] = db.FormatLocal(s.CreatedAt)
 			rows[i] = row
 		}
-		return writeJSON(cmd.OutOrStdout(), rows, scheduleListJQ, scheduleListFields)
+		return WriteJSON(cmd.OutOrStdout(), rows, scheduleListJQ, scheduleListFields)
 	},
 }
 

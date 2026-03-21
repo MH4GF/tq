@@ -64,7 +64,7 @@ var projectListCmd = &cobra.Command{
 				"created_at":       db.FormatLocal(p.CreatedAt),
 			}
 		}
-		return writeJSON(cmd.OutOrStdout(), rows, projectListJQ, projectListFields)
+		return WriteJSON(cmd.OutOrStdout(), rows, projectListJQ, projectListFields)
 	},
 }
 

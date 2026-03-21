@@ -40,7 +40,7 @@ var listCmd = &cobra.Command{
 		for i, a := range actions {
 			rows[i] = actionToMap(a)
 		}
-		return writeJSON(cmd.OutOrStdout(), rows, listJQ, listFields)
+		return WriteJSON(cmd.OutOrStdout(), rows, listJQ, listFields)
 	},
 }
 
