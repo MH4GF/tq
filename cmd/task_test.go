@@ -473,6 +473,91 @@ func TestTaskUpdate_InvalidMeta(t *testing.T) {
 	}
 }
 
+func TestTaskGet(t *testing.T) {
+	tests := []struct {
+		name      string
+		setupTask bool
+		args      []string
+		wantErr   bool
+		check     func(t *testing.T, output []byte)
+	}{
+		{
+			name:      "success with actions",
+			setupTask: true,
+			wantErr:   false,
+			check: func(t *testing.T, output []byte) {
+				var row map[string]any
+				if err := json.Unmarshal(output, &row); err != nil {
+					t.Fatalf("JSON parse error: %v\noutput: %s", err, string(output))
+				}
+				if row["title"] != "my task" {
+					t.Errorf("title = %v, want %q", row["title"], "my task")
+				}
+				if row["metadata"] != `{"url":"https://example.com"}` {
+					t.Errorf("metadata = %v", row["metadata"])
+				}
+				actions, ok := row["actions"].([]any)
+				if !ok {
+					t.Fatalf("actions field missing or wrong type: %v", row["actions"])
+				}
+				if len(actions) != 1 {
+					t.Fatalf("expected 1 action, got %d", len(actions))
+				}
+				action := actions[0].(map[string]any)
+				if action["prompt_id"] != "review-pr" {
+					t.Errorf("action prompt_id = %v, want %q", action["prompt_id"], "review-pr")
+				}
+			},
+		},
+		{
+			name:    "not found",
+			args:    []string{"task", "get", "999"},
+			wantErr: true,
+		},
+		{
+			name:    "invalid ID",
+			args:    []string{"task", "get", "abc"},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+
+			args := tc.args
+			if tc.setupTask {
+				taskID, _ := d.InsertTask(1, "my task", `{"url":"https://example.com"}`, "")
+				d.InsertAction("review action", "review-pr", taskID, `{"pr":1}`, db.ActionStatusPending)
+				args = []string{"task", "get", fmt.Sprintf("%d", taskID)}
+			}
+
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs(args)
+
+			err := root.Execute()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.check != nil {
+				tc.check(t, buf.Bytes())
+			}
+		})
+	}
+}
+
 func TestTaskList_WithActions(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
