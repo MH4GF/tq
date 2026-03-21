@@ -91,7 +91,7 @@ gh api -X PATCH /notifications/threads/<thread_id>
 
 ### 4. Output summary
 
-```
+```text
 GitHub通知処理完了。取得: N件、スキップ: M件、アクション作成: K件。
 [list of each action summary]
 ```

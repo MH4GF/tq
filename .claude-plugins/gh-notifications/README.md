@@ -17,7 +17,7 @@ Fetches GitHub notifications, classifies them by type and priority, and creates 
 
 Triggered automatically via `tq schedule` or invoke manually:
 
-```
+```text
 /gh-notifications:watch
 ```
 

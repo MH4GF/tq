@@ -228,17 +228,24 @@ var scheduleUpdateCmd = &cobra.Command{
 			return fmt.Errorf("at least one flag (--title, --cron, --meta, --prompt, --instruction, --task) is required")
 		}
 
-		if promptID != nil && *promptID == "" {
+		if promptID != nil || meta != nil {
 			s, err := database.GetSchedule(id)
 			if err != nil {
 				return fmt.Errorf("get schedule for validation: %w", err)
 			}
-			currentMeta := s.Metadata
-			if meta != nil {
-				currentMeta = *meta
+
+			finalPromptID := s.PromptID
+			if promptID != nil {
+				finalPromptID = *promptID
 			}
-			if instructionFromMeta(currentMeta) == "" {
-				return fmt.Errorf("cannot clear --prompt without --instruction: schedule would have neither prompt nor instruction")
+
+			finalMeta := s.Metadata
+			if meta != nil {
+				finalMeta = *meta
+			}
+
+			if finalPromptID == "" && instructionFromMeta(finalMeta) == "" {
+				return fmt.Errorf("schedule would have neither prompt nor instruction")
 			}
 		}
 

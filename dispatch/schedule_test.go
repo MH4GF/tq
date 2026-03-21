@@ -180,6 +180,25 @@ func TestCheckSchedules_InstructionBasedAction(t *testing.T) {
 	}
 }
 
+func TestCheckSchedules_EmptyInstructionSkipped(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	d.InsertSchedule(taskID, "", "Bad schedule", "* * * * *", `{}`)
+	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
+
+	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := d.ListActions("", nil, 0)
+	if len(actions) != 0 {
+		t.Errorf("expected 0 actions for schedule without prompt or instruction, got %d", len(actions))
+	}
+}
+
 func TestCheckSchedules_InstructionDuplicateSkipped(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

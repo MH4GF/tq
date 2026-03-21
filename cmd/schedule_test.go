@@ -86,6 +86,29 @@ func TestScheduleCreate_NoPromptNoInstruction(t *testing.T) {
 	}
 }
 
+func TestScheduleUpdate_ClearMetaWithoutPrompt(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
+	d.InsertSchedule(taskID, "", "Watch", "* * * * *", `{"instruction":"/gh-notifications:watch"}`)
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"schedule", "update", "1", "--meta", "{}"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error when clearing meta would leave schedule without prompt or instruction")
+	}
+	if !contains(err.Error(), "neither prompt nor instruction") {
+		t.Errorf("error = %q, want to contain 'neither prompt nor instruction'", err.Error())
+	}
+}
+
 func TestScheduleUpdate_InvalidMeta(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

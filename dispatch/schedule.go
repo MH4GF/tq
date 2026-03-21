@@ -69,7 +69,12 @@ func CheckSchedules(database db.Store, now time.Time) error {
 		if s.PromptID != "" {
 			has, err = database.HasActiveAction(s.TaskID, s.PromptID)
 		} else {
-			has, err = database.HasActiveActionWithMeta(s.TaskID, "", "instruction", instructionFromMeta(s.Metadata))
+			instruction := instructionFromMeta(s.Metadata)
+			if instruction == "" {
+				slog.Warn("schedule: no prompt_id and no instruction in metadata, skipping", "schedule_id", s.ID, "task_id", s.TaskID)
+				continue
+			}
+			has, err = database.HasActiveActionWithMeta(s.TaskID, "", "instruction", instruction)
 		}
 		if err != nil {
 			slog.Warn("schedule: active action check failed", "schedule_id", s.ID, "error", err)
