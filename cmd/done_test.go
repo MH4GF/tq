@@ -132,6 +132,6 @@ func TestDone_TriggersOnDone(t *testing.T) {
 		t.Errorf("template_id = %q, want review", followUp.PromptID)
 	}
 	if followUp.Status != db.ActionStatusPending {
-		t.Errorf("status = %q, want pending", followUp.Status)
+		t.Errorf("status = %q, want %q", followUp.Status, db.ActionStatusPending)
 	}
 }
