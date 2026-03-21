@@ -846,6 +846,41 @@ func TestGetAction_NotFound(t *testing.T) {
 	}
 }
 
+func TestInsertAction_EmptyPromptID(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
+	id, err := d.InsertAction("test", "", taskID, `{"instruction":"do something"}`, db.ActionStatusPending)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := d.GetAction(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.PromptID != "" {
+		t.Errorf("prompt_id = %q, want empty", a.PromptID)
+	}
+}
+
+func TestHasActiveAction_EmptyPromptID(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	d.InsertAction("test", "", taskID, `{"instruction":"do something"}`, db.ActionStatusPending)
+
+	has, err := d.HasActiveAction(taskID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if has {
+		t.Error("expected false for empty prompt_id (should skip duplicate check)")
+	}
+}
+
 func TestInsertAction_Title(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

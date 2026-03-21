@@ -61,34 +61,6 @@ func WindowName(actionID int64) string {
 
 // ExecuteAction loads the prompt, renders it, and dispatches via the appropriate worker.
 func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action) (*ExecuteResult, error) {
-	lr, err := prompt.Load(params.PromptsDir, action.PromptID)
-	if err != nil {
-		failMsg := fmt.Sprintf("prompt load error: %v", err)
-		_ = params.DB.MarkFailed(action.ID, failMsg)
-		CreateInvestigateFailureAction(params.DB, action, failMsg)
-		return nil, fmt.Errorf("load prompt %q: %w", action.PromptID, err)
-	}
-	tmpl := lr.Prompt
-
-	if len(lr.UnknownFields) > 0 {
-		CreateSelfImprovementAction(params.DB, params.PromptsDir, action.PromptID, lr.UnknownFields)
-	}
-
-	if len(lr.DeprecatedPatterns) > 0 {
-		created, ferr := CreateParseErrorFixAction(params.DB, params.PromptsDir, action.PromptID, lr.DeprecatedPatterns)
-		var msg string
-		switch {
-		case ferr != nil:
-			msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v (failed to create fix action: %v)", action.PromptID, lr.DeprecatedPatterns, ferr)
-		case created:
-			msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v — a fix action has been created", action.PromptID, lr.DeprecatedPatterns)
-		default:
-			msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v", action.PromptID, lr.DeprecatedPatterns)
-		}
-		_ = params.DB.MarkFailed(action.ID, msg)
-		return nil, fmt.Errorf("prompt %q uses deprecated patterns: %v", action.PromptID, lr.DeprecatedPatterns)
-	}
-
 	promptData, err := BuildPromptData(params.DB, action)
 	if err != nil {
 		failMsg := fmt.Sprintf("build prompt data: %v", err)
@@ -97,23 +69,69 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 		return nil, fmt.Errorf("build prompt data: %w", err)
 	}
 
-	rendered, err := tmpl.Render(promptData)
-	if err != nil {
-		failMsg := fmt.Sprintf("render error: %v", err)
-		_ = params.DB.MarkFailed(action.ID, failMsg)
-		CreateInvestigateFailureAction(params.DB, action, failMsg)
-		return nil, fmt.Errorf("render prompt: %w", err)
+	var rendered string
+	var cfg prompt.Config
+
+	if action.PromptID == "" {
+		instruction, ok := promptData.Action.Meta["instruction"].(string)
+		if !ok || instruction == "" {
+			_ = params.DB.MarkFailed(action.ID, "no prompt_id and no instruction in metadata")
+			return nil, errors.New("no prompt_id and no instruction in metadata")
+		}
+		rendered = instruction
+		cfg = prompt.Config{Mode: ModeInteractive}
+
+		if modeStr, ok := promptData.Action.Meta["mode"].(string); ok {
+			cfg.Mode = modeStr
+		}
+	} else {
+		lr, err := prompt.Load(params.PromptsDir, action.PromptID)
+		if err != nil {
+			failMsg := fmt.Sprintf("prompt load error: %v", err)
+			_ = params.DB.MarkFailed(action.ID, failMsg)
+			CreateInvestigateFailureAction(params.DB, action, failMsg)
+			return nil, fmt.Errorf("load prompt %q: %w", action.PromptID, err)
+		}
+
+		if len(lr.UnknownFields) > 0 {
+			CreateSelfImprovementAction(params.DB, params.PromptsDir, action.PromptID, lr.UnknownFields)
+		}
+
+		if len(lr.DeprecatedPatterns) > 0 {
+			created, ferr := CreateParseErrorFixAction(params.DB, params.PromptsDir, action.PromptID, lr.DeprecatedPatterns)
+			var msg string
+			switch {
+			case ferr != nil:
+				msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v (failed to create fix action: %v)", action.PromptID, lr.DeprecatedPatterns, ferr)
+			case created:
+				msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v — a fix action has been created", action.PromptID, lr.DeprecatedPatterns)
+			default:
+				msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v", action.PromptID, lr.DeprecatedPatterns)
+			}
+			_ = params.DB.MarkFailed(action.ID, msg)
+			return nil, fmt.Errorf("prompt %q uses deprecated patterns: %v", action.PromptID, lr.DeprecatedPatterns)
+		}
+
+		rendered, err = lr.Prompt.Render(promptData)
+		if err != nil {
+			failMsg := fmt.Sprintf("render error: %v", err)
+			_ = params.DB.MarkFailed(action.ID, failMsg)
+			CreateInvestigateFailureAction(params.DB, action, failMsg)
+			return nil, fmt.Errorf("render prompt: %w", err)
+		}
+
+		cfg = lr.Prompt.Config
 	}
 
 	workDir := ResolveWorkDir(promptData)
 
-	if tmpl.Config.IsRemote() {
-		return executeRemote(ctx, params, action, rendered, tmpl.Config, workDir)
+	if cfg.IsRemote() {
+		return executeRemote(ctx, params, action, rendered, cfg, workDir)
 	}
-	if tmpl.Config.IsInteractive() {
-		return executeInteractive(ctx, params, action, rendered, tmpl.Config, workDir)
+	if cfg.IsInteractive() {
+		return executeInteractive(ctx, params, action, rendered, cfg, workDir)
 	}
-	return executeNonInteractive(ctx, params, action, rendered, tmpl.Config, workDir)
+	return executeNonInteractive(ctx, params, action, rendered, cfg, workDir)
 }
 
 func executeRemote(ctx context.Context, params ExecuteParams, action *db.Action, rendered string, cfg prompt.Config, workDir string) (*ExecuteResult, error) {

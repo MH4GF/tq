@@ -3,6 +3,7 @@ package cmd_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
@@ -183,6 +184,75 @@ func TestList_JSON(t *testing.T) {
 	}
 	if row["completed_at"] == nil {
 		t.Error("completed_at should not be null for done action")
+	}
+}
+
+func TestActionGet(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupAction bool
+		args        []string
+		wantErr     bool
+		check       func(t *testing.T, output []byte)
+	}{
+		{
+			name:        "success",
+			setupAction: true,
+			wantErr:     false,
+			check: func(t *testing.T, output []byte) {
+				var row map[string]any
+				if err := json.Unmarshal(output, &row); err != nil {
+					t.Fatalf("JSON parse error: %v\noutput: %s", err, string(output))
+				}
+				if row["prompt_id"] != "review-pr" {
+					t.Errorf("prompt_id = %v, want %q", row["prompt_id"], "review-pr")
+				}
+				if row["result"] != nil {
+					t.Errorf("result should be null, got %v", row["result"])
+				}
+			},
+		},
+		{
+			name:    "not found",
+			args:    []string{"action", "get", "999"},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+
+			args := tc.args
+			if tc.setupAction {
+				taskID, _ := d.InsertTask(1, "test task", "{}", "")
+				actionID, _ := d.InsertAction("review action", "review-pr", taskID, `{"pr":1}`, db.ActionStatusPending)
+				args = []string{"action", "get", fmt.Sprintf("%d", actionID)}
+			}
+
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs(args)
+
+			err := root.Execute()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.check != nil {
+				tc.check(t, buf.Bytes())
+			}
+		})
 	}
 }
 

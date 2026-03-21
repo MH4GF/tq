@@ -69,7 +69,11 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 	fmt.Fprintf(&b, "  ID:        %d\n", a.ID)
 	fmt.Fprintf(&b, "  Status:    %s\n", st.Render(a.Status))
 	fmt.Fprintf(&b, "  Title:     %s\n", a.Title)
-	fmt.Fprintf(&b, "  Prompt:    %s\n", a.PromptID)
+	promptDisplay := a.PromptID
+	if promptDisplay == "" {
+		promptDisplay = "(instruction)"
+	}
+	fmt.Fprintf(&b, "  Prompt:    %s\n", promptDisplay)
 	fmt.Fprintf(&b, "  Task:      #%d\n", a.TaskID)
 	if a.CompletedAt.Valid {
 		fmt.Fprintf(&b, "  Completed: %s\n", db.FormatLocal(a.CompletedAt.String))

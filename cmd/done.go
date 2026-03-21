@@ -20,16 +20,24 @@ var doneCmd = &cobra.Command{
 	Short: "Mark action as done",
 	Long: `Mark an action as done, optionally recording a result summary.
 Can be called on any non-terminal action (pending or running).
+Triggers on_done hooks defined in the prompt template.
 
-RESULT is a free-form string. Triggers on_done hooks defined in the prompt template.
+RESULT is free-form text read by future workers to understand past work.
+Structure it with these sections (omit any that don't apply):
 
-RESULT serves as memory for future sessions. Write what a future worker needs to
-continue the work: what was done, what approach was taken, what failed, and what
-remains unfinished.`,
+  outcome:    What changed — concrete deliverables, not process steps
+  decisions:  What was decided and why — include rejected alternatives
+  artifacts:  PR numbers, file paths, commit SHAs, URLs
+  remaining:  Unfinished work, known issues, follow-up needed
+
+Do NOT describe process ("I ran grep, then read the file…").
+Session logs already capture that.`,
 	Example: `  tq action done 5
-  tq action done 5 "Refactored auth to use JWT. Changed auth/middleware.go and added
-  auth/token.go. Tried Redis session store first but reverted due to latency.
-  Still need to update API docs for new token format."`,
+
+  tq action done 5 'outcome: Added JWT auth middleware
+  decisions: Tried Redis session store, reverted due to p99 latency (+40ms); fell back to signed cookies
+  artifacts: PR #142, auth/middleware.go, auth/token.go
+  remaining: API docs not yet updated for new token format'`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := strconv.ParseInt(args[0], 10, 64)

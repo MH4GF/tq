@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS actions (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   title        TEXT NOT NULL DEFAULT '',
-  prompt_id    TEXT NOT NULL,
+  prompt_id    TEXT DEFAULT '',
   task_id      INTEGER NOT NULL REFERENCES tasks(id),
   metadata     TEXT NOT NULL DEFAULT '{}',
   status       TEXT DEFAULT 'pending',
@@ -59,3 +59,8 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS idx_events_entity ON events(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+
+CREATE TABLE IF NOT EXISTS worker_heartbeats (
+  id             INTEGER PRIMARY KEY CHECK (id = 1),
+  last_heartbeat TEXT NOT NULL
+);

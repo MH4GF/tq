@@ -40,42 +40,45 @@ var listCmd = &cobra.Command{
 
 		rows := make([]map[string]any, len(actions))
 		for i, a := range actions {
-			row := map[string]any{
-				"id":         a.ID,
-				"title":      a.Title,
-				"prompt_id":  a.PromptID,
-				"task_id":    a.TaskID,
-				"metadata":   a.Metadata,
-				"status":     a.Status,
-				"created_at": db.FormatLocal(a.CreatedAt),
-			}
-			if a.Result.Valid {
-				row["result"] = a.Result.String
-			} else {
-				row["result"] = nil
-			}
-			if a.SessionID.Valid {
-				row["session_id"] = a.SessionID.String
-			} else {
-				row["session_id"] = nil
-			}
-			if a.StartedAt.Valid {
-				row["started_at"] = db.FormatLocal(a.StartedAt.String)
-			} else {
-				row["started_at"] = nil
-			}
-			if a.CompletedAt.Valid {
-				row["completed_at"] = db.FormatLocal(a.CompletedAt.String)
-			} else {
-				row["completed_at"] = nil
-			}
-
-			rows[i] = row
+			rows[i] = actionToMap(a)
 		}
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
 		return enc.Encode(rows)
 	},
+}
+
+func actionToMap(a db.Action) map[string]any {
+	row := map[string]any{
+		"id":         a.ID,
+		"title":      a.Title,
+		"prompt_id":  a.PromptID,
+		"task_id":    a.TaskID,
+		"metadata":   a.Metadata,
+		"status":     a.Status,
+		"created_at": db.FormatLocal(a.CreatedAt),
+	}
+	if a.Result.Valid {
+		row["result"] = a.Result.String
+	} else {
+		row["result"] = nil
+	}
+	if a.SessionID.Valid {
+		row["session_id"] = a.SessionID.String
+	} else {
+		row["session_id"] = nil
+	}
+	if a.StartedAt.Valid {
+		row["started_at"] = db.FormatLocal(a.StartedAt.String)
+	} else {
+		row["started_at"] = nil
+	}
+	if a.CompletedAt.Valid {
+		row["completed_at"] = db.FormatLocal(a.CompletedAt.String)
+	} else {
+		row["completed_at"] = nil
+	}
+	return row
 }
 
 func init() {
