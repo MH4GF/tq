@@ -23,6 +23,7 @@ type Config struct {
 	Description    string `yaml:"description"`
 	Mode           string `yaml:"mode"` // "interactive" (default) | "noninteractive" | "remote"
 	PermissionMode string `yaml:"permission_mode"`
+	Worktree       bool   `yaml:"-"` // set via action metadata, not frontmatter
 	OnDone         string `yaml:"on_done"`
 	OnCancel       string `yaml:"on_cancel"`
 }

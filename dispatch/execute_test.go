@@ -9,8 +9,19 @@ import (
 	"testing"
 
 	"github.com/MH4GF/tq/db"
+	"github.com/MH4GF/tq/prompt"
 	"github.com/MH4GF/tq/testutil"
 )
+
+type cfgCapturingWorker struct {
+	inner Worker
+	cfg   *prompt.Config
+}
+
+func (w *cfgCapturingWorker) Execute(ctx context.Context, p string, cfg prompt.Config, workDir string, actionID, taskID int64) (string, error) {
+	*w.cfg = cfg
+	return w.inner.Execute(ctx, p, cfg, workDir, actionID, taskID)
+}
 
 func TestExecuteAction(t *testing.T) {
 	tests := []struct {
@@ -186,6 +197,42 @@ func TestExecuteAction_InstructionWithModeOverride(t *testing.T) {
 	}
 	if result.Mode != ModeNonInteractive {
 		t.Errorf("mode = %q, want %q", result.Mode, ModeNonInteractive)
+	}
+}
+
+func TestExecuteAction_WorktreeFromMetadata(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	promptsDir := filepath.Join(t.TempDir(), "prompts")
+	os.MkdirAll(promptsDir, 0o755)
+
+	meta, _ := json.Marshal(map[string]any{"instruction": "do work", "worktree": true})
+	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+	d.InsertAction("task", "", taskID, string(meta), db.ActionStatusPending)
+
+	action, _ := d.NextPending(context.Background())
+
+	var capturedCfg prompt.Config
+	worker := &countingWorker{result: "interactive:done"}
+	workerFunc := func() Worker {
+		return &cfgCapturingWorker{inner: worker, cfg: &capturedCfg}
+	}
+
+	_, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+		PromptsDir: promptsDir,
+	}, action)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !capturedCfg.Worktree {
+		t.Error("expected cfg.Worktree to be true")
 	}
 }
 
