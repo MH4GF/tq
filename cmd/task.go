@@ -86,56 +86,7 @@ var taskListCmd = &cobra.Command{
 
 		rows := make([]map[string]any, len(tasks))
 		for i, t := range tasks {
-			row := map[string]any{
-				"id":         t.ID,
-				"project_id": t.ProjectID,
-				"title":      t.Title,
-				"metadata":   t.Metadata,
-				"status":     t.Status,
-				"work_dir":   t.WorkDir,
-				"created_at": db.FormatLocal(t.CreatedAt),
-			}
-			if t.UpdatedAt.Valid {
-				row["updated_at"] = db.FormatLocal(t.UpdatedAt.String)
-			} else {
-				row["updated_at"] = nil
-			}
-
-			actions := actionsByTask[t.ID]
-			actionRows := make([]map[string]any, len(actions))
-			for j, a := range actions {
-				ar := map[string]any{
-					"id":         a.ID,
-					"prompt_id":  a.PromptID,
-					"metadata":   a.Metadata,
-					"status":     a.Status,
-					"created_at": db.FormatLocal(a.CreatedAt),
-				}
-				ar["task_id"] = a.TaskID
-				if a.Result.Valid {
-					ar["result"] = a.Result.String
-				} else {
-					ar["result"] = nil
-				}
-				if a.SessionID.Valid {
-					ar["session_id"] = a.SessionID.String
-				} else {
-					ar["session_id"] = nil
-				}
-				if a.StartedAt.Valid {
-					ar["started_at"] = db.FormatLocal(a.StartedAt.String)
-				} else {
-					ar["started_at"] = nil
-				}
-				if a.CompletedAt.Valid {
-					ar["completed_at"] = db.FormatLocal(a.CompletedAt.String)
-				} else {
-					ar["completed_at"] = nil
-				}
-				actionRows[j] = ar
-			}
-			row["actions"] = actionRows
-			rows[i] = row
+			rows[i] = taskToMap(t, actionsByTask[t.ID])
 		}
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
@@ -217,6 +168,52 @@ At least one of --status, --project, --work-dir, or --meta is required.`,
 	},
 }
 
+func taskToMap(t db.Task, actions []db.Action) map[string]any {
+	row := map[string]any{
+		"id":         t.ID,
+		"project_id": t.ProjectID,
+		"title":      t.Title,
+		"metadata":   t.Metadata,
+		"status":     t.Status,
+		"work_dir":   t.WorkDir,
+		"created_at": db.FormatLocal(t.CreatedAt),
+	}
+	if t.UpdatedAt.Valid {
+		row["updated_at"] = db.FormatLocal(t.UpdatedAt.String)
+	} else {
+		row["updated_at"] = nil
+	}
+	actionRows := make([]map[string]any, len(actions))
+	for i, a := range actions {
+		actionRows[i] = actionToMap(a)
+	}
+	row["actions"] = actionRows
+	return row
+}
+
+var taskGetCmd = &cobra.Command{
+	Use:   "get <ID>",
+	Short: "Get a task by ID (JSON output, includes nested actions)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := parseID(args[0])
+		if err != nil {
+			return err
+		}
+		task, err := database.GetTask(id)
+		if err != nil {
+			return fmt.Errorf("get task: %w", err)
+		}
+		actions, err := database.ListActions("", &id)
+		if err != nil {
+			return fmt.Errorf("list actions: %w", err)
+		}
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(taskToMap(*task, actions))
+	},
+}
+
 func joinUpdates(updates []string) string {
 	return strings.Join(updates, ", ")
 }
@@ -240,4 +237,5 @@ func init() {
 	taskCmd.AddCommand(taskListCmd)
 	taskCmd.AddCommand(taskCreateCmd)
 	taskCmd.AddCommand(taskUpdateCmd)
+	taskCmd.AddCommand(taskGetCmd)
 }
