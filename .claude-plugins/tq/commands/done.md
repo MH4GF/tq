@@ -6,8 +6,6 @@ allowed-tools: Bash(tq *)
 
 # tq action done
 
-IMPORTANT: Run `tq action done --help` first to understand result format guidance.
-
 ## Find action_id
 
 1. Environment variable `TQ_ACTION_ID` — always check this first. It is pre-set by the dispatcher and avoids an extra CLI call.
@@ -16,4 +14,9 @@ IMPORTANT: Run `tq action done --help` first to understand result format guidanc
 
 ## Execute
 
+IMPORTANT: Run `tq action done --help` for the full result format guidance.
+
 `tq action done <action_id> '<result>'`
+
+Result must use structured sections: outcome, decisions, artifacts, remaining.
+Do NOT describe process steps — session logs capture that.
