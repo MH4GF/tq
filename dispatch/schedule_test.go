@@ -168,7 +168,7 @@ func TestCheckSchedules_InstructionBasedAction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actions, _ := d.ListActions(db.ActionStatusPending, nil)
+	actions, _ := d.ListActions(db.ActionStatusPending, nil, 0)
 	if len(actions) != 1 {
 		t.Fatalf("expected 1 action, got %d", len(actions))
 	}
@@ -195,7 +195,7 @@ func TestCheckSchedules_InstructionDuplicateSkipped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actions, _ := d.ListActions(db.ActionStatusPending, nil)
+	actions, _ := d.ListActions(db.ActionStatusPending, nil, 0)
 	if len(actions) != 1 {
 		t.Errorf("expected 1 action (existing only), got %d", len(actions))
 	}

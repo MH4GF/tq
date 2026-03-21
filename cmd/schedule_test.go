@@ -52,7 +52,7 @@ func TestScheduleCreate_WithInstruction(t *testing.T) {
 		t.Errorf("output = %q, want to contain 'schedule #'", out.String())
 	}
 
-	schedules, _ := d.ListSchedules()
+	schedules, _ := d.ListSchedules(0)
 	if len(schedules) != 1 {
 		t.Fatalf("expected 1 schedule, got %d", len(schedules))
 	}
