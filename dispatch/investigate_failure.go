@@ -45,11 +45,11 @@ func CreateInvestigateFailureAction(database db.Store, action *db.Action, failur
 	}
 
 	title := fmt.Sprintf("Investigate failure of action #%d (%s)", action.ID, action.PromptID)
-	_, err = database.InsertAction(title, investigateFailurePromptID, action.TaskID, string(metaJSON), db.ActionStatusPending)
+	id, err := database.InsertAction(title, investigateFailurePromptID, action.TaskID, string(metaJSON), db.ActionStatusPending)
 	if err != nil {
 		slog.Error("create investigate-failure action", "error", err)
 		return
 	}
 
-	slog.Info("investigate-failure action created", "failed_action_id", action.ID, "prompt_id", action.PromptID)
+	slog.Info("investigate-failure action created", "action_id", id, "failed_action_id", action.ID, "prompt_id", action.PromptID)
 }

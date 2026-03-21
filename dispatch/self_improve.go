@@ -51,11 +51,11 @@ func CreateSelfImprovementAction(database db.Store, promptsDir string, promptID 
 	}
 
 	title := fmt.Sprintf("Remove unknown frontmatter fields from %q", promptID)
-	_, err = database.InsertAction(title, selfImprovementPromptID, taskID, string(metaJSON), db.ActionStatusPending)
+	id, err := database.InsertAction(title, selfImprovementPromptID, taskID, string(metaJSON), db.ActionStatusPending)
 	if err != nil {
 		slog.Error("create self-improvement action", "error", err)
 		return
 	}
 
-	slog.Info("self-improvement action created", "prompt_id", promptID, "unknown_fields", unknownFields)
+	slog.Info("self-improvement action created", "action_id", id, "prompt_id", promptID, "unknown_fields", unknownFields)
 }

@@ -44,11 +44,11 @@ func CreateParseErrorFixAction(database db.Store, promptsDir string, promptID st
 	}
 
 	title := fmt.Sprintf("Fix deprecated patterns in %q", promptID)
-	_, err = database.InsertAction(title, parseErrorFixPromptID, taskID, string(metaJSON), db.ActionStatusPending)
+	id, err := database.InsertAction(title, parseErrorFixPromptID, taskID, string(metaJSON), db.ActionStatusPending)
 	if err != nil {
 		return false, fmt.Errorf("create parse-error-fix action: %w", err)
 	}
 
-	slog.Info("parse-error-fix action created", "prompt_id", promptID, "deprecated_patterns", deprecatedPatterns)
+	slog.Info("parse-error-fix action created", "action_id", id, "prompt_id", promptID, "deprecated_patterns", deprecatedPatterns)
 	return true, nil
 }
