@@ -1,0 +1,90 @@
+package db
+
+import (
+	"fmt"
+	"strings"
+)
+
+type SearchResult struct {
+	EntityType string `json:"entity_type"`
+	EntityID   int64  `json:"entity_id"`
+	TaskID     int64  `json:"task_id"`
+	Field      string `json:"field"`
+	Snippet    string `json:"snippet"`
+	Status     string `json:"status"`
+	CreatedAt  string `json:"created_at"`
+}
+
+func extractSnippet(value, lowerKeyword string, keywordLen, contextChars int) string {
+	normalized := strings.ReplaceAll(value, "\n", " ")
+	lower := strings.ToLower(normalized)
+	idx := strings.Index(lower, lowerKeyword)
+	if idx < 0 {
+		if len(normalized) > contextChars*2 {
+			return normalized[:contextChars*2] + "..."
+		}
+		return normalized
+	}
+
+	start := idx - contextChars
+	end := idx + keywordLen + contextChars
+
+	var prefix, suffix string
+	if start < 0 {
+		start = 0
+	} else {
+		prefix = "..."
+	}
+	if end > len(normalized) {
+		end = len(normalized)
+	} else {
+		suffix = "..."
+	}
+
+	return prefix + normalized[start:end] + suffix
+}
+
+func (db *DB) Search(keyword string) ([]SearchResult, error) {
+	query := `
+		SELECT 'task' AS entity_type, t.id AS entity_id, t.id AS task_id, 'title' AS field, t.title AS value, t.status, t.created_at
+		FROM tasks t WHERE t.title LIKE '%' || ? || '%'
+		UNION ALL
+		SELECT 'task', t.id, t.id, 'metadata', t.metadata, t.status, t.created_at
+		FROM tasks t WHERE t.metadata LIKE '%' || ? || '%'
+		UNION ALL
+		SELECT 'action', a.id, a.task_id, 'title', a.title, a.status, a.created_at
+		FROM actions a WHERE a.title LIKE '%' || ? || '%'
+		UNION ALL
+		SELECT 'action', a.id, a.task_id, 'result', COALESCE(a.result, ''), a.status, a.created_at
+		FROM actions a WHERE COALESCE(a.result, '') LIKE '%' || ? || '%'
+		UNION ALL
+		SELECT 'action', a.id, a.task_id, 'metadata', a.metadata, a.status, a.created_at
+		FROM actions a WHERE a.metadata LIKE '%' || ? || '%'
+		ORDER BY task_id DESC, entity_id DESC
+		LIMIT 500
+	`
+
+	rows, err := db.Query(query, keyword, keyword, keyword, keyword, keyword)
+	if err != nil {
+		return nil, fmt.Errorf("search: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	lowerKeyword := strings.ToLower(keyword)
+	keywordLen := len(keyword)
+	var results []SearchResult
+	for rows.Next() {
+		var r SearchResult
+		var value string
+		if err := rows.Scan(&r.EntityType, &r.EntityID, &r.TaskID, &r.Field, &value, &r.Status, &r.CreatedAt); err != nil {
+			return nil, fmt.Errorf("search scan: %w", err)
+		}
+		r.Snippet = extractSnippet(value, lowerKeyword, keywordLen, 40)
+		r.CreatedAt = FormatLocal(r.CreatedAt)
+		results = append(results, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("search iterate: %w", err)
+	}
+	return results, nil
+}
