@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -10,6 +9,9 @@ import (
 )
 
 var scheduleListLimit int
+var scheduleListJQ string
+
+var scheduleListFields = []string{"id", "task_id", "prompt_id", "title", "cron_expr", "metadata", "enabled", "last_run_at", "created_at"}
 
 var scheduleCmd = &cobra.Command{
 	Use:   "schedule",
@@ -66,10 +68,6 @@ var scheduleListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if len(schedules) == 0 {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
-			return nil
-		}
 
 		rows := make([]map[string]any, len(schedules))
 		for i, s := range schedules {
@@ -90,9 +88,7 @@ var scheduleListCmd = &cobra.Command{
 			row["created_at"] = db.FormatLocal(s.CreatedAt)
 			rows[i] = row
 		}
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(rows)
+		return writeJSON(cmd.OutOrStdout(), rows, scheduleListJQ, scheduleListFields)
 	},
 }
 
@@ -212,6 +208,7 @@ func init() {
 	scheduleCreateCmd.Flags().String("meta", "{}", `JSON metadata (e.g. {"key":"value"})`)
 
 	scheduleListCmd.Flags().IntVar(&scheduleListLimit, "limit", 0, "Limit number of results (0 = no limit)")
+	scheduleListCmd.Flags().StringVar(&scheduleListJQ, "jq", "", jqFlagUsage(scheduleListFields))
 
 	scheduleCmd.AddCommand(scheduleCreateCmd)
 	scheduleCmd.AddCommand(scheduleListCmd)
