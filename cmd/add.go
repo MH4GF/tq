@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"unicode/utf8"
 
@@ -13,21 +14,25 @@ import (
 const maxActionTitleLength = 100
 
 var (
-	addPrompt string
-	addTitle  string
-	addTask   int64
-	addMeta   string
-	addStatus string
-	addForce  bool
+	addPrompt      string
+	addInstruction string
+	addTitle       string
+	addTask        int64
+	addMeta        string
+	addStatus      string
+	addForce       bool
 )
 
 var addCmd = &cobra.Command{
-	Use:   "create <PROMPT>",
+	Use:   "create",
 	Short: "Create an action",
-	Long: `Create a new action linked to a task and prompt template.
+	Long: `Create a new action linked to a task. Provide a prompt template and/or direct instruction.
 
-PROMPT is the prompt template ID. Run "tq prompt list" first to see available prompts
-and choose the appropriate one for the task.
+  --prompt: specify a prompt template ID
+  --instruction: provide a direct instruction (e.g., "/github-pr review this")
+
+  At least one of --prompt or --instruction is required.
+  When both are given, instruction is available in template as {{index .Action.Meta "instruction"}}.
 
 Errors if an active action with the same prompt exists for the task. Use --force to override.
 
@@ -38,15 +43,22 @@ technical details from the current session), and constraints.
 If @filepath content is attached in session context, embed the file path and content
 in the instruction so the worker can skip file discovery.
 If instruction cannot be determined from context, ask the user.`,
-	Example: `  # Check available prompts, then create:
-  tq prompt list
-  tq action create review-pr --task 1 --title "Review PR #42"
+	Example: `  # With prompt template
+  tq action create --prompt review-pr --task 1 --title "Review PR #42"
+
+  # With direct instruction (no template needed)
+  tq action create --task 1 --title "Review PR" --instruction "/github-pr review this"
+
+  # Both (instruction available in template)
+  tq action create --prompt implement --task 1 --title "Add auth" --instruction "Add JWT middleware"
 
   # With instruction metadata for implementation prompts:
-  tq action create implement --task 2 --title "Add auth middleware" --meta '{"instruction":"Goal: Add JWT auth middleware\nContext: auth/ has existing helpers, routes defined in cmd/server.go\nConstraints: Apply per-route, not globally"}'`,
-	Args: cobra.ExactArgs(1),
+  tq action create --prompt implement --task 2 --title "Add auth middleware" --meta '{"instruction":"Goal: Add JWT auth middleware"}'`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		addPrompt = args[0]
+		if addPrompt == "" && addInstruction == "" {
+			return fmt.Errorf("at least one of --prompt or --instruction is required")
+		}
 
 		if addTitle == "" {
 			return fmt.Errorf("--title is required: set a concise, descriptive title (max %d chars) that explains what this action does", maxActionTitleLength)
@@ -68,47 +80,58 @@ If instruction cannot be determined from context, ask the user.`,
 			return err
 		}
 
-		if !addForce {
-			existing, err := database.GetActiveAction(addTask, addPrompt)
+		meta := addMeta
+		if addInstruction != "" {
+			merged, err := mergeInstruction(meta, addInstruction)
 			if err != nil {
-				return fmt.Errorf("check duplicates: %w", err)
+				return err
 			}
-			if existing != nil {
-				return fmt.Errorf("blocked: active action exists for task %d prompt %s\n  → action #%d %q (status: %s, created: %s)\n  hint: cancel it first: tq action cancel %d\n  hint: or create a second action with --force (both will be dispatched)",
-					addTask, addPrompt, existing.ID, existing.Title, existing.Status, existing.CreatedAt, existing.ID)
+			meta = merged
+		}
+
+		if addPrompt != "" {
+			if !addForce {
+				existing, err := database.GetActiveAction(addTask, addPrompt)
+				if err != nil {
+					return fmt.Errorf("check duplicates: %w", err)
+				}
+				if existing != nil {
+					return fmt.Errorf("blocked: active action exists for task %d prompt %s\n  → action #%d %q (status: %s, created: %s)\n  hint: cancel it first: tq action cancel %d\n  hint: or create a second action with --force (both will be dispatched)",
+						addTask, addPrompt, existing.ID, existing.Title, existing.Status, existing.CreatedAt, existing.ID)
+				}
+			}
+
+			promptsDir := resolvePromptsDir()
+			lr, err := prompt.Load(promptsDir, addPrompt)
+			if err != nil {
+				return fmt.Errorf("load prompt: %w", err)
+			}
+			if len(lr.DeprecatedPatterns) > 0 {
+				created, ferr := dispatch.CreateParseErrorFixAction(database, promptsDir, addPrompt, lr.DeprecatedPatterns)
+				if ferr != nil {
+					return fmt.Errorf("prompt %q uses deprecated patterns: %v (failed to create fix action: %w)", addPrompt, lr.DeprecatedPatterns, ferr)
+				}
+				if created {
+					return fmt.Errorf("prompt %q uses deprecated patterns: %v — a fix action has been created", addPrompt, lr.DeprecatedPatterns)
+				}
+				return fmt.Errorf("prompt %q uses deprecated patterns: %v", addPrompt, lr.DeprecatedPatterns)
+			}
+			tempAction := &db.Action{
+				TaskID:   addTask,
+				PromptID: addPrompt,
+				Metadata: meta,
+				Status:   status,
+			}
+			promptData, err := dispatch.BuildPromptData(database, tempAction)
+			if err != nil {
+				return fmt.Errorf("build prompt data: %w", err)
+			}
+			if _, err := lr.Prompt.Render(promptData); err != nil {
+				return fmt.Errorf("prompt %q requires metadata not provided in --meta: %w", addPrompt, err)
 			}
 		}
 
-		promptsDir := resolvePromptsDir()
-		lr, err := prompt.Load(promptsDir, addPrompt)
-		if err != nil {
-			return fmt.Errorf("load prompt: %w", err)
-		}
-		if len(lr.DeprecatedPatterns) > 0 {
-			created, ferr := dispatch.CreateParseErrorFixAction(database, promptsDir, addPrompt, lr.DeprecatedPatterns)
-			if ferr != nil {
-				return fmt.Errorf("prompt %q uses deprecated patterns: %v (failed to create fix action: %w)", addPrompt, lr.DeprecatedPatterns, ferr)
-			}
-			if created {
-				return fmt.Errorf("prompt %q uses deprecated patterns: %v — a fix action has been created", addPrompt, lr.DeprecatedPatterns)
-			}
-			return fmt.Errorf("prompt %q uses deprecated patterns: %v", addPrompt, lr.DeprecatedPatterns)
-		}
-		tempAction := &db.Action{
-			TaskID:   addTask,
-			PromptID: addPrompt,
-			Metadata: addMeta,
-			Status:   status,
-		}
-		promptData, err := dispatch.BuildPromptData(database, tempAction)
-		if err != nil {
-			return fmt.Errorf("build prompt data: %w", err)
-		}
-		if _, err := lr.Prompt.Render(promptData); err != nil {
-			return fmt.Errorf("prompt %q requires metadata not provided in --meta: %w", addPrompt, err)
-		}
-
-		id, err := database.InsertAction(addTitle, addPrompt, addTask, addMeta, status)
+		id, err := database.InsertAction(addTitle, addPrompt, addTask, meta, status)
 		if err != nil {
 			return fmt.Errorf("insert action: %w", err)
 		}
@@ -117,7 +140,24 @@ If instruction cannot be determined from context, ask the user.`,
 	},
 }
 
+func mergeInstruction(metaJSON, instruction string) (string, error) {
+	m := make(map[string]any)
+	if metaJSON != "" && metaJSON != "{}" {
+		if err := json.Unmarshal([]byte(metaJSON), &m); err != nil {
+			return "", fmt.Errorf("parse metadata for instruction merge: %w", err)
+		}
+	}
+	m["instruction"] = instruction
+	data, err := json.Marshal(m)
+	if err != nil {
+		return "", fmt.Errorf("marshal metadata: %w", err)
+	}
+	return string(data), nil
+}
+
 func init() {
+	addCmd.Flags().StringVarP(&addPrompt, "prompt", "p", "", "Prompt template ID (see: tq prompt list)")
+	addCmd.Flags().StringVarP(&addInstruction, "instruction", "i", "", "Direct instruction text")
 	addCmd.Flags().StringVar(&addTitle, "title", "", fmt.Sprintf("Action title (required, max %d chars)", maxActionTitleLength))
 	addCmd.Flags().Int64Var(&addTask, "task", 0, "Task ID (required, see: tq task list)")
 	if err := addCmd.MarkFlagRequired("task"); err != nil {

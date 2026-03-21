@@ -12,10 +12,13 @@ IMPORTANT: Run `tq action create --help` first to understand meta format and bes
 
 ## Workflow
 
-### 1. Choose prompt
+### 1. Decide: prompt template or direct instruction?
 
-Run `tq prompt list`, then infer the best prompt from `$ARGUMENTS` and session context.
-If unsure, present options to the user.
+- If the task maps to an existing prompt template, use `--prompt`.
+- If the user provides a slash command or direct instruction (e.g., "/github-pr review this"), use `--instruction` without a prompt.
+- Both can be combined: `--prompt` for the template, `--instruction` for the specific instruction text.
+
+Run `tq prompt list` if unsure which prompt to use.
 
 ### 2. Find task_id
 
@@ -30,4 +33,13 @@ For prompts that rely on task-level data (e.g. `{{.Task.URL}}`), metadata can be
 
 ### 4. Create
 
-`tq action create <prompt> --title '<title>' --task <task_id> --meta '<json>'`
+```bash
+# With prompt template
+tq action create --prompt <prompt> --title '<title>' --task <task_id> --meta '<json>'
+
+# With direct instruction (no template needed)
+tq action create --instruction '<instruction>' --title '<title>' --task <task_id>
+
+# Both (instruction available in template as {{index .Action.Meta "instruction"}})
+tq action create --prompt <prompt> --instruction '<instruction>' --title '<title>' --task <task_id>
+```
