@@ -301,4 +301,4 @@ func TestList_JSON_MissingResult(t *testing.T) {
 	if row["completed_at"] != nil {
 		t.Errorf("completed_at should be null, got %v", row["completed_at"])
 	}
-	}
+}

@@ -6,8 +6,9 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/MH4GF/tq/dispatch"
 	"github.com/spf13/cobra"
+
+	"github.com/MH4GF/tq/dispatch"
 )
 
 func init() {

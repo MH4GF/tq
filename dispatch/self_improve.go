@@ -8,11 +8,13 @@ import (
 	"github.com/MH4GF/tq/db"
 )
 
-const selfImprovementProjectName = "tq-improvement"
-const selfImprovementTaskTitle = "prompt maintenance"
-const selfImprovementPromptID = "internal:remove-unknown-frontmatter"
+const (
+	selfImprovementProjectName = "tq-improvement"
+	selfImprovementTaskTitle   = "prompt maintenance"
+	selfImprovementPromptID    = "internal:remove-unknown-frontmatter"
+)
 
-func CreateSelfImprovementAction(database db.Store, promptsDir string, promptID string, unknownFields []string) {
+func CreateSelfImprovementAction(database db.Store, promptsDir, promptID string, unknownFields []string) {
 	projectID, err := database.EnsureProject(selfImprovementProjectName)
 	if err != nil {
 		slog.Error("ensure self-improvement project", "error", err)

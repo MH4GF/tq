@@ -52,7 +52,7 @@ func (h *TUILogHandler) Enabled(_ context.Context, l slog.Level) bool {
 }
 
 func (h *TUILogHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
-func (h *TUILogHandler) WithGroup(_ string) slog.Handler       { return h }
+func (h *TUILogHandler) WithGroup(_ string) slog.Handler      { return h }
 
 // LogWriter is an io.Writer that sends written text to a channel as LogEntry.
 type LogWriter struct {

@@ -42,10 +42,7 @@ func calcVisibleRange(cursor, total, height, headerRows int) visibleRange {
 	if total <= maxVisible {
 		return visibleRange{0, total}
 	}
-	start := cursor - maxVisible/2
-	if start < 0 {
-		start = 0
-	}
+	start := max(cursor-maxVisible/2, 0)
 	end := start + maxVisible
 	if end > total {
 		end = total

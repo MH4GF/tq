@@ -10,7 +10,7 @@ import (
 
 const parseErrorFixPromptID = "internal:fix-deprecated-patterns"
 
-func CreateParseErrorFixAction(database db.Store, promptsDir string, promptID string, deprecatedPatterns []string) (bool, error) {
+func CreateParseErrorFixAction(database db.Store, promptsDir, promptID string, deprecatedPatterns []string) (bool, error) {
 	projectID, err := database.EnsureProject(selfImprovementProjectName)
 	if err != nil {
 		return false, fmt.Errorf("ensure self-improvement project: %w", err)

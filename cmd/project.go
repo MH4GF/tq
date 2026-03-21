@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/MH4GF/tq/db"
 	"github.com/spf13/cobra"
+
+	"github.com/MH4GF/tq/db"
 )
 
 var projectCmd = &cobra.Command{
@@ -19,7 +20,7 @@ var projectCreateMeta string
 var projectCreateCmd = &cobra.Command{
 	Use:   "create <NAME> <WORK_DIR>",
 	Short: "Create a new project",
-	Long: `Create a new project. NAME is a short identifier, WORK_DIR is the absolute path where tasks run.`,
+	Long:  `Create a new project. NAME is a short identifier, WORK_DIR is the absolute path where tasks run.`,
 	Example: `  tq project create myapp ~/src/myapp
   tq project create infra ~/src/infra --meta '{"team":"platform"}'`,
 	Args: cobra.ExactArgs(2),
@@ -91,8 +92,8 @@ var (
 )
 
 var projectUpdateCmd = &cobra.Command{
-	Use:     "update <ID>",
-	Short:   "Update a project",
+	Use:   "update <ID>",
+	Short: "Update a project",
 	Example: `  tq project update 1 --dispatch-enabled true
   tq project update 1 --work-dir ~/src/myapp-v2`,
 	Args: cobra.ExactArgs(1),

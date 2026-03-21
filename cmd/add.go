@@ -7,10 +7,11 @@ import (
 	"log/slog"
 	"unicode/utf8"
 
+	"github.com/spf13/cobra"
+
 	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/dispatch"
 	"github.com/MH4GF/tq/prompt"
-	"github.com/spf13/cobra"
 )
 
 const maxActionTitleLength = 100

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
@@ -77,7 +78,7 @@ func TestTasksModel_Navigation(t *testing.T) {
 	}
 
 	// Navigate to end
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	}
 	last := len(m.lines) - 1
@@ -404,7 +405,7 @@ func TestTasksModel_VisibleRange_Scroll(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	// Create enough lines to exceed viewport: 1 project + 30 tasks + 30 actions = 61 lines
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		taskID, _ := d.InsertTask(1, fmt.Sprintf("Task %d", i), "{}", "")
 		d.InsertAction("a", "a", taskID, "{}", db.ActionStatusPending)
 	}
@@ -428,7 +429,7 @@ func TestTasksModel_VisibleRange_Scroll(t *testing.T) {
 	}
 
 	// Move cursor to middle
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	}
 	if m.cursor != 20 {
@@ -683,5 +684,3 @@ func TestTasksModel_ProjectWorkDir(t *testing.T) {
 		t.Errorf("project line should show work_dir, got %q", view)
 	}
 }
-
-

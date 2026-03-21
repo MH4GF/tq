@@ -11,7 +11,7 @@ import (
 
 func writePrompt(t *testing.T, dir, name, content string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, name+".md"), []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, name+".md"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

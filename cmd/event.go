@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/MH4GF/tq/db"
 	"github.com/spf13/cobra"
+
+	"github.com/MH4GF/tq/db"
 )
 
 var (

@@ -37,7 +37,7 @@ func (c *ExecTmuxChecker) ListWindows(ctx context.Context, session string) ([]st
 		return nil, fmt.Errorf("tmux list-windows: %w (output: %s)", err, string(out))
 	}
 	var names []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if line != "" {
 			names = append(names, line)
 		}

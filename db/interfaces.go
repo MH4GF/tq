@@ -8,7 +8,7 @@ import (
 // CommandWriter defines all write operations.
 type CommandWriter interface {
 	// Action commands
-	InsertAction(title, promptID string, taskID int64, metadata string, status string) (int64, error)
+	InsertAction(title, promptID string, taskID int64, metadata, status string) (int64, error)
 	MarkDone(id int64, result string) error
 	MarkFailed(id int64, result string) error
 	MarkCancelled(id int64, result string) error
@@ -21,7 +21,7 @@ type CommandWriter interface {
 	// Task commands
 	InsertTask(projectID int64, title, metadata, workDir string) (int64, error)
 	UpdateTask(id int64, status, reason string) error
-	UpdateTaskProject(id int64, projectID int64) error
+	UpdateTaskProject(id, projectID int64) error
 	UpdateTaskWorkDir(id int64, workDir string) error
 	MergeTaskMetadata(id int64, updates map[string]any) error
 	EnsureTask(projectID int64, title string) (int64, error)

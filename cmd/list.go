@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/MH4GF/tq/db"
 	"github.com/spf13/cobra"
+
+	"github.com/MH4GF/tq/db"
 )
 
 var (
@@ -16,7 +17,7 @@ var (
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List actions",
-	Long: `List actions, optionally filtered by status and/or task ID. Output is JSON.`,
+	Long:  `List actions, optionally filtered by status and/or task ID. Output is JSON.`,
 	Example: `  tq action list
   tq action list --status pending
   tq action list --task 3

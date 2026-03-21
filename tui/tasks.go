@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/MH4GF/tq/db"
 )
 
@@ -265,7 +266,6 @@ func (m *TasksModel) buildLines() {
 			}
 
 			for _, a := range tn.actions {
-				a := a
 				icon := StatusIcon(a.Status)
 				ast := StatusStyle(a.Status)
 				m.lines = append(m.lines, treeLine{

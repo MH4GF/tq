@@ -1,36 +1,20 @@
-# CLAUDE.md
+# tq — Task Queue CLI/TUI
 
-## プロジェクト概要
+Run `tq --help` for data model, commands, and usage examples.
 
-tq (Task Queue) — タスクとアクションをSQLiteで管理し、Claude Codeワーカーで自動処理するタスクキューCLI/TUI。
+## Commands
 
-## コマンド
-
-- ビルド: `go build ./...`
-- テスト: `go test ./...`
+- Build: `go build ./...`
+- Test: `go test ./...`
+- Single test: `go test ./db/ -run TestTaskCreate`
 - Lint: `golangci-lint run`
-- インストール: `go install .`
-- 単一テスト: `go test ./db/ -run TestTaskCreate`
+- Install: `go install .`
 
-## アーキテクチャ
+## Style
 
-```
-main.go          → エントリポイント
-cmd/             → cobra CLI コマンド定義
-db/              → SQLite データ層（schema.sql, CRUD操作）
-dispatch/        → アクションディスパッチ（queue worker, interactive/noninteractive/remote, schedule）
-tui/             → Bubble Tea TUI（tasks タブ, schedules タブ）
-prompt/          → プロンプトローダー（frontmatter + Go template）
-testutil/        → テスト用ヘルパー（インメモリDB）
-```
+- Table-driven tests in `*_test.go`; use `testutil.NewTestDB()` for in-memory SQLite
+- Wrap errors with `fmt.Errorf`
 
-## データディレクトリ
+## Pointers
 
-- DB: `~/.config/tq/tq.db`（固定）
-- プロンプト: `~/.config/tq/prompts/`
-
-## スタイル
-
-- テストは `*_test.go` でテーブル駆動テスト
-- テストDBは `testutil.NewTestDB()` でインメモリSQLite
-- エラーは `fmt.Errorf` でラップ
+- Lint rules: `.golangci.yml`

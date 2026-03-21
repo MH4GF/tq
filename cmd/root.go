@@ -5,9 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/MH4GF/tq/db"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/MH4GF/tq/db"
 )
 
 var (

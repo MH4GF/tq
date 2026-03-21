@@ -145,7 +145,6 @@ func TestExecuteAction_InstructionOnly(t *testing.T) {
 		},
 		PromptsDir: promptsDir,
 	}, action)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -182,7 +181,6 @@ func TestExecuteAction_InstructionWithModeOverride(t *testing.T) {
 		},
 		PromptsDir: promptsDir,
 	}, action)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

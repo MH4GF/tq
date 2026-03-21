@@ -16,7 +16,7 @@ type InteractiveWorker struct {
 	Session string
 }
 
-func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID int64, taskID int64) (string, error) {
+func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID, taskID int64) (string, error) {
 	session := w.Session
 	if session == "" {
 		session = "main"

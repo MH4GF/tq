@@ -99,7 +99,11 @@ func TestDone_TriggersOnDone(t *testing.T) {
 	promptsDir := filepath.Join(tqDir, "prompts")
 	os.MkdirAll(promptsDir, 0o755)
 
-	for _, tc := range []struct{ name string; auto bool; onDone string }{
+	for _, tc := range []struct {
+		name   string
+		auto   bool
+		onDone string
+	}{
 		{"check-pr", true, "review"},
 		{"review", true, ""},
 	} {

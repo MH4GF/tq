@@ -7,8 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/MH4GF/tq/dispatch"
 	"github.com/spf13/cobra"
+
+	"github.com/MH4GF/tq/dispatch"
 )
 
 var defaultWorkerFactory = func() dispatch.Worker {
