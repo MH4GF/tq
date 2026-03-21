@@ -91,8 +91,7 @@ func Load(promptsDir, promptID string) (*LoadResult, error) {
 	var data []byte
 	var err error
 
-	if after, ok := strings.CutPrefix(promptID, "internal:"); ok {
-		name := after
+	if name, ok := strings.CutPrefix(promptID, "internal:"); ok {
 		data, err = internalPrompts.ReadFile("internal/" + name + ".md")
 		if err != nil {
 			return nil, fmt.Errorf("internal prompt %q not found: %w", promptID, err)
