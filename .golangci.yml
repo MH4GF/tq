@@ -21,6 +21,13 @@ linters:
     - revive
     - govet
     - modernize
+    - errorlint
+    - thelper
+    - nilerr
+    - unconvert
+    - ineffassign
+    - dupword
+    - misspell
 
   settings:
     revive:
