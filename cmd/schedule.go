@@ -20,22 +20,28 @@ var scheduleCmd = &cobra.Command{
 }
 
 var scheduleCreateCmd = &cobra.Command{
-	Use:   "create <PROMPT_ID>",
+	Use:   "create",
 	Short: "Create a new schedule",
 	Long: `Create a scheduled action that runs on a cron schedule.
 
---task and --cron are required. PROMPT_ID is the prompt template to use.
+--task and --cron are required.
+At least one of --prompt or --instruction is required.
 --cron accepts standard 5-field cron expressions (minute hour dom month dow).`,
-	Example: `  tq schedule create daily-review --task 1 --cron "0 9 * * *" --title "Morning review"
-  tq schedule create sync-prs --task 2 --cron "*/30 * * * *"`,
-	Args: cobra.ExactArgs(1),
+	Example: `  tq schedule create --prompt daily-review --task 1 --cron "0 9 * * *" --title "Morning review"
+  tq schedule create --prompt sync-prs --task 2 --cron "*/30 * * * *"
+  tq schedule create --instruction "/gh-notifications:watch" --task 3 --cron "*/10 * * * *" --title "Watch notifications"`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		promptID := args[0]
+		promptID, _ := cmd.Flags().GetString("prompt")
+		instruction, _ := cmd.Flags().GetString("instruction")
 		taskID, _ := cmd.Flags().GetInt64("task")
 		title, _ := cmd.Flags().GetString("title")
 		cronExpr, _ := cmd.Flags().GetString("cron")
 		meta, _ := cmd.Flags().GetString("meta")
 
+		if promptID == "" && instruction == "" {
+			return fmt.Errorf("at least one of --prompt or --instruction is required")
+		}
 		if taskID == 0 {
 			return fmt.Errorf("--task is required")
 		}
@@ -46,10 +52,22 @@ var scheduleCreateCmd = &cobra.Command{
 			return fmt.Errorf("invalid cron expression %q: %w", cronExpr, err)
 		}
 		if title == "" {
-			title = promptID
+			if promptID != "" {
+				title = promptID
+			} else {
+				title = instruction
+			}
 		}
 		if err := validateMetaJSON(meta); err != nil {
 			return err
+		}
+
+		if instruction != "" {
+			merged, err := mergeInstruction(meta, instruction)
+			if err != nil {
+				return err
+			}
+			meta = merged
 		}
 
 		id, err := database.InsertSchedule(taskID, promptID, title, cronExpr, meta)
@@ -148,7 +166,9 @@ var scheduleUpdateCmd = &cobra.Command{
 	Use:   "update <ID>",
 	Short: "Update a schedule",
 	Example: `  tq schedule update 1 --cron "0 10 * * *"
-  tq schedule update 2 --title "Weekly sync" --task 3`,
+  tq schedule update 2 --title "Weekly sync" --task 3
+  tq schedule update 3 --prompt new-prompt
+  tq schedule update 4 --instruction "/gh-notifications:watch"`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := parseID(args[0])
@@ -156,7 +176,7 @@ var scheduleUpdateCmd = &cobra.Command{
 			return err
 		}
 
-		var title, cronExpr, meta *string
+		var title, cronExpr, meta, promptID *string
 		var taskID *int64
 
 		if cmd.Flags().Changed("title") {
@@ -177,16 +197,52 @@ var scheduleUpdateCmd = &cobra.Command{
 			}
 			meta = &v
 		}
+		if cmd.Flags().Changed("prompt") {
+			v, _ := cmd.Flags().GetString("prompt")
+			promptID = &v
+		}
+		if cmd.Flags().Changed("instruction") {
+			v, _ := cmd.Flags().GetString("instruction")
+			var currentMeta string
+			if meta != nil {
+				currentMeta = *meta
+			} else {
+				s, err := database.GetSchedule(id)
+				if err != nil {
+					return fmt.Errorf("get schedule for instruction merge: %w", err)
+				}
+				currentMeta = s.Metadata
+			}
+			merged, err := mergeInstruction(currentMeta, v)
+			if err != nil {
+				return err
+			}
+			meta = &merged
+		}
 		if cmd.Flags().Changed("task") {
 			v, _ := cmd.Flags().GetInt64("task")
 			taskID = &v
 		}
 
-		if title == nil && cronExpr == nil && meta == nil && taskID == nil {
-			return fmt.Errorf("at least one flag (--title, --cron, --meta, --task) is required")
+		if title == nil && cronExpr == nil && meta == nil && promptID == nil && taskID == nil {
+			return fmt.Errorf("at least one flag (--title, --cron, --meta, --prompt, --instruction, --task) is required")
 		}
 
-		if err := database.UpdateSchedule(id, title, cronExpr, meta, taskID); err != nil {
+		if promptID != nil && *promptID == "" {
+			s, err := database.GetSchedule(id)
+			if err != nil {
+				return fmt.Errorf("get schedule for validation: %w", err)
+			}
+			currentMeta := s.Metadata
+			if meta != nil {
+				currentMeta = *meta
+			}
+			if instructionFromMeta(currentMeta) == "" {
+				return fmt.Errorf("cannot clear --prompt without --instruction: schedule would have neither prompt nor instruction")
+			}
+		}
+
+		if err := database.UpdateSchedule(id, title, cronExpr, meta, promptID, taskID); err != nil {
 			return err
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d updated\n", id)
@@ -203,8 +259,10 @@ func parseID(s string) (int64, error) {
 }
 
 func init() {
+	scheduleCreateCmd.Flags().StringP("prompt", "p", "", "Prompt template ID")
+	scheduleCreateCmd.Flags().StringP("instruction", "i", "", "Direct instruction text")
 	scheduleCreateCmd.Flags().Int64("task", 0, "Task ID (required, see: tq task list)")
-	scheduleCreateCmd.Flags().String("title", "", "Schedule title (defaults to prompt ID)")
+	scheduleCreateCmd.Flags().String("title", "", "Schedule title (defaults to prompt ID or instruction)")
 	scheduleCreateCmd.Flags().String("cron", "", "Cron expression (required, e.g. \"0 9 * * *\")")
 	scheduleCreateCmd.Flags().String("meta", "{}", `JSON metadata (e.g. {"key":"value"})`)
 
@@ -220,6 +278,8 @@ func init() {
 	scheduleUpdateCmd.Flags().String("title", "", "Schedule title")
 	scheduleUpdateCmd.Flags().String("cron", "", "Cron expression")
 	scheduleUpdateCmd.Flags().String("meta", "", "JSON metadata")
+	scheduleUpdateCmd.Flags().StringP("prompt", "p", "", "Prompt template ID")
+	scheduleUpdateCmd.Flags().StringP("instruction", "i", "", "Direct instruction text")
 	scheduleUpdateCmd.Flags().Int64("task", 0, "Task ID")
 	scheduleCmd.AddCommand(scheduleUpdateCmd)
 }

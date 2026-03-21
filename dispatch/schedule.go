@@ -1,12 +1,24 @@
 package dispatch
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/MH4GF/tq/db"
 )
+
+func instructionFromMeta(metadata string) string {
+	var m map[string]any
+	if err := json.Unmarshal([]byte(metadata), &m); err != nil {
+		return ""
+	}
+	if v, ok := m["instruction"].(string); ok {
+		return v
+	}
+	return ""
+}
 
 func CheckSchedules(database db.Store, now time.Time) error {
 	schedules, err := database.ListSchedules(0)
@@ -53,7 +65,12 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			continue
 		}
 
-		has, err := database.HasActiveAction(s.TaskID, s.PromptID)
+		var has bool
+		if s.PromptID != "" {
+			has, err = database.HasActiveAction(s.TaskID, s.PromptID)
+		} else {
+			has, err = database.HasActiveActionWithMeta(s.TaskID, "", "instruction", instructionFromMeta(s.Metadata))
+		}
 		if err != nil {
 			slog.Warn("schedule: active action check failed", "schedule_id", s.ID, "error", err)
 			continue

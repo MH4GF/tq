@@ -12,3 +12,14 @@ func validateMetaJSON(meta string) error {
 	}
 	return nil
 }
+
+func instructionFromMeta(metadata string) string {
+	var m map[string]any
+	if err := json.Unmarshal([]byte(metadata), &m); err != nil {
+		return ""
+	}
+	if v, ok := m["instruction"].(string); ok {
+		return v
+	}
+	return ""
+}

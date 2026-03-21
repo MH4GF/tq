@@ -155,6 +155,52 @@ func TestCheckSchedules_TaskArchivedAutoDisable(t *testing.T) {
 	}
 }
 
+func TestCheckSchedules_InstructionBasedAction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	d.InsertSchedule(taskID, "", "Watch notifications", "* * * * *", `{"instruction":"/gh-notifications:watch"}`)
+	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
+
+	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := d.ListActions(db.ActionStatusPending, nil)
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if actions[0].PromptID != "" {
+		t.Errorf("prompt_id = %q, want empty", actions[0].PromptID)
+	}
+	if actions[0].Metadata != `{"instruction":"/gh-notifications:watch"}` {
+		t.Errorf("metadata = %q, want instruction in metadata", actions[0].Metadata)
+	}
+}
+
+func TestCheckSchedules_InstructionDuplicateSkipped(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	d.InsertSchedule(taskID, "", "Watch notifications", "* * * * *", `{"instruction":"/gh-notifications:watch"}`)
+	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
+
+	d.InsertAction("existing", "", taskID, `{"instruction":"/gh-notifications:watch"}`, db.ActionStatusPending)
+
+	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := d.ListActions(db.ActionStatusPending, nil)
+	if len(actions) != 1 {
+		t.Errorf("expected 1 action (existing only), got %d", len(actions))
+	}
+}
+
 func TestCheckSchedules_LastRunAtStoredAsUTC(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
