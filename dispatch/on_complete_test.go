@@ -116,6 +116,46 @@ func TestTriggerOnDone(t *testing.T) {
 	}
 }
 
+func TestTriggerOnDone_NoPromptID(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	promptsDir := setupPromptsDir(t)
+
+	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+	actionID, _ := d.InsertAction("instruction-only", "", taskID, `{"instruction":"do something"}`, db.ActionStatusDone)
+	action, _ := d.GetAction(actionID)
+
+	err := TriggerOnDone(d, promptsDir, action, "done result")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	actions, _ := d.ListActions("", nil)
+	if len(actions) != 1 {
+		t.Errorf("expected 1 action (no follow-up), got %d", len(actions))
+	}
+}
+
+func TestTriggerOnCancel_NoPromptID(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	promptsDir := setupPromptsDir(t)
+
+	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+	actionID, _ := d.InsertAction("instruction-only", "", taskID, `{"instruction":"do something"}`, db.ActionStatusCancelled)
+	action, _ := d.GetAction(actionID)
+
+	err := TriggerOnCancel(d, promptsDir, action, "cancelled")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	actions, _ := d.ListActions("", nil)
+	if len(actions) != 1 {
+		t.Errorf("expected 1 action (no follow-up), got %d", len(actions))
+	}
+}
+
 func TestTriggerOnCancel(t *testing.T) {
 	tests := []struct {
 		name          string

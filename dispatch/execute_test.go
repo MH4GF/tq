@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -116,5 +117,111 @@ func TestExecuteAction(t *testing.T) {
 				t.Errorf("status = %q, want %q", a.Status, tc.wantStatus)
 			}
 		})
+	}
+}
+
+func TestExecuteAction_InstructionOnly(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	promptsDir := filepath.Join(t.TempDir(), "prompts")
+	os.MkdirAll(promptsDir, 0o755)
+
+	meta, _ := json.Marshal(map[string]any{"instruction": "/github-pr review this"})
+	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
+	d.InsertAction("review", "", taskID, string(meta), db.ActionStatusPending)
+
+	action, _ := d.NextPending(context.Background())
+
+	worker := &countingWorker{result: "interactive:done"}
+	workerFunc := func() Worker { return worker }
+
+	result, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+		PromptsDir: promptsDir,
+	}, action)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Mode != ModeInteractive {
+		t.Errorf("mode = %q, want %q", result.Mode, ModeInteractive)
+	}
+	if worker.count != 1 {
+		t.Errorf("worker.count = %d, want 1", worker.count)
+	}
+}
+
+func TestExecuteAction_InstructionWithModeOverride(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	promptsDir := filepath.Join(t.TempDir(), "prompts")
+	os.MkdirAll(promptsDir, 0o755)
+
+	meta, _ := json.Marshal(map[string]any{"instruction": "do something", "mode": "noninteractive"})
+	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
+	d.InsertAction("task", "", taskID, string(meta), db.ActionStatusPending)
+
+	action, _ := d.NextPending(context.Background())
+
+	worker := &countingWorker{result: `{"ok":true}`}
+	workerFunc := func() Worker { return worker }
+
+	result, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+		PromptsDir: promptsDir,
+	}, action)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Mode != ModeNonInteractive {
+		t.Errorf("mode = %q, want %q", result.Mode, ModeNonInteractive)
+	}
+}
+
+func TestExecuteAction_NoPromptNoInstruction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	promptsDir := filepath.Join(t.TempDir(), "prompts")
+	os.MkdirAll(promptsDir, 0o755)
+
+	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+	d.InsertAction("task", "", taskID, "{}", db.ActionStatusPending)
+
+	action, _ := d.NextPending(context.Background())
+
+	worker := &countingWorker{}
+	workerFunc := func() Worker { return worker }
+
+	_, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+		PromptsDir: promptsDir,
+	}, action)
+
+	if err == nil {
+		t.Fatal("expected error for no prompt and no instruction")
+	}
+
+	a, _ := d.GetAction(action.ID)
+	if a.Status != db.ActionStatusFailed {
+		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusFailed)
 	}
 }
