@@ -205,7 +205,7 @@ var taskGetCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("get task: %w", err)
 		}
-		actions, err := database.ListActions("", &id)
+		actions, err := database.ListActions("", &id, 0)
 		if err != nil {
 			return fmt.Errorf("list actions: %w", err)
 		}

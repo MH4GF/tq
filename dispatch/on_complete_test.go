@@ -130,7 +130,7 @@ func TestTriggerOnDone_NoPromptID(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	actions, _ := d.ListActions("", nil)
+	actions, _ := d.ListActions("", nil, 0)
 	if len(actions) != 1 {
 		t.Errorf("expected 1 action (no follow-up), got %d", len(actions))
 	}
@@ -150,7 +150,7 @@ func TestTriggerOnCancel_NoPromptID(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	actions, _ := d.ListActions("", nil)
+	actions, _ := d.ListActions("", nil, 0)
 	if len(actions) != 1 {
 		t.Errorf("expected 1 action (no follow-up), got %d", len(actions))
 	}
