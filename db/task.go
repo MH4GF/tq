@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 )
 
@@ -105,6 +106,44 @@ func (db *DB) UpdateTaskWorkDir(id int64, workDir string) error {
 	if err == nil {
 		db.emitEvent("task", id, "task.workdir_changed", map[string]any{
 			"from": from, "to": workDir,
+		})
+	}
+	return err
+}
+
+func (db *DB) MergeTaskMetadata(id int64, updates map[string]any) error {
+	var existing string
+	err := db.QueryRow("SELECT metadata FROM tasks WHERE id = ?", id).Scan(&existing)
+	if err != nil {
+		return err
+	}
+
+	merged := make(map[string]any)
+	if existing != "" && existing != "{}" {
+		if err := json.Unmarshal([]byte(existing), &merged); err != nil {
+			return fmt.Errorf("parse existing metadata: %w", err)
+		}
+	}
+	for k, v := range updates {
+		merged[k] = v
+	}
+
+	data, err := json.Marshal(merged)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	_, err = db.Exec(
+		"UPDATE tasks SET metadata = ?, updated_at = datetime('now') WHERE id = ?",
+		string(data), id,
+	)
+	if err == nil {
+		keys := make([]string, 0, len(updates))
+		for k := range updates {
+			keys = append(keys, k)
+		}
+		db.emitEvent("task", id, "task.metadata_merged", map[string]any{
+			"keys_updated": keys,
 		})
 	}
 	return err

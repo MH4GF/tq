@@ -219,6 +219,62 @@ func TestUpdateTaskWorkDir(t *testing.T) {
 	}
 }
 
+func TestMergeTaskMetadata(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	t.Run("merge new key", func(t *testing.T) {
+		id, err := d.InsertTask(1, "task", `{"existing":"value"}`, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := d.MergeTaskMetadata(id, map[string]any{"url": "https://example.com"}); err != nil {
+			t.Fatal(err)
+		}
+		task, err := d.GetTask(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if task.Metadata != `{"existing":"value","url":"https://example.com"}` {
+			t.Errorf("expected merged metadata, got %s", task.Metadata)
+		}
+	})
+
+	t.Run("overwrite existing key", func(t *testing.T) {
+		id, err := d.InsertTask(1, "task", `{"existing":"value","url":"https://example.com"}`, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := d.MergeTaskMetadata(id, map[string]any{"existing": "new"}); err != nil {
+			t.Fatal(err)
+		}
+		task, err := d.GetTask(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if task.Metadata != `{"existing":"new","url":"https://example.com"}` {
+			t.Errorf("expected overwritten key, got %s", task.Metadata)
+		}
+	})
+
+	t.Run("merge into empty metadata", func(t *testing.T) {
+		id, err := d.InsertTask(1, "task2", "{}", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := d.MergeTaskMetadata(id, map[string]any{"key": "val"}); err != nil {
+			t.Fatal(err)
+		}
+		task, err := d.GetTask(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if task.Metadata != `{"key":"val"}` {
+			t.Errorf("expected metadata on empty, got %s", task.Metadata)
+		}
+	})
+}
+
 func TestEnsureTask(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

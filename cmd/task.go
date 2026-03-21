@@ -148,16 +148,18 @@ var (
 	taskUpdateStatus    string
 	taskUpdateProjectID int64
 	taskUpdateWorkDir   string
+	taskUpdateMeta      string
 )
 
 var taskUpdateCmd = &cobra.Command{
 	Use:   "update <ID>",
 	Short: "Update a task",
-	Long: `Update a task's status, project, or working directory.
-At least one of --status, --project, or --work-dir is required.`,
+	Long: `Update a task's status, project, working directory, or metadata.
+At least one of --status, --project, --work-dir, or --meta is required.`,
 	Example: `  tq task update 1 --status done
   tq task update 3 --status review
-  tq task update 5 --project 2 --work-dir ~/src/other`,
+  tq task update 5 --project 2 --work-dir ~/src/other
+  tq task update 7 --meta '{"url":"https://github.com/org/repo/pull/99"}'`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var err error
@@ -165,8 +167,15 @@ At least one of --status, --project, or --work-dir is required.`,
 		if err != nil {
 			return fmt.Errorf("invalid task ID: %w", err)
 		}
-		if taskUpdateStatus == "" && taskUpdateProjectID == 0 && taskUpdateWorkDir == "" {
-			return fmt.Errorf("at least one of --status, --project, or --work-dir is required")
+		if taskUpdateStatus == "" && taskUpdateProjectID == 0 && taskUpdateWorkDir == "" && taskUpdateMeta == "" {
+			return fmt.Errorf("at least one of --status, --project, --work-dir, or --meta is required")
+		}
+
+		var metaMap map[string]any
+		if taskUpdateMeta != "" {
+			if err := json.Unmarshal([]byte(taskUpdateMeta), &metaMap); err != nil {
+				return fmt.Errorf("invalid JSON for --meta (must be a JSON object): %s", taskUpdateMeta)
+			}
 		}
 
 		var updates []string
@@ -187,6 +196,13 @@ At least one of --status, --project, or --work-dir is required.`,
 				return fmt.Errorf("update task work_dir: %w", err)
 			}
 			updates = append(updates, fmt.Sprintf("work_dir: %s", taskUpdateWorkDir))
+		}
+
+		if metaMap != nil {
+			if err := database.MergeTaskMetadata(taskUpdateID, metaMap); err != nil {
+				return fmt.Errorf("update task metadata: %w", err)
+			}
+			updates = append(updates, "metadata: updated")
 		}
 
 		if taskUpdateStatus != "" {
@@ -216,6 +232,7 @@ func init() {
 	taskUpdateCmd.Flags().StringVar(&taskUpdateStatus, "status", "", "New status (open, review, done, blocked, archived)")
 	taskUpdateCmd.Flags().Int64Var(&taskUpdateProjectID, "project", 0, "Project ID")
 	taskUpdateCmd.Flags().StringVar(&taskUpdateWorkDir, "work-dir", "", "Working directory")
+	taskUpdateCmd.Flags().StringVar(&taskUpdateMeta, "meta", "", `JSON metadata to merge (e.g. {"url":"https://..."})`)
 
 	taskListCmd.Flags().Int64Var(&taskListProjectID, "project", 0, "Filter by project ID (see: tq project list)")
 	taskListCmd.Flags().StringVar(&taskListStatus, "status", "", "Filter by status (open, review, done, blocked, archived)")
