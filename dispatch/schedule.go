@@ -63,7 +63,7 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			continue
 		}
 
-		_, err = database.InsertAction(s.Title, s.PromptID, s.TaskID, s.Metadata, db.ActionStatusPending)
+		id, err := database.InsertAction(s.Title, s.PromptID, s.TaskID, s.Metadata, db.ActionStatusPending)
 		if err != nil {
 			slog.Error("schedule: insert action failed", "schedule_id", s.ID, "error", err)
 			continue
@@ -73,7 +73,7 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			slog.Error("schedule: update last_run_at failed", "schedule_id", s.ID, "error", err)
 		}
 
-		slog.Info("schedule: action created", "schedule_id", s.ID, "prompt_id", s.PromptID, "task_id", s.TaskID)
+		slog.Info("schedule: action created", "action_id", id, "schedule_id", s.ID, "prompt_id", s.PromptID, "task_id", s.TaskID)
 	}
 
 	return nil
