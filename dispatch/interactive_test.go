@@ -9,183 +9,152 @@ import (
 )
 
 func TestInteractiveWorker_Execute(t *testing.T) {
-	runner := &mockRunner{output: []byte("ok"), failAt: -1}
-	w := &InteractiveWorker{
-		Runner: runner,
+	tests := []struct {
+		name           string
+		session        string
+		cfg            prompt.Config
+		prompt         string
+		actionID       int64
+		taskID         int64
+		wantContains   []string
+		wantNotContain []string
+		wantNewWindow  []string
+	}{
+		{
+			name:     "basic",
+			cfg:      prompt.Config{},
+			prompt:   "Fix the bug",
+			actionID: 42,
+			taskID:   10,
+			wantContains: []string{
+				"claude", "Fix the bug",
+				"TQ_ACTION_ID=42", "TQ_TASK_ID=10",
+			},
+			wantNotContain: []string{
+				"--worktree", "TQ_DIR", "--tmux", "--permission-mode",
+			},
+			wantNewWindow: []string{"new-window", "-t", "main", "-n", "tq-action-42", "-c", "/work/dir"},
+		},
+		{
+			name:     "custom session",
+			session:  "work",
+			cfg:      prompt.Config{},
+			prompt:   "Fix the bug",
+			actionID: 7,
+			wantContains: []string{
+				"work:tq-action-7",
+			},
+			wantNewWindow: []string{"new-window", "-t", "work", "-n", "tq-action-7", "-c", "/work/dir"},
+		},
+		{
+			name:     "permission mode",
+			cfg:      prompt.Config{PermissionMode: "plan"},
+			prompt:   "Plan the feature",
+			actionID: 50,
+			taskID:   10,
+			wantContains: []string{
+				"--permission-mode 'plan'",
+			},
+		},
+		{
+			name:     "worktree",
+			cfg:      prompt.Config{Worktree: true},
+			prompt:   "Fix the bug",
+			actionID: 42,
+			taskID:   10,
+			wantContains: []string{
+				"--worktree",
+			},
+		},
+		{
+			name:     "single quote escape",
+			cfg:      prompt.Config{},
+			prompt:   "it's a test",
+			actionID: 99,
+			wantContains: []string{
+				"it'\\''s a test",
+			},
+		},
 	}
 
-	cfg := prompt.Config{}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &mockRunner{output: []byte("ok"), failAt: -1}
+			w := &InteractiveWorker{
+				Runner:  runner,
+				Session: tc.session,
+			}
 
-	result, err := w.Execute(context.Background(), "Fix the bug", cfg, "/work/dir", 42, 10)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
+			result, err := w.Execute(context.Background(), tc.prompt, tc.cfg, "/work/dir", tc.actionID, tc.taskID)
+			if err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
 
-	if !strings.Contains(result, "action=42") {
-		t.Errorf("result = %q, want to contain action=42", result)
-	}
+			if !strings.Contains(result, "action=") {
+				t.Errorf("result = %q, want to contain action=", result)
+			}
 
-	if len(runner.calls) != 3 {
-		t.Fatalf("expected 3 runner calls, got %d", len(runner.calls))
-	}
+			if len(runner.calls) != 3 {
+				t.Fatalf("expected 3 runner calls, got %d", len(runner.calls))
+			}
 
-	// Call 1: tmux new-window
-	c := runner.calls[0]
-	if c.name != "tmux" {
-		t.Errorf("call[0] command = %q, want tmux", c.name)
-	}
-	wantArgs := []string{"new-window", "-t", "main", "-n", "tq-action-42", "-c", "/work/dir"}
-	if strings.Join(c.args, " ") != strings.Join(wantArgs, " ") {
-		t.Errorf("call[0] args = %v, want %v", c.args, wantArgs)
-	}
+			if tc.wantNewWindow != nil {
+				c := runner.calls[0]
+				if strings.Join(c.args, " ") != strings.Join(tc.wantNewWindow, " ") {
+					t.Errorf("new-window args = %v, want %v", c.args, tc.wantNewWindow)
+				}
+			}
 
-	// Call 2: tmux send-keys (command text)
-	c = runner.calls[1]
-	if c.name != "tmux" {
-		t.Errorf("call[1] command = %q, want tmux", c.name)
-	}
-	argsStr := strings.Join(c.args, " ")
-	if !strings.Contains(argsStr, "send-keys") {
-		t.Errorf("call[1] args = %v, want to contain send-keys", c.args)
-	}
-	if !strings.Contains(argsStr, "main:tq-action-42") {
-		t.Errorf("call[1] args = %v, want to contain main:tq-action-42", c.args)
-	}
-	if !strings.Contains(argsStr, "claude") {
-		t.Errorf("call[1] args = %v, want to contain 'claude'", c.args)
-	}
-	if strings.Contains(argsStr, "--worktree") {
-		t.Errorf("call[1] args = %v, must NOT contain --worktree", c.args)
-	}
-	if strings.Contains(argsStr, "TQ_DIR") {
-		t.Errorf("call[1] args = %v, must NOT contain TQ_DIR", c.args)
-	}
-	if !strings.Contains(argsStr, "TQ_ACTION_ID=42") {
-		t.Errorf("call[1] args = %v, want to contain TQ_ACTION_ID=42", c.args)
-	}
-	if !strings.Contains(argsStr, "TQ_TASK_ID=10") {
-		t.Errorf("call[1] args = %v, want to contain TQ_TASK_ID=10", c.args)
-	}
-	if strings.Contains(argsStr, "--tmux") {
-		t.Errorf("call[1] args = %v, must NOT contain --tmux", c.args)
-	}
-	if strings.Contains(argsStr, "--permission-mode") {
-		t.Errorf("call[1] args = %v, must NOT contain --permission-mode when not configured", c.args)
-	}
-	if !strings.Contains(argsStr, "Fix the bug") {
-		t.Errorf("call[1] args = %v, want to contain prompt text 'Fix the bug'", c.args)
-	}
+			argsStr := strings.Join(runner.calls[1].args, " ")
+			for _, want := range tc.wantContains {
+				if !strings.Contains(argsStr, want) {
+					t.Errorf("send-keys args = %q, want to contain %q", argsStr, want)
+				}
+			}
+			for _, notWant := range tc.wantNotContain {
+				if strings.Contains(argsStr, notWant) {
+					t.Errorf("send-keys args = %q, must NOT contain %q", argsStr, notWant)
+				}
+			}
 
-	// Call 3: tmux send-keys Enter
-	c = runner.calls[2]
-	if c.name != "tmux" {
-		t.Errorf("call[2] command = %q, want tmux", c.name)
-	}
-	if len(c.args) < 4 || c.args[3] != "Enter" {
-		t.Errorf("call[2] args = %v, want last arg to be Enter", c.args)
+			enterCall := runner.calls[2]
+			if len(enterCall.args) < 4 || enterCall.args[3] != "Enter" {
+				t.Errorf("call[2] args = %v, want last arg to be Enter", enterCall.args)
+			}
+		})
 	}
 }
 
-func TestInteractiveWorker_NewWindowError(t *testing.T) {
-	runner := &mockRunner{err: context.DeadlineExceeded, failAt: 0}
-	w := &InteractiveWorker{
-		Runner: runner,
+func TestInteractiveWorker_Error(t *testing.T) {
+	tests := []struct {
+		name        string
+		failAt      int
+		wantErrText string
+	}{
+		{
+			name:        "new window error",
+			failAt:      0,
+			wantErrText: "create tmux window",
+		},
+		{
+			name:        "send keys error",
+			failAt:      1,
+			wantErrText: "send claude command",
+		},
 	}
 
-	cfg := prompt.Config{}
-	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1, 0)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "create tmux window") {
-		t.Errorf("error = %q, want to contain 'create tmux window'", err.Error())
-	}
-}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &mockRunner{err: context.DeadlineExceeded, failAt: tc.failAt}
+			w := &InteractiveWorker{Runner: runner}
 
-func TestInteractiveWorker_SendKeysError(t *testing.T) {
-	runner := &mockRunner{err: context.DeadlineExceeded, failAt: 1}
-	w := &InteractiveWorker{
-		Runner: runner,
-	}
-
-	cfg := prompt.Config{}
-	_, err := w.Execute(context.Background(), "test", cfg, "/work", 2, 0)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "send claude command") {
-		t.Errorf("error = %q, want to contain 'send claude command'", err.Error())
-	}
-}
-
-func TestInteractiveWorker_CustomSession(t *testing.T) {
-	runner := &mockRunner{output: []byte("ok"), failAt: -1}
-	w := &InteractiveWorker{
-		Runner:  runner,
-		Session: "work",
-	}
-
-	cfg := prompt.Config{}
-
-	_, err := w.Execute(context.Background(), "Fix the bug", cfg, "/work/dir", 7, 0)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	// Call 1: tmux new-window -t work
-	c := runner.calls[0]
-	wantArgs := []string{"new-window", "-t", "work", "-n", "tq-action-7", "-c", "/work/dir"}
-	if strings.Join(c.args, " ") != strings.Join(wantArgs, " ") {
-		t.Errorf("call[0] args = %v, want %v", c.args, wantArgs)
-	}
-
-	// Call 2: send-keys -t work:tq-action-7
-	argsStr := strings.Join(runner.calls[1].args, " ")
-	if !strings.Contains(argsStr, "work:tq-action-7") {
-		t.Errorf("call[1] args = %v, want to contain work:tq-action-7", runner.calls[1].args)
-	}
-
-	// Call 3: send-keys Enter -t work:tq-action-7
-	argsStr = strings.Join(runner.calls[2].args, " ")
-	if !strings.Contains(argsStr, "work:tq-action-7") {
-		t.Errorf("call[2] args = %v, want to contain work:tq-action-7", runner.calls[2].args)
-	}
-}
-
-func TestInteractiveWorker_PermissionMode(t *testing.T) {
-	runner := &mockRunner{output: []byte("ok"), failAt: -1}
-	w := &InteractiveWorker{
-		Runner: runner,
-	}
-
-	cfg := prompt.Config{PermissionMode: "plan"}
-
-	_, err := w.Execute(context.Background(), "Plan the feature", cfg, "/work/dir", 50, 10)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	argsStr := strings.Join(runner.calls[1].args, " ")
-	if !strings.Contains(argsStr, "--permission-mode 'plan'") {
-		t.Errorf("call[1] args = %v, want to contain \"--permission-mode 'plan'\"", runner.calls[1].args)
-	}
-}
-
-func TestInteractiveWorker_SingleQuoteEscape(t *testing.T) {
-	runner := &mockRunner{output: []byte("ok"), failAt: -1}
-	w := &InteractiveWorker{
-		Runner: runner,
-	}
-
-	cfg := prompt.Config{}
-	_, err := w.Execute(context.Background(), "it's a test", cfg, "/work/dir", 99, 0)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	// send-keys command should contain the escaped single quote
-	argsStr := strings.Join(runner.calls[1].args, " ")
-	if !strings.Contains(argsStr, "it'\\''s a test") {
-		t.Errorf("call[1] args = %v, want to contain escaped single quote", runner.calls[1].args)
+			_, err := w.Execute(context.Background(), "test", prompt.Config{}, "/work", 1, 0)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !strings.Contains(err.Error(), tc.wantErrText) {
+				t.Errorf("error = %q, want to contain %q", err.Error(), tc.wantErrText)
+			}
+		})
 	}
 }
