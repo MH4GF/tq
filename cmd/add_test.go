@@ -98,6 +98,12 @@ Review.
 	if !contains(err.Error(), "--force") {
 		t.Errorf("error = %q, want to contain '--force'", err.Error())
 	}
+	if !contains(err.Error(), "action #") {
+		t.Errorf("error = %q, want to contain 'action #'", err.Error())
+	}
+	if !contains(err.Error(), "tq action cancel") {
+		t.Errorf("error = %q, want to contain 'tq action cancel'", err.Error())
+	}
 }
 
 func TestAdd_DuplicateForce(t *testing.T) {

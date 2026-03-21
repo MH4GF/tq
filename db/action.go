@@ -121,6 +121,21 @@ func (db *DB) HasActiveAction(taskID int64, promptID string) (bool, error) {
 	return count > 0, nil
 }
 
+func (db *DB) GetActiveAction(taskID int64, promptID string) (*Action, error) {
+	a := &Action{}
+	err := db.QueryRow(
+		"SELECT "+actionColumns+" FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN (?, ?, ?) ORDER BY id DESC LIMIT 1",
+		taskID, promptID, ActionStatusPending, ActionStatusRunning, ActionStatusDispatched,
+	).Scan(a.scanFields()...)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
 func (db *DB) HasActiveActionWithMeta(taskID int64, promptID, metaKey, metaValue string) (bool, error) {
 	var count int
 	err := db.QueryRow(

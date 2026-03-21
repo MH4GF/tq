@@ -726,6 +726,80 @@ func TestHasActiveAction_Dispatched(t *testing.T) {
 	}
 }
 
+func TestGetActiveAction(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   string
+		wantNil  bool
+	}{
+		{"pending is active", db.ActionStatusPending, false},
+		{"running is active", db.ActionStatusRunning, false},
+		{"done is not active", db.ActionStatusDone, true},
+		{"failed is not active", db.ActionStatusFailed, true},
+		{"cancelled is not active", db.ActionStatusCancelled, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			taskID, _ := d.InsertTask(1, "test", "{}", "")
+			d.InsertAction("review-pr", "review-pr", taskID, "{}", tt.status)
+
+			got, err := d.GetActiveAction(taskID, "review-pr")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.wantNil && got != nil {
+				t.Errorf("expected nil, got action #%d", got.ID)
+			}
+			if !tt.wantNil && got == nil {
+				t.Error("expected action, got nil")
+			}
+			if !tt.wantNil && got != nil {
+				if got.Title != "review-pr" {
+					t.Errorf("title = %q, want %q", got.Title, "review-pr")
+				}
+				if got.Status != tt.status {
+					t.Errorf("status = %q, want %q", got.Status, tt.status)
+				}
+			}
+		})
+	}
+}
+
+func TestGetActiveAction_NoMatch(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+
+	got, err := d.GetActiveAction(taskID, "nonexistent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Errorf("expected nil, got action #%d", got.ID)
+	}
+}
+
+func TestGetActiveAction_Dispatched(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	id, _ := d.InsertAction("impl", "impl", taskID, "{}", db.ActionStatusRunning)
+	d.MarkDispatched(id)
+
+	got, err := d.GetActiveAction(taskID, "impl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("expected action, got nil")
+	}
+	if got.Status != db.ActionStatusDispatched {
+		t.Errorf("status = %q, want %q", got.Status, db.ActionStatusDispatched)
+	}
+}
+
 func TestMarkDone_FromDispatched(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
