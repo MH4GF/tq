@@ -20,6 +20,7 @@ type CommandWriter interface {
 	UpdateTask(id int64, status, reason string) error
 	UpdateTaskProject(id int64, projectID int64) error
 	UpdateTaskWorkDir(id int64, workDir string) error
+	MergeTaskMetadata(id int64, updates map[string]any) error
 	EnsureTask(projectID int64, title string) (int64, error)
 	// Project commands
 	InsertProject(name, workDir, metadata string) (int64, error)

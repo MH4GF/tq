@@ -3,6 +3,8 @@ package cmd_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
@@ -420,6 +422,54 @@ func TestTaskUpdate_NeitherStatusNorProject(t *testing.T) {
 
 	if err := root.Execute(); err == nil {
 		t.Fatal("expected error when neither --status nor --project is given")
+	}
+}
+
+func TestTaskUpdate_MetaOnly(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	id, _ := d.InsertTask(1, "task", `{"old":"data"}`, "")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"task", "update", fmt.Sprintf("%d", id), "--meta", `{"url":"https://example.com"}`})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	task, err := d.GetTask(id)
+	if err != nil {
+		t.Fatalf("failed to get task: %v", err)
+	}
+	if task.Metadata != `{"old":"data","url":"https://example.com"}` {
+		t.Errorf("expected merged metadata, got %s", task.Metadata)
+	}
+	if !strings.Contains(buf.String(), "metadata: updated") {
+		t.Errorf("expected output to mention metadata update, got %s", buf.String())
+	}
+}
+
+func TestTaskUpdate_InvalidMeta(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "task", "{}", "")
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"task", "update", "1", "--meta", "not-json"})
+
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected error for invalid JSON")
 	}
 }
 
