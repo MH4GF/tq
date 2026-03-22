@@ -87,7 +87,7 @@ func TestGetWorkerMaxInteractive(t *testing.T) {
 	}{
 		{
 			name:      "no row",
-			setup:     func(t *testing.T, d *db.DB) {},
+			setup:     func(t *testing.T, _ *db.DB) { t.Helper() },
 			threshold: 30 * time.Second,
 			want:      0,
 			wantErr:   sql.ErrNoRows,
