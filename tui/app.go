@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -103,7 +104,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForLog(m.logCh)
 
 	case backgroundStatusMsg:
-		if msg.err != nil && msg.err != context.Canceled {
+		if msg.err != nil && !errors.Is(msg.err, context.Canceled) {
 			m.statusLine = fmt.Sprintf("background error: %v", msg.err)
 		}
 		return m, nil

@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"database/sql"
+	"errors"
 	"testing"
 
 	"github.com/MH4GF/tq/testutil"
@@ -27,7 +28,7 @@ func TestGetProjectByName_NotFound(t *testing.T) {
 	d := testutil.NewTestDB(t)
 
 	_, err := d.GetProjectByName("nonexistent")
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("expected sql.ErrNoRows, got %v", err)
 	}
 }

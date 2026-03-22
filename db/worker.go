@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -17,7 +18,7 @@ func (db *DB) UpdateWorkerHeartbeat() error {
 func (db *DB) IsWorkerRunning(staleThreshold time.Duration) (bool, error) {
 	var heartbeat string
 	err := db.QueryRow("SELECT last_heartbeat FROM worker_heartbeats WHERE id = 1").Scan(&heartbeat)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {

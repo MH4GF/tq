@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 )
@@ -205,7 +206,7 @@ func (db *DB) EnsureTask(projectID int64, title string) (int64, error) {
 	if err == nil {
 		return id, nil
 	}
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return 0, err
 	}
 	return db.InsertTask(projectID, title, "{}", "")

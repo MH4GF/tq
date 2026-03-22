@@ -28,8 +28,10 @@ func TestIsWorkerRunning(t *testing.T) {
 		want      bool
 	}{
 		{
-			name:      "no heartbeat",
-			setup:     func(t *testing.T, d *db.DB) {},
+			name: "no heartbeat",
+			setup: func(t *testing.T, d *db.DB) {
+				t.Helper()
+			},
 			threshold: 30 * time.Second,
 			want:      false,
 		},
