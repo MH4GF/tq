@@ -183,6 +183,9 @@ var scheduleUpdateCmd = &cobra.Command{
 		}
 		if cmd.Flags().Changed("instruction") {
 			v, _ := cmd.Flags().GetString("instruction")
+			if v == "" {
+				return fmt.Errorf("--instruction cannot be empty")
+			}
 			instruction = &v
 		}
 		if cmd.Flags().Changed("task") {
