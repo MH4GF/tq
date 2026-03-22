@@ -36,7 +36,7 @@ type CommandWriter interface {
 	UpdateWorkerHeartbeat() error
 	// Schedule commands
 	InsertSchedule(taskID int64, promptID, title, cronExpr, metadata string) (int64, error)
-	UpdateSchedule(id int64, title, cronExpr, metadata *string, taskID *int64) error
+	UpdateSchedule(id int64, title, cronExpr, metadata, promptID *string, taskID *int64) error
 	UpdateScheduleEnabled(id int64, enabled bool) error
 	DeleteSchedule(id int64) error
 	UpdateScheduleLastRunAt(id int64, t string) error
@@ -73,6 +73,8 @@ type QueryReader interface {
 	// Event queries
 	ListEvents(entityType string, entityID int64) ([]Event, error)
 	ListRecentEvents(limit int) ([]Event, error)
+	// Search
+	Search(keyword string) ([]SearchResult, error)
 }
 
 // Store implements both CommandWriter and QueryReader.

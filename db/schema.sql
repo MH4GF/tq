@@ -39,7 +39,7 @@ CREATE INDEX IF NOT EXISTS idx_actions_task ON actions(task_id, id ASC);
 CREATE TABLE IF NOT EXISTS schedules (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   task_id     INTEGER NOT NULL REFERENCES tasks(id),
-  prompt_id   TEXT NOT NULL,
+  prompt_id   TEXT NOT NULL DEFAULT '',
   title       TEXT NOT NULL,
   cron_expr   TEXT NOT NULL,
   metadata    TEXT NOT NULL DEFAULT '{}',

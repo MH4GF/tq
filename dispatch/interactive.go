@@ -40,7 +40,11 @@ func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg prom
 		escapedMode := strings.ReplaceAll(cfg.PermissionMode, "'", "'\\''")
 		permFlag = " --permission-mode '" + escapedMode + "'"
 	}
-	claudeCmd := fmt.Sprintf("%s claude%s '%s'", envPrefix, permFlag, escapedPrompt)
+	worktreeFlag := ""
+	if cfg.Worktree {
+		worktreeFlag = " --worktree"
+	}
+	claudeCmd := fmt.Sprintf("%s claude%s%s '%s'", envPrefix, permFlag, worktreeFlag, escapedPrompt)
 	out, err = w.Runner.Run(ctx, "tmux", []string{
 		"send-keys", "-t", tmuxTarget, claudeCmd,
 	}, workDir, nil)
