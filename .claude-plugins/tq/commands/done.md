@@ -17,7 +17,7 @@ allowed-tools: Bash(tq *)
 Before marking done, determine if follow-up work is needed:
 
 1. Run `tq action list --task <task_id>` to review action history
-2. **Improvement extraction**: If result contains improvement suggestions, TODOs, or "handle in separate task" items with independent work scope, use `/tq:create-action` to create a task
+2. **Improvement extraction**: If result contains improvement suggestions, TODOs, or "handle in separate task" items with independent work scope, use `/tq:create-action` to create a follow-up action
 3. **Next action decision**: Determine the next action needed to achieve the task's goal:
    - Additional work needed → `/tq:create-action` to create it
    - External blocker (waiting for review, approval, etc.) → do nothing

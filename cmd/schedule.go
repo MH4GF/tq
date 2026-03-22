@@ -57,7 +57,7 @@ var scheduleCreateCmd = &cobra.Command{
 
 		id, err := database.InsertSchedule(taskID, instruction, title, cronExpr, meta)
 		if err != nil {
-			return err
+			return fmt.Errorf("insert schedule: %w", err)
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d created\n", id)
 		return nil
