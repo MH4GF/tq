@@ -33,7 +33,7 @@ type CommandWriter interface {
 	SetAllDispatchEnabled(enabled bool) error
 	EnsureProject(name string) (int64, error)
 	// Worker commands
-	UpdateWorkerHeartbeat() error
+	UpdateWorkerHeartbeat(maxInteractive int) error
 	// Schedule commands
 	InsertSchedule(taskID int64, promptID, title, cronExpr, metadata string) (int64, error)
 	UpdateSchedule(id int64, title, cronExpr, metadata, promptID *string, taskID *int64) error
@@ -70,6 +70,7 @@ type QueryReader interface {
 	ListSchedules(limit int) ([]Schedule, error)
 	// Worker queries
 	IsWorkerRunning(staleThreshold time.Duration) (bool, error)
+	GetWorkerMaxInteractive(staleThreshold time.Duration) (int, error)
 	// Event queries
 	ListEvents(entityType string, entityID int64) ([]Event, error)
 	ListRecentEvents(limit int) ([]Event, error)

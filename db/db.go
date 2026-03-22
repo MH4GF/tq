@@ -135,6 +135,14 @@ func (db *DB) Migrate() error {
 		return err
 	}
 
+	if has, err := db.hasColumn("worker_heartbeats", "max_interactive"); err != nil {
+		return fmt.Errorf("migrate max_interactive: check column: %w", err)
+	} else if !has {
+		if _, err := db.Exec("ALTER TABLE worker_heartbeats ADD COLUMN max_interactive INTEGER NOT NULL DEFAULT 3"); err != nil {
+			return fmt.Errorf("migrate max_interactive: alter table: %w", err)
+		}
+	}
+
 	// Migrate url column values into metadata JSON, then drop the column (idempotent)
 	if has, err := db.hasColumn("tasks", "url"); err != nil {
 		return fmt.Errorf("migrate url: check column: %w", err)
