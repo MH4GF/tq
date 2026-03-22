@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -171,8 +173,12 @@ func printQueueStatus(w io.Writer, actionID int64, isInteractive bool) {
 	} else {
 		pendingCount = counts[db.ActionStatusPending]
 	}
-	workerRunning, err := database.IsWorkerRunning(dispatch.DefaultStaleThreshold)
-	if err != nil {
+	maxInteractive := dispatch.DefaultMaxInteractive
+	workerRunning := false
+	if mi, err := database.GetWorkerMaxInteractive(dispatch.DefaultStaleThreshold); err == nil {
+		workerRunning = true
+		maxInteractive = mi
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		slog.Error("check worker status", "error", err)
 	}
 
@@ -189,13 +195,13 @@ func printQueueStatus(w io.Writer, actionID int64, isInteractive bool) {
 	if err != nil {
 		slog.Error("count running interactive", "error", err)
 	}
-	if runningInteractive >= dispatch.DefaultMaxInteractive {
+	if runningInteractive >= maxInteractive {
 		_, _ = fmt.Fprintf(w, "  queue: %d pending — worker running, but interactive slots full (%d/%d)\n",
-			pendingCount, runningInteractive, dispatch.DefaultMaxInteractive)
+			pendingCount, runningInteractive, maxInteractive)
 		_, _ = fmt.Fprintf(w, "  [agent hint] ask the user before running 'tq dispatch %d' to execute immediately\n", actionID)
 	} else {
 		_, _ = fmt.Fprintf(w, "  queue: %d pending — worker running, will be dispatched automatically (interactive: %d/%d)\n",
-			pendingCount, runningInteractive, dispatch.DefaultMaxInteractive)
+			pendingCount, runningInteractive, maxInteractive)
 	}
 }
 
