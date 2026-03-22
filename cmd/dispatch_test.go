@@ -3,14 +3,11 @@ package cmd_test
 import (
 	"bytes"
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
 	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/dispatch"
-	"github.com/MH4GF/tq/prompt"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -19,7 +16,7 @@ type mockWorker struct {
 	err    error
 }
 
-func (m *mockWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID, taskID int64) (string, error) {
+func (m *mockWorker) Execute(ctx context.Context, prompt string, cfg dispatch.ActionConfig, workDir string, actionID, taskID int64) (string, error) {
 	return m.result, m.err
 }
 
@@ -44,20 +41,10 @@ func TestDispatch_Success(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	tqDir := t.TempDir()
-	cmd.SetConfigDir(tqDir)
-
-	promptsDir := filepath.Join(tqDir, "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-	os.WriteFile(filepath.Join(promptsDir, "review-pr.md"), []byte(`---
-description: Review PR
-mode: noninteractive
----
-Review PR for {{.Task.Title}}.
-`), 0o644)
+	cmd.SetConfigDir(t.TempDir())
 
 	taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
-	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("review-pr", taskID, `{"instruction":"Review PR for Fix bug.","mode":"noninteractive"}`, db.ActionStatusPending)
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{result: `{"review":"approved"}`}
@@ -97,21 +84,11 @@ func TestDispatch_WithActionID(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	tqDir := t.TempDir()
-	cmd.SetConfigDir(tqDir)
-
-	promptsDir := filepath.Join(tqDir, "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-	os.WriteFile(filepath.Join(promptsDir, "review-pr.md"), []byte(`---
-description: Review PR
-mode: noninteractive
----
-Review PR for {{.Task.Title}}.
-`), 0o644)
+	cmd.SetConfigDir(t.TempDir())
 
 	taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
-	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
-	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending)
+	d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending)
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{result: `{"review":"approved"}`}
@@ -174,20 +151,10 @@ func TestDispatch_WorkerError(t *testing.T) {
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
-	tqDir := t.TempDir()
-	cmd.SetConfigDir(tqDir)
-
-	promptsDir := filepath.Join(tqDir, "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-	os.WriteFile(filepath.Join(promptsDir, "test.md"), []byte(`---
-description: Test
-mode: noninteractive
----
-Do something.
-`), 0o644)
+	cmd.SetConfigDir(t.TempDir())
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("test", "test", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("test", taskID, `{"instruction":"Do something.","mode":"noninteractive"}`, db.ActionStatusPending)
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{err: context.DeadlineExceeded}

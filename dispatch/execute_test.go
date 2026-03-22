@@ -4,24 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/MH4GF/tq/db"
-	"github.com/MH4GF/tq/prompt"
 	"github.com/MH4GF/tq/testutil"
 )
-
-type cfgCapturingWorker struct {
-	inner Worker
-	cfg   *prompt.Config
-}
-
-func (w *cfgCapturingWorker) Execute(ctx context.Context, p string, cfg prompt.Config, workDir string, actionID, taskID int64) (string, error) {
-	*w.cfg = cfg
-	return w.inner.Execute(ctx, p, cfg, workDir, actionID, taskID)
-}
 
 func TestExecuteAction(t *testing.T) {
 	tests := []struct {
@@ -76,13 +63,9 @@ func TestExecuteAction(t *testing.T) {
 			d := testutil.NewTestDB(t)
 			testutil.SeedTestProjects(t, d)
 
-			promptsDir := filepath.Join(t.TempDir(), "prompts")
-			os.MkdirAll(promptsDir, 0o755)
-			promptName := "test-" + tc.promptMode
-			writeTestPromptWithMode(t, promptsDir, promptName, tc.promptMode, "")
-
+			meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": tc.promptMode})
 			taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-			d.InsertAction(promptName, promptName, taskID, "{}", db.ActionStatusPending)
+			d.InsertAction("test-"+tc.promptMode, taskID, string(meta), db.ActionStatusPending)
 
 			action, _ := d.NextPending(context.Background())
 
@@ -96,7 +79,6 @@ func TestExecuteAction(t *testing.T) {
 					InteractiveFunc:    workerFunc,
 					RemoteFunc:         workerFunc,
 				},
-				PromptsDir:        promptsDir,
 				BeforeInteractive: tc.beforeInteractive,
 			}, action)
 
@@ -135,12 +117,9 @@ func TestExecuteAction_InstructionOnly(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	promptsDir := filepath.Join(t.TempDir(), "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-
 	meta, _ := json.Marshal(map[string]any{"instruction": "/github-pr review this"})
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("review", "", taskID, string(meta), db.ActionStatusPending)
+	d.InsertAction("review", taskID, string(meta), db.ActionStatusPending)
 
 	action, _ := d.NextPending(context.Background())
 
@@ -154,7 +133,6 @@ func TestExecuteAction_InstructionOnly(t *testing.T) {
 			InteractiveFunc:    workerFunc,
 			RemoteFunc:         workerFunc,
 		},
-		PromptsDir: promptsDir,
 	}, action)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -171,12 +149,9 @@ func TestExecuteAction_InstructionWithModeOverride(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	promptsDir := filepath.Join(t.TempDir(), "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-
 	meta, _ := json.Marshal(map[string]any{"instruction": "do something", "mode": "noninteractive"})
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("task", "", taskID, string(meta), db.ActionStatusPending)
+	d.InsertAction("task", taskID, string(meta), db.ActionStatusPending)
 
 	action, _ := d.NextPending(context.Background())
 
@@ -190,7 +165,6 @@ func TestExecuteAction_InstructionWithModeOverride(t *testing.T) {
 			InteractiveFunc:    workerFunc,
 			RemoteFunc:         workerFunc,
 		},
-		PromptsDir: promptsDir,
 	}, action)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -200,51 +174,12 @@ func TestExecuteAction_InstructionWithModeOverride(t *testing.T) {
 	}
 }
 
-func TestExecuteAction_WorktreeFromMetadata(t *testing.T) {
+func TestExecuteAction_NoInstruction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	promptsDir := filepath.Join(t.TempDir(), "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-
-	meta, _ := json.Marshal(map[string]any{"instruction": "do work", "worktree": true})
 	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("task", "", taskID, string(meta), db.ActionStatusPending)
-
-	action, _ := d.NextPending(context.Background())
-
-	var capturedCfg prompt.Config
-	worker := &countingWorker{result: "interactive:done"}
-	workerFunc := func() Worker {
-		return &cfgCapturingWorker{inner: worker, cfg: &capturedCfg}
-	}
-
-	_, err := ExecuteAction(context.Background(), ExecuteParams{
-		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: workerFunc,
-			InteractiveFunc:    workerFunc,
-			RemoteFunc:         workerFunc,
-		},
-		PromptsDir: promptsDir,
-	}, action)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !capturedCfg.Worktree {
-		t.Error("expected cfg.Worktree to be true")
-	}
-}
-
-func TestExecuteAction_NoPromptNoInstruction(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	promptsDir := filepath.Join(t.TempDir(), "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-
-	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("task", "", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("task", taskID, "{}", db.ActionStatusPending)
 
 	action, _ := d.NextPending(context.Background())
 
@@ -258,11 +193,10 @@ func TestExecuteAction_NoPromptNoInstruction(t *testing.T) {
 			InteractiveFunc:    workerFunc,
 			RemoteFunc:         workerFunc,
 		},
-		PromptsDir: promptsDir,
 	}, action)
 
 	if err == nil {
-		t.Fatal("expected error for no prompt and no instruction")
+		t.Fatal("expected error for no instruction")
 	}
 
 	a, _ := d.GetAction(action.ID)

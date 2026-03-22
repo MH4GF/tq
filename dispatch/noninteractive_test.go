@@ -6,14 +6,12 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/MH4GF/tq/prompt"
 )
 
 func TestNonInteractiveWorker_Execute(t *testing.T) {
 	tests := []struct {
 		name       string
-		cfg        prompt.Config
+		cfg        ActionConfig
 		prompt     string
 		output     string
 		wantArgs   []string
@@ -21,7 +19,7 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 	}{
 		{
 			name:       "basic",
-			cfg:        prompt.Config{},
+			cfg:        ActionConfig{},
 			prompt:     "do something",
 			output:     `{"type":"result","subtype":"success","result":"{\"result\":\"ok\"}","cost_usd":0.01}`,
 			wantArgs:   []string{"-p", "do something", "--output-format", "json"},
@@ -29,7 +27,7 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 		},
 		{
 			name:       "permission mode",
-			cfg:        prompt.Config{PermissionMode: "plan"},
+			cfg:        ActionConfig{PermissionMode: "plan"},
 			prompt:     "plan something",
 			output:     `{"type":"result","subtype":"success","result":"ok"}`,
 			wantArgs:   []string{"-p", "plan something", "--output-format", "json", "--permission-mode", "plan"},
@@ -37,7 +35,7 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 		},
 		{
 			name:       "worktree",
-			cfg:        prompt.Config{Worktree: true},
+			cfg:        ActionConfig{Worktree: true},
 			prompt:     "do something",
 			output:     `{"type":"result","subtype":"success","result":"ok"}`,
 			wantArgs:   []string{"-p", "do something", "--output-format", "json", "--worktree"},
@@ -45,7 +43,7 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 		},
 		{
 			name:       "complex output",
-			cfg:        prompt.Config{},
+			cfg:        ActionConfig{},
 			prompt:     "process data",
 			output:     `{"type":"result","subtype":"success","result":"{\"status\":\"success\",\"data\":[1,2,3]}"}`,
 			wantArgs:   []string{"-p", "process data", "--output-format", "json"},
@@ -90,7 +88,9 @@ func TestNonInteractiveWorker_Execute_Env(t *testing.T) {
 	}
 	w := &NonInteractiveWorker{Runner: runner}
 
-	_, err := w.Execute(context.Background(), "test", prompt.Config{}, "/work", 1, 10)
+	cfg := ActionConfig{}
+
+	_, err := w.Execute(context.Background(), "do something", cfg, "/work", 1, 10)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestNonInteractiveWorker_Execute_Error(t *testing.T) {
 			runner := &mockRunner{output: []byte(tc.output), err: tc.runnerErr, failAt: tc.failAt}
 			w := &NonInteractiveWorker{Runner: runner}
 
-			_, err := w.Execute(context.Background(), "fail", prompt.Config{}, "/work", 1, 0)
+			_, err := w.Execute(context.Background(), "fail", ActionConfig{}, "/work", 1, 0)
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -169,7 +169,9 @@ func TestNonInteractiveWorker_Execute_Timeout(t *testing.T) {
 	}
 	w := &NonInteractiveWorker{Runner: runner}
 
-	_, err := w.Execute(context.Background(), "test", prompt.Config{}, "/work", 1, 0)
+	cfg := ActionConfig{}
+
+	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

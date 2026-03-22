@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-
-	"github.com/MH4GF/tq/prompt"
 )
 
 const defaultTimeout = 300
@@ -21,8 +19,8 @@ type NonInteractiveWorker struct {
 	Runner CommandRunner
 }
 
-func (w *NonInteractiveWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID, taskID int64) (string, error) {
-	args := []string{"-p", prompt, "--output-format", "json"}
+func (w *NonInteractiveWorker) Execute(ctx context.Context, instruction string, cfg ActionConfig, workDir string, actionID, taskID int64) (string, error) {
+	args := []string{"-p", instruction, "--output-format", "json"}
 	if cfg.PermissionMode != "" {
 		args = append(args, "--permission-mode", cfg.PermissionMode)
 	}

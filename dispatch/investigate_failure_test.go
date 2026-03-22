@@ -9,13 +9,22 @@ import (
 	"github.com/MH4GF/tq/testutil"
 )
 
+func hasMetaKey(metadata, key string) bool {
+	var m map[string]any
+	if err := json.Unmarshal([]byte(metadata), &m); err != nil {
+		return false
+	}
+	_, ok := m[key]
+	return ok
+}
+
 func TestCreateInvestigateFailureAction(t *testing.T) {
 	t.Run("creates investigation action on same task", func(t *testing.T) {
 		d := testutil.NewTestDB(t)
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-		actionID, _ := d.InsertAction("my-prompt", "my-prompt", taskID, "{}", "failed")
+		actionID, _ := d.InsertAction("my-prompt", taskID, "{}", "failed")
 		action, _ := d.GetAction(actionID)
 
 		CreateInvestigateFailureAction(d, action, "worker error: timeout")
@@ -26,9 +35,6 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		}
 
 		investigate := actions[0]
-		if investigate.PromptID != "internal:investigate-failure" {
-			t.Errorf("prompt_id = %q, want internal:investigate-failure", investigate.PromptID)
-		}
 		if investigate.Status != "pending" {
 			t.Errorf("status = %q, want pending", investigate.Status)
 		}
@@ -43,8 +49,8 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		if meta["failed_action_id"] != fmt.Sprintf("%d", actionID) {
 			t.Errorf("failed_action_id = %v, want %d", meta["failed_action_id"], actionID)
 		}
-		if meta["failed_prompt_id"] != "my-prompt" {
-			t.Errorf("failed_prompt_id = %v, want my-prompt", meta["failed_prompt_id"])
+		if _, ok := meta["is_investigate_failure"]; !ok {
+			t.Error("metadata missing is_investigate_failure key")
 		}
 		if meta["failure_result"] != "worker error: timeout" {
 			t.Errorf("failure_result = %v, want 'worker error: timeout'", meta["failure_result"])
@@ -56,7 +62,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-		actionID, _ := d.InsertAction("my-prompt", "my-prompt", taskID, "{}", "failed")
+		actionID, _ := d.InsertAction("my-prompt", taskID, "{}", "failed")
 		action, _ := d.GetAction(actionID)
 
 		// Create first investigation
@@ -67,7 +73,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		actions, _ := d.ListActions("", nil, 0)
 		investigateCount := 0
 		for _, a := range actions {
-			if a.PromptID == "internal:investigate-failure" {
+			if hasMetaKey(a.Metadata, "is_investigate_failure") {
 				investigateCount++
 			}
 		}
@@ -81,9 +87,9 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-		action1ID, _ := d.InsertAction("prompt-a", "prompt-a", taskID, "{}", "failed")
+		action1ID, _ := d.InsertAction("prompt-a", taskID, "{}", "failed")
 		action1, _ := d.GetAction(action1ID)
-		action2ID, _ := d.InsertAction("prompt-b", "prompt-b", taskID, "{}", "failed")
+		action2ID, _ := d.InsertAction("prompt-b", taskID, "{}", "failed")
 		action2, _ := d.GetAction(action2ID)
 
 		CreateInvestigateFailureAction(d, action1, "error 1")
@@ -92,7 +98,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		actions, _ := d.ListActions("", nil, 0)
 		investigateCount := 0
 		for _, a := range actions {
-			if a.PromptID == "internal:investigate-failure" {
+			if hasMetaKey(a.Metadata, "is_investigate_failure") {
 				investigateCount++
 			}
 		}
@@ -101,31 +107,31 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		}
 	})
 
-	t.Run("title includes action ID and prompt ID", func(t *testing.T) {
+	t.Run("title includes action ID", func(t *testing.T) {
 		d := testutil.NewTestDB(t)
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-		actionID, _ := d.InsertAction("deploy", "deploy", taskID, "{}", "failed")
+		actionID, _ := d.InsertAction("deploy", taskID, "{}", "failed")
 		action, _ := d.GetAction(actionID)
 
 		CreateInvestigateFailureAction(d, action, "deploy failed")
 
 		actions, _ := d.ListActions("", nil, 0)
 		investigate := actions[0]
-		expectedTitle := fmt.Sprintf("Investigate failure of action #%d (deploy)", actionID)
+		expectedTitle := fmt.Sprintf("Investigate failure of action #%d", actionID)
 		if investigate.Title != expectedTitle {
 			t.Errorf("title = %q, want %q", investigate.Title, expectedTitle)
 		}
 	})
 }
 
-func TestCreateInvestigateFailureAction_SkipsInvestigateFailurePrompt(t *testing.T) {
+func TestCreateInvestigateFailureAction_SkipsInvestigationItself(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	actionID, _ := d.InsertAction("internal:investigate-failure", "internal:investigate-failure", taskID, "{}", "failed")
+	actionID, _ := d.InsertAction("internal:investigate-failure", taskID, `{"is_investigate_failure":true}`, "failed")
 	action, _ := d.GetAction(actionID)
 
 	CreateInvestigateFailureAction(d, action, "investigation itself failed")
@@ -134,7 +140,7 @@ func TestCreateInvestigateFailureAction_SkipsInvestigateFailurePrompt(t *testing
 	// Should NOT create a new investigation action to prevent infinite loops
 	pendingCount := 0
 	for _, a := range actions {
-		if a.PromptID == "internal:investigate-failure" && a.Status == db.ActionStatusPending {
+		if hasMetaKey(a.Metadata, "is_investigate_failure") && a.Status == db.ActionStatusPending {
 			pendingCount++
 		}
 	}

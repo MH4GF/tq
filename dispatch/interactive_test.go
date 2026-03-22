@@ -4,15 +4,13 @@ import (
 	"context"
 	"strings"
 	"testing"
-
-	"github.com/MH4GF/tq/prompt"
 )
 
 func TestInteractiveWorker_Execute(t *testing.T) {
 	tests := []struct {
 		name           string
 		session        string
-		cfg            prompt.Config
+		cfg            ActionConfig
 		prompt         string
 		actionID       int64
 		taskID         int64
@@ -22,7 +20,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 	}{
 		{
 			name:     "basic",
-			cfg:      prompt.Config{},
+			cfg:      ActionConfig{},
 			prompt:   "Fix the bug",
 			actionID: 42,
 			taskID:   10,
@@ -38,7 +36,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 		{
 			name:     "custom session",
 			session:  "work",
-			cfg:      prompt.Config{},
+			cfg:      ActionConfig{},
 			prompt:   "Fix the bug",
 			actionID: 7,
 			wantContains: []string{
@@ -48,7 +46,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 		},
 		{
 			name:     "permission mode",
-			cfg:      prompt.Config{PermissionMode: "plan"},
+			cfg:      ActionConfig{PermissionMode: "plan"},
 			prompt:   "Plan the feature",
 			actionID: 50,
 			taskID:   10,
@@ -58,7 +56,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 		},
 		{
 			name:     "worktree",
-			cfg:      prompt.Config{Worktree: true},
+			cfg:      ActionConfig{Worktree: true},
 			prompt:   "Fix the bug",
 			actionID: 42,
 			taskID:   10,
@@ -68,7 +66,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 		},
 		{
 			name:     "single quote escape",
-			cfg:      prompt.Config{},
+			cfg:      ActionConfig{},
 			prompt:   "it's a test",
 			actionID: 99,
 			wantContains: []string{
@@ -148,7 +146,7 @@ func TestInteractiveWorker_Error(t *testing.T) {
 			runner := &mockRunner{err: context.DeadlineExceeded, failAt: tc.failAt}
 			w := &InteractiveWorker{Runner: runner}
 
-			_, err := w.Execute(context.Background(), "test", prompt.Config{}, "/work", 1, 0)
+			_, err := w.Execute(context.Background(), "test", ActionConfig{}, "/work", 1, 0)
 			if err == nil {
 				t.Fatal("expected error")
 			}

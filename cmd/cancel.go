@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"log/slog"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -56,11 +55,6 @@ classification could be improved to avoid similar unnecessary actions.`,
 
 		if err := database.MarkCancelled(id, reason); err != nil {
 			return fmt.Errorf("mark cancelled: %w", err)
-		}
-
-		promptsDir := resolvePromptsDir()
-		if err := dispatch.TriggerOnCancel(database, promptsDir, action, reason); err != nil {
-			slog.Warn("on_cancel trigger failed", "action_id", id, "error", err)
 		}
 
 		if reason != "" {
