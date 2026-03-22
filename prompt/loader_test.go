@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/MH4GF/tq/db"
 )
 
 func writePrompt(t *testing.T, dir, name, content string) {
@@ -297,7 +295,7 @@ ActionMeta: {{index .Action.Meta "key"}}`,
 		Task: TaskData{
 			ID:     1,
 			Title:  "Test Task",
-			Status: db.TaskStatusOpen,
+			Status: "open",
 			Meta:   map[string]any{"key": "tval", "url": "https://example.com/1"},
 		},
 		Project: ProjectData{
@@ -309,7 +307,7 @@ ActionMeta: {{index .Action.Meta "key"}}`,
 		Action: ActionData{
 			ID:       3,
 			PromptID: "implement",
-			Status:   db.ActionStatusPending,
+			Status:   "pending",
 			Meta:     map[string]any{"key": "aval"},
 		},
 	}
@@ -469,6 +467,63 @@ func TestRender_MissingMetaKey_DotSyntax(t *testing.T) {
 	_, err := p.Render(data)
 	if err == nil {
 		t.Fatal("expected error for missing meta key via dot syntax")
+	}
+}
+
+func TestRender_SoftIndex_MissingKey(t *testing.T) {
+	p := &Prompt{
+		ID:   "test",
+		Body: `URL: {{get .Task.Meta "url"}}`,
+	}
+	data := PromptData{
+		Task:    TaskData{Meta: map[string]any{}},
+		Project: ProjectData{Meta: map[string]any{}},
+		Action:  ActionData{Meta: map[string]any{}},
+	}
+	result, err := p.Render(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "URL: " {
+		t.Errorf("Render = %q, want %q", result, "URL: ")
+	}
+}
+
+func TestRender_SoftIndex_KeyExists(t *testing.T) {
+	p := &Prompt{
+		ID:   "test",
+		Body: `URL: {{get .Task.Meta "url"}}`,
+	}
+	data := PromptData{
+		Task:    TaskData{Meta: map[string]any{"url": "https://example.com"}},
+		Project: ProjectData{Meta: map[string]any{}},
+		Action:  ActionData{Meta: map[string]any{}},
+	}
+	result, err := p.Render(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "URL: https://example.com" {
+		t.Errorf("Render = %q, want %q", result, "URL: https://example.com")
+	}
+}
+
+func TestRender_SoftIndex_IfGuard(t *testing.T) {
+	p := &Prompt{
+		ID:   "test",
+		Body: `{{if get .Task.Meta "url"}}URL: {{get .Task.Meta "url"}}{{end}}done`,
+	}
+	data := PromptData{
+		Task:    TaskData{Meta: map[string]any{}},
+		Project: ProjectData{Meta: map[string]any{}},
+		Action:  ActionData{Meta: map[string]any{}},
+	}
+	result, err := p.Render(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "done" {
+		t.Errorf("Render = %q, want %q", result, "done")
 	}
 }
 
