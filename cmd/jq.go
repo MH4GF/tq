@@ -46,9 +46,9 @@ func WriteJSON(w io.Writer, data any, jqExpr string, fields []string) error {
 		}
 		if err, isErr := v.(error); isErr {
 			if len(fields) > 0 {
-				return fmt.Errorf("jq error: %s (available fields: %s)", err, strings.Join(fields, ", "))
+				return fmt.Errorf("jq error: %w (available fields: %s)", err, strings.Join(fields, ", "))
 			}
-			return fmt.Errorf("jq error: %s", err)
+			return fmt.Errorf("jq error: %w", err)
 		}
 		switch val := v.(type) {
 		case string:

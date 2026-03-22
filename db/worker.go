@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -14,7 +15,7 @@ func (db *DB) getActiveWorker(staleThreshold time.Duration) (*workerHeartbeat, e
 	var heartbeat string
 	var maxInteractive int
 	err := db.QueryRow("SELECT last_heartbeat, max_interactive FROM worker_heartbeats WHERE id = 1").Scan(&heartbeat, &maxInteractive)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, sql.ErrNoRows
 	}
 	if err != nil {
@@ -48,7 +49,7 @@ func (db *DB) GetWorkerMaxInteractive(staleThreshold time.Duration) (int, error)
 
 func (db *DB) IsWorkerRunning(staleThreshold time.Duration) (bool, error) {
 	_, err := db.getActiveWorker(staleThreshold)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
