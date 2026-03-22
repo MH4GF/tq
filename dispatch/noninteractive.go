@@ -26,6 +26,9 @@ func (w *NonInteractiveWorker) Execute(ctx context.Context, prompt string, cfg p
 	if cfg.PermissionMode != "" {
 		args = append(args, "--permission-mode", cfg.PermissionMode)
 	}
+	if cfg.Worktree {
+		args = append(args, "--worktree")
+	}
 	env := buildTQEnv(actionID, taskID)
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, defaultTimeout*time.Second)

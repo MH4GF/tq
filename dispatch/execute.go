@@ -123,6 +123,10 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 		cfg = lr.Prompt.Config
 	}
 
+	if wt, ok := promptData.Action.Meta["worktree"].(bool); ok {
+		cfg.Worktree = wt
+	}
+
 	workDir := ResolveWorkDir(promptData)
 
 	if cfg.IsRemote() {
