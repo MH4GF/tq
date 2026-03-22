@@ -89,7 +89,7 @@ func (db *DB) UpdateScheduleLastRunAt(id int64, t string) error {
 	return err
 }
 
-func (db *DB) UpdateSchedule(id int64, title, cronExpr, metadata *string, taskID *int64) error {
+func (db *DB) UpdateSchedule(id int64, title, cronExpr, metadata, promptID *string, taskID *int64) error {
 	var setClauses []string
 	var args []any
 
@@ -104,6 +104,10 @@ func (db *DB) UpdateSchedule(id int64, title, cronExpr, metadata *string, taskID
 	if metadata != nil {
 		setClauses = append(setClauses, "metadata = ?")
 		args = append(args, *metadata)
+	}
+	if promptID != nil {
+		setClauses = append(setClauses, "prompt_id = ?")
+		args = append(args, *promptID)
 	}
 	if taskID != nil {
 		setClauses = append(setClauses, "task_id = ?")

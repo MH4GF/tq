@@ -131,7 +131,7 @@ func TestUpdateSchedule(t *testing.T) {
 	id, _ := d.InsertSchedule(taskID, "test", "Original", "* * * * *", "{}")
 
 	newTitle := "Updated"
-	if err := d.UpdateSchedule(id, &newTitle, nil, nil, nil); err != nil {
+	if err := d.UpdateSchedule(id, &newTitle, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	s, _ := d.GetSchedule(id)
@@ -144,7 +144,7 @@ func TestUpdateSchedule(t *testing.T) {
 
 	newCron := "0 */3 * * *"
 	newMeta := `{"key":"val"}`
-	if err := d.UpdateSchedule(id, nil, &newCron, &newMeta, &taskID2); err != nil {
+	if err := d.UpdateSchedule(id, nil, &newCron, &newMeta, nil, &taskID2); err != nil {
 		t.Fatal(err)
 	}
 	s, _ = d.GetSchedule(id)
@@ -161,8 +161,63 @@ func TestUpdateSchedule(t *testing.T) {
 		t.Errorf("title changed unexpectedly: %q", s.Title)
 	}
 
-	if err := d.UpdateSchedule(id, nil, nil, nil, nil); err == nil {
+	if err := d.UpdateSchedule(id, nil, nil, nil, nil, nil); err == nil {
 		t.Error("expected error when no fields specified")
+	}
+}
+
+func TestInsertSchedule_WithInstruction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
+	id, err := d.InsertSchedule(taskID, "", "Watch notifications", "*/10 * * * *", `{"instruction":"/gh-notifications:watch"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := d.GetSchedule(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.PromptID != "" {
+		t.Errorf("prompt_id = %q, want empty", s.PromptID)
+	}
+	if s.Title != "Watch notifications" {
+		t.Errorf("title = %q, want %q", s.Title, "Watch notifications")
+	}
+	if s.Metadata != `{"instruction":"/gh-notifications:watch"}` {
+		t.Errorf("metadata = %q, want instruction in metadata", s.Metadata)
+	}
+}
+
+func TestUpdateSchedule_PromptID(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	id, _ := d.InsertSchedule(taskID, "old-prompt", "Test", "* * * * *", "{}")
+
+	newPromptID := "new-prompt"
+	if err := d.UpdateSchedule(id, nil, nil, nil, &newPromptID, nil); err != nil {
+		t.Fatal(err)
+	}
+	s, _ := d.GetSchedule(id)
+	if s.PromptID != "new-prompt" {
+		t.Errorf("prompt_id = %q, want %q", s.PromptID, "new-prompt")
+	}
+
+	emptyPromptID := ""
+	newMeta := `{"instruction":"/some:command"}`
+	if err := d.UpdateSchedule(id, nil, nil, &newMeta, &emptyPromptID, nil); err != nil {
+		t.Fatal(err)
+	}
+	s, _ = d.GetSchedule(id)
+	if s.PromptID != "" {
+		t.Errorf("prompt_id = %q, want empty", s.PromptID)
+	}
+	if s.Metadata != `{"instruction":"/some:command"}` {
+		t.Errorf("metadata = %q, want instruction metadata", s.Metadata)
 	}
 }
 
