@@ -151,7 +151,8 @@ var scheduleUpdateCmd = &cobra.Command{
 	Use:   "update <ID>",
 	Short: "Update a schedule",
 	Example: `  tq schedule update 1 --cron "0 10 * * *"
-  tq schedule update 2 --title "Weekly sync" --task 3`,
+  tq schedule update 2 --title "Weekly sync" --task 3
+  tq schedule update 4 --instruction "/gh-notifications:watch"`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := parseID(args[0])
@@ -159,7 +160,7 @@ var scheduleUpdateCmd = &cobra.Command{
 			return err
 		}
 
-		var title, cronExpr, meta *string
+		var title, cronExpr, meta, instruction *string
 		var taskID *int64
 
 		if cmd.Flags().Changed("title") {
@@ -180,16 +181,20 @@ var scheduleUpdateCmd = &cobra.Command{
 			}
 			meta = &v
 		}
+		if cmd.Flags().Changed("instruction") {
+			v, _ := cmd.Flags().GetString("instruction")
+			instruction = &v
+		}
 		if cmd.Flags().Changed("task") {
 			v, _ := cmd.Flags().GetInt64("task")
 			taskID = &v
 		}
 
-		if title == nil && cronExpr == nil && meta == nil && taskID == nil {
-			return fmt.Errorf("at least one flag (--title, --cron, --meta, --task) is required")
+		if title == nil && cronExpr == nil && meta == nil && instruction == nil && taskID == nil {
+			return fmt.Errorf("at least one flag (--title, --cron, --meta, --instruction, --task) is required")
 		}
 
-		if err := database.UpdateSchedule(id, title, cronExpr, meta, taskID); err != nil {
+		if err := database.UpdateSchedule(id, title, cronExpr, meta, instruction, taskID); err != nil {
 			return err
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "schedule #%d updated\n", id)
@@ -224,6 +229,7 @@ func init() {
 	scheduleUpdateCmd.Flags().String("title", "", "Schedule title")
 	scheduleUpdateCmd.Flags().String("cron", "", "Cron expression")
 	scheduleUpdateCmd.Flags().String("meta", "", "JSON metadata")
+	scheduleUpdateCmd.Flags().String("instruction", "", "Instruction text")
 	scheduleUpdateCmd.Flags().Int64("task", 0, "Task ID")
 	scheduleCmd.AddCommand(scheduleUpdateCmd)
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.21.1](https://github.com/MH4GF/tq/compare/v0.21.0...v0.21.1) - 2026-03-21
+- Add depguard rules to enforce layered architecture by @MH4GF in https://github.com/MH4GF/tq/pull/33
+- Add get template function for optional metadata keys by @MH4GF in https://github.com/MH4GF/tq/pull/34
+
 ## [v0.21.0](https://github.com/MH4GF/tq/commits/v0.21.0) - 2026-03-21
 - Refactor navigation: hierarchical tasks→queue view with action counts by @MH4GF in https://github.com/MH4GF/tq/pull/2
 - Add action status validation and improve reset/cancel logic by @MH4GF in https://github.com/MH4GF/tq/pull/3

@@ -131,7 +131,7 @@ func TestUpdateSchedule(t *testing.T) {
 	id, _ := d.InsertSchedule(taskID, "test", "Original", "* * * * *", "{}")
 
 	newTitle := "Updated"
-	if err := d.UpdateSchedule(id, &newTitle, nil, nil, nil); err != nil {
+	if err := d.UpdateSchedule(id, &newTitle, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	s, _ := d.GetSchedule(id)
@@ -144,7 +144,7 @@ func TestUpdateSchedule(t *testing.T) {
 
 	newCron := "0 */3 * * *"
 	newMeta := `{"key":"val"}`
-	if err := d.UpdateSchedule(id, nil, &newCron, &newMeta, &taskID2); err != nil {
+	if err := d.UpdateSchedule(id, nil, &newCron, &newMeta, nil, &taskID2); err != nil {
 		t.Fatal(err)
 	}
 	s, _ = d.GetSchedule(id)
@@ -161,8 +161,38 @@ func TestUpdateSchedule(t *testing.T) {
 		t.Errorf("title changed unexpectedly: %q", s.Title)
 	}
 
-	if err := d.UpdateSchedule(id, nil, nil, nil, nil); err == nil {
+	if err := d.UpdateSchedule(id, nil, nil, nil, nil, nil); err == nil {
 		t.Error("expected error when no fields specified")
+	}
+}
+
+func TestUpdateSchedule_Instruction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	id, _ := d.InsertSchedule(taskID, "old-instruction", "Test", "* * * * *", "{}")
+
+	newInstruction := "new-instruction"
+	if err := d.UpdateSchedule(id, nil, nil, nil, &newInstruction, nil); err != nil {
+		t.Fatal(err)
+	}
+	s, _ := d.GetSchedule(id)
+	if s.Instruction != "new-instruction" {
+		t.Errorf("instruction = %q, want %q", s.Instruction, "new-instruction")
+	}
+
+	emptyInstruction := ""
+	newMeta := `{"key":"val"}`
+	if err := d.UpdateSchedule(id, nil, nil, &newMeta, &emptyInstruction, nil); err != nil {
+		t.Fatal(err)
+	}
+	s, _ = d.GetSchedule(id)
+	if s.Instruction != "" {
+		t.Errorf("instruction = %q, want empty", s.Instruction)
+	}
+	if s.Metadata != `{"key":"val"}` {
+		t.Errorf("metadata = %q, want %q", s.Metadata, `{"key":"val"}`)
 	}
 }
 

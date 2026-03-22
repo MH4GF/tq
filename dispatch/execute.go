@@ -68,6 +68,7 @@ func WindowName(actionID int64) string {
 type ActionConfig struct {
 	Mode           string
 	PermissionMode string
+	Worktree       bool
 }
 
 func (c ActionConfig) IsInteractive() bool    { return c.Mode == ModeInteractive }
@@ -96,6 +97,9 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 	}
 	if permMode, ok := actionMeta[MetaKeyPermissionMode].(string); ok {
 		cfg.PermissionMode = permMode
+	}
+	if wt, ok := actionMeta["worktree"].(bool); ok {
+		cfg.Worktree = wt
 	}
 
 	workDir := resolveWorkDir(params.DB, action)

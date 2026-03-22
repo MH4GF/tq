@@ -30,6 +30,83 @@ func TestScheduleCreate_InvalidMeta(t *testing.T) {
 	}
 }
 
+func TestScheduleCreate_WithInstruction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "test task", "{}", "")
+
+	root := cmd.GetRootCmd()
+	out := new(bytes.Buffer)
+	root.SetOut(out)
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"schedule", "create", "--instruction", "/gh-notifications:watch", "--task", "1", "--cron", "*/10 * * * *", "--title", "Watch notifications"})
+
+	err := root.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !contains(out.String(), "schedule #") {
+		t.Errorf("output = %q, want to contain 'schedule #'", out.String())
+	}
+
+	schedules, _ := d.ListSchedules(0)
+	if len(schedules) != 1 {
+		t.Fatalf("expected 1 schedule, got %d", len(schedules))
+	}
+	if schedules[0].Instruction != "/gh-notifications:watch" {
+		t.Errorf("instruction = %q, want %q", schedules[0].Instruction, "/gh-notifications:watch")
+	}
+}
+
+func TestScheduleCreate_NoInstruction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "test task", "{}", "")
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"schedule", "create", "--task", "1", "--cron", "0 9 * * *"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error when --instruction is not provided")
+	}
+	if !contains(err.Error(), "--instruction is required") {
+		t.Errorf("error = %q, want to contain '--instruction is required'", err.Error())
+	}
+}
+
+func TestScheduleUpdate_Success(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
+	d.InsertSchedule(taskID, "/gh-notifications:watch", "Watch", "* * * * *", "{}")
+
+	root := cmd.GetRootCmd()
+	out := new(bytes.Buffer)
+	root.SetOut(out)
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"schedule", "update", "1", "--title", "Updated Watch"})
+
+	err := root.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !contains(out.String(), "schedule #1 updated") {
+		t.Errorf("output = %q, want to contain 'schedule #1 updated'", out.String())
+	}
+}
+
 func TestScheduleUpdate_InvalidMeta(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -37,7 +114,7 @@ func TestScheduleUpdate_InvalidMeta(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-	d.InsertSchedule(taskID, "daily-review", "daily", "0 9 * * *", "{}")
+	d.InsertSchedule(taskID, "/daily-review", "daily", "0 9 * * *", "{}")
 
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))

@@ -174,7 +174,7 @@ func TestExecuteAction_InstructionWithModeOverride(t *testing.T) {
 	}
 }
 
-func TestExecuteAction_NoPromptNoInstruction(t *testing.T) {
+func TestExecuteAction_NoInstruction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -196,7 +196,7 @@ func TestExecuteAction_NoPromptNoInstruction(t *testing.T) {
 	}, action)
 
 	if err == nil {
-		t.Fatal("expected error for no prompt and no instruction")
+		t.Fatal("expected error for no instruction")
 	}
 
 	a, _ := d.GetAction(action.ID)
