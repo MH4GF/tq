@@ -73,6 +73,8 @@ type QueryReader interface {
 	// Event queries
 	ListEvents(entityType string, entityID int64) ([]Event, error)
 	ListRecentEvents(limit int) ([]Event, error)
+	// Search
+	Search(keyword string) ([]SearchResult, error)
 }
 
 // Store implements both CommandWriter and QueryReader.
