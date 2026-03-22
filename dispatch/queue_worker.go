@@ -81,7 +81,7 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 		}
 
 		if time.Since(lastHeartbeat) >= cfg.PollInterval {
-			if err := cfg.DB.UpdateWorkerHeartbeat(); err != nil {
+			if err := cfg.DB.UpdateWorkerHeartbeat(cfg.MaxInteractive); err != nil {
 				slog.Error("update worker heartbeat", "error", err)
 			}
 			lastHeartbeat = time.Now()
