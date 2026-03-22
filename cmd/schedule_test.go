@@ -19,7 +19,7 @@ func TestScheduleCreate_InvalidMeta(t *testing.T) {
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"schedule", "create", "--prompt", "daily-review", "--task", "1", "--cron", "0 9 * * *", "--meta", "{invalid}"})
+	root.SetArgs([]string{"schedule", "create", "--instruction", "daily-review", "--task", "1", "--cron", "0 9 * * *", "--meta", "{invalid}"})
 
 	err := root.Execute()
 	if err == nil {
@@ -56,15 +56,12 @@ func TestScheduleCreate_WithInstruction(t *testing.T) {
 	if len(schedules) != 1 {
 		t.Fatalf("expected 1 schedule, got %d", len(schedules))
 	}
-	if schedules[0].PromptID != "" {
-		t.Errorf("prompt_id = %q, want empty", schedules[0].PromptID)
-	}
-	if !contains(schedules[0].Metadata, `"instruction":"/gh-notifications:watch"`) {
-		t.Errorf("metadata = %q, want instruction in metadata", schedules[0].Metadata)
+	if schedules[0].Instruction != "/gh-notifications:watch" {
+		t.Errorf("instruction = %q, want %q", schedules[0].Instruction, "/gh-notifications:watch")
 	}
 }
 
-func TestScheduleCreate_NoPromptNoInstruction(t *testing.T) {
+func TestScheduleCreate_NoInstruction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
@@ -79,33 +76,34 @@ func TestScheduleCreate_NoPromptNoInstruction(t *testing.T) {
 
 	err := root.Execute()
 	if err == nil {
-		t.Fatal("expected error when neither --prompt nor --instruction is provided")
+		t.Fatal("expected error when --instruction is not provided")
 	}
-	if !contains(err.Error(), "at least one of --prompt or --instruction is required") {
-		t.Errorf("error = %q, want to contain 'at least one of --prompt or --instruction is required'", err.Error())
+	if !contains(err.Error(), "--instruction is required") {
+		t.Errorf("error = %q, want to contain '--instruction is required'", err.Error())
 	}
 }
 
-func TestScheduleUpdate_ClearMetaWithoutPrompt(t *testing.T) {
+func TestScheduleUpdate_Success(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-	d.InsertSchedule(taskID, "", "Watch", "* * * * *", `{"instruction":"/gh-notifications:watch"}`)
+	d.InsertSchedule(taskID, "/gh-notifications:watch", "Watch", "* * * * *", "{}")
 
 	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
+	out := new(bytes.Buffer)
+	root.SetOut(out)
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"schedule", "update", "1", "--meta", "{}"})
+	root.SetArgs([]string{"schedule", "update", "1", "--title", "Updated Watch"})
 
 	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected error when clearing meta would leave schedule without prompt or instruction")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !contains(err.Error(), "neither prompt nor instruction") {
-		t.Errorf("error = %q, want to contain 'neither prompt nor instruction'", err.Error())
+	if !contains(out.String(), "schedule #1 updated") {
+		t.Errorf("output = %q, want to contain 'schedule #1 updated'", out.String())
 	}
 }
 
@@ -116,7 +114,7 @@ func TestScheduleUpdate_InvalidMeta(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-	d.InsertSchedule(taskID, "daily-review", "daily", "0 9 * * *", "{}")
+	d.InsertSchedule(taskID, "/daily-review", "daily", "0 9 * * *", "{}")
 
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))

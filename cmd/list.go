@@ -15,7 +15,7 @@ var (
 	listJQ     string
 )
 
-var listFields = []string{"id", "title", "prompt_id", "task_id", "metadata", "status", "result", "session_id", "started_at", "completed_at", "created_at"}
+var listFields = []string{"id", "title", "task_id", "metadata", "status", "result", "session_id", "started_at", "completed_at", "created_at"}
 
 var listCmd = &cobra.Command{
 	Use:   "list",
@@ -48,7 +48,6 @@ func actionToMap(a db.Action) map[string]any {
 	row := map[string]any{
 		"id":         a.ID,
 		"title":      a.Title,
-		"prompt_id":  a.PromptID,
 		"task_id":    a.TaskID,
 		"metadata":   a.Metadata,
 		"status":     a.Status,

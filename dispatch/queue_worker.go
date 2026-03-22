@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -48,7 +47,6 @@ func (c *ExecTmuxChecker) ListWindows(ctx context.Context, session string) ([]st
 // WorkerConfig configures the queue worker.
 type WorkerConfig struct {
 	DispatchConfig
-	UserConfigDir    string
 	MaxInteractive   int
 	PollInterval     time.Duration
 	TmuxChecker      TmuxChecker
@@ -171,7 +169,6 @@ func dispatchOne(ctx context.Context, cfg WorkerConfig) (bool, error) {
 
 	result, err := ExecuteAction(ctx, ExecuteParams{
 		DispatchConfig: cfg.DispatchConfig,
-		PromptsDir:     resolvePromptsDir(cfg.UserConfigDir),
 		BeforeInteractive: func(a *db.Action) error {
 			running, err := cfg.DB.CountRunningInteractive()
 			if err != nil {
@@ -199,8 +196,4 @@ func dispatchOne(ctx context.Context, cfg WorkerConfig) (bool, error) {
 
 	slog.Info("action dispatched", "action_id", action.ID, "mode", result.Mode)
 	return true, nil
-}
-
-func resolvePromptsDir(userConfigDir string) string {
-	return filepath.Join(userConfigDir, "prompts")
 }

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/MH4GF/tq/prompt"
 )
 
 // InteractiveWorker opens a tmux window and launches `claude` via send-keys.
@@ -16,7 +14,7 @@ type InteractiveWorker struct {
 	Session string
 }
 
-func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID, taskID int64) (string, error) {
+func (w *InteractiveWorker) Execute(ctx context.Context, instruction string, cfg ActionConfig, workDir string, actionID, taskID int64) (string, error) {
 	session := w.Session
 	if session == "" {
 		session = "main"
@@ -33,7 +31,7 @@ func (w *InteractiveWorker) Execute(ctx context.Context, prompt string, cfg prom
 
 	// 2. Send claude command text
 	tmuxTarget := fmt.Sprintf("%s:%s", session, windowName)
-	escapedPrompt := strings.ReplaceAll(prompt, "'", "'\\''")
+	escapedPrompt := strings.ReplaceAll(instruction, "'", "'\\''")
 	envPrefix := fmt.Sprintf("TQ_ACTION_ID=%d TQ_TASK_ID=%d", actionID, taskID)
 	permFlag := ""
 	if cfg.PermissionMode != "" {

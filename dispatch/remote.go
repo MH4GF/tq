@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/MH4GF/tq/prompt"
 )
 
 const RemoteSessionPrefix = "remote:session="
@@ -19,8 +17,8 @@ type RemoteWorker struct {
 	Runner CommandRunner
 }
 
-func (w *RemoteWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID, taskID int64) (string, error) {
-	remotePrompt := prompt + remoteRules(actionID)
+func (w *RemoteWorker) Execute(ctx context.Context, instruction string, cfg ActionConfig, workDir string, actionID, taskID int64) (string, error) {
+	remotePrompt := instruction + remoteRules(actionID)
 
 	debugFile := filepath.Join(os.TempDir(), fmt.Sprintf("tq-remote-debug-%d.log", actionID))
 	defer func() { _ = os.Remove(debugFile) }()

@@ -10,13 +10,19 @@ import (
 	"path/filepath"
 
 	"github.com/MH4GF/tq/db"
-	"github.com/MH4GF/tq/prompt"
 )
 
 const (
 	ModeRemote         = "remote"
 	ModeInteractive    = "interactive"
 	ModeNonInteractive = "noninteractive"
+
+	MetaKeyInstruction     = "instruction"
+	MetaKeyMode            = "mode"
+	MetaKeyPermissionMode  = "permission_mode"
+	MetaKeyScheduleID      = "schedule_id"
+	MetaKeyIsInvestigation = "is_investigate_failure"
+	MetaKeyFailedActionID  = "failed_action_id"
 )
 
 // DispatchConfig holds shared dispatch settings used by both WorkerConfig and ExecuteParams.
@@ -30,7 +36,6 @@ type DispatchConfig struct {
 
 type ExecuteParams struct {
 	DispatchConfig
-	PromptsDir        string
 	BeforeInteractive func(action *db.Action) error
 }
 
@@ -59,88 +64,58 @@ func WindowName(actionID int64) string {
 	return fmt.Sprintf("tq-action-%d", actionID)
 }
 
-// ExecuteAction loads the prompt, renders it, and dispatches via the appropriate worker.
+// ActionConfig holds execution configuration extracted from action metadata.
+type ActionConfig struct {
+	Mode           string
+	PermissionMode string
+	Worktree       bool
+}
+
+func (c ActionConfig) IsInteractive() bool    { return c.Mode == ModeInteractive }
+func (c ActionConfig) IsNonInteractive() bool { return c.Mode == ModeNonInteractive }
+func (c ActionConfig) IsRemote() bool         { return c.Mode == ModeRemote }
+
+// ExecuteAction reads instruction from metadata and dispatches via the appropriate worker.
 func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action) (*ExecuteResult, error) {
-	promptData, err := BuildPromptData(params.DB, action)
+	actionMeta, err := parseMetadata(action.Metadata)
 	if err != nil {
-		failMsg := fmt.Sprintf("build prompt data: %v", err)
+		failMsg := fmt.Sprintf("parse action metadata: %v", err)
 		_ = params.DB.MarkFailed(action.ID, failMsg)
 		CreateInvestigateFailureAction(params.DB, action, failMsg)
-		return nil, fmt.Errorf("build prompt data: %w", err)
+		return nil, fmt.Errorf("parse action metadata: %w", err)
 	}
 
-	var rendered string
-	var cfg prompt.Config
-
-	if action.PromptID == "" {
-		instruction, ok := promptData.Action.Meta["instruction"].(string)
-		if !ok || instruction == "" {
-			_ = params.DB.MarkFailed(action.ID, "no prompt_id and no instruction in metadata")
-			return nil, errors.New("no prompt_id and no instruction in metadata")
-		}
-		rendered = instruction
-		cfg = prompt.Config{Mode: ModeInteractive}
-
-		if modeStr, ok := promptData.Action.Meta["mode"].(string); ok {
-			cfg.Mode = modeStr
-		}
-	} else {
-		lr, err := prompt.Load(params.PromptsDir, action.PromptID)
-		if err != nil {
-			failMsg := fmt.Sprintf("prompt load error: %v", err)
-			_ = params.DB.MarkFailed(action.ID, failMsg)
-			CreateInvestigateFailureAction(params.DB, action, failMsg)
-			return nil, fmt.Errorf("load prompt %q: %w", action.PromptID, err)
-		}
-
-		if len(lr.UnknownFields) > 0 {
-			CreateSelfImprovementAction(params.DB, params.PromptsDir, action.PromptID, lr.UnknownFields)
-		}
-
-		if len(lr.DeprecatedPatterns) > 0 {
-			created, ferr := CreateParseErrorFixAction(params.DB, params.PromptsDir, action.PromptID, lr.DeprecatedPatterns)
-			var msg string
-			switch {
-			case ferr != nil:
-				msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v (failed to create fix action: %v)", action.PromptID, lr.DeprecatedPatterns, ferr)
-			case created:
-				msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v — a fix action has been created", action.PromptID, lr.DeprecatedPatterns)
-			default:
-				msg = fmt.Sprintf("prompt %q uses deprecated patterns: %v", action.PromptID, lr.DeprecatedPatterns)
-			}
-			_ = params.DB.MarkFailed(action.ID, msg)
-			return nil, fmt.Errorf("prompt %q uses deprecated patterns: %v", action.PromptID, lr.DeprecatedPatterns)
-		}
-
-		rendered, err = lr.Prompt.Render(promptData)
-		if err != nil {
-			failMsg := fmt.Sprintf("render error: %v", err)
-			_ = params.DB.MarkFailed(action.ID, failMsg)
-			CreateInvestigateFailureAction(params.DB, action, failMsg)
-			return nil, fmt.Errorf("render prompt: %w", err)
-		}
-
-		cfg = lr.Prompt.Config
+	instruction, ok := actionMeta[MetaKeyInstruction].(string)
+	if !ok || instruction == "" {
+		_ = params.DB.MarkFailed(action.ID, "no instruction in metadata")
+		return nil, errors.New("no instruction in metadata")
 	}
 
-	if wt, ok := promptData.Action.Meta["worktree"].(bool); ok {
+	cfg := ActionConfig{Mode: ModeInteractive}
+	if modeStr, ok := actionMeta[MetaKeyMode].(string); ok {
+		cfg.Mode = modeStr
+	}
+	if permMode, ok := actionMeta[MetaKeyPermissionMode].(string); ok {
+		cfg.PermissionMode = permMode
+	}
+	if wt, ok := actionMeta["worktree"].(bool); ok {
 		cfg.Worktree = wt
 	}
 
-	workDir := ResolveWorkDir(promptData)
+	workDir := resolveWorkDir(params.DB, action)
 
 	if cfg.IsRemote() {
-		return executeRemote(ctx, params, action, rendered, cfg, workDir)
+		return executeRemote(ctx, params, action, instruction, cfg, workDir)
 	}
 	if cfg.IsInteractive() {
-		return executeInteractive(ctx, params, action, rendered, cfg, workDir)
+		return executeInteractive(ctx, params, action, instruction, cfg, workDir)
 	}
-	return executeNonInteractive(ctx, params, action, rendered, cfg, workDir)
+	return executeNonInteractive(ctx, params, action, instruction, cfg, workDir)
 }
 
-func executeRemote(ctx context.Context, params ExecuteParams, action *db.Action, rendered string, cfg prompt.Config, workDir string) (*ExecuteResult, error) {
+func executeRemote(ctx context.Context, params ExecuteParams, action *db.Action, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
 	worker := params.RemoteFunc()
-	result, err := worker.Execute(ctx, rendered, cfg, workDir, action.ID, action.TaskID)
+	result, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
 	if err != nil {
 		_ = params.DB.MarkFailed(action.ID, err.Error())
 		CreateInvestigateFailureAction(params.DB, action, err.Error())
@@ -160,7 +135,7 @@ func executeRemote(ctx context.Context, params ExecuteParams, action *db.Action,
 	return &ExecuteResult{Mode: ModeRemote, Output: result}, nil
 }
 
-func executeInteractive(ctx context.Context, params ExecuteParams, action *db.Action, rendered string, cfg prompt.Config, workDir string) (*ExecuteResult, error) {
+func executeInteractive(ctx context.Context, params ExecuteParams, action *db.Action, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
 	if params.BeforeInteractive != nil {
 		if err := params.BeforeInteractive(action); err != nil {
 			if errors.Is(err, ErrInteractiveDeferred) {
@@ -172,7 +147,7 @@ func executeInteractive(ctx context.Context, params ExecuteParams, action *db.Ac
 	}
 
 	worker := params.InteractiveFunc()
-	result, err := worker.Execute(ctx, rendered, cfg, workDir, action.ID, action.TaskID)
+	result, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
 	if err != nil {
 		_ = params.DB.MarkFailed(action.ID, err.Error())
 		CreateInvestigateFailureAction(params.DB, action, err.Error())
@@ -189,9 +164,9 @@ func executeInteractive(ctx context.Context, params ExecuteParams, action *db.Ac
 	return &ExecuteResult{Mode: ModeInteractive, Output: result}, nil
 }
 
-func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db.Action, rendered string, cfg prompt.Config, workDir string) (*ExecuteResult, error) {
+func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db.Action, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
 	worker := params.NonInteractiveFunc()
-	result, err := worker.Execute(ctx, rendered, cfg, workDir, action.ID, action.TaskID)
+	result, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
 	if err != nil {
 		_ = params.DB.MarkFailed(action.ID, err.Error())
 		CreateInvestigateFailureAction(params.DB, action, err.Error())
@@ -200,10 +175,6 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 
 	if err := params.DB.MarkDone(action.ID, result); err != nil {
 		return nil, fmt.Errorf("mark done: %w", err)
-	}
-
-	if err := TriggerOnDone(params.DB, params.PromptsDir, action, result); err != nil {
-		slog.Warn("on_done trigger failed", "action_id", action.ID, "error", err)
 	}
 
 	return &ExecuteResult{Mode: ModeNonInteractive, Output: result}, nil
@@ -220,62 +191,21 @@ func parseMetadata(raw string) (map[string]any, error) {
 	return m, nil
 }
 
-// BuildPromptData builds prompt data by looking up the action's task and project from the database.
-func BuildPromptData(database db.Store, action *db.Action) (prompt.PromptData, error) {
-	var data prompt.PromptData
-
-	actionMeta, err := parseMetadata(action.Metadata)
-	if err != nil {
-		return data, fmt.Errorf("parse action metadata: %w", err)
-	}
-	data.Action = prompt.ActionData{
-		ID:       action.ID,
-		PromptID: action.PromptID,
-		Status:   action.Status,
-		Meta:     actionMeta,
-	}
-
+// resolveWorkDir returns the effective working directory for action execution.
+func resolveWorkDir(database db.Store, action *db.Action) string {
 	task, err := database.GetTask(action.TaskID)
 	if err != nil {
-		return data, fmt.Errorf("get task: %w", err)
+		return "."
 	}
-	taskMeta, err := parseMetadata(task.Metadata)
-	if err != nil {
-		return data, fmt.Errorf("parse task metadata: %w", err)
+	if task.WorkDir != "" {
+		return expandHome(task.WorkDir)
 	}
-	data.Task = prompt.TaskData{
-		ID:      task.ID,
-		Title:   task.Title,
-		Status:  task.Status,
-		WorkDir: task.WorkDir,
-		Meta:    taskMeta,
-	}
-
 	project, err := database.GetProjectByID(task.ProjectID)
 	if err != nil {
-		return data, fmt.Errorf("get project: %w", err)
+		return "."
 	}
-	projectMeta, err := parseMetadata(project.Metadata)
-	if err != nil {
-		return data, fmt.Errorf("parse project metadata: %w", err)
-	}
-	data.Project = prompt.ProjectData{
-		ID:      project.ID,
-		Name:    project.Name,
-		WorkDir: project.WorkDir,
-		Meta:    projectMeta,
-	}
-
-	return data, nil
-}
-
-// ResolveWorkDir returns the effective working directory for prompt execution.
-func ResolveWorkDir(data prompt.PromptData) string {
-	if data.Task.WorkDir != "" {
-		return expandHome(data.Task.WorkDir)
-	}
-	if data.Project.WorkDir != "" {
-		return expandHome(data.Project.WorkDir)
+	if project.WorkDir != "" {
+		return expandHome(project.WorkDir)
 	}
 	return "."
 }

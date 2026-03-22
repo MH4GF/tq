@@ -2,9 +2,6 @@ package cmd_test
 
 import (
 	"bytes"
-	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
@@ -19,7 +16,7 @@ func TestDone(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", "test", taskID, "{}", db.ActionStatusRunning)
+	id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusRunning)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -55,7 +52,7 @@ func TestDone_NoResult(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("test", "test", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("test", taskID, "{}", db.ActionStatusRunning)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -86,56 +83,5 @@ func TestDone_InvalidID(t *testing.T) {
 
 	if err := root.Execute(); err == nil {
 		t.Fatal("expected error for non-existent action ID")
-	}
-}
-
-func TestDone_TriggersOnDone(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	tqDir := t.TempDir()
-	promptsDir := filepath.Join(tqDir, "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-
-	for _, tc := range []struct {
-		name   string
-		auto   bool
-		onDone string
-	}{
-		{"check-pr", true, "review"},
-		{"review", true, ""},
-	} {
-		content := fmt.Sprintf("---\ndescription: %s\nauto: %v\non_done: %s\n---\nDo %s.\n", tc.name, tc.auto, tc.onDone, tc.name)
-		os.WriteFile(filepath.Join(promptsDir, tc.name+".md"), []byte(content), 0o644)
-	}
-
-	cmd.SetConfigDir(tqDir)
-
-	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", "check-pr", taskID, "{}", db.ActionStatusRunning)
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"action", "done", "1", `{"result":"PR merged"}`})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	actions, _ := d.ListActions("", nil, 0)
-	if len(actions) != 2 {
-		t.Fatalf("expected 2 actions, got %d", len(actions))
-	}
-
-	followUp := actions[0]
-	if followUp.PromptID != "review" {
-		t.Errorf("template_id = %q, want review", followUp.PromptID)
-	}
-	if followUp.Status != db.ActionStatusPending {
-		t.Errorf("status = %q, want %q", followUp.Status, db.ActionStatusPending)
 	}
 }

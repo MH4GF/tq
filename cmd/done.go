@@ -7,8 +7,6 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
-
-	"github.com/MH4GF/tq/dispatch"
 )
 
 func init() {
@@ -20,7 +18,6 @@ var doneCmd = &cobra.Command{
 	Short: "Mark action as done",
 	Long: `Mark an action as done, optionally recording a result summary.
 Can be called on any non-terminal action (pending or running).
-Triggers on_done hooks defined in the prompt template.
 
 RESULT is free-form text read by future workers to understand past work.
 Structure it with these sections (omit any that don't apply):
@@ -69,11 +66,6 @@ Session logs already capture that.`,
 			} else {
 				slog.Info("updated task work_dir", "task_id", task.ID, "work_dir", pwd)
 			}
-		}
-
-		promptsDir := resolvePromptsDir()
-		if err := dispatch.TriggerOnDone(database, promptsDir, action, result); err != nil {
-			slog.Warn("on_done trigger failed", "action_id", id, "error", err)
 		}
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d done\n", id)

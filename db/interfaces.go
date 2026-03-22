@@ -8,7 +8,7 @@ import (
 // CommandWriter defines all write operations.
 type CommandWriter interface {
 	// Action commands
-	InsertAction(title, promptID string, taskID int64, metadata, status string) (int64, error)
+	InsertAction(title string, taskID int64, metadata, status string) (int64, error)
 	MarkDone(id int64, result string) error
 	MarkFailed(id int64, result string) error
 	MarkCancelled(id int64, result string) error
@@ -35,8 +35,8 @@ type CommandWriter interface {
 	// Worker commands
 	UpdateWorkerHeartbeat(maxInteractive int) error
 	// Schedule commands
-	InsertSchedule(taskID int64, promptID, title, cronExpr, metadata string) (int64, error)
-	UpdateSchedule(id int64, title, cronExpr, metadata, promptID *string, taskID *int64) error
+	InsertSchedule(taskID int64, instruction, title, cronExpr, metadata string) (int64, error)
+	UpdateSchedule(id int64, title, cronExpr, metadata, instruction *string, taskID *int64) error
 	UpdateScheduleEnabled(id int64, enabled bool) error
 	DeleteSchedule(id int64) error
 	UpdateScheduleLastRunAt(id int64, t string) error
@@ -47,9 +47,7 @@ type QueryReader interface {
 	// Action queries
 	GetAction(id int64) (*Action, error)
 	ListActions(status string, taskID *int64, limit int) ([]Action, error)
-	HasActiveAction(taskID int64, promptID string) (bool, error)
-	GetActiveAction(taskID int64, promptID string) (*Action, error)
-	HasActiveActionWithMeta(taskID int64, promptID, metaKey, metaValue string) (bool, error)
+	HasActiveActionWithMeta(taskID int64, metaKey, metaValue string) (bool, error)
 	ListRunningInteractive() ([]Action, error)
 	CountRunningInteractive() (int, error)
 	CountByStatus() (map[string]int, error)
