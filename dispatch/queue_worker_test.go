@@ -2,15 +2,13 @@ package dispatch
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/MH4GF/tq/db"
-	"github.com/MH4GF/tq/prompt"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -20,63 +18,9 @@ type countingWorker struct {
 	err    error
 }
 
-func (w *countingWorker) Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID, taskID int64) (string, error) {
+func (w *countingWorker) Execute(ctx context.Context, instruction string, cfg ActionConfig, workDir string, actionID, taskID int64) (string, error) {
 	w.count++
 	return w.result, w.err
-}
-
-func setupPromptsDir(t *testing.T) string {
-	t.Helper()
-	tqDir := t.TempDir()
-	promptsDir := filepath.Join(tqDir, "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-
-	writeTestPrompt(t, promptsDir, "check-pr-status", false)
-	writeTestPrompt(t, promptsDir, "fix-conflict", true)
-	writeTestPrompt(t, promptsDir, "respond-review", true)
-	writeTestPrompt(t, promptsDir, "fix-ci", true)
-	writeTestPrompt(t, promptsDir, "merge-pr", true)
-	writeTestPromptWithMode(t, promptsDir, "remote-task", "remote", "")
-	return tqDir
-}
-
-func writeTestPromptFull(t *testing.T, dir, name, mode, onDone, onCancel string) {
-	t.Helper()
-	hooks := ""
-	if onDone != "" {
-		hooks += fmt.Sprintf("on_done: %s\n", onDone)
-	}
-	if onCancel != "" {
-		hooks += fmt.Sprintf("on_cancel: %s\n", onCancel)
-	}
-	content := fmt.Sprintf(`---
-description: %s
-mode: %s
-%s---
-Do %s for {{.Task.Title}}.
-`, name, mode, hooks, name)
-	if err := os.WriteFile(filepath.Join(dir, name+".md"), []byte(content), 0o644); err != nil {
-		t.Fatalf("write prompt %q: %v", name, err)
-	}
-}
-
-func writeTestPromptWithMode(t *testing.T, dir, name, mode, onDone string) {
-	t.Helper()
-	writeTestPromptFull(t, dir, name, mode, onDone, "")
-}
-
-func writeTestPrompt(t *testing.T, dir, name string, interactive bool) {
-	t.Helper()
-	writeTestPromptWithOnDone(t, dir, name, interactive, "")
-}
-
-func writeTestPromptWithOnDone(t *testing.T, dir, name string, interactive bool, onDone string) {
-	t.Helper()
-	mode := "noninteractive"
-	if interactive {
-		mode = "interactive"
-	}
-	writeTestPromptFull(t, dir, name, mode, onDone, "")
 }
 
 func TestRunWorker_ProcessesAndStops(t *testing.T) {
@@ -84,9 +28,7 @@ func TestRunWorker_ProcessesAndStops(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr-status", "check-pr-status", taskID, "{}", db.ActionStatusPending)
-
-	tqDir := setupPromptsDir(t)
+	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, db.ActionStatusPending)
 
 	worker := &countingWorker{result: `{"ok":true}`}
 
@@ -103,7 +45,6 @@ func TestRunWorker_ProcessesAndStops(t *testing.T) {
 				return worker
 			},
 		},
-		UserConfigDir:  tqDir,
 		MaxInteractive: 3,
 		PollInterval:   50 * time.Millisecond,
 	}
@@ -128,12 +69,9 @@ func TestRunWorker_InteractiveLimitEnforced(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix conflict","mode":"interactive"}`, db.ActionStatusPending)
 
-	tqDir := setupPromptsDir(t)
-
-	// Simulate an already-running interactive session
-	d.InsertAction("respond-review", "respond-review", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("respond-review", taskID, "{}", db.ActionStatusRunning)
 	d.Exec("UPDATE actions SET session_id = 'session-1' WHERE id = 2")
 
 	interactiveWorker := &countingWorker{result: "interactive:session=test"}
@@ -151,7 +89,6 @@ func TestRunWorker_InteractiveLimitEnforced(t *testing.T) {
 				return interactiveWorker
 			},
 		},
-		UserConfigDir:  tqDir,
 		MaxInteractive: 1,
 		PollInterval:   50 * time.Millisecond,
 	}
@@ -168,9 +105,7 @@ func TestRunWorker_FailureEscalation(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr-status", "check-pr-status", taskID, "{}", db.ActionStatusPending)
-
-	tqDir := setupPromptsDir(t)
+	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, db.ActionStatusPending)
 
 	worker := &countingWorker{err: context.DeadlineExceeded}
 
@@ -187,7 +122,6 @@ func TestRunWorker_FailureEscalation(t *testing.T) {
 				return worker
 			},
 		},
-		UserConfigDir:  tqDir,
 		MaxInteractive: 3,
 		PollInterval:   50 * time.Millisecond,
 	}
@@ -200,71 +134,12 @@ func TestRunWorker_FailureEscalation(t *testing.T) {
 	}
 }
 
-func TestRunWorker_OnDoneTriggersFollowUp(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	tqDir := t.TempDir()
-	promptsDir := filepath.Join(tqDir, "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-
-	writeTestPromptWithOnDone(t, promptsDir, "check-pr", false, "review")
-	writeTestPrompt(t, promptsDir, "review", false)
-
-	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", "check-pr", taskID, "{}", db.ActionStatusPending)
-
-	worker := &countingWorker{result: `{"status":"merged"}`}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{
-			DB: d,
-			NonInteractiveFunc: func() Worker {
-				return worker
-			},
-			InteractiveFunc: func() Worker {
-				return worker
-			},
-		},
-		UserConfigDir:  tqDir,
-		MaxInteractive: 3,
-		PollInterval:   50 * time.Millisecond,
-	}
-
-	err := RunWorker(ctx, cfg)
-	if err != context.DeadlineExceeded {
-		t.Fatalf("RunWorker error = %v, want context.DeadlineExceeded", err)
-	}
-
-	// check-pr should be done
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusDone {
-		t.Errorf("check-pr status = %q, want %q", action.Status, db.ActionStatusDone)
-	}
-
-	// review should have been auto-created as pending
-	actions, _ := d.ListActions("", nil, 0)
-	if len(actions) < 2 {
-		t.Fatalf("expected at least 2 actions, got %d", len(actions))
-	}
-
-	review := actions[0]
-	if review.PromptID != "review" {
-		t.Errorf("follow-up template = %q, want review", review.PromptID)
-	}
-}
-
 func TestRunWorker_FailureCreatesInvestigateAction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	tqDir := setupPromptsDir(t)
-
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr-status", "check-pr-status", taskID, "{}", "pending")
+	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, "pending")
 
 	worker := &countingWorker{err: fmt.Errorf("something went wrong")}
 
@@ -281,28 +156,29 @@ func TestRunWorker_FailureCreatesInvestigateAction(t *testing.T) {
 				return worker
 			},
 		},
-		UserConfigDir:  tqDir,
 		MaxInteractive: 3,
 		PollInterval:   50 * time.Millisecond,
 	}
 
 	_ = RunWorker(ctx, cfg)
 
-	// Original action should be failed
 	action, _ := d.GetAction(1)
 	if action.Status != "failed" {
 		t.Errorf("action status = %q, want failed", action.Status)
 	}
 
-	// Investigate-failure action should have been auto-created
 	actions, _ := d.ListActions("", nil, 0)
 	if len(actions) < 2 {
 		t.Fatalf("expected at least 2 actions, got %d", len(actions))
 	}
 
 	investigate := actions[0]
-	if investigate.PromptID != "internal:investigate-failure" {
-		t.Errorf("follow-up prompt_id = %q, want internal:investigate-failure", investigate.PromptID)
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(investigate.Metadata), &meta); err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+	if _, ok := meta["is_investigate_failure"]; !ok {
+		t.Errorf("metadata missing is_investigate_failure key, got %v", meta)
 	}
 	if investigate.TaskID != taskID {
 		t.Errorf("follow-up task_id = %d, want %d", investigate.TaskID, taskID)
@@ -325,7 +201,7 @@ func TestReapStaleActions_DetectsStale(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "other-window"}}
@@ -352,7 +228,7 @@ func TestReapStaleActions_SkipsLiveWindows(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}}
@@ -376,8 +252,7 @@ func TestReapStaleActions_GracePeriod(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", db.ActionStatusRunning)
-	// started_at is now (within grace period)
+	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now') WHERE id = 1")
 
 	checker := &mockTmuxChecker{windows: []string{"zsh"}}
@@ -401,7 +276,7 @@ func TestReapStaleActions_TmuxError(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{err: fmt.Errorf("tmux not available")}
@@ -425,7 +300,7 @@ func TestReapStaleActions_NilChecker(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1' WHERE id = 1")
 
 	cfg := WorkerConfig{
@@ -433,7 +308,6 @@ func TestReapStaleActions_NilChecker(t *testing.T) {
 		TmuxChecker:    nil,
 	}
 
-	// Should not panic
 	reapStaleActions(context.Background(), cfg)
 
 	action, _ := d.GetAction(1)
@@ -447,9 +321,7 @@ func TestRunWorker_RemoteDispatch(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Remote task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("remote-task", "remote-task", taskID, "{}", db.ActionStatusPending)
-
-	tqDir := setupPromptsDir(t)
+	d.InsertAction("remote-task", taskID, `{"instruction":"do remote task","mode":"remote"}`, db.ActionStatusPending)
 
 	remoteWorker := &countingWorker{result: "remote:session=https://console.anthropic.com/p/abc"}
 
@@ -469,7 +341,6 @@ func TestRunWorker_RemoteDispatch(t *testing.T) {
 				return remoteWorker
 			},
 		},
-		UserConfigDir:  tqDir,
 		MaxInteractive: 1,
 		PollInterval:   50 * time.Millisecond,
 	}
@@ -491,16 +362,11 @@ func TestRunWorker_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	// First: a remote action (pending)
-	d.InsertAction("remote-task", "remote-task", taskID, "{}", db.ActionStatusPending)
-	// Second: an interactive action (pending)
-	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("remote-task", taskID, `{"instruction":"do remote task","mode":"remote"}`, db.ActionStatusPending)
+	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix conflict","mode":"interactive"}`, db.ActionStatusPending)
 
-	// Simulate an already-running interactive session to fill max
-	d.InsertAction("respond-review", "respond-review", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("respond-review", taskID, `{"instruction":"respond to review","mode":"interactive"}`, db.ActionStatusRunning)
 	d.Exec("UPDATE actions SET session_id = 'session-1' WHERE id = 3")
-
-	tqDir := setupPromptsDir(t)
 
 	remoteWorker := &countingWorker{result: "remote:session=https://example.com"}
 	interactiveWorker := &countingWorker{result: "interactive:action=2"}
@@ -521,7 +387,6 @@ func TestRunWorker_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
 				return remoteWorker
 			},
 		},
-		UserConfigDir:  tqDir,
 		MaxInteractive: 1,
 		PollInterval:   50 * time.Millisecond,
 	}
@@ -541,7 +406,7 @@ func TestReapStaleActions_CustomSession(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", "fix-conflict", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning)
 	d.Exec("UPDATE actions SET session_id = 'work', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}}
@@ -568,8 +433,6 @@ func TestDispatchOne_NoPending(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	tqDir := setupPromptsDir(t)
-
 	cfg := WorkerConfig{
 		DispatchConfig: DispatchConfig{
 			DB: d,
@@ -580,8 +443,7 @@ func TestDispatchOne_NoPending(t *testing.T) {
 				return &countingWorker{}
 			},
 		},
-		UserConfigDir: tqDir,
-		PollInterval:  50 * time.Millisecond,
+		PollInterval: 50 * time.Millisecond,
 	}
 
 	dispatched, err := dispatchOne(context.Background(), cfg)
