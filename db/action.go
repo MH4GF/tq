@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -140,7 +141,7 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 		 ORDER BY a.id ASC LIMIT 1`,
 		ActionStatusPending,
 	).Scan(a.scanFields()...)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -175,7 +176,7 @@ func (db *DB) ClaimPending(ctx context.Context, id int64) (*Action, error) {
 		"SELECT "+actionColumns+" FROM actions WHERE id = ?",
 		id,
 	).Scan(a.scanFields()...)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("action #%d not found", id)
 	}
 	if err != nil {

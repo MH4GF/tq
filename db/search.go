@@ -80,6 +80,7 @@ func (db *DB) Search(keyword string) ([]SearchResult, error) {
 	}
 	escaped := escapeLike(keyword)
 
+	//nolint:dupword
 	query := `
 		SELECT 'task' AS entity_type, t.id AS entity_id, t.id AS task_id, 'title' AS field, t.title AS value, t.status, t.created_at
 		FROM tasks t WHERE t.title LIKE '%' || ? || '%' ESCAPE '\'

@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -50,7 +51,7 @@ func TestRunWorker_ProcessesAndStops(t *testing.T) {
 	}
 
 	err := RunWorker(ctx, cfg)
-	if err != context.DeadlineExceeded {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("RunWorker error = %v, want context.DeadlineExceeded", err)
 	}
 

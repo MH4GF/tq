@@ -200,6 +200,7 @@ func TestActionGet(t *testing.T) {
 			setupAction: true,
 			wantErr:     false,
 			check: func(t *testing.T, output []byte) {
+				t.Helper()
 				var row map[string]any
 				if err := json.Unmarshal(output, &row); err != nil {
 					t.Fatalf("JSON parse error: %v\noutput: %s", err, string(output))

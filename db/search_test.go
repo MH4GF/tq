@@ -92,6 +92,7 @@ func TestSearch(t *testing.T) {
 			},
 			wantLen: 1,
 			check: func(t *testing.T, results []db.SearchResult) {
+				t.Helper()
 				r := results[0]
 				if r.EntityType != "task" {
 					t.Errorf("entity_type = %q, want task", r.EntityType)
@@ -109,6 +110,7 @@ func TestSearch(t *testing.T) {
 			},
 			wantLen: 1,
 			check: func(t *testing.T, results []db.SearchResult) {
+				t.Helper()
 				if results[0].Field != "metadata" {
 					t.Errorf("field = %q, want metadata", results[0].Field)
 				}
@@ -123,6 +125,7 @@ func TestSearch(t *testing.T) {
 			},
 			wantLen: 1,
 			check: func(t *testing.T, results []db.SearchResult) {
+				t.Helper()
 				if results[0].EntityType != "action" {
 					t.Errorf("entity_type = %q, want action", results[0].EntityType)
 				}
@@ -141,6 +144,7 @@ func TestSearch(t *testing.T) {
 			},
 			wantLen: 1,
 			check: func(t *testing.T, results []db.SearchResult) {
+				t.Helper()
 				if results[0].Field != "result" {
 					t.Errorf("field = %q, want result", results[0].Field)
 				}
@@ -155,6 +159,7 @@ func TestSearch(t *testing.T) {
 			},
 			wantLen: 1,
 			check: func(t *testing.T, results []db.SearchResult) {
+				t.Helper()
 				if results[0].Field != "metadata" {
 					t.Errorf("field = %q, want metadata", results[0].Field)
 				}
@@ -210,6 +215,7 @@ func TestSearch(t *testing.T) {
 			},
 			wantLen: 1,
 			check: func(t *testing.T, results []db.SearchResult) {
+				t.Helper()
 				if results[0].Snippet != "100% complete" {
 					t.Errorf("snippet = %q, want %q", results[0].Snippet, "100% complete")
 				}
