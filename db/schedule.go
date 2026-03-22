@@ -7,27 +7,27 @@ import (
 )
 
 type Schedule struct {
-	ID        int64
-	TaskID    int64
-	PromptID  string
-	Title     string
-	CronExpr  string
-	Metadata  string
-	Enabled   bool
-	LastRunAt sql.NullString
-	CreatedAt string
+	ID          int64
+	TaskID      int64
+	Instruction string
+	Title       string
+	CronExpr    string
+	Metadata    string
+	Enabled     bool
+	LastRunAt   sql.NullString
+	CreatedAt   string
 }
 
-const scheduleColumns = "id, task_id, prompt_id, title, cron_expr, metadata, enabled, last_run_at, created_at"
+const scheduleColumns = "id, task_id, instruction, title, cron_expr, metadata, enabled, last_run_at, created_at"
 
 func (s *Schedule) scanFields() []any {
-	return []any{&s.ID, &s.TaskID, &s.PromptID, &s.Title, &s.CronExpr, &s.Metadata, &s.Enabled, &s.LastRunAt, &s.CreatedAt}
+	return []any{&s.ID, &s.TaskID, &s.Instruction, &s.Title, &s.CronExpr, &s.Metadata, &s.Enabled, &s.LastRunAt, &s.CreatedAt}
 }
 
-func (db *DB) InsertSchedule(taskID int64, promptID, title, cronExpr, metadata string) (int64, error) {
+func (db *DB) InsertSchedule(taskID int64, instruction, title, cronExpr, metadata string) (int64, error) {
 	res, err := db.Exec(
-		"INSERT INTO schedules (task_id, prompt_id, title, cron_expr, metadata) VALUES (?, ?, ?, ?, ?)",
-		taskID, promptID, title, cronExpr, metadata,
+		"INSERT INTO schedules (task_id, instruction, title, cron_expr, metadata) VALUES (?, ?, ?, ?, ?)",
+		taskID, instruction, title, cronExpr, metadata,
 	)
 	if err != nil {
 		return 0, err
@@ -37,7 +37,7 @@ func (db *DB) InsertSchedule(taskID int64, promptID, title, cronExpr, metadata s
 		return 0, err
 	}
 	db.emitEvent("schedule", id, "schedule.created", map[string]any{
-		"task_id": taskID, "prompt_id": promptID, "cron_expr": cronExpr,
+		"task_id": taskID, "instruction": instruction, "cron_expr": cronExpr,
 	})
 	return id, nil
 }

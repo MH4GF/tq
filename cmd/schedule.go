@@ -11,7 +11,7 @@ import (
 var (
 	scheduleListLimit  int
 	scheduleListJQ     string
-	scheduleListFields = []string{"id", "task_id", "prompt_id", "title", "cron_expr", "metadata", "enabled", "last_run_at", "created_at"}
+	scheduleListFields = []string{"id", "task_id", "instruction", "title", "cron_expr", "metadata", "enabled", "last_run_at", "created_at"}
 )
 
 var scheduleCmd = &cobra.Command{
@@ -20,22 +20,25 @@ var scheduleCmd = &cobra.Command{
 }
 
 var scheduleCreateCmd = &cobra.Command{
-	Use:   "create <PROMPT_ID>",
+	Use:   "create",
 	Short: "Create a new schedule",
 	Long: `Create a scheduled action that runs on a cron schedule.
 
---task and --cron are required. PROMPT_ID is the prompt template to use.
+--task, --cron, and --instruction are required.
 --cron accepts standard 5-field cron expressions (minute hour dom month dow).`,
-	Example: `  tq schedule create daily-review --task 1 --cron "0 9 * * *" --title "Morning review"
-  tq schedule create sync-prs --task 2 --cron "*/30 * * * *"`,
-	Args: cobra.ExactArgs(1),
+	Example: `  tq schedule create --instruction "/gmail-inbox-zero" --task 1 --cron "0 9 * * *" --title "Morning inbox zero"
+  tq schedule create --instruction "/sync-prs" --task 2 --cron "*/30 * * * *"`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		promptID := args[0]
+		instruction, _ := cmd.Flags().GetString("instruction")
 		taskID, _ := cmd.Flags().GetInt64("task")
 		title, _ := cmd.Flags().GetString("title")
 		cronExpr, _ := cmd.Flags().GetString("cron")
 		meta, _ := cmd.Flags().GetString("meta")
 
+		if instruction == "" {
+			return fmt.Errorf("--instruction is required")
+		}
 		if taskID == 0 {
 			return fmt.Errorf("--task is required")
 		}
@@ -46,13 +49,13 @@ var scheduleCreateCmd = &cobra.Command{
 			return fmt.Errorf("invalid cron expression %q: %w", cronExpr, err)
 		}
 		if title == "" {
-			title = promptID
+			title = instruction
 		}
 		if err := validateMetaJSON(meta); err != nil {
 			return err
 		}
 
-		id, err := database.InsertSchedule(taskID, promptID, title, cronExpr, meta)
+		id, err := database.InsertSchedule(taskID, instruction, title, cronExpr, meta)
 		if err != nil {
 			return err
 		}
@@ -73,13 +76,13 @@ var scheduleListCmd = &cobra.Command{
 		rows := make([]map[string]any, len(schedules))
 		for i, s := range schedules {
 			row := map[string]any{
-				"id":        s.ID,
-				"task_id":   s.TaskID,
-				"prompt_id": s.PromptID,
-				"title":     s.Title,
-				"cron_expr": s.CronExpr,
-				"metadata":  s.Metadata,
-				"enabled":   s.Enabled,
+				"id":          s.ID,
+				"task_id":     s.TaskID,
+				"instruction": s.Instruction,
+				"title":       s.Title,
+				"cron_expr":   s.CronExpr,
+				"metadata":    s.Metadata,
+				"enabled":     s.Enabled,
 			}
 			if s.LastRunAt.Valid {
 				row["last_run_at"] = db.FormatLocal(s.LastRunAt.String)
@@ -203,8 +206,9 @@ func parseID(s string) (int64, error) {
 }
 
 func init() {
+	scheduleCreateCmd.Flags().String("instruction", "", "Instruction text (required)")
 	scheduleCreateCmd.Flags().Int64("task", 0, "Task ID (required, see: tq task list)")
-	scheduleCreateCmd.Flags().String("title", "", "Schedule title (defaults to prompt ID)")
+	scheduleCreateCmd.Flags().String("title", "", "Schedule title (defaults to instruction)")
 	scheduleCreateCmd.Flags().String("cron", "", "Cron expression (required, e.g. \"0 9 * * *\")")
 	scheduleCreateCmd.Flags().String("meta", "{}", `JSON metadata (e.g. {"key":"value"})`)
 

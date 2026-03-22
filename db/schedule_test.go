@@ -23,8 +23,8 @@ func TestInsertSchedule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.PromptID != "inbox-zero" {
-		t.Errorf("prompt_id = %q, want %q", s.PromptID, "inbox-zero")
+	if s.Instruction != "inbox-zero" {
+		t.Errorf("instruction = %q, want %q", s.Instruction, "inbox-zero")
 	}
 	if s.Title != "Inbox Zero" {
 		t.Errorf("title = %q, want %q", s.Title, "Inbox Zero")

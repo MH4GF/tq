@@ -30,7 +30,6 @@ var ValidActionStatuses = map[string]bool{
 type Action struct {
 	ID          int64
 	Title       string
-	PromptID    string
 	TaskID      int64
 	Metadata    string
 	Status      string
@@ -42,10 +41,10 @@ type Action struct {
 	CompletedAt sql.NullString
 }
 
-const actionColumns = "id, title, prompt_id, task_id, metadata, status, result, session_id, tmux_pane, created_at, started_at, completed_at"
+const actionColumns = "id, title, task_id, metadata, status, result, session_id, tmux_pane, created_at, started_at, completed_at"
 
 func (a *Action) scanFields() []any {
-	return []any{&a.ID, &a.Title, &a.PromptID, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.CreatedAt, &a.StartedAt, &a.CompletedAt}
+	return []any{&a.ID, &a.Title, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.CreatedAt, &a.StartedAt, &a.CompletedAt}
 }
 
 func (a Action) MatchesDate(date string) bool {
@@ -89,13 +88,13 @@ func FilterByDate(actions []Action, date string) []Action {
 	return filtered
 }
 
-func (db *DB) InsertAction(title, promptID string, taskID int64, metadata, status string) (int64, error) {
+func (db *DB) InsertAction(title string, taskID int64, metadata, status string) (int64, error) {
 	if !ValidActionStatuses[status] {
 		return 0, fmt.Errorf("invalid action status %q: must be one of pending, running, dispatched, done, failed, cancelled", status)
 	}
 	res, err := db.Exec(
-		"INSERT INTO actions (title, prompt_id, task_id, metadata, status) VALUES (?, ?, ?, ?, ?)",
-		title, promptID, taskID, metadata, status,
+		"INSERT INTO actions (title, task_id, metadata, status) VALUES (?, ?, ?, ?)",
+		title, taskID, metadata, status,
 	)
 	if err != nil {
 		return 0, err
@@ -105,46 +104,16 @@ func (db *DB) InsertAction(title, promptID string, taskID int64, metadata, statu
 		return 0, err
 	}
 	db.emitEvent("action", id, "action.created", map[string]any{
-		"status": status, "prompt_id": promptID, "task_id": taskID, "title": title,
+		"status": status, "task_id": taskID, "title": title,
 	})
 	return id, nil
 }
 
-func (db *DB) HasActiveAction(taskID int64, promptID string) (bool, error) {
-	if promptID == "" {
-		return false, nil
-	}
+func (db *DB) HasActiveActionWithMeta(taskID int64, metaKey, metaValue string) (bool, error) {
 	var count int
 	err := db.QueryRow(
-		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN (?, ?, ?)",
-		taskID, promptID, ActionStatusPending, ActionStatusRunning, ActionStatusDispatched,
-	).Scan(&count)
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
-}
-
-func (db *DB) GetActiveAction(taskID int64, promptID string) (*Action, error) {
-	a := &Action{}
-	err := db.QueryRow(
-		"SELECT "+actionColumns+" FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN (?, ?, ?) ORDER BY id DESC LIMIT 1",
-		taskID, promptID, ActionStatusPending, ActionStatusRunning, ActionStatusDispatched,
-	).Scan(a.scanFields()...)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return a, nil
-}
-
-func (db *DB) HasActiveActionWithMeta(taskID int64, promptID, metaKey, metaValue string) (bool, error) {
-	var count int
-	err := db.QueryRow(
-		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND prompt_id = ? AND status IN (?, ?, ?) AND json_extract(metadata, '$.' || ?) = ?",
-		taskID, promptID, ActionStatusPending, ActionStatusRunning, ActionStatusDispatched, metaKey, metaValue,
+		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND status IN (?, ?, ?) AND json_extract(metadata, '$.' || ?) = ?",
+		taskID, ActionStatusPending, ActionStatusRunning, ActionStatusDispatched, metaKey, metaValue,
 	).Scan(&count)
 	if err != nil {
 		return false, err
@@ -161,7 +130,7 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 
 	a := &Action{}
 	err = tx.QueryRowContext(ctx,
-		`SELECT a.id, a.title, a.prompt_id, a.task_id, a.metadata, a.status, a.result,
+		`SELECT a.id, a.title, a.task_id, a.metadata, a.status, a.result,
 		        a.session_id, a.tmux_pane, a.created_at, a.started_at, a.completed_at
 		 FROM actions a
 		 INNER JOIN tasks t ON a.task_id = t.id

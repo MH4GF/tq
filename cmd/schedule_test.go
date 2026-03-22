@@ -19,7 +19,7 @@ func TestScheduleCreate_InvalidMeta(t *testing.T) {
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"schedule", "create", "daily-review", "--task", "1", "--cron", "0 9 * * *", "--meta", "{invalid}"})
+	root.SetArgs([]string{"schedule", "create", "--instruction", "daily-review", "--task", "1", "--cron", "0 9 * * *", "--meta", "{invalid}"})
 
 	err := root.Execute()
 	if err == nil {

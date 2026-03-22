@@ -6,8 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-
-	"github.com/MH4GF/tq/prompt"
 )
 
 // CommandRunner abstracts command execution for testing.
@@ -44,7 +42,7 @@ func buildTQEnv(actionID, taskID int64) []string {
 	}
 }
 
-// Worker executes a rendered prompt.
+// Worker executes an instruction.
 type Worker interface {
-	Execute(ctx context.Context, prompt string, cfg prompt.Config, workDir string, actionID, taskID int64) (string, error)
+	Execute(ctx context.Context, instruction string, cfg ActionConfig, workDir string, actionID, taskID int64) (string, error)
 }

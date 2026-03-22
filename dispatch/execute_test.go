@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/MH4GF/tq/db"
@@ -65,13 +63,9 @@ func TestExecuteAction(t *testing.T) {
 			d := testutil.NewTestDB(t)
 			testutil.SeedTestProjects(t, d)
 
-			promptsDir := filepath.Join(t.TempDir(), "prompts")
-			os.MkdirAll(promptsDir, 0o755)
-			promptName := "test-" + tc.promptMode
-			writeTestPromptWithMode(t, promptsDir, promptName, tc.promptMode, "")
-
+			meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": tc.promptMode})
 			taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-			d.InsertAction(promptName, promptName, taskID, "{}", db.ActionStatusPending)
+			d.InsertAction("test-"+tc.promptMode, taskID, string(meta), db.ActionStatusPending)
 
 			action, _ := d.NextPending(context.Background())
 
@@ -85,7 +79,6 @@ func TestExecuteAction(t *testing.T) {
 					InteractiveFunc:    workerFunc,
 					RemoteFunc:         workerFunc,
 				},
-				PromptsDir:        promptsDir,
 				BeforeInteractive: tc.beforeInteractive,
 			}, action)
 
@@ -124,12 +117,9 @@ func TestExecuteAction_InstructionOnly(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	promptsDir := filepath.Join(t.TempDir(), "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-
 	meta, _ := json.Marshal(map[string]any{"instruction": "/github-pr review this"})
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("review", "", taskID, string(meta), db.ActionStatusPending)
+	d.InsertAction("review", taskID, string(meta), db.ActionStatusPending)
 
 	action, _ := d.NextPending(context.Background())
 
@@ -143,7 +133,6 @@ func TestExecuteAction_InstructionOnly(t *testing.T) {
 			InteractiveFunc:    workerFunc,
 			RemoteFunc:         workerFunc,
 		},
-		PromptsDir: promptsDir,
 	}, action)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -160,12 +149,9 @@ func TestExecuteAction_InstructionWithModeOverride(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	promptsDir := filepath.Join(t.TempDir(), "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-
 	meta, _ := json.Marshal(map[string]any{"instruction": "do something", "mode": "noninteractive"})
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("task", "", taskID, string(meta), db.ActionStatusPending)
+	d.InsertAction("task", taskID, string(meta), db.ActionStatusPending)
 
 	action, _ := d.NextPending(context.Background())
 
@@ -179,7 +165,6 @@ func TestExecuteAction_InstructionWithModeOverride(t *testing.T) {
 			InteractiveFunc:    workerFunc,
 			RemoteFunc:         workerFunc,
 		},
-		PromptsDir: promptsDir,
 	}, action)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -193,11 +178,8 @@ func TestExecuteAction_NoPromptNoInstruction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	promptsDir := filepath.Join(t.TempDir(), "prompts")
-	os.MkdirAll(promptsDir, 0o755)
-
 	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("task", "", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("task", taskID, "{}", db.ActionStatusPending)
 
 	action, _ := d.NextPending(context.Background())
 
@@ -211,7 +193,6 @@ func TestExecuteAction_NoPromptNoInstruction(t *testing.T) {
 			InteractiveFunc:    workerFunc,
 			RemoteFunc:         workerFunc,
 		},
-		PromptsDir: promptsDir,
 	}, action)
 
 	if err == nil {

@@ -106,14 +106,14 @@ func TestList_JQ(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "task1", "{}", "")
-	d.InsertAction("review-pr", "review-pr", taskID, "{}", db.ActionStatusPending)
-	d.InsertAction("deploy", "deploy", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("review-pr", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("deploy", taskID, "{}", db.ActionStatusRunning)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "list", "--jq", ".[].prompt_id"})
+	root.SetArgs([]string{"action", "list", "--jq", ".[].title"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)

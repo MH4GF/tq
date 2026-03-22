@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/MH4GF/tq/prompt"
 )
 
 func TestNonInteractiveWorker_Execute(t *testing.T) {
@@ -17,7 +15,7 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 	}
 	w := &NonInteractiveWorker{Runner: runner}
 
-	cfg := prompt.Config{}
+	cfg := ActionConfig{}
 
 	result, err := w.Execute(context.Background(), "do something", cfg, "/work", 1, 10)
 	if err != nil {
@@ -76,7 +74,7 @@ func TestNonInteractiveWorker_Execute_PermissionMode(t *testing.T) {
 	}
 	w := &NonInteractiveWorker{Runner: runner}
 
-	cfg := prompt.Config{PermissionMode: "plan"}
+	cfg := ActionConfig{PermissionMode: "plan"}
 
 	_, err := w.Execute(context.Background(), "plan something", cfg, "/work", 1, 10)
 	if err != nil {
@@ -99,7 +97,7 @@ func TestNonInteractiveWorker_Execute_Error(t *testing.T) {
 	runner := &mockRunner{err: errors.New("command failed"), failAt: 0}
 	w := &NonInteractiveWorker{Runner: runner}
 
-	cfg := prompt.Config{}
+	cfg := ActionConfig{}
 
 	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1, 0)
 	if err == nil {
@@ -117,7 +115,7 @@ func TestNonInteractiveWorker_Execute_Timeout(t *testing.T) {
 	}
 	w := &NonInteractiveWorker{Runner: runner}
 
-	cfg := prompt.Config{}
+	cfg := ActionConfig{}
 
 	_, err := w.Execute(context.Background(), "test", cfg, "/work", 1, 0)
 	if err != nil {
@@ -142,7 +140,7 @@ func TestNonInteractiveWorker_Execute_Output(t *testing.T) {
 	runner := &mockRunner{output: []byte(wrapperJSON), failAt: -1}
 	w := &NonInteractiveWorker{Runner: runner}
 
-	cfg := prompt.Config{}
+	cfg := ActionConfig{}
 
 	got, err := w.Execute(context.Background(), "process data", cfg, "/projects/app", 42, 5)
 	if err != nil {
@@ -160,7 +158,7 @@ func TestNonInteractiveWorker_Execute_ErrorSubtype(t *testing.T) {
 	}
 	w := &NonInteractiveWorker{Runner: runner}
 
-	cfg := prompt.Config{}
+	cfg := ActionConfig{}
 
 	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1, 0)
 	if err == nil {
@@ -175,7 +173,7 @@ func TestNonInteractiveWorker_Execute_MalformedJSON(t *testing.T) {
 	runner := &mockRunner{output: []byte(`not json at all`), failAt: -1}
 	w := &NonInteractiveWorker{Runner: runner}
 
-	cfg := prompt.Config{}
+	cfg := ActionConfig{}
 
 	_, err := w.Execute(context.Background(), "fail", cfg, "/work", 1, 0)
 	if err == nil {

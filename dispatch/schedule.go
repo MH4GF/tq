@@ -1,6 +1,7 @@
 package dispatch
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -53,7 +54,7 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			continue
 		}
 
-		has, err := database.HasActiveAction(s.TaskID, s.PromptID)
+		has, err := database.HasActiveActionWithMeta(s.TaskID, MetaKeyScheduleID, fmt.Sprintf("%d", s.ID))
 		if err != nil {
 			slog.Warn("schedule: active action check failed", "schedule_id", s.ID, "error", err)
 			continue
@@ -63,7 +64,20 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			continue
 		}
 
-		id, err := database.InsertAction(s.Title, s.PromptID, s.TaskID, s.Metadata, db.ActionStatusPending)
+		meta, err := parseMetadata(s.Metadata)
+		if err != nil {
+			slog.Warn("schedule: parse metadata failed", "schedule_id", s.ID, "error", err)
+			meta = make(map[string]any)
+		}
+		meta[MetaKeyInstruction] = s.Instruction
+		meta[MetaKeyScheduleID] = fmt.Sprintf("%d", s.ID)
+		metaJSON, err := json.Marshal(meta)
+		if err != nil {
+			slog.Error("schedule: marshal metadata failed", "schedule_id", s.ID, "error", err)
+			continue
+		}
+
+		id, err := database.InsertAction(s.Title, s.TaskID, string(metaJSON), db.ActionStatusPending)
 		if err != nil {
 			slog.Error("schedule: insert action failed", "schedule_id", s.ID, "error", err)
 			continue
@@ -73,7 +87,7 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			slog.Error("schedule: update last_run_at failed", "schedule_id", s.ID, "error", err)
 		}
 
-		slog.Info("schedule: action created", "action_id", id, "schedule_id", s.ID, "prompt_id", s.PromptID, "task_id", s.TaskID)
+		slog.Info("schedule: action created", "action_id", id, "schedule_id", s.ID, "instruction", s.Instruction, "task_id", s.TaskID)
 	}
 
 	return nil

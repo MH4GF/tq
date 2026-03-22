@@ -85,7 +85,6 @@ func init() {
 	rootCmd.AddCommand(dispatchCmd)
 	rootCmd.AddCommand(uiCmd)
 	rootCmd.AddCommand(projectCmd)
-	rootCmd.AddCommand(promptCmd)
 	rootCmd.AddCommand(scheduleCmd)
 }
 

@@ -5,8 +5,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/MH4GF/tq/prompt"
 )
 
 func TestRemoteWorker_Execute(t *testing.T) {
@@ -16,7 +14,7 @@ func TestRemoteWorker_Execute(t *testing.T) {
 	}
 
 	w := &RemoteWorker{Runner: runner}
-	result, err := w.Execute(context.Background(), "do the thing", prompt.Config{Mode: "remote"}, "/tmp/work", 42, 10)
+	result, err := w.Execute(context.Background(), "do the thing", ActionConfig{Mode: "remote"}, "/tmp/work", 42, 10)
 	if err != nil {
 		t.Fatalf("Execute error: %v", err)
 	}
@@ -57,7 +55,7 @@ func TestRemoteWorker_ExecuteError(t *testing.T) {
 	}
 
 	w := &RemoteWorker{Runner: runner}
-	_, err := w.Execute(context.Background(), "prompt", prompt.Config{Mode: "remote"}, ".", 1, 0)
+	_, err := w.Execute(context.Background(), "prompt", ActionConfig{Mode: "remote"}, ".", 1, 0)
 	if err == nil {
 		t.Fatal("expected error")
 	}

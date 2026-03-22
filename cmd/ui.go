@@ -34,11 +34,6 @@ var uiCmd = &cobra.Command{
 		slog.SetDefault(slog.New(handler))
 		defer slog.SetDefault(prevLogger)
 
-		cfgDir, err := configDir()
-		if err != nil {
-			return err
-		}
-
 		workerBg := func(ctx context.Context) error {
 			cfg := dispatch.WorkerConfig{
 				DispatchConfig: dispatch.DispatchConfig{
@@ -61,7 +56,6 @@ var uiCmd = &cobra.Command{
 					},
 					TmuxSession: uiSession,
 				},
-				UserConfigDir:  cfgDir,
 				MaxInteractive: uiMaxInteractive,
 				PollInterval:   uiPollInterval,
 				TmuxChecker:    &dispatch.ExecTmuxChecker{Runner: &dispatch.ExecRunner{}},

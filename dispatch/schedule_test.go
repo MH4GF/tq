@@ -28,14 +28,11 @@ func TestCheckSchedules_ActionCreated(t *testing.T) {
 	if len(actions) != 1 {
 		t.Fatalf("expected 1 action, got %d", len(actions))
 	}
-	if actions[0].PromptID != "my-prompt" {
-		t.Errorf("prompt_id = %q, want %q", actions[0].PromptID, "my-prompt")
-	}
 	if actions[0].Title != "My Prompt" {
 		t.Errorf("title = %q, want %q", actions[0].Title, "My Prompt")
 	}
-	if actions[0].Metadata != `{"key":"val"}` {
-		t.Errorf("metadata = %q, want %q", actions[0].Metadata, `{"key":"val"}`)
+	if actions[0].Metadata != `{"instruction":"my-prompt","key":"val","schedule_id":"1"}` {
+		t.Errorf("metadata = %q, want %q", actions[0].Metadata, `{"instruction":"my-prompt","key":"val","schedule_id":"1"}`)
 	}
 
 	// Verify last_run_at was updated
@@ -75,7 +72,7 @@ func TestCheckSchedules_DuplicateSkipped(t *testing.T) {
 	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
 
 	// Insert an active action for the same task/prompt
-	d.InsertAction("existing", "my-prompt", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("existing", taskID, `{"schedule_id":"1"}`, db.ActionStatusPending)
 
 	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
 	if err := dispatch.CheckSchedules(d, now); err != nil {

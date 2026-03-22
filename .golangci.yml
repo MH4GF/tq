@@ -36,20 +36,6 @@ linters:
               desc: "db must not import upper layers"
             - pkg: github.com/MH4GF/tq/tui
               desc: "db must not import upper layers"
-            - pkg: github.com/MH4GF/tq/prompt
-              desc: "db must not import prompt (same layer)"
-        deny-upward-from-prompt:
-          files:
-            - "**/prompt/*.go"
-          deny:
-            - pkg: github.com/MH4GF/tq/cmd
-              desc: "prompt must not import upper layers"
-            - pkg: github.com/MH4GF/tq/dispatch
-              desc: "prompt must not import upper layers"
-            - pkg: github.com/MH4GF/tq/tui
-              desc: "prompt must not import upper layers"
-            - pkg: github.com/MH4GF/tq/db
-              desc: "prompt must not import db (same layer)"
         deny-upward-from-dispatch:
           files:
             - "**/dispatch/*.go"
@@ -66,8 +52,6 @@ linters:
               desc: "tui must not import upper layers"
             - pkg: github.com/MH4GF/tq/dispatch
               desc: "tui must not import dispatch (cross-layer)"
-            - pkg: github.com/MH4GF/tq/prompt
-              desc: "tui must not import prompt (cross-layer)"
         deny-upward-from-testutil:
           files:
             - "**/testutil/*.go"
@@ -78,8 +62,6 @@ linters:
               desc: "testutil must not import upper layers"
             - pkg: github.com/MH4GF/tq/tui
               desc: "testutil must not import upper layers"
-            - pkg: github.com/MH4GF/tq/prompt
-              desc: "testutil must not import prompt"
     revive:
       rules:
         - name: exported

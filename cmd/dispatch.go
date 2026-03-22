@@ -98,7 +98,6 @@ var dispatchCmd = &cobra.Command{
 				InteractiveFunc:    getInteractiveWorkerFactory(),
 				RemoteFunc:         getRemoteWorkerFactory(),
 			},
-			PromptsDir: resolvePromptsDir(),
 		}, action)
 
 		var af *dispatch.ActionFailedError

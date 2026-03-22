@@ -85,8 +85,12 @@ func (db *DB) Migrate() error {
 	}
 
 	// Rename classify → classify-gh-notification in prompt_id (idempotent)
-	if _, err := db.Exec(`UPDATE actions SET prompt_id = 'classify-gh-notification' WHERE prompt_id = 'classify'`); err != nil {
+	if has, err := db.hasColumn("actions", "prompt_id"); err != nil {
 		return err
+	} else if has {
+		if _, err := db.Exec(`UPDATE actions SET prompt_id = 'classify-gh-notification' WHERE prompt_id = 'classify'`); err != nil {
+			return err
+		}
 	}
 
 	// Drop source column from existing DBs (idempotent)
@@ -133,6 +137,34 @@ func (db *DB) Migrate() error {
 
 	if _, err := db.Exec("DELETE FROM actions WHERE task_id IS NULL"); err != nil {
 		return err
+	}
+
+	// Drop prompt_id column from actions (idempotent)
+	if has, err := db.hasColumn("actions", "prompt_id"); err != nil {
+		return err
+	} else if has {
+		if _, err := db.Exec("ALTER TABLE actions DROP COLUMN prompt_id"); err != nil {
+			return err
+		}
+	}
+
+	// Migrate schedules: prompt_id → instruction (idempotent)
+	if has, err := db.hasColumn("schedules", "prompt_id"); err != nil {
+		return err
+	} else if has {
+		if hasInstruction, err := db.hasColumn("schedules", "instruction"); err != nil {
+			return err
+		} else if !hasInstruction {
+			if _, err := db.Exec("ALTER TABLE schedules ADD COLUMN instruction TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
+		}
+		if _, err := db.Exec("UPDATE schedules SET instruction = prompt_id WHERE instruction = ''"); err != nil {
+			return err
+		}
+		if _, err := db.Exec("ALTER TABLE schedules DROP COLUMN prompt_id"); err != nil {
+			return err
+		}
 	}
 
 	// Migrate url column values into metadata JSON, then drop the column (idempotent)

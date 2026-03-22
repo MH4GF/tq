@@ -504,8 +504,8 @@ func TestTaskGet(t *testing.T) {
 					t.Fatalf("expected 1 action, got %d", len(actions))
 				}
 				action := actions[0].(map[string]any)
-				if action["prompt_id"] != "review-pr" {
-					t.Errorf("action prompt_id = %v, want %q", action["prompt_id"], "review-pr")
+				if action["title"] != "review action" {
+					t.Errorf("action title = %v, want %q", action["title"], "review action")
 				}
 			},
 		},
@@ -531,7 +531,7 @@ func TestTaskGet(t *testing.T) {
 			args := tc.args
 			if tc.setupTask {
 				taskID, _ := d.InsertTask(1, "my task", `{"url":"https://example.com"}`, "")
-				d.InsertAction("review action", "review-pr", taskID, `{"pr":1}`, db.ActionStatusPending)
+				d.InsertAction("review action", taskID, `{"pr":1}`, db.ActionStatusPending)
 				args = []string{"task", "get", fmt.Sprintf("%d", taskID)}
 			}
 
@@ -566,8 +566,8 @@ func TestTaskList_WithActions(t *testing.T) {
 
 	taskID1, _ := d.InsertTask(1, "task with actions", "{}", "")
 	taskID2, _ := d.InsertTask(1, "task without actions", "{}", "")
-	d.InsertAction("review-pr", "review-pr", taskID1, `{"pr":1}`, db.ActionStatusPending)
-	d.InsertAction("implement", "implement", taskID1, "{}", db.ActionStatusDone)
+	d.InsertAction("review-pr", taskID1, `{"pr":1}`, db.ActionStatusPending)
+	d.InsertAction("implement", taskID1, "{}", db.ActionStatusDone)
 	_ = taskID2
 
 	root := cmd.GetRootCmd()
@@ -607,8 +607,8 @@ func TestTaskList_WithActions(t *testing.T) {
 		t.Errorf("task 1 actions = %d, want 2", len(actions1))
 	}
 	firstAction := actions1[0].(map[string]any)
-	if firstAction["prompt_id"] != "review-pr" {
-		t.Errorf("first action prompt_id = %v, want %q", firstAction["prompt_id"], "review-pr")
+	if firstAction["title"] != "review-pr" {
+		t.Errorf("first action title = %v, want %q", firstAction["title"], "review-pr")
 	}
 }
 
