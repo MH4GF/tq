@@ -35,6 +35,7 @@ All list commands output JSON.`,
   tq project create myapp ~/src/myapp
   tq task create "Implement feature X" --project 1
   tq action create review-pr --task 1 --title "Review PR #42"
+  tq search "feature X"
   tq dispatch
   tq ui`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {

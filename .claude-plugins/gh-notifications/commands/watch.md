@@ -63,14 +63,12 @@ For actionable notifications, select the **first matching** prompt by priority:
 
 #### 2e. Match existing task
 
-```bash
-tq task list --status open
-```
+Use `tq search "<keyword>"` to find matching tasks. Extract keywords from the notification title (PR number `#123`, ticket ID `PROJ-456`, repo name, feature name, etc.) and search.
 
 Try in order, use the first match:
 
-1. **URL match**: notification URL exactly matches existing task URL
-2. **Title keyword match**: extract keywords from notification title (PR number `#123`, ticket ID `PROJ-456`, repo name, etc.) and match against existing task titles
+1. **URL match**: notification URL exactly matches existing task URL in search results
+2. **Keyword match**: search results contain a task whose title matches the notification context
 3. **No match**: create new task (classify under **works** project if project is unknown)
 
 #### 2f. Create action
