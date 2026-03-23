@@ -1,5 +1,20 @@
 # Changelog
 
+## [v0.21.2](https://github.com/MH4GF/tq/compare/v0.21.1...v0.21.2) - 2026-03-23
+- Add --worktree flag support for claude CLI dispatch by @MH4GF in https://github.com/MH4GF/tq/pull/37
+- Add gh-notifications plugin and instruction-based schedule support by @MH4GF in https://github.com/MH4GF/tq/pull/32
+- Add tq search command for cross-entity full-text search by @MH4GF in https://github.com/MH4GF/tq/pull/25
+- Expand golangci-lint rules for tech debt detection by @MH4GF in https://github.com/MH4GF/tq/pull/35
+- Register gh-notifications plugin in marketplace manifest by @MH4GF in https://github.com/MH4GF/tq/pull/41
+- Remove prompt template system, migrate to instruction-only by @MH4GF in https://github.com/MH4GF/tq/pull/38
+- Add PR processing commands to gh-notifications plugin by @MH4GF in https://github.com/MH4GF/tq/pull/42
+- Bump gh-notifications plugin version to 0.2.0 by @MH4GF in https://github.com/MH4GF/tq/pull/44
+- Add common preamble/postamble to dispatched action instructions by @MH4GF in https://github.com/MH4GF/tq/pull/46
+- Change action create instruction to positional argument by @MH4GF in https://github.com/MH4GF/tq/pull/47
+- Add gh-notifications plugin to tagpr versionFile by @MH4GF in https://github.com/MH4GF/tq/pull/45
+- Use tq search for task lookup in skills by @MH4GF in https://github.com/MH4GF/tq/pull/43
+- Store and display worker's actual max_interactive by @MH4GF in https://github.com/MH4GF/tq/pull/40
+
 ## [v0.21.1](https://github.com/MH4GF/tq/compare/v0.21.0...v0.21.1) - 2026-03-21
 - Add depguard rules to enforce layered architecture by @MH4GF in https://github.com/MH4GF/tq/pull/33
 - Add get template function for optional metadata keys by @MH4GF in https://github.com/MH4GF/tq/pull/34
