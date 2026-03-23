@@ -1,6 +1,7 @@
 ---
 description: Fix CI failures on a PR
 argument-hint: "<PR_URL>"
+allowed-tools: Bash(gh pr checks *), Bash(gh run view *), Bash(gh pr checkout *), Read, Edit, Write, Grep, Glob
 ---
 
 # Fix CI Failures

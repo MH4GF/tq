@@ -1,6 +1,7 @@
 ---
 description: Respond to review comments on a PR
 argument-hint: "<PR_URL>"
+allowed-tools: Bash(*/scripts/gh-unresolved-threads *), Read, Edit, Write, Grep, Glob
 ---
 
 # Respond to Review Comments
