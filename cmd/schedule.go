@@ -25,9 +25,15 @@ var scheduleCreateCmd = &cobra.Command{
 	Long: `Create a scheduled action that runs on a cron schedule.
 
 --task, --cron, and --instruction are required.
---cron accepts standard 5-field cron expressions (minute hour dom month dow).`,
+--cron accepts standard 5-field cron expressions (minute hour dom month dow).
+
+Metadata keys for dispatch control (passed to actions automatically):
+  mode             Execution mode: "interactive" (default), "noninteractive", "remote"
+  permission_mode  Claude permission mode (e.g. "plan")
+  worktree         Run in git worktree: true/false`,
 	Example: `  tq schedule create --instruction "/gmail-inbox-zero" --task 1 --cron "0 9 * * *" --title "Morning inbox zero"
-  tq schedule create --instruction "/sync-prs" --task 2 --cron "*/30 * * * *"`,
+  tq schedule create --instruction "/sync-prs" --task 2 --cron "*/30 * * * *"
+  tq schedule create --instruction "/watch" --task 3 --cron "*/10 * * * *" --meta '{"mode":"noninteractive"}'`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		instruction, _ := cmd.Flags().GetString("instruction")
@@ -215,7 +221,7 @@ func init() {
 	scheduleCreateCmd.Flags().Int64("task", 0, "Task ID (required, see: tq task list)")
 	scheduleCreateCmd.Flags().String("title", "", "Schedule title (defaults to instruction)")
 	scheduleCreateCmd.Flags().String("cron", "", "Cron expression (required, e.g. \"0 9 * * *\")")
-	scheduleCreateCmd.Flags().String("meta", "{}", `JSON metadata (e.g. {"key":"value"})`)
+	scheduleCreateCmd.Flags().String("meta", "{}", `JSON metadata (e.g. {"mode":"noninteractive"})`)
 
 	scheduleListCmd.Flags().IntVar(&scheduleListLimit, "limit", 0, "Limit number of results (0 = no limit)")
 	scheduleListCmd.Flags().StringVar(&scheduleListJQ, "jq", "", jqFlagUsage(scheduleListFields))
@@ -228,7 +234,7 @@ func init() {
 
 	scheduleUpdateCmd.Flags().String("title", "", "Schedule title")
 	scheduleUpdateCmd.Flags().String("cron", "", "Cron expression")
-	scheduleUpdateCmd.Flags().String("meta", "", "JSON metadata")
+	scheduleUpdateCmd.Flags().String("meta", "", `JSON metadata (e.g. {"mode":"noninteractive"})`)
 	scheduleUpdateCmd.Flags().String("instruction", "", "Instruction text")
 	scheduleUpdateCmd.Flags().Int64("task", 0, "Task ID")
 	scheduleCmd.AddCommand(scheduleUpdateCmd)

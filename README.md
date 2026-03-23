@@ -127,7 +127,7 @@ Available template variables: `{{.Task.ID}}`, `{{.Task.Title}}`, `{{.Task.URL}}`
 | `tq action attach <ID>` | Attach to a running action's tmux window |
 | `tq action reset <ID>` | Reset action to pending |
 | `tq dispatch <ACTION_ID>` | Dispatch an action by ID |
-| `tq schedule create --instruction <TEXT> --task <ID> --cron <EXPR>` | Create a schedule |
+| `tq schedule create --instruction <TEXT> --task <ID> --cron <EXPR> [--meta <JSON>]` | Create a schedule |
 | `tq schedule list` | List schedules (JSON) |
 | `tq schedule update <ID>` | Update a schedule |
 | `tq schedule delete <ID>` | Delete a schedule |
@@ -135,6 +135,7 @@ Available template variables: `{{.Task.ID}}`, `{{.Task.Title}}`, `{{.Task.URL}}`
 | `tq schedule disable <ID>` | Disable a schedule |
 | `tq event list` | List events |
 | `tq search <KEYWORD>` | Search tasks and actions |
+| `tq prompt list` | List available prompt templates |
 | `tq ui` | Launch TUI with queue worker |
 
 ## License
