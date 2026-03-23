@@ -123,7 +123,7 @@ Available template variables: `{{.Task.ID}}`, `{{.Task.Title}}`, `{{.Task.URL}}`
 | `tq action reset <ID>` | Reset action to pending |
 | `tq dispatch <ACTION_ID>` | Dispatch a specific action |
 | `tq dispatch` | Dispatch next pending action |
-| `tq schedule create --instruction <INSTRUCTION> --task <ID> --title <TITLE> --cron <EXPR>` | Create a schedule |
+| `tq schedule create --instruction <INSTRUCTION> --task <ID> --title <TITLE> --cron <EXPR> [--meta <JSON>]` | Create a schedule |
 | `tq schedule list` | List schedules |
 | `tq prompt list` | List available prompt templates |
 | `tq ui` | Launch TUI with queue worker |

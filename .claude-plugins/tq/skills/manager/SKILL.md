@@ -14,3 +14,4 @@ Run `tq --help` and `tq <command> --help` for available commands and flags.
 - **Which prompt?** Infer from context. Run `tq prompt list` if unsure. If the user provides a direct instruction (e.g., a slash command), pass it as a positional argument.
 - **Dispatch immediately?** Only when user says "割り込み" or "すぐ実行". Otherwise create as pending.
 - **Looking for past context?** Use `tq search "<keyword>"` to find tasks/actions by keyword.
+- **Schedule mode?** Use `--meta` to control dispatch behavior. Run `tq schedule create --help` for available metadata keys.
