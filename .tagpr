@@ -1,6 +1,6 @@
 [tagpr]
 vPrefix = true
 releaseBranch = main
-versionFile = cmd/version.go,.claude-plugins/tq/.claude-plugin/plugin.json
+versionFile = cmd/version.go,.claude-plugins/tq/.claude-plugin/plugin.json,.claude-plugins/gh-notifications/.claude-plugin/plugin.json
 release = false
 changelog = true
