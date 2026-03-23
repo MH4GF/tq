@@ -1,13 +1,13 @@
 ---
-name: docs-updater
-description: Detect and fix drift between CLI/plugin source of truth and documentation
-tools: Read, Edit, Glob, Grep, Bash
+name: docs-reviewer
+description: Review documentation for drift against CLI/plugin source of truth (report only, no edits)
+tools: Read, Glob, Grep, Bash
 model: sonnet
 ---
 
-Detect drift between CLI help output, plugin source files, and their documentation. Fix any discrepancies found.
+Detect drift between CLI help output, plugin source files, and their documentation. Report findings only — do NOT edit any files.
 
-Execute phases 1–6 sequentially. Stop early at phase 3 if no drift exists.
+Execute phases 1–4 sequentially. Stop early at phase 3 if no drift exists.
 
 ## Phase 1: CLI Ground Truth
 
@@ -43,7 +43,7 @@ IMPORTANT: If no drift is found, report "No drift detected." and stop. Do NOT pr
 
 ## Phase 4: Drift Report
 
-Output a markdown table summarizing all detected drift:
+Return a markdown table summarizing all detected drift:
 
 ```
 | File | Section | Issue | Severity |
@@ -52,17 +52,4 @@ Output a markdown table summarizing all detected drift:
 
 Severity: `high` = missing/incorrect command, `medium` = description mismatch, `low` = formatting only.
 
-## Phase 5: Apply Fixes
-
-<constraints>
-- Preserve existing writing style, structure, and language of each document
-- Only modify sections with detected drift — do not reorganize or add new sections
-- For plugin READMEs, mirror the exact command names and descriptions from frontmatter
-</constraints>
-
-## Phase 6: Verify
-
-Run `go build ./...` and `go test ./...`.
-
-- **Pass** → report the list of changes made
-- **Fail** → report changes made AND the failure log. Do NOT rollback.
+IMPORTANT: Do NOT apply fixes. The parent agent will decide which fixes to apply.
