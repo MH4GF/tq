@@ -196,6 +196,48 @@ func TestUpdateSchedule_Instruction(t *testing.T) {
 	}
 }
 
+func TestEnabledScheduleIDs(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	schedID, _ := d.InsertSchedule(taskID, "p", "t", "* * * * *", "{}")
+
+	tests := []struct {
+		name    string
+		setup   func()
+		wantLen int
+		wantID  int64
+	}{
+		{
+			name:    "enabled schedule returns its ID",
+			setup:   func() {},
+			wantLen: 1,
+			wantID:  schedID,
+		},
+		{
+			name:    "disabled schedule returns empty",
+			setup:   func() { d.UpdateScheduleEnabled(schedID, false) },
+			wantLen: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setup()
+			ids, err := d.EnabledScheduleIDs(taskID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(ids) != tc.wantLen {
+				t.Errorf("got %d IDs, want %d: %v", len(ids), tc.wantLen, ids)
+			}
+			if tc.wantLen == 1 && ids[0] != tc.wantID {
+				t.Errorf("got ID %d, want %d", ids[0], tc.wantID)
+			}
+		})
+	}
+}
+
 func TestGetSchedule_NotFound(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

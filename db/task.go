@@ -65,6 +65,16 @@ func (db *DB) UpdateTask(id int64, status, reason string) error {
 		return fmt.Errorf("get current status: %w", err)
 	}
 
+	if status == TaskStatusDone || status == TaskStatusArchived {
+		schedIDs, err := db.EnabledScheduleIDs(id)
+		if err != nil {
+			return fmt.Errorf("check enabled schedules: %w", err)
+		}
+		if len(schedIDs) > 0 {
+			return fmt.Errorf("task #%d has enabled schedules %v — this task has recurring scheduled actions; it should usually stay open. [agent hint] this task is likely not meant to be closed; confirm with the user whether they really want to close it, and if so, run `tq schedule disable <id>` for each schedule first, then retry", id, schedIDs)
+		}
+	}
+
 	_, err := db.Exec(
 		"UPDATE tasks SET status = ?, updated_at = datetime('now') WHERE id = ?",
 		status, id,

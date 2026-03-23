@@ -66,6 +66,7 @@ type QueryReader interface {
 	// Schedule queries
 	GetSchedule(id int64) (*Schedule, error)
 	ListSchedules(limit int) ([]Schedule, error)
+	EnabledScheduleIDs(taskID int64) ([]int64, error)
 	// Worker queries
 	IsWorkerRunning(staleThreshold time.Duration) (bool, error)
 	GetWorkerMaxInteractive(staleThreshold time.Duration) (int, error)

@@ -322,6 +322,37 @@ func TestEnsureTask(t *testing.T) {
 	}
 }
 
+func TestUpdateTask_BlockedByActiveSchedule(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	schedID, _ := d.InsertSchedule(taskID, "p", "t", "* * * * *", "{}")
+
+	tests := []struct {
+		name    string
+		status  string
+		setup   func()
+		wantErr bool
+	}{
+		{"done blocked by active schedule", db.TaskStatusDone, nil, true},
+		{"archived blocked by active schedule", db.TaskStatusArchived, nil, true},
+		{"review allowed with active schedule", "review", nil, false},
+		{"done allowed after disable", db.TaskStatusDone, func() { d.UpdateScheduleEnabled(schedID, false) }, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.setup != nil {
+				tc.setup()
+			}
+			err := d.UpdateTask(taskID, tc.status, "")
+			if (err != nil) != tc.wantErr {
+				t.Errorf("UpdateTask(%q) error = %v, wantErr %v", tc.status, err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestListTasksByStatus(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
