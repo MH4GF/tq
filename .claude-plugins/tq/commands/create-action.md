@@ -14,7 +14,7 @@ IMPORTANT: Run `tq action create --help` first to understand meta format and bes
 
 ### 1. Find task_id
 
-Infer from session context and search `tq task list --status open`.
+Infer from session context. Use `tq search "<keyword>"` to find matching tasks by keyword.
 If no matching task exists, create one with `tq task create`.
 
 ### 2. Build instruction
