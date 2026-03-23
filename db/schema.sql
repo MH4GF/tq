@@ -60,6 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_events_entity ON events(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
 
 CREATE TABLE IF NOT EXISTS worker_heartbeats (
-  id             INTEGER PRIMARY KEY CHECK (id = 1),
-  last_heartbeat TEXT NOT NULL
+  id              INTEGER PRIMARY KEY CHECK (id = 1),
+  last_heartbeat  TEXT NOT NULL,
+  max_interactive INTEGER NOT NULL DEFAULT 3
 );
