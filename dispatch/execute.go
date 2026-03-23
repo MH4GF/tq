@@ -102,6 +102,8 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 		cfg.Worktree = wt
 	}
 
+	instruction = wrapInstruction(instruction, action.TaskID, cfg.Mode)
+
 	workDir := resolveWorkDir(params.DB, action)
 
 	if cfg.IsRemote() {
@@ -178,6 +180,15 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 	}
 
 	return &ExecuteResult{Mode: ModeNonInteractive, Output: result}, nil
+}
+
+func wrapInstruction(instruction string, taskID int64, mode string) string {
+	preamble := fmt.Sprintf("First, run `tq action list --task %d` to understand the task history (completed actions, their results, etc.).\n\n", taskID)
+	result := preamble + instruction
+	if mode != ModeRemote {
+		result += "\n\nWhen you finish, run `/tq:done` to mark this action as complete."
+	}
+	return result
 }
 
 func parseMetadata(raw string) (map[string]any, error) {

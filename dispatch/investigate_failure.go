@@ -30,7 +30,7 @@ func CreateInvestigateFailureAction(database db.Store, action *db.Action, failur
 		return
 	}
 
-	instruction := fmt.Sprintf("Investigate why action #%s failed.\n\nFailure result:\n%s\n\nSteps:\n1. Run `tq action list --task $TQ_TASK_ID` to review action history\n2. Check logs and context for the failed action\n3. Determine root cause and create a fix action if needed\n4. Mark this action done with findings", failedActionID, failureResult)
+	instruction := fmt.Sprintf("Investigate why action #%s failed.\n\nFailure result:\n%s\n\nSteps:\n1. Check logs and context for the failed action\n2. Determine root cause and create a fix action if needed\n3. Mark this action done with findings", failedActionID, failureResult)
 	newMeta := map[string]any{
 		MetaKeyIsInvestigation: true,
 		MetaKeyFailedActionID:  failedActionID,
