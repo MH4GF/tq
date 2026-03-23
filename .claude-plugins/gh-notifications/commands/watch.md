@@ -13,7 +13,7 @@ GitHub notifications watcher. Fetch, classify, and create tq actions for each no
 gh api /notifications --paginate --jq '.[] | {id: .id, reason: .reason, subject_type: .subject.type, title: .subject.title, repo: .repository.full_name, subject_url: .subject.url}' 2>/dev/null
 ```
 
-If 0 notifications, output "通知なし" and finish.
+If 0 notifications, output "No notifications" and finish.
 
 ### 2. Process each notification
 
@@ -30,8 +30,6 @@ Extract repo name and number from subject_url, then fetch by subject_type:
 #### 2b. Skip conditions
 
 Mark as read and skip if:
-- state is merged/closed
-- Discussion/Release
 - `reason=review_requested` and already reviewed (reviews contain own APPROVED/CHANGES_REQUESTED)
 
 #### 2c. Remote action PR detection
@@ -45,19 +43,20 @@ State: <state>, Review: <reviewDecision>, CI: <pass/fail/pending>, Draft: <yes/n
 ```
 Mark as read and skip.
 
-#### 2d. Prompt selection
+#### 2d. Instruction selection
 
-For actionable notifications, select the **first matching** prompt by priority:
+For actionable notifications, select the **first matching** instruction by priority:
 
-| Priority | Condition | Prompt |
+| Priority | Condition | Instruction |
 |---|---|---|
-| 1 | `reason=review_requested` + not yet reviewed | `review-pr` |
-| 2 | `mergeStateStatus: "BEHIND"` or conflicting | `fix-conflict` |
-| 3 | statusCheckRollup has failure | `fix-ci` |
-| 4 | `reviewDecision: "CHANGES_REQUESTED"` / unaddressed review comments | `respond-review` |
-| 5 | `reviewDecision: "APPROVED"` + CI pass + mergeable | `merge-pr` |
-| 6 | Own PR, not yet reviewed | `self-review` |
-| 7 | Other implementation/fix requests | `implement` |
+| 1 | `reason=review_requested` + not yet reviewed | `/gh-notifications:review-pr <PR_URL>` |
+| 2 | `mergeStateStatus: "BEHIND"` or conflicting | `/gh-notifications:fix-conflict <PR_URL>` |
+| 3 | statusCheckRollup has failure | `/gh-notifications:fix-ci <PR_URL>` |
+| 4 | `reviewDecision: "CHANGES_REQUESTED"` / unaddressed review comments | `/gh-notifications:respond-review <PR_URL>` |
+| 5 | `reviewDecision: "APPROVED"` + CI pass + mergeable | `/gh-notifications:merge-pr <PR_URL>` |
+| 6 | Own PR, not yet reviewed | `/gh-notifications:self-review <PR_URL>` |
+
+If no condition matches, do NOT use a slash command. Instead, write a detailed free-text instruction describing what needs to be done — include the PR/issue URL, the context from the notification, and specific next steps.
 
 **Excluded prompts** (never select these): `classify-gh-notification`, `classify-next-action`, `watch-gh-notifications`
 
@@ -79,8 +78,8 @@ Try in order, use the first match:
 # If new task needed
 tq task create --project <project_name> --title "<title>" --url "<url>"
 
-# Create action
-tq action create <prompt> --task <task_id> --title "<title>"
+# Create action (instruction is the slash command from 2d)
+tq action create <instruction> --task <task_id> --title "<title>"
 ```
 
 ### 3. Mark notifications as read
@@ -92,7 +91,7 @@ gh api -X PATCH /notifications/threads/<thread_id>
 ### 4. Output summary
 
 ```text
-GitHub通知処理完了。取得: N件、スキップ: M件、アクション作成: K件。
+GitHub notifications processed. Fetched: N, Skipped: M, Actions created: K.
 [list of each action summary]
 ```
 
