@@ -67,6 +67,9 @@ func TestAdd_NoInstruction(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing instruction")
 	}
+	if !contains(err.Error(), "accepts 1 arg(s), received 0") {
+		t.Errorf("error = %q, want to contain 'accepts 1 arg(s), received 0'", err.Error())
+	}
 }
 
 func TestAdd_InstructionMergesMeta(t *testing.T) {
