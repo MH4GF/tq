@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/MH4GF/tq/db"
@@ -171,6 +172,51 @@ func TestExecuteAction_InstructionWithModeOverride(t *testing.T) {
 	}
 	if result.Mode != ModeNonInteractive {
 		t.Errorf("mode = %q, want %q", result.Mode, ModeNonInteractive)
+	}
+}
+
+func TestWrapInstruction(t *testing.T) {
+	tests := []struct {
+		name        string
+		mode        string
+		wantDone    bool
+		wantHistory bool
+	}{
+		{
+			name:        "interactive includes /tq:done",
+			mode:        ModeInteractive,
+			wantDone:    true,
+			wantHistory: true,
+		},
+		{
+			name:        "noninteractive includes /tq:done",
+			mode:        ModeNonInteractive,
+			wantDone:    true,
+			wantHistory: true,
+		},
+		{
+			name:        "remote excludes /tq:done",
+			mode:        ModeRemote,
+			wantDone:    false,
+			wantHistory: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := wrapInstruction("Fix the bug", 42, tc.mode)
+			if tc.wantHistory && !strings.Contains(got, "tq action list --task 42") {
+				t.Error("should contain preamble with tq action list and task ID")
+			}
+			if !strings.Contains(got, "Fix the bug") {
+				t.Error("should contain the original instruction")
+			}
+			if tc.wantDone && !strings.Contains(got, "/tq:done") {
+				t.Error("should contain /tq:done postamble")
+			}
+			if !tc.wantDone && strings.Contains(got, "/tq:done") {
+				t.Error("should NOT contain /tq:done postamble")
+			}
+		})
 	}
 }
 
