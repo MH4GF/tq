@@ -124,6 +124,23 @@ func (db *DB) UpdateSchedule(id int64, title, cronExpr, metadata, instruction *s
 	return err
 }
 
+func (db *DB) EnabledScheduleIDs(taskID int64) ([]int64, error) {
+	rows, err := db.Query("SELECT id FROM schedules WHERE task_id = ? AND enabled = 1", taskID)
+	if err != nil {
+		return nil, fmt.Errorf("query enabled schedules: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan schedule id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (db *DB) DeleteSchedule(id int64) error {
 	var taskID int64
 	if err := db.QueryRow("SELECT task_id FROM schedules WHERE id = ?", id).Scan(&taskID); err != nil {

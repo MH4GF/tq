@@ -105,53 +105,6 @@ func TestCheckSchedules_DisabledSkipped(t *testing.T) {
 	}
 }
 
-func TestCheckSchedules_TaskDoneAutoDisable(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.UpdateTask(taskID, db.TaskStatusDone, "")
-	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
-	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = ?", id)
-
-	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
-	if err := dispatch.CheckSchedules(d, now); err != nil {
-		t.Fatal(err)
-	}
-
-	// No action created
-	actions, _ := d.ListActions("", nil, 0)
-	if len(actions) != 0 {
-		t.Errorf("expected 0 actions, got %d", len(actions))
-	}
-
-	// Schedule auto-disabled
-	s, _ := d.GetSchedule(id)
-	if s.Enabled {
-		t.Error("expected schedule to be auto-disabled")
-	}
-}
-
-func TestCheckSchedules_TaskArchivedAutoDisable(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.UpdateTask(taskID, db.TaskStatusArchived, "")
-	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
-	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = ?", id)
-
-	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
-	if err := dispatch.CheckSchedules(d, now); err != nil {
-		t.Fatal(err)
-	}
-
-	s, _ := d.GetSchedule(id)
-	if s.Enabled {
-		t.Error("expected schedule to be auto-disabled for archived task")
-	}
-}
-
 func TestCheckSchedules_InstructionBasedAction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

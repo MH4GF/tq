@@ -26,10 +26,7 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			continue
 		}
 		if task.Status == db.TaskStatusDone || task.Status == db.TaskStatusArchived {
-			slog.Info("schedule: auto-disabling for closed task", "schedule_id", s.ID, "task_id", s.TaskID, "task_status", task.Status)
-			if err := database.UpdateScheduleEnabled(s.ID, false); err != nil {
-				slog.Error("schedule: auto-disable failed", "schedule_id", s.ID, "error", err)
-			}
+			slog.Debug("schedule: skipping for closed task", "schedule_id", s.ID, "task_id", s.TaskID, "task_status", task.Status)
 			continue
 		}
 
