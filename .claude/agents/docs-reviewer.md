@@ -33,7 +33,7 @@ Compare ground truth (phases 1–2) against these documents:
 <checks>
 | Document | What to check |
 |----------|---------------|
-| `CLAUDE.md` | Build/test commands execute successfully; architecture layer names match actual Go packages |
+| `CLAUDE.md` | Build/test commands are documented; architecture layer names are mentioned |
 | `README.md` § CLI Reference | Every tq subcommand is listed; descriptions match `--help` output |
 | `.claude-plugins/tq/README.md` | Commands section lists all files in `tq/commands/*.md`; skills section lists all files in `tq/skills/*/SKILL.md`; descriptions match frontmatter |
 | `.claude-plugins/gh-notifications/README.md` | Commands section lists all files in `gh-notifications/commands/*.md`; descriptions match frontmatter |
@@ -45,7 +45,7 @@ IMPORTANT: If no drift is found, report "No drift detected." and stop. Do NOT pr
 
 Return a markdown table summarizing all detected drift:
 
-```
+```markdown
 | File | Section | Issue | Severity |
 |------|---------|-------|----------|
 ```
