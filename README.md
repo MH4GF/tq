@@ -27,10 +27,10 @@ tq project create myapp ~/src/myapp
 tq task create "Implement feature X" --project 1
 
 # Create an action with an instruction
-tq action create "Review PR #42" --task 1 --title "Review PR #42"
+tq action create "/github-pr review this" --task 1 --title "Review PR #42"
 
-# Dispatch the next pending action
-tq dispatch
+# Dispatch a pending action by ID
+tq dispatch 1
 
 # Launch the TUI (includes queue worker)
 tq ui
@@ -113,19 +113,28 @@ Available template variables: `{{.Task.ID}}`, `{{.Task.Title}}`, `{{.Task.URL}}`
 |---------|-------------|
 | `tq project create <NAME> <WORK_DIR>` | Register a project |
 | `tq project list` | List projects (JSON) |
+| `tq project update <ID>` | Update a project |
 | `tq project delete <ID>` | Delete a project |
 | `tq task create <TITLE> --project <ID>` | Create a task |
 | `tq task list` | List tasks with nested actions (JSON) |
+| `tq task get <ID>` | Get a task by ID (JSON) |
 | `tq task update <ID> --status <STATUS>` | Update task status |
 | `tq action create <INSTRUCTION> --task <ID> --title <TITLE>` | Create an action |
 | `tq action list` | List actions (JSON) |
-| `tq action done <ID> '<RESULT_JSON>'` | Mark action as done |
+| `tq action get <ID>` | Get an action by ID (JSON) |
+| `tq action done <ID> [RESULT]` | Mark action as done |
+| `tq action cancel <ID>` | Cancel an action |
+| `tq action attach <ID>` | Attach to a running action's tmux window |
 | `tq action reset <ID>` | Reset action to pending |
-| `tq dispatch <ACTION_ID>` | Dispatch a specific action |
-| `tq dispatch` | Dispatch next pending action |
-| `tq schedule create --instruction <INSTRUCTION> --task <ID> --title <TITLE> --cron <EXPR>` | Create a schedule |
-| `tq schedule list` | List schedules |
-| `tq prompt list` | List available prompt templates |
+| `tq dispatch <ACTION_ID>` | Dispatch an action by ID |
+| `tq schedule create --instruction <TEXT> --task <ID> --cron <EXPR>` | Create a schedule |
+| `tq schedule list` | List schedules (JSON) |
+| `tq schedule update <ID>` | Update a schedule |
+| `tq schedule delete <ID>` | Delete a schedule |
+| `tq schedule enable <ID>` | Enable a schedule |
+| `tq schedule disable <ID>` | Disable a schedule |
+| `tq event list` | List events |
+| `tq search <KEYWORD>` | Search tasks and actions |
 | `tq ui` | Launch TUI with queue worker |
 
 ## License
