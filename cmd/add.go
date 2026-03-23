@@ -16,29 +16,25 @@ import (
 const maxActionTitleLength = 100
 
 var (
-	addInstruction string
-	addTitle       string
-	addTask        int64
-	addMeta        string
-	addStatus      string
+	addTitle  string
+	addTask   int64
+	addMeta   string
+	addStatus string
 )
 
 var addCmd = &cobra.Command{
-	Use:   "create",
+	Use:   "create <instruction>",
 	Short: "Create an action",
 	Long: `Create a new action linked to a task.
 
-  --instruction: provide a direct instruction (required)
-
+Instruction is provided as a positional argument.
 --meta passes JSON metadata. The instruction is automatically merged into metadata.`,
-	Example: `  tq action create --task 1 --title "Review PR" --instruction "/github-pr review this"
+	Example: `  tq action create "/github-pr review this" --task 1 --title "Review PR"
 
-  tq action create --task 2 --title "Add auth middleware" --instruction "Add JWT auth middleware"`,
-	Args: cobra.NoArgs,
+  tq action create "Add JWT auth middleware" --task 2 --title "Add auth middleware"`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if addInstruction == "" {
-			return fmt.Errorf("--instruction is required")
-		}
+		instruction := args[0]
 
 		if addTitle == "" {
 			return fmt.Errorf("--title is required: set a concise, descriptive title (max %d chars) that explains what this action does", maxActionTitleLength)
@@ -60,7 +56,7 @@ var addCmd = &cobra.Command{
 			return err
 		}
 
-		merged, err := mergeInstruction(addMeta, addInstruction)
+		merged, err := mergeInstruction(addMeta, instruction)
 		if err != nil {
 			return err
 		}
@@ -114,7 +110,6 @@ func printQueueStatus(w io.Writer, actionID int64) {
 }
 
 func init() {
-	addCmd.Flags().StringVarP(&addInstruction, "instruction", "i", "", "Instruction text (required)")
 	addCmd.Flags().StringVar(&addTitle, "title", "", fmt.Sprintf("Action title (required, max %d chars)", maxActionTitleLength))
 	addCmd.Flags().Int64Var(&addTask, "task", 0, "Task ID (required, see: tq task list)")
 	if err := addCmd.MarkFlagRequired("task"); err != nil {

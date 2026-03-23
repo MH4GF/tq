@@ -9,7 +9,7 @@ import (
 	"github.com/MH4GF/tq/testutil"
 )
 
-func TestAdd_InstructionOnly(t *testing.T) {
+func TestAdd_PositionalArg(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
@@ -24,7 +24,7 @@ func TestAdd_InstructionOnly(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "--task", "1", "--title", "Review PR", "--instruction", "/github-pr review this"})
+	root.SetArgs([]string{"action", "create", "/github-pr review this", "--task", "1", "--title", "Review PR"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -65,10 +65,7 @@ func TestAdd_NoInstruction(t *testing.T) {
 
 	err := root.Execute()
 	if err == nil {
-		t.Fatal("expected error for missing --instruction")
-	}
-	if !contains(err.Error(), "--instruction is required") {
-		t.Errorf("error = %q, want to contain '--instruction is required'", err.Error())
+		t.Fatal("expected error for missing instruction")
 	}
 }
 
@@ -87,7 +84,7 @@ func TestAdd_InstructionMergesMeta(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "--task", "1", "--title", "test", "--instruction", "do something", "--meta", `{"mode":"noninteractive"}`})
+	root.SetArgs([]string{"action", "create", "do something", "--task", "1", "--title", "test", "--meta", `{"mode":"noninteractive"}`})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -110,22 +107,6 @@ func TestAdd_InstructionMergesMeta(t *testing.T) {
 	}
 }
 
-func TestAdd_PositionalArgRejected(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"action", "create", "review-pr", "--task", "1", "--title", "test"})
-
-	if err := root.Execute(); err == nil {
-		t.Fatal("expected error for positional argument")
-	}
-}
-
 func TestAdd_MissingTask(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -136,7 +117,7 @@ func TestAdd_MissingTask(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"action", "create", "--title", "review-pr", "--instruction", "review this"})
+	root.SetArgs([]string{"action", "create", "review this", "--title", "review-pr"})
 
 	err := root.Execute()
 	if err == nil {
@@ -161,7 +142,7 @@ func TestAdd_InvalidMeta(t *testing.T) {
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"action", "create", "--title", "review-pr", "--task", "1", "--instruction", "review this", "--meta", "{invalid}"})
+	root.SetArgs([]string{"action", "create", "review this", "--title", "review-pr", "--task", "1", "--meta", "{invalid}"})
 
 	err := root.Execute()
 	if err == nil {

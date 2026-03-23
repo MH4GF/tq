@@ -25,5 +25,5 @@ Use only information from the current session — do not investigate files (that
 ### 3. Create
 
 ```bash
-tq action create --instruction '<instruction>' --title '<title>' --task <task_id>
+tq action create '<instruction>' --title '<title>' --task <task_id>
 ```

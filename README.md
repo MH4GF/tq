@@ -26,8 +26,8 @@ tq project create myapp ~/src/myapp
 # Create a task under the project
 tq task create "Implement feature X" --project 1
 
-# Create an action linked to a prompt template
-tq action create review-pr --task 1 --title "Review PR #42"
+# Create an action with an instruction
+tq action create "Review PR #42" --task 1 --title "Review PR #42"
 
 # Dispatch the next pending action
 tq dispatch
@@ -117,13 +117,13 @@ Available template variables: `{{.Task.ID}}`, `{{.Task.Title}}`, `{{.Task.URL}}`
 | `tq task create <TITLE> --project <ID>` | Create a task |
 | `tq task list` | List tasks with nested actions (JSON) |
 | `tq task update <ID> --status <STATUS>` | Update task status |
-| `tq action create <PROMPT> --task <ID> --title <TITLE>` | Create an action |
+| `tq action create <INSTRUCTION> --task <ID> --title <TITLE>` | Create an action |
 | `tq action list` | List actions (JSON) |
 | `tq action done <ID> '<RESULT_JSON>'` | Mark action as done |
 | `tq action reset <ID>` | Reset action to pending |
 | `tq dispatch <ACTION_ID>` | Dispatch a specific action |
 | `tq dispatch` | Dispatch next pending action |
-| `tq schedule create <PROMPT> --task <ID> --title <TITLE> --cron <EXPR>` | Create a schedule |
+| `tq schedule create --instruction <INSTRUCTION> --task <ID> --title <TITLE> --cron <EXPR>` | Create a schedule |
 | `tq schedule list` | List schedules |
 | `tq prompt list` | List available prompt templates |
 | `tq ui` | Launch TUI with queue worker |
