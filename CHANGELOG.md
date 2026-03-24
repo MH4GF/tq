@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.21.4](https://github.com/MH4GF/tq/compare/v0.21.3...v0.21.4) - 2026-03-24
+- Replace schedule auto-disable with UpdateTask guard by @MH4GF in https://github.com/MH4GF/tq/pull/52
+- Instruct manager skill to use --jq flag instead of piped commands by @MH4GF in https://github.com/MH4GF/tq/pull/53
+
 ## [v0.21.3](https://github.com/MH4GF/tq/compare/v0.21.2...v0.21.3) - 2026-03-23
 - Add docs-reviewer sub-agent and fix documentation drift by @MH4GF in https://github.com/MH4GF/tq/pull/48
 - Document schedule metadata dispatch keys by @MH4GF in https://github.com/MH4GF/tq/pull/51
