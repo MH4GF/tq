@@ -1,6 +1,7 @@
 ---
 description: Resolve merge conflicts on a PR
 argument-hint: "<PR_URL>"
+allowed-tools: Bash(gh pr view *), Bash(gh pr checkout *), Bash(git fetch *), Bash(git add *), Read, Edit, Grep, Glob
 ---
 
 # Resolve Merge Conflicts

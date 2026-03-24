@@ -15,3 +15,17 @@ Run `tq --help` and `tq <command> --help` for available commands and flags.
 - **Dispatch immediately?** Only when user says "割り込み" or "すぐ実行". Otherwise create as pending.
 - **Looking for past context?** Use `tq search "<keyword>"` to find tasks/actions by keyword.
 - **Schedule mode?** Use `--meta` to control dispatch behavior. Run `tq schedule create --help` for available metadata keys.
+
+## Filtering output
+
+IMPORTANT: Always use the built-in `--jq` flag for filtering. Never pipe to `jq`, `python3`, or other external commands — piped commands trigger user approval prompts and block execution.
+
+```bash
+# Good: single command, no approval needed
+tq action list --jq '.[] | select(.task_id == 200) | .title'
+tq task list --jq '.[] | select(.status == "open") | {id, title}'
+
+# Bad: pipe triggers approval prompt
+tq action list | jq '.[] | select(.task_id == 200)'
+tq task list | python3 -c 'import json,sys; ...'
+```

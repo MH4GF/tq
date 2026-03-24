@@ -1,6 +1,7 @@
 ---
 description: Judge and execute PR merge
 argument-hint: "<PR_URL>"
+allowed-tools: Bash(gh pr view *), Skill(gh-notifications:self-review)
 ---
 
 # Merge Decision

@@ -1,6 +1,7 @@
 ---
 description: Review another person's PR
 argument-hint: "<PR_URL>"
+allowed-tools: Bash(gh pr view *), Bash(gh pr diff *), Bash(gh pr checks *), Read, Grep, Glob
 ---
 
 # PR Review
