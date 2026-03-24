@@ -309,6 +309,17 @@ type PendingCounts struct {
 	Total        int
 }
 
+func (pc PendingCounts) Unfocused() int {
+	return pc.Total - pc.Dispatchable
+}
+
+func (pc PendingCounts) Label() string {
+	if u := pc.Unfocused(); u > 0 {
+		return fmt.Sprintf("%d pending (%d unfocused)", pc.Dispatchable, u)
+	}
+	return fmt.Sprintf("%d pending", pc.Dispatchable)
+}
+
 func (db *DB) CountPendingByDispatch() (PendingCounts, error) {
 	var pc PendingCounts
 	err := db.QueryRow(`

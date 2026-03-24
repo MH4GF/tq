@@ -636,62 +636,55 @@ func TestTasksModel_SetSize(t *testing.T) {
 }
 
 func TestTasksModel_SummaryLine(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
-	d.InsertAction("a1", taskID, "{}", db.ActionStatusRunning)
-	d.InsertAction("a2", taskID, "{}", db.ActionStatusPending)
-	id3, _ := d.InsertAction("a3", taskID, "{}", db.ActionStatusRunning)
-	d.MarkDone(id3, "ok")
-	id4, _ := d.InsertAction("a4", taskID, "{}", db.ActionStatusRunning)
-	d.MarkFailed(id4, "err")
-
-	m := NewTasksModel(d, "")
-	m = m.SetSize(120, 40)
-	msg := m.Init()()
-	m, _ = m.Update(msg)
-
-	view := m.View()
-	if !strings.Contains(view, "1 running") {
-		t.Errorf("summary should show '1 running', got %q", view)
+	tests := []struct {
+		name     string
+		setup    func(d db.Store)
+		contains []string
+	}{
+		{
+			name: "all statuses",
+			setup: func(d db.Store) {
+				taskID, _ := d.InsertTask(1, "Test task", "{}", "")
+				d.InsertAction("a1", taskID, "{}", db.ActionStatusRunning)
+				d.InsertAction("a2", taskID, "{}", db.ActionStatusPending)
+				id3, _ := d.InsertAction("a3", taskID, "{}", db.ActionStatusRunning)
+				d.MarkDone(id3, "ok")
+				id4, _ := d.InsertAction("a4", taskID, "{}", db.ActionStatusRunning)
+				d.MarkFailed(id4, "err")
+			},
+			contains: []string{"1 running", "1 pending", "1 done", "1 failed"},
+		},
+		{
+			name: "unfocused pending",
+			setup: func(d db.Store) {
+				taskID1, _ := d.InsertTask(1, "Task1", "{}", "")
+				d.InsertAction("a1", taskID1, "{}", db.ActionStatusPending)
+				taskID2, _ := d.InsertTask(2, "Task2", "{}", "")
+				d.InsertAction("a2", taskID2, "{}", db.ActionStatusPending)
+				d.InsertAction("a3", taskID2, "{}", db.ActionStatusPending)
+				d.SetDispatchEnabled(2, false)
+			},
+			contains: []string{"1 pending", "(2 unfocused)"},
+		},
 	}
-	if !strings.Contains(view, "1 pending") {
-		t.Errorf("summary should show '1 pending', got %q", view)
-	}
-	if !strings.Contains(view, "1 done") {
-		t.Errorf("summary should show '1 done', got %q", view)
-	}
-	if !strings.Contains(view, "1 failed") {
-		t.Errorf("summary should show '1 failed', got %q", view)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			tt.setup(d)
 
-func TestTasksModel_SummaryLineUnfocused(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
+			m := NewTasksModel(d, "")
+			m = m.SetSize(120, 40)
+			msg := m.Init()()
+			m, _ = m.Update(msg)
 
-	// Project 1 (enabled): 1 pending
-	taskID1, _ := d.InsertTask(1, "Task1", "{}", "")
-	d.InsertAction("a1", taskID1, "{}", db.ActionStatusPending)
-
-	// Project 2 (disabled): 2 pending
-	taskID2, _ := d.InsertTask(2, "Task2", "{}", "")
-	d.InsertAction("a2", taskID2, "{}", db.ActionStatusPending)
-	d.InsertAction("a3", taskID2, "{}", db.ActionStatusPending)
-	d.SetDispatchEnabled(2, false)
-
-	m := NewTasksModel(d, "")
-	m = m.SetSize(120, 40)
-	msg := m.Init()()
-	m, _ = m.Update(msg)
-
-	view := m.View()
-	if !strings.Contains(view, "1 pending") {
-		t.Errorf("summary should show '1 pending', got %q", view)
-	}
-	if !strings.Contains(view, "(2 unfocused)") {
-		t.Errorf("summary should show '(2 unfocused)', got %q", view)
+			view := m.View()
+			for _, s := range tt.contains {
+				if !strings.Contains(view, s) {
+					t.Errorf("summary should contain %q, got %q", s, view)
+				}
+			}
+		})
 	}
 }
 

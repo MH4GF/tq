@@ -91,14 +91,6 @@ func mergeInstruction(metaJSON, instruction string) (string, error) {
 	return string(data), nil
 }
 
-func formatPendingLabel(pc db.PendingCounts) string {
-	unfocused := pc.Total - pc.Dispatchable
-	if unfocused > 0 {
-		return fmt.Sprintf("%d pending (%d unfocused)", pc.Dispatchable, unfocused)
-	}
-	return fmt.Sprintf("%d pending", pc.Dispatchable)
-}
-
 func printQueueStatus(w io.Writer, actionID int64) {
 	var pc db.PendingCounts
 	if counts, err := database.CountPendingByDispatch(); err != nil {
@@ -106,7 +98,7 @@ func printQueueStatus(w io.Writer, actionID int64) {
 	} else {
 		pc = counts
 	}
-	pendingLabel := formatPendingLabel(pc)
+	pendingLabel := pc.Label()
 
 	maxInteractive := dispatch.DefaultMaxInteractive
 	workerRunning := false
