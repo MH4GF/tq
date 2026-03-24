@@ -285,23 +285,35 @@ func (db *DB) ListActions(status string, taskID *int64, limit int) ([]Action, er
 	return actions, rows.Err()
 }
 
-func (db *DB) CountByStatus() (map[string]int, error) {
-	rows, err := db.Query("SELECT status, COUNT(*) FROM actions GROUP BY status")
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
+type PendingCounts struct {
+	Dispatchable int
+	Total        int
+}
 
-	counts := make(map[string]int)
-	for rows.Next() {
-		var status string
-		var count int
-		if err := rows.Scan(&status, &count); err != nil {
-			return nil, err
-		}
-		counts[status] = count
+func (pc PendingCounts) Unfocused() int {
+	return pc.Total - pc.Dispatchable
+}
+
+func (pc PendingCounts) Label() string {
+	if u := pc.Unfocused(); u > 0 {
+		return fmt.Sprintf("%d pending (%d unfocused)", pc.Dispatchable, u)
 	}
-	return counts, rows.Err()
+	return fmt.Sprintf("%d pending", pc.Dispatchable)
+}
+
+func (db *DB) CountPendingByDispatch() (PendingCounts, error) {
+	var pc PendingCounts
+	err := db.QueryRow(`
+		SELECT
+			COALESCE(SUM(CASE WHEN p.dispatch_enabled = 1 THEN 1 ELSE 0 END), 0),
+			COUNT(*)
+		FROM actions a
+		INNER JOIN tasks t ON a.task_id = t.id
+		INNER JOIN projects p ON t.project_id = p.id
+		WHERE a.status = ?`,
+		ActionStatusPending,
+	).Scan(&pc.Dispatchable, &pc.Total)
+	return pc, err
 }
 
 func (db *DB) ListRunningInteractive() ([]Action, error) {

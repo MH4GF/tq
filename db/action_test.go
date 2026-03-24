@@ -236,28 +236,55 @@ func TestListActions(t *testing.T) {
 	}
 }
 
-func TestCountByStatus(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
+func TestCountPendingByDispatch(t *testing.T) {
+	tests := []struct {
+		name             string
+		setup            func(d *db.DB)
+		wantDispatchable int
+		wantTotal        int
+	}{
+		{
+			name: "some disabled",
+			setup: func(d *db.DB) {
+				task1, _ := d.InsertTask(1, "t1", "{}", "")
+				d.InsertAction("a", task1, "{}", db.ActionStatusPending)
+				d.InsertAction("b", task1, "{}", db.ActionStatusPending)
+				task2, _ := d.InsertTask(2, "t2", "{}", "")
+				d.InsertAction("c", task2, "{}", db.ActionStatusPending)
+				d.InsertAction("d", task2, "{}", db.ActionStatusPending)
+				d.InsertAction("e", task2, "{}", db.ActionStatusPending)
+				d.SetDispatchEnabled(2, false)
+			},
+			wantDispatchable: 2,
+			wantTotal:        5,
+		},
+		{
+			name: "all enabled",
+			setup: func(d *db.DB) {
+				task1, _ := d.InsertTask(1, "t1", "{}", "")
+				d.InsertAction("a", task1, "{}", db.ActionStatusPending)
+			},
+			wantDispatchable: 1,
+			wantTotal:        1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			tt.setup(d)
 
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("a", taskID, "{}", db.ActionStatusPending)
-	d.InsertAction("b", taskID, "{}", db.ActionStatusPending)
-	d.InsertAction("c", taskID, "{}", db.ActionStatusRunning)
-	d.InsertAction("d", taskID, "{}", db.ActionStatusDone)
-
-	counts, err := d.CountByStatus()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if counts[db.ActionStatusPending] != 2 {
-		t.Errorf("pending = %d, want 2", counts[db.ActionStatusPending])
-	}
-	if counts[db.ActionStatusRunning] != 1 {
-		t.Errorf("running = %d, want 1", counts[db.ActionStatusRunning])
-	}
-	if counts[db.ActionStatusDone] != 1 {
-		t.Errorf("done = %d, want 1", counts[db.ActionStatusDone])
+			pc, err := d.CountPendingByDispatch()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if pc.Dispatchable != tt.wantDispatchable {
+				t.Errorf("Dispatchable = %d, want %d", pc.Dispatchable, tt.wantDispatchable)
+			}
+			if pc.Total != tt.wantTotal {
+				t.Errorf("Total = %d, want %d", pc.Total, tt.wantTotal)
+			}
+		})
 	}
 }
 
