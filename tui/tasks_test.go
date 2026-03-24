@@ -667,6 +667,34 @@ func TestTasksModel_SummaryLine(t *testing.T) {
 	}
 }
 
+func TestTasksModel_SummaryLineUnfocused(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// Project 1 (enabled): 1 pending
+	taskID1, _ := d.InsertTask(1, "Task1", "{}", "")
+	d.InsertAction("a1", taskID1, "{}", db.ActionStatusPending)
+
+	// Project 2 (disabled): 2 pending
+	taskID2, _ := d.InsertTask(2, "Task2", "{}", "")
+	d.InsertAction("a2", taskID2, "{}", db.ActionStatusPending)
+	d.InsertAction("a3", taskID2, "{}", db.ActionStatusPending)
+	d.SetDispatchEnabled(2, false)
+
+	m := NewTasksModel(d, "")
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	view := m.View()
+	if !strings.Contains(view, "1 pending") {
+		t.Errorf("summary should show '1 pending', got %q", view)
+	}
+	if !strings.Contains(view, "(2 unfocused)") {
+		t.Errorf("summary should show '(2 unfocused)', got %q", view)
+	}
+}
+
 func TestTasksModel_ProjectWorkDir(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

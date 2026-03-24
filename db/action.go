@@ -304,6 +304,26 @@ func (db *DB) CountByStatus() (map[string]int, error) {
 	return counts, rows.Err()
 }
 
+type PendingCounts struct {
+	Dispatchable int
+	Total        int
+}
+
+func (db *DB) CountPendingByDispatch() (PendingCounts, error) {
+	var pc PendingCounts
+	err := db.QueryRow(`
+		SELECT
+			COALESCE(SUM(CASE WHEN p.dispatch_enabled = 1 THEN 1 ELSE 0 END), 0),
+			COUNT(*)
+		FROM actions a
+		INNER JOIN tasks t ON a.task_id = t.id
+		INNER JOIN projects p ON t.project_id = p.id
+		WHERE a.status = ?`,
+		ActionStatusPending,
+	).Scan(&pc.Dispatchable, &pc.Total)
+	return pc, err
+}
+
 func (db *DB) ListRunningInteractive() ([]Action, error) {
 	rows, err := db.Query(
 		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND session_id IS NOT NULL ORDER BY id",

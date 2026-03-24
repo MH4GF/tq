@@ -91,13 +91,23 @@ func mergeInstruction(metaJSON, instruction string) (string, error) {
 	return string(data), nil
 }
 
-func printQueueStatus(w io.Writer, actionID int64) {
-	pendingCount := 0
-	if counts, err := database.CountByStatus(); err != nil {
-		slog.Error("count by status", "error", err)
-	} else {
-		pendingCount = counts[db.ActionStatusPending]
+func formatPendingLabel(pc db.PendingCounts) string {
+	unfocused := pc.Total - pc.Dispatchable
+	if unfocused > 0 {
+		return fmt.Sprintf("%d pending (%d unfocused)", pc.Dispatchable, unfocused)
 	}
+	return fmt.Sprintf("%d pending", pc.Dispatchable)
+}
+
+func printQueueStatus(w io.Writer, actionID int64) {
+	var pc db.PendingCounts
+	if counts, err := database.CountPendingByDispatch(); err != nil {
+		slog.Error("count pending by dispatch", "error", err)
+	} else {
+		pc = counts
+	}
+	pendingLabel := formatPendingLabel(pc)
+
 	maxInteractive := dispatch.DefaultMaxInteractive
 	workerRunning := false
 	if mi, err := database.GetWorkerMaxInteractive(dispatch.DefaultStaleThreshold); err == nil {
@@ -108,7 +118,7 @@ func printQueueStatus(w io.Writer, actionID int64) {
 	}
 
 	if !workerRunning {
-		_, _ = fmt.Fprintf(w, "  queue: %d pending — no worker detected\n", pendingCount)
+		_, _ = fmt.Fprintf(w, "  queue: %s — no worker detected\n", pendingLabel)
 		_, _ = fmt.Fprintf(w, "  [agent hint] ask the user to run 'tq ui', or run 'tq dispatch %d' to execute immediately\n", actionID)
 		return
 	}
@@ -117,12 +127,12 @@ func printQueueStatus(w io.Writer, actionID int64) {
 		slog.Error("count running interactive", "error", err)
 	}
 	if runningInteractive >= maxInteractive {
-		_, _ = fmt.Fprintf(w, "  queue: %d pending — worker running, but interactive slots full (%d/%d)\n",
-			pendingCount, runningInteractive, maxInteractive)
+		_, _ = fmt.Fprintf(w, "  queue: %s — worker running, but interactive slots full (%d/%d)\n",
+			pendingLabel, runningInteractive, maxInteractive)
 		_, _ = fmt.Fprintf(w, "  [agent hint] ask the user before running 'tq dispatch %d' to execute immediately\n", actionID)
 	} else {
-		_, _ = fmt.Fprintf(w, "  queue: %d pending — worker running, will be dispatched automatically (interactive: %d/%d)\n",
-			pendingCount, runningInteractive, maxInteractive)
+		_, _ = fmt.Fprintf(w, "  queue: %s — worker running, will be dispatched automatically (interactive: %d/%d)\n",
+			pendingLabel, runningInteractive, maxInteractive)
 	}
 }
 

@@ -51,6 +51,7 @@ type QueryReader interface {
 	ListRunningInteractive() ([]Action, error)
 	CountRunningInteractive() (int, error)
 	CountByStatus() (map[string]int, error)
+	CountPendingByDispatch() (PendingCounts, error)
 	ListActionsByTaskIDs(taskIDs []int64) (map[int64][]Action, error)
 	// Task queries
 	GetTask(id int64) (*Task, error)

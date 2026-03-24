@@ -261,6 +261,54 @@ func TestCountByStatus(t *testing.T) {
 	}
 }
 
+func TestCountPendingByDispatch(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// Project 1 (dispatch_enabled=true by default): 2 pending
+	task1, _ := d.InsertTask(1, "t1", "{}", "")
+	d.InsertAction("a", task1, "{}", db.ActionStatusPending)
+	d.InsertAction("b", task1, "{}", db.ActionStatusPending)
+
+	// Project 2 (will be disabled): 3 pending
+	task2, _ := d.InsertTask(2, "t2", "{}", "")
+	d.InsertAction("c", task2, "{}", db.ActionStatusPending)
+	d.InsertAction("d", task2, "{}", db.ActionStatusPending)
+	d.InsertAction("e", task2, "{}", db.ActionStatusPending)
+
+	d.SetDispatchEnabled(2, false)
+
+	pc, err := d.CountPendingByDispatch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pc.Dispatchable != 2 {
+		t.Errorf("Dispatchable = %d, want 2", pc.Dispatchable)
+	}
+	if pc.Total != 5 {
+		t.Errorf("Total = %d, want 5", pc.Total)
+	}
+}
+
+func TestCountPendingByDispatch_AllEnabled(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	task1, _ := d.InsertTask(1, "t1", "{}", "")
+	d.InsertAction("a", task1, "{}", db.ActionStatusPending)
+
+	pc, err := d.CountPendingByDispatch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pc.Dispatchable != 1 {
+		t.Errorf("Dispatchable = %d, want 1", pc.Dispatchable)
+	}
+	if pc.Total != 1 {
+		t.Errorf("Total = %d, want 1", pc.Total)
+	}
+}
+
 func TestListRunningInteractive(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

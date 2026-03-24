@@ -350,7 +350,7 @@ func (m TasksModel) attachAction(a *db.Action) tea.Cmd {
 }
 
 func (m TasksModel) summaryLine() string {
-	var running, pending, done, failed int
+	var running, pending, pendingUnfocused, done, failed int
 	for _, pt := range m.trees {
 		for _, tn := range pt.tasks {
 			for _, a := range tn.actions {
@@ -359,6 +359,9 @@ func (m TasksModel) summaryLine() string {
 					running++
 				case db.ActionStatusPending:
 					pending++
+					if !pt.project.DispatchEnabled {
+						pendingUnfocused++
+					}
 				case db.ActionStatusDone:
 					done++
 				case db.ActionStatusFailed:
@@ -367,8 +370,12 @@ func (m TasksModel) summaryLine() string {
 			}
 		}
 	}
+	pendingStr := fmt.Sprintf(" %d pending", pending-pendingUnfocused)
+	if pendingUnfocused > 0 {
+		pendingStr += fmt.Sprintf(" (%d unfocused)", pendingUnfocused)
+	}
 	return styleRunning.Render("●") + fmt.Sprintf(" %d running  ", running) +
-		stylePending.Render("○") + fmt.Sprintf(" %d pending  ", pending) +
+		stylePending.Render("○") + pendingStr + "  " +
 		styleDone.Render("✓") + fmt.Sprintf(" %d done  ", done) +
 		styleFailed.Render("✗") + fmt.Sprintf(" %d failed", failed)
 }
