@@ -61,7 +61,7 @@ func TestActionUpdate_NoFlags(t *testing.T) {
 	}
 }
 
-func TestActionUpdate_RunningAction(t *testing.T) {
+func TestActionUpdate_DoneAction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
