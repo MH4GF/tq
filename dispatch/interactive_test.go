@@ -61,7 +61,18 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 			actionID: 42,
 			taskID:   10,
 			wantContains: []string{
-				"--worktree",
+				"'Fix the bug' --worktree",
+			},
+		},
+		{
+			name:     "worktree with permission mode",
+			cfg:      ActionConfig{Worktree: true, PermissionMode: "plan"},
+			prompt:   "Fix the bug",
+			actionID: 42,
+			taskID:   10,
+			wantContains: []string{
+				"--permission-mode 'plan'",
+				"'Fix the bug' --worktree",
 			},
 		},
 		{
