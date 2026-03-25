@@ -109,7 +109,7 @@ func printQueueStatus(w io.Writer, actionID int64) {
 
 	if !workerRunning {
 		_, _ = fmt.Fprintf(w, "  queue: %d pending — no worker detected\n", pendingCount)
-		_, _ = fmt.Fprintf(w, "  [agent hint] ask the user to run 'tq ui', or run 'tq dispatch %d' to execute immediately\n", actionID)
+		_, _ = fmt.Fprintf(w, "  [agent hint] ask the user to run 'tq ui', or run 'tq action dispatch %d' to execute immediately\n", actionID)
 		return
 	}
 	runningInteractive, err := database.CountRunningInteractive()
@@ -119,7 +119,7 @@ func printQueueStatus(w io.Writer, actionID int64) {
 	if runningInteractive >= maxInteractive {
 		_, _ = fmt.Fprintf(w, "  queue: %d pending — worker running, but interactive slots full (%d/%d)\n",
 			pendingCount, runningInteractive, maxInteractive)
-		_, _ = fmt.Fprintf(w, "  [agent hint] ask the user before running 'tq dispatch %d' to execute immediately\n", actionID)
+		_, _ = fmt.Fprintf(w, "  [agent hint] ask the user before running 'tq action dispatch %d' to execute immediately\n", actionID)
 	} else {
 		_, _ = fmt.Fprintf(w, "  queue: %d pending — worker running, will be dispatched automatically (interactive: %d/%d)\n",
 			pendingCount, runningInteractive, maxInteractive)

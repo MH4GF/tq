@@ -72,12 +72,12 @@ func SetRemoteWorkerFactory(f func() dispatch.Worker) {
 	activeRemoteWorkerFactory = f
 }
 
-var dispatchCmd = &cobra.Command{
+var actionDispatchCmd = &cobra.Command{
 	Use:   "dispatch <action_id>",
 	Short: "Dispatch an action immediately (skip queue)",
 	Long:  `Dispatch a pending action immediately by its ID.`,
-	Example: `  tq dispatch 42
-  tq dispatch 42 --session work`,
+	Example: `  tq action dispatch 42
+  tq action dispatch 42 --session work`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
@@ -123,5 +123,6 @@ var dispatchCmd = &cobra.Command{
 }
 
 func init() {
-	dispatchCmd.Flags().StringVar(&dispatchSession, "session", "main", "Target tmux session name")
+	actionDispatchCmd.Flags().StringVar(&dispatchSession, "session", "main", "Target tmux session name")
+	actionCmd.AddCommand(actionDispatchCmd)
 }

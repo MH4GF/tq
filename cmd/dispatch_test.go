@@ -27,7 +27,7 @@ func TestDispatch_NoArgs(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"dispatch"})
+	root.SetArgs([]string{"action", "dispatch"})
 
 	err := root.Execute()
 	if err == nil {
@@ -55,7 +55,7 @@ func TestDispatch_Success(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"dispatch", "1"})
+	root.SetArgs([]string{"action", "dispatch", "1"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -99,7 +99,7 @@ func TestDispatch_WithActionID(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"dispatch", "2"})
+	root.SetArgs([]string{"action", "dispatch", "2"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -134,7 +134,7 @@ func TestDispatch_WithInvalidActionID(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"dispatch", "999"})
+	root.SetArgs([]string{"action", "dispatch", "999"})
 
 	err := root.Execute()
 	if err == nil {
@@ -165,7 +165,7 @@ func TestDispatch_WorkerError(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"dispatch", "1"})
+	root.SetArgs([]string{"action", "dispatch", "1"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)

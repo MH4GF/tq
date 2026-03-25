@@ -28,7 +28,7 @@ Data model: project → task → action.
   - action: dispatchable item linked to a prompt template (status: pending, running, done, failed, cancelled)
 
 Typical flow: create a task, then create actions under it.
-Pending actions are auto-dispatched by the queue worker (tq ui), or manually via tq dispatch.
+Pending actions are auto-dispatched by the queue worker (tq ui), or manually via tq action dispatch.
 
 All list commands output JSON.`,
 	Example: `  # Quick start
@@ -36,7 +36,7 @@ All list commands output JSON.`,
   tq task create "Implement feature X" --project 1
   tq action create review-pr --task 1 --title "Review PR #42"
   tq search "feature X"
-  tq dispatch
+  tq action dispatch 1
   tq ui`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if database != nil {
@@ -83,7 +83,6 @@ func init() {
 	rootCmd.Version = version
 	rootCmd.AddCommand(taskCmd)
 	rootCmd.AddCommand(actionCmd)
-	rootCmd.AddCommand(dispatchCmd)
 	rootCmd.AddCommand(uiCmd)
 	rootCmd.AddCommand(projectCmd)
 	rootCmd.AddCommand(scheduleCmd)
