@@ -30,7 +30,7 @@ tq task create "Implement feature X" --project 1
 tq action create "/github-pr review this" --task 1 --title "Review PR #42"
 
 # Dispatch a pending action by ID
-tq dispatch 1
+tq action dispatch 1
 
 # Launch the TUI (includes queue worker)
 tq ui
@@ -126,7 +126,7 @@ Available template variables: `{{.Task.ID}}`, `{{.Task.Title}}`, `{{.Task.URL}}`
 | `tq action cancel <ID>` | Cancel an action |
 | `tq action attach <ID>` | Attach to a running action's tmux window |
 | `tq action reset <ID>` | Reset action to pending |
-| `tq dispatch <ACTION_ID>` | Dispatch an action by ID |
+| `tq action dispatch <ACTION_ID>` | Dispatch an action by ID |
 | `tq schedule create --instruction <TEXT> --task <ID> --cron <EXPR> [--meta <JSON>]` | Create a schedule |
 | `tq schedule list` | List schedules (JSON) |
 | `tq schedule update <ID>` | Update a schedule |
