@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
@@ -22,14 +23,16 @@ func TestActionUpdate(t *testing.T) {
 	out := new(bytes.Buffer)
 	root.SetOut(out)
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"action", "update", "1", "--title", "updated"})
+	idStr := fmt.Sprintf("%d", actionID)
+	root.SetArgs([]string{"action", "update", idStr, "--title", "updated"})
 
 	err := root.Execute()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !contains(out.String(), "action #1 updated") {
-		t.Errorf("output = %q, want to contain 'action #1 updated'", out.String())
+	expected := fmt.Sprintf("action #%d updated", actionID)
+	if !contains(out.String(), expected) {
+		t.Errorf("output = %q, want to contain %q", out.String(), expected)
 	}
 
 	a, _ := d.GetAction(actionID)
@@ -45,12 +48,12 @@ func TestActionUpdate_NoFlags(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-	d.InsertAction("test", taskID, "{}", db.ActionStatusPending)
+	actionID, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending)
 
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"action", "update", "1"})
+	root.SetArgs([]string{"action", "update", fmt.Sprintf("%d", actionID)})
 
 	err := root.Execute()
 	if err == nil {
@@ -68,13 +71,13 @@ func TestActionUpdate_DoneAction(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-	d.InsertAction("test", taskID, "{}", db.ActionStatusPending)
-	d.MarkDone(1, "done")
+	actionID, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending)
+	d.MarkDone(actionID, "done")
 
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"action", "update", "1", "--title", "nope"})
+	root.SetArgs([]string{"action", "update", fmt.Sprintf("%d", actionID), "--title", "nope"})
 
 	err := root.Execute()
 	if err == nil {
@@ -92,12 +95,12 @@ func TestActionUpdate_InvalidMeta(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-	d.InsertAction("test", taskID, "{}", db.ActionStatusPending)
+	actionID, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending)
 
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"action", "update", "1", "--meta", "{invalid}"})
+	root.SetArgs([]string{"action", "update", fmt.Sprintf("%d", actionID), "--meta", "{invalid}"})
 
 	err := root.Execute()
 	if err == nil {
