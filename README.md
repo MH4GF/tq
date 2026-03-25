@@ -46,7 +46,7 @@ project → task → action
 
 - **project**: groups tasks, sets default working directory
 - **task**: unit of work (status: open, review, done, blocked, archived)
-- **action**: dispatchable item linked to a prompt template (status: pending, running, done, failed, cancelled)
+- **action**: dispatchable unit of work with an instruction (status: pending, running, done, failed, cancelled)
 
 ### Design Principles
 
@@ -82,30 +82,17 @@ project → task → action
 
 ### Worker Types
 
-| auto | interactive | Execution |
-|------|------------|-----------|
-| true | false | `claude -p` — captures stdout, auto-completes |
-| true | true | `claude --worktree --tmux` — fire-and-forget, worker reports via `tq action done` |
-| false | * | Not dispatched — waits for human |
+Controlled via `--meta` on `action create` / `schedule create`:
 
-### Prompts
+| mode | Description |
+|------|-------------|
+| `interactive` (default) | `claude` in tmux — fire-and-forget, worker reports via `tq action done` |
+| `noninteractive` | `claude -p` — captures stdout, auto-completes |
+| `remote` | Dispatched to remote worker |
 
-Defined as frontmatter-annotated markdown in `~/.config/tq/prompts/`:
-
-```markdown
----
-description: Generic implementation task
-auto: true
-interactive: true
-max_retries: 0
-on_done: review
----
-{{.Action.Meta.instruction}}
-
-When done: tq action done {{.Action.ID}} '{"result":"<summary>"}'
-```
-
-Available template variables: `{{.Task.ID}}`, `{{.Task.Title}}`, `{{.Task.URL}}`, `{{.Project.Name}}`, `{{.Project.WorkDir}}`, `{{.Action.ID}}`, `{{.Action.Meta.<key>}}`
+Additional metadata keys:
+- `permission_mode` — Claude permission mode (e.g. `"plan"`, `"auto"`)
+- `worktree` — Run in a git worktree for isolation (`true`/`false`)
 
 ## CLI Reference
 
@@ -122,6 +109,7 @@ Available template variables: `{{.Task.ID}}`, `{{.Task.Title}}`, `{{.Task.URL}}`
 | `tq action create <INSTRUCTION> --task <ID> --title <TITLE>` | Create an action |
 | `tq action list` | List actions (JSON) |
 | `tq action get <ID>` | Get an action by ID (JSON) |
+| `tq action update <ID>` | Update an action |
 | `tq action done <ID> [RESULT]` | Mark action as done |
 | `tq action cancel <ID>` | Cancel an action |
 | `tq action attach <ID>` | Attach to a running action's tmux window |
@@ -135,7 +123,6 @@ Available template variables: `{{.Task.ID}}`, `{{.Task.Title}}`, `{{.Task.URL}}`
 | `tq schedule disable <ID>` | Disable a schedule |
 | `tq event list` | List events |
 | `tq search <KEYWORD>` | Search tasks and actions |
-| `tq prompt list` | List available prompt templates |
 | `tq ui` | Launch TUI with queue worker |
 
 ## License
