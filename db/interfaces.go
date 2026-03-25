@@ -16,6 +16,7 @@ type CommandWriter interface {
 	ResetToPending(id int64) error
 	SetSessionInfo(id int64, sessionID, tmuxPane string) error
 	MergeActionMetadata(id int64, updates map[string]any) error
+	UpdateAction(id int64, title *string, taskID *int64, metadata *string) error
 	NextPending(ctx context.Context) (*Action, error)
 	ClaimPending(ctx context.Context, id int64) (*Action, error)
 	// Task commands

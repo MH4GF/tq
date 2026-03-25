@@ -410,6 +410,63 @@ func (db *DB) MergeActionMetadata(id int64, updates map[string]any) error {
 	return err
 }
 
+func (db *DB) UpdateAction(id int64, title *string, taskID *int64, metadata *string) error {
+	var current Action
+	err := db.QueryRow("SELECT "+actionColumns+" FROM actions WHERE id = ?", id).Scan(current.scanFields()...)
+	if err != nil {
+		return fmt.Errorf("action #%d not found: %w", id, err)
+	}
+
+	if current.Status != ActionStatusPending && current.Status != ActionStatusFailed {
+		return fmt.Errorf("action #%d has status %q: only pending or failed actions can be updated", id, current.Status)
+	}
+
+	var setClauses []string
+	var args []any
+
+	if title != nil {
+		setClauses = append(setClauses, "title = ?")
+		args = append(args, *title)
+	}
+	if taskID != nil {
+		setClauses = append(setClauses, "task_id = ?")
+		args = append(args, *taskID)
+	}
+	if metadata != nil {
+		existing := make(map[string]any)
+		if current.Metadata != "" && current.Metadata != "{}" {
+			if err := json.Unmarshal([]byte(current.Metadata), &existing); err != nil {
+				return fmt.Errorf("parse existing metadata: %w", err)
+			}
+		}
+		updates := make(map[string]any)
+		if err := json.Unmarshal([]byte(*metadata), &updates); err != nil {
+			return fmt.Errorf("parse new metadata: %w", err)
+		}
+		maps.Copy(existing, updates)
+		merged, err := json.Marshal(existing)
+		if err != nil {
+			return fmt.Errorf("marshal metadata: %w", err)
+		}
+		setClauses = append(setClauses, "metadata = ?")
+		args = append(args, string(merged))
+	}
+
+	if len(setClauses) == 0 {
+		return fmt.Errorf("no fields to update")
+	}
+
+	query := "UPDATE actions SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
+	args = append(args, id)
+	_, err = db.Exec(query, args...)
+	if err == nil {
+		db.emitEvent("action", id, "action.updated", map[string]any{
+			"fields_count": len(setClauses),
+		})
+	}
+	return err
+}
+
 func (db *DB) ListActionsByTaskIDs(taskIDs []int64) (map[int64][]Action, error) {
 	result := make(map[int64][]Action)
 	if len(taskIDs) == 0 {
