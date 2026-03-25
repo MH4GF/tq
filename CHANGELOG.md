@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.21.5](https://github.com/MH4GF/tq/compare/v0.21.4...v0.21.5) - 2026-03-25
+- Add tq action update command by @MH4GF in https://github.com/MH4GF/tq/pull/56
+- Show pending counts split by dispatch-enabled projects by @MH4GF in https://github.com/MH4GF/tq/pull/55
+
 ## [v0.21.4](https://github.com/MH4GF/tq/compare/v0.21.3...v0.21.4) - 2026-03-24
 - Replace schedule auto-disable with UpdateTask guard by @MH4GF in https://github.com/MH4GF/tq/pull/52
 - Instruct manager skill to use --jq flag instead of piped commands by @MH4GF in https://github.com/MH4GF/tq/pull/53
