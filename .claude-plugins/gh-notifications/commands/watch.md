@@ -10,8 +10,10 @@ GitHub notifications watcher. Fetch, classify, and create tq actions for each no
 ### 1. Fetch notifications
 
 ```bash
-gh api /notifications --paginate --jq '.[] | {id: .id, reason: .reason, subject_type: .subject.type, title: .subject.title, repo: .repository.full_name, subject_url: .subject.url}' 2>/dev/null
+gh api /notifications --paginate --jq '.[] | {id: .id, reason: .reason, subject_type: .subject.type, title: .subject.title, repo: .repository.full_name, subject_url: .subject.url}'
 ```
+
+If the command fails, is blocked by permissions, or returns a non-zero exit code, report the error clearly and stop. Only report "No notifications" when the command succeeds with empty output.
 
 If 0 notifications, output "No notifications" and finish.
 
