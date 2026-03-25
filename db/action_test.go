@@ -745,3 +745,117 @@ func TestInsertAction_Title(t *testing.T) {
 		t.Errorf("title = %q, want %q", a.Title, "Review PR #123")
 	}
 }
+
+func TestUpdateAction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID1, _ := d.InsertTask(1, "task 1", "{}", "")
+	taskID2, _ := d.InsertTask(1, "task 2", "{}", "")
+
+	t.Run("update title", func(t *testing.T) {
+		id, _ := d.InsertAction("original", taskID1, `{"k":"v"}`, db.ActionStatusPending)
+		title := "updated title"
+		if err := d.UpdateAction(id, &title, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		a, _ := d.GetAction(id)
+		if a.Title != "updated title" {
+			t.Errorf("title = %q, want %q", a.Title, "updated title")
+		}
+	})
+
+	t.Run("update task_id", func(t *testing.T) {
+		id, _ := d.InsertAction("test", taskID1, "{}", db.ActionStatusPending)
+		if err := d.UpdateAction(id, nil, &taskID2, nil); err != nil {
+			t.Fatal(err)
+		}
+		a, _ := d.GetAction(id)
+		if a.TaskID != taskID2 {
+			t.Errorf("task_id = %d, want %d", a.TaskID, taskID2)
+		}
+	})
+
+	t.Run("merge metadata", func(t *testing.T) {
+		id, _ := d.InsertAction("test", taskID1, `{"existing":"value"}`, db.ActionStatusPending)
+		meta := `{"new":"data"}`
+		if err := d.UpdateAction(id, nil, nil, &meta); err != nil {
+			t.Fatal(err)
+		}
+		a, _ := d.GetAction(id)
+		if !strings.Contains(a.Metadata, `"existing":"value"`) || !strings.Contains(a.Metadata, `"new":"data"`) {
+			t.Errorf("metadata = %s, want merged result", a.Metadata)
+		}
+	})
+
+	t.Run("update failed action", func(t *testing.T) {
+		id, _ := d.InsertAction("test", taskID1, "{}", db.ActionStatusPending)
+		d.MarkFailed(id, "err")
+		title := "fixed"
+		if err := d.UpdateAction(id, &title, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		a, _ := d.GetAction(id)
+		if a.Title != "fixed" {
+			t.Errorf("title = %q, want %q", a.Title, "fixed")
+		}
+	})
+
+	t.Run("multiple fields", func(t *testing.T) {
+		id, _ := d.InsertAction("test", taskID1, `{"a":"1"}`, db.ActionStatusPending)
+		title := "new"
+		meta := `{"b":"2"}`
+		if err := d.UpdateAction(id, &title, &taskID2, &meta); err != nil {
+			t.Fatal(err)
+		}
+		a, _ := d.GetAction(id)
+		if a.Title != "new" {
+			t.Errorf("title = %q, want %q", a.Title, "new")
+		}
+		if a.TaskID != taskID2 {
+			t.Errorf("task_id = %d, want %d", a.TaskID, taskID2)
+		}
+	})
+}
+
+func TestUpdateAction_StatusRestriction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+	tests := []struct {
+		name   string
+		setup  func(int64)
+		status string
+	}{
+		{"running", func(id int64) { d.ClaimPending(context.Background(), id) }, "running"},
+		{"done", func(id int64) { d.MarkDone(id, "ok") }, "done"},
+		{"cancelled", func(id int64) { d.MarkCancelled(id, "no") }, "cancelled"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending)
+			tt.setup(id)
+			title := "nope"
+			err := d.UpdateAction(id, &title, nil, nil)
+			if err == nil {
+				t.Fatalf("expected error for %s action", tt.status)
+			}
+			if !strings.Contains(err.Error(), "only pending or failed") {
+				t.Errorf("error = %q, want mention of status restriction", err.Error())
+			}
+		})
+	}
+}
+
+func TestUpdateAction_NotFound(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	title := "nope"
+	err := d.UpdateAction(999, &title, nil, nil)
+	if err == nil {
+		t.Fatal("expected error for non-existent action")
+	}
+}
