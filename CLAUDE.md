@@ -19,3 +19,7 @@ Run `tq --help` for data model, commands, and usage examples.
 
 - Lint rules: `.golangci.yml`
 - Architecture layers enforced by depguard: db (foundation) → dispatch/tui (service) → cmd (orchestrator) → main
+
+## Quality Gates
+
+- MUST: Run `/quality-review` before marking work complete
