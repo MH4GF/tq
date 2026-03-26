@@ -1,7 +1,7 @@
 ---
 description: Self-review a PR before requesting review
 argument-hint: "<PR_URL>"
-allowed-tools: Bash(gh pr checks *), Bash(gh pr view *), Bash(gh pr diff *), Bash(*/scripts/gh-unresolved-threads *), Read, Edit, Write, Grep, Glob, Skill(gh-notifications:respond-review)
+allowed-tools: Bash(gh pr checks *), Bash(gh pr view *), Bash(gh pr diff *), Bash(**/scripts/gh-unresolved-threads *), Read, Edit, Write, Grep, Glob, Skill(gh-notifications:respond-review)
 ---
 
 # Self-Review

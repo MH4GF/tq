@@ -1,6 +1,6 @@
 ---
 description: Watch GitHub notifications, classify them, and create tq actions
-allowed-tools: Bash(*/scripts/gh-fetch-notifications), Bash(*/scripts/gh-mark-notification-read *), Bash(gh pr view *), Bash(gh issue view *), Bash(tq *), Skill(tq:done)
+allowed-tools: Bash(**/scripts/gh-fetch-notifications), Bash(**/scripts/gh-mark-notification-read *), Bash(gh pr view *), Bash(gh issue view *), Bash(tq *), Skill(tq:done)
 ---
 
 GitHub notifications watcher. Fetch, classify, and create tq actions for each notification.
