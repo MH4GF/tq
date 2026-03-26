@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.21.7](https://github.com/MH4GF/tq/compare/v0.21.6...v0.21.7) - 2026-03-26
+- Extract gh api calls into standalone scripts for gh-notifications plugin by @MH4GF in https://github.com/MH4GF/tq/pull/65
+
 ## [v0.21.6](https://github.com/MH4GF/tq/compare/v0.21.5...v0.21.6) - 2026-03-25
 - Move tq dispatch to tq action dispatch subcommand by @MH4GF in https://github.com/MH4GF/tq/pull/58
 - Place --worktree flag after prompt in interactive dispatch by @MH4GF in https://github.com/MH4GF/tq/pull/64
