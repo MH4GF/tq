@@ -78,7 +78,7 @@ var actionGetCmd = &cobra.Command{
 func init() {
 	actionUpdateCmd.Flags().String("title", "", "Action title")
 	actionUpdateCmd.Flags().Int64("task", 0, "Task ID")
-	actionUpdateCmd.Flags().String("meta", "", `JSON metadata to merge (e.g. {"key":"value"})`)
+	actionUpdateCmd.Flags().String("meta", "", `JSON metadata for dispatch control (keys: mode, permission_mode, worktree)`)
 
 	actionCmd.AddCommand(actionGetCmd)
 	actionCmd.AddCommand(actionUpdateCmd)

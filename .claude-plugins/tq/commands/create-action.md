@@ -1,5 +1,5 @@
 ---
-description: Create a tq action (auto-infer prompt or let user choose)
+description: Create a tq action (auto-infer instruction or let user specify)
 argument-hint: "<instruction>"
 allowed-tools: Bash(tq *)
 ---

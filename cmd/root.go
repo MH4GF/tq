@@ -25,7 +25,7 @@ var rootCmd = &cobra.Command{
 Data model: project → task → action.
   - project: groups tasks, sets working directory
   - task: unit of work (status: open, review, done, blocked, archived)
-  - action: dispatchable item linked to a prompt template (status: pending, running, done, failed, cancelled)
+  - action: dispatchable unit of work with an instruction (status: pending, running, done, failed, cancelled)
 
 Typical flow: create a task, then create actions under it.
 Pending actions are auto-dispatched by the queue worker (tq ui), or manually via tq action dispatch.

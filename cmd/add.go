@@ -30,10 +30,15 @@ var addCmd = &cobra.Command{
 	Long: `Create a new action linked to a task.
 
 Instruction is provided as a positional argument.
---meta passes JSON metadata. The instruction is automatically merged into metadata.`,
-	Example: `  tq action create "/github-pr review this" --task 1 --title "Review PR"
+--meta passes JSON metadata. The instruction is automatically merged into metadata.
 
-  tq action create "Add JWT auth middleware" --task 2 --title "Add auth middleware"`,
+Metadata keys for dispatch control:
+  mode             Execution mode: "interactive" (default), "noninteractive", "remote"
+  permission_mode  Claude permission mode (e.g. "plan", "auto")
+  worktree         Run in git worktree: true/false`,
+	Example: `  tq action create "/github-pr review this" --task 1 --title "Review PR"
+  tq action create "Add JWT auth middleware" --task 2 --title "Add auth middleware"
+  tq action create "/review" --task 3 --title "Plan review" --meta '{"permission_mode":"plan","worktree":true}'`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		instruction := args[0]
@@ -132,7 +137,7 @@ func init() {
 	if err := addCmd.MarkFlagRequired("task"); err != nil {
 		panic(err)
 	}
-	addCmd.Flags().StringVar(&addMeta, "meta", "{}", `JSON metadata (e.g. {"key":"value"})`)
+	addCmd.Flags().StringVar(&addMeta, "meta", "{}", `JSON metadata for dispatch control (keys: mode, permission_mode, worktree)`)
 	addCmd.Flags().StringVar(&addStatus, "status", "", "Initial status (default: pending)")
 	actionCmd.AddCommand(addCmd)
 }
