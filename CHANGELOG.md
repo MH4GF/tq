@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.21.8](https://github.com/MH4GF/tq/compare/v0.21.7...v0.21.8) - 2026-03-26
+- Add /quality-review command as quality gate by @MH4GF in https://github.com/MH4GF/tq/pull/63
+- Add meta key descriptions and fix stale prompt references by @MH4GF in https://github.com/MH4GF/tq/pull/62
+- Add draft status check to self-review Phase 4 by @MH4GF in https://github.com/MH4GF/tq/pull/49
+
 ## [v0.21.7](https://github.com/MH4GF/tq/compare/v0.21.6...v0.21.7) - 2026-03-26
 - Extract gh api calls into standalone scripts for gh-notifications plugin by @MH4GF in https://github.com/MH4GF/tq/pull/65
 
