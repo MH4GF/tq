@@ -126,6 +126,16 @@ After completing Phases 1–3, decide whether the PR can be marked ready for rev
 
 **IMPORTANT: If any concern remains, do NOT propose marking ready.** Report the concern and wait for user instructions.
 
+### 0. Draft status check
+
+```bash
+gh pr view $ARGUMENTS --json isDraft
+```
+
+If `isDraft: false` → report "This PR is already marked as ready" and **end Phase 4**.
+
+If `isDraft: true` → proceed to the steps below.
+
 ### 1. Prerequisite check
 
 Determine prerequisites for marking this PR ready based on task info, diff, and PR description. Confirm with the user.
