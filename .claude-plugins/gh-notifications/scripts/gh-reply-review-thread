@@ -1,0 +1,18 @@
+#!/bin/bash
+# Reply to a GitHub PR review thread
+# Usage: gh-reply-review-thread <thread_id> <body>
+set -euo pipefail
+
+THREAD_ID="${1:?Usage: gh-reply-review-thread <thread_id> <body>}"
+BODY="${2:?Usage: gh-reply-review-thread <thread_id> <body>}"
+
+gh api graphql \
+  -f threadId="$THREAD_ID" \
+  -f body="$BODY" \
+  -f query='
+    mutation($threadId: ID!, $body: String!) {
+      addPullRequestReviewThreadReply(input: {
+        pullRequestReviewThreadId: $threadId
+        body: $body
+      }) { comment { id } }
+    }'

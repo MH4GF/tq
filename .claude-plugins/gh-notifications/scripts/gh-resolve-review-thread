@@ -1,0 +1,15 @@
+#!/bin/bash
+# Resolve a GitHub PR review thread
+# Usage: gh-resolve-review-thread <thread_id>
+set -euo pipefail
+
+THREAD_ID="${1:?Usage: gh-resolve-review-thread <thread_id>}"
+
+gh api graphql \
+  -f threadId="$THREAD_ID" \
+  -f query='
+    mutation($threadId: ID!) {
+      resolveReviewThread(input: {threadId: $threadId}) {
+        thread { isResolved }
+      }
+    }'

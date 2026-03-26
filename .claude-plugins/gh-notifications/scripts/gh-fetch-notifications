@@ -1,0 +1,7 @@
+#!/bin/bash
+# Fetch GitHub notifications as JSON
+# Usage: gh-fetch-notifications
+set -euo pipefail
+
+gh api /notifications --paginate \
+  --jq '.[] | {id: .id, reason: .reason, subject_type: .subject.type, title: .subject.title, repo: .repository.full_name, subject_url: .subject.url}'
