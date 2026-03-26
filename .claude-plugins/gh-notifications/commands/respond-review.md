@@ -1,7 +1,7 @@
 ---
 description: Respond to review comments on a PR
 argument-hint: "<PR_URL>"
-allowed-tools: Bash(*/scripts/gh-unresolved-threads *), Read, Edit, Write, Grep, Glob
+allowed-tools: Bash(*/scripts/gh-unresolved-threads *), Bash(*/scripts/gh-reply-review-thread *), Bash(*/scripts/gh-resolve-review-thread *), Bash(gh pr edit *), Read, Edit, Write, Grep, Glob
 ---
 
 # Respond to Review Comments
@@ -92,24 +92,13 @@ gh pr edit $ARGUMENTS --add-reviewer <REVIEWER_LOGIN>
 Use the `id` (THREAD_ID) from `gh-unresolved-threads` output to reply:
 
 ```bash
-gh api graphql -f query='
-  mutation {
-    addPullRequestReviewThreadReply(input: {
-      pullRequestReviewThreadId: "<THREAD_ID>"
-      body: "Reply content"
-    }) { comment { id } }
-  }'
+${CLAUDE_PLUGIN_ROOT}/scripts/gh-reply-review-thread "<THREAD_ID>" "Reply content"
 ```
 
 ### Resolve a thread
 
 ```bash
-gh api graphql -f query='
-  mutation {
-    resolveReviewThread(input: {threadId: "<THREAD_ID>"}) {
-      thread { isResolved }
-    }
-  }'
+${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-thread "<THREAD_ID>"
 ```
 
 When both replying and resolving, execute reply first, then resolve.

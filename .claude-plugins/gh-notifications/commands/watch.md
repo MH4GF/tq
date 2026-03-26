@@ -1,6 +1,6 @@
 ---
 description: Watch GitHub notifications, classify them, and create tq actions
-allowed-tools: Bash(gh *), Bash(tq *), Skill(tq:done)
+allowed-tools: Bash(*/scripts/gh-fetch-notifications), Bash(*/scripts/gh-mark-notification-read *), Bash(gh pr view *), Bash(gh issue view *), Bash(tq *), Skill(tq:done)
 ---
 
 GitHub notifications watcher. Fetch, classify, and create tq actions for each notification.
@@ -10,7 +10,7 @@ GitHub notifications watcher. Fetch, classify, and create tq actions for each no
 ### 1. Fetch notifications
 
 ```bash
-gh api /notifications --paginate --jq '.[] | {id: .id, reason: .reason, subject_type: .subject.type, title: .subject.title, repo: .repository.full_name, subject_url: .subject.url}'
+${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-notifications
 ```
 
 If the command fails, is blocked by permissions, or returns a non-zero exit code, report the error clearly and stop. Only report "No notifications" when the command succeeds with empty output.
@@ -85,7 +85,7 @@ tq action create <instruction> --task <task_id> --title "<title>"
 ### 3. Mark notifications as read
 
 ```bash
-gh api -X PATCH /notifications/threads/<thread_id>
+${CLAUDE_PLUGIN_ROOT}/scripts/gh-mark-notification-read <thread_id>
 ```
 
 ### 4. Output summary
