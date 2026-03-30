@@ -78,15 +78,47 @@ func (db *DB) InsertProject(name, workDir, metadata string) (int64, error) {
 	return id, nil
 }
 
-func (db *DB) DeleteProject(id int64) error {
+func (db *DB) DeleteProject(id int64, cascade bool) error {
 	var name string
 	if err := db.QueryRow("SELECT name FROM projects WHERE id = ?", id).Scan(&name); err != nil {
 		return fmt.Errorf("get project name: %w", err)
 	}
 
-	if _, err := db.Exec("DELETE FROM projects WHERE id = ?", id); err != nil {
-		return err
+	if cascade {
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("begin transaction: %w", err)
+		}
+		defer func() { _ = tx.Rollback() }()
+
+		if _, err := tx.Exec("DELETE FROM actions WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)", id); err != nil {
+			return fmt.Errorf("delete actions: %w", err)
+		}
+		if _, err := tx.Exec("DELETE FROM schedules WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)", id); err != nil {
+			return fmt.Errorf("delete schedules: %w", err)
+		}
+		if _, err := tx.Exec("DELETE FROM tasks WHERE project_id = ?", id); err != nil {
+			return fmt.Errorf("delete tasks: %w", err)
+		}
+		if _, err := tx.Exec("DELETE FROM projects WHERE id = ?", id); err != nil {
+			return fmt.Errorf("delete project: %w", err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit: %w", err)
+		}
+	} else {
+		var count int
+		if err := db.QueryRow("SELECT COUNT(*) FROM tasks WHERE project_id = ?", id).Scan(&count); err != nil {
+			return fmt.Errorf("count tasks: %w", err)
+		}
+		if count > 0 {
+			return fmt.Errorf("project #%d has %d task(s); cannot delete without cascade", id, count)
+		}
+		if _, err := db.Exec("DELETE FROM projects WHERE id = ?", id); err != nil {
+			return err
+		}
 	}
+
 	db.emitEvent("project", id, "project.deleted", map[string]any{
 		"name": name,
 	})
