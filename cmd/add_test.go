@@ -131,6 +131,39 @@ func TestAdd_MissingTask(t *testing.T) {
 	}
 }
 
+func TestAdd_UnfocusedProject(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	tqDir := t.TempDir()
+	cmd.SetConfigDir(tqDir)
+
+	if err := d.SetDispatchEnabled(1, false); err != nil {
+		t.Fatal(err)
+	}
+	d.InsertTask(1, "test task", "{}", "")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"action", "create", "do something", "--task", "1", "--title", "test"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !contains(out, "will not be auto-dispatched") {
+		t.Errorf("output = %q, want to contain 'will not be auto-dispatched'", out)
+	}
+	if contains(out, "will be dispatched automatically") {
+		t.Errorf("output = %q, should not contain 'will be dispatched automatically'", out)
+	}
+}
+
 func TestAdd_InvalidMeta(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

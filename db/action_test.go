@@ -876,6 +876,48 @@ func TestUpdateAction_StatusRestriction(t *testing.T) {
 	}
 }
 
+func TestIsActionDispatchEnabled(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
+	actionID, _ := d.InsertAction("test", taskID, "{}", "pending")
+
+	tests := []struct {
+		name     string
+		setup    func()
+		expected bool
+	}{
+		{
+			name:     "focused project returns true",
+			setup:    func() {},
+			expected: true,
+		},
+		{
+			name: "unfocused project returns false",
+			setup: func() {
+				if err := d.SetDispatchEnabled(1, false); err != nil {
+					t.Fatal(err)
+				}
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setup()
+			got, err := d.IsActionDispatchEnabled(actionID)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.expected {
+				t.Errorf("IsActionDispatchEnabled(%d) = %v, want %v", actionID, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestUpdateAction_NotFound(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
