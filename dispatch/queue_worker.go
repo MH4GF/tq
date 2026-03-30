@@ -109,51 +109,73 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 }
 
 func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
-	if cfg.TmuxChecker == nil {
-		return
-	}
-
-	actions, err := cfg.DB.ListRunningInteractive()
-	if err != nil {
-		slog.Error("list running interactive for stale check", "error", err)
-		return
-	}
-	if len(actions) == 0 {
-		return
-	}
-
-	windows, err := cfg.TmuxChecker.ListWindows(ctx, cfg.TmuxSession)
-	if err != nil {
-		slog.Warn("tmux list-windows failed, skipping stale check", "error", err)
-		return
-	}
-
-	windowSet := make(map[string]struct{}, len(windows))
-	for _, w := range windows {
-		windowSet[w] = struct{}{}
-	}
-
 	now := time.Now()
-	for _, a := range actions {
-		if a.StartedAt.Valid {
-			started, err := time.Parse(db.TimeLayout, a.StartedAt.String)
-			if err == nil && now.Sub(started) < cfg.StaleGracePeriod {
-				continue
+
+	// Interactive stale check (tmux window-based)
+	if cfg.TmuxChecker != nil {
+		actions, err := cfg.DB.ListRunningInteractive()
+		if err != nil {
+			slog.Error("list running interactive for stale check", "error", err)
+		} else if len(actions) > 0 {
+			windows, err := cfg.TmuxChecker.ListWindows(ctx, cfg.TmuxSession)
+			if err != nil {
+				slog.Warn("tmux list-windows failed, skipping stale check", "error", err)
+			} else {
+				windowSet := make(map[string]struct{}, len(windows))
+				for _, w := range windows {
+					windowSet[w] = struct{}{}
+				}
+
+				for _, a := range actions {
+					if a.StartedAt.Valid {
+						started, err := time.Parse(db.TimeLayout, a.StartedAt.String)
+						if err == nil && now.Sub(started) < cfg.StaleGracePeriod {
+							continue
+						}
+					}
+
+					windowName := WindowName(a.ID)
+					if _, exists := windowSet[windowName]; exists {
+						continue
+					}
+
+					result := fmt.Sprintf("stale: tmux window %q no longer exists", windowName)
+					if err := cfg.DB.MarkFailed(a.ID, result); err != nil {
+						slog.Error("mark stale action failed", "action_id", a.ID, "error", err)
+						continue
+					}
+					slog.Warn("reaped stale action", "action_id", a.ID, "window", windowName)
+
+					CreateInvestigateFailureAction(cfg.DB, &a, result)
+				}
 			}
 		}
+	}
 
-		windowName := WindowName(a.ID)
-		if _, exists := windowSet[windowName]; exists {
+	// Noninteractive stale check (time-based)
+	niActions, err := cfg.DB.ListRunningNonInteractive()
+	if err != nil {
+		slog.Error("list running noninteractive for stale check", "error", err)
+		return
+	}
+	staleThreshold := time.Duration(defaultTimeout*nonInteractiveStaleMultiplier) * time.Second
+	for _, a := range niActions {
+		if !a.StartedAt.Valid {
 			continue
 		}
-
-		result := fmt.Sprintf("stale: tmux window %q no longer exists", windowName)
+		started, err := time.Parse(db.TimeLayout, a.StartedAt.String)
+		if err != nil {
+			continue
+		}
+		if now.Sub(started) < staleThreshold {
+			continue
+		}
+		result := fmt.Sprintf("stale: noninteractive action exceeded timeout (%v)", staleThreshold)
 		if err := cfg.DB.MarkFailed(a.ID, result); err != nil {
-			slog.Error("mark stale action failed", "action_id", a.ID, "error", err)
+			slog.Error("mark stale noninteractive action failed", "action_id", a.ID, "error", err)
 			continue
 		}
-		slog.Warn("reaped stale action", "action_id", a.ID, "window", windowName)
-
+		slog.Warn("reaped stale noninteractive action", "action_id", a.ID)
 		CreateInvestigateFailureAction(cfg.DB, &a, result)
 	}
 }
