@@ -886,3 +886,62 @@ func TestUpdateAction_NotFound(t *testing.T) {
 		t.Fatal("expected error for non-existent action")
 	}
 }
+
+func TestMarkTerminalSkipsTerminalState(t *testing.T) {
+	tests := []struct {
+		name       string
+		initial    string
+		markAs     string
+		wantStatus string
+	}{
+		{"done_to_failed", db.ActionStatusDone, db.ActionStatusFailed, db.ActionStatusDone},
+		{"failed_to_done", db.ActionStatusFailed, db.ActionStatusDone, db.ActionStatusFailed},
+		{"cancelled_to_failed", db.ActionStatusCancelled, db.ActionStatusFailed, db.ActionStatusCancelled},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+
+			taskID, _ := d.InsertTask(1, "test", "{}", "")
+			id, err := d.InsertAction("act", taskID, "{}", db.ActionStatusRunning)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			switch tt.initial {
+			case db.ActionStatusDone:
+				err = d.MarkDone(id, "original result")
+			case db.ActionStatusFailed:
+				err = d.MarkFailed(id, "original result")
+			case db.ActionStatusCancelled:
+				err = d.MarkCancelled(id, "original result")
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			switch tt.markAs {
+			case db.ActionStatusDone:
+				err = d.MarkDone(id, "overwrite attempt")
+			case db.ActionStatusFailed:
+				err = d.MarkFailed(id, "overwrite attempt")
+			}
+			if err != nil {
+				t.Fatalf("markTerminal returned error: %v", err)
+			}
+
+			a, err := d.GetAction(id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if a.Status != tt.wantStatus {
+				t.Errorf("status = %s, want %s", a.Status, tt.wantStatus)
+			}
+			if a.Result.String != "original result" {
+				t.Errorf("result = %s, want 'original result'", a.Result.String)
+			}
+		})
+	}
+}
