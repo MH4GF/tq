@@ -320,6 +320,20 @@ func (db *DB) CountPendingByDispatch() (PendingCounts, error) {
 	return pc, err
 }
 
+func (db *DB) IsActionDispatchEnabled(actionID int64) (bool, error) {
+	var enabled bool
+	err := db.QueryRow(`
+		SELECT p.dispatch_enabled
+		FROM actions a
+		INNER JOIN tasks t ON a.task_id = t.id
+		INNER JOIN projects p ON t.project_id = p.id
+		WHERE a.id = ?`, actionID).Scan(&enabled)
+	if err != nil {
+		return false, fmt.Errorf("check dispatch enabled for action %d: %w", actionID, err)
+	}
+	return enabled, nil
+}
+
 func (db *DB) ListRunningInteractive() ([]Action, error) {
 	rows, err := db.Query(
 		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND session_id IS NOT NULL ORDER BY id",

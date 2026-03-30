@@ -103,6 +103,16 @@ func printQueueStatus(w io.Writer, actionID int64) {
 	}
 	pendingLabel := pc.Label()
 
+	dispatchEnabled, err := database.IsActionDispatchEnabled(actionID)
+	if err != nil {
+		slog.Error("check action dispatch enabled", "error", err)
+	}
+	if err == nil && !dispatchEnabled {
+		_, _ = fmt.Fprintf(w, "  queue: %s\n", pendingLabel)
+		_, _ = fmt.Fprintf(w, "  [agent hint] project is unfocused — action will not be auto-dispatched. run 'tq action dispatch %d' to execute manually?\n", actionID)
+		return
+	}
+
 	maxInteractive := dispatch.DefaultMaxInteractive
 	workerRunning := false
 	if mi, err := database.GetWorkerMaxInteractive(dispatch.DefaultStaleThreshold); err == nil {
