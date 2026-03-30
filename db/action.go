@@ -221,6 +221,10 @@ func (db *DB) markTerminal(id int64, status, result string) error {
 		return fmt.Errorf("get current status: %w", err)
 	}
 
+	if from == ActionStatusDone || from == ActionStatusFailed || from == ActionStatusCancelled {
+		return nil
+	}
+
 	_, err := db.Exec(
 		"UPDATE actions SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ?",
 		status, result, id,
