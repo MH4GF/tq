@@ -30,7 +30,7 @@ Constraints:
 
 ## Execute
 
-IMPORTANT: Run `tq action done --help` for the full result format guidance.
+IMPORTANT: Run !`tq action done --help` for the full result format guidance.
 
 `tq action done <action_id> '<result>'`
 

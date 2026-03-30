@@ -6,7 +6,7 @@ allowed-tools: Bash(tq *)
 
 # tq action cancel
 
-IMPORTANT: Run `tq action cancel --help` first to understand the expected reason format.
+IMPORTANT: Run !`tq action cancel --help` first to understand the expected reason format.
 
 ## Find action_id
 
