@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.21.9](https://github.com/MH4GF/tq/compare/v0.21.8...v0.21.9) - 2026-03-30
+- Prevent markTerminal from overwriting already-terminal actions by @MH4GF in https://github.com/MH4GF/tq/pull/68
+- Show unfocused hint for action create on unfocused projects by @MH4GF in https://github.com/MH4GF/tq/pull/70
+- Add --cascade flag to project delete by @MH4GF in https://github.com/MH4GF/tq/pull/72
+
 ## [v0.21.8](https://github.com/MH4GF/tq/compare/v0.21.7...v0.21.8) - 2026-03-26
 - Add /quality-review command as quality gate by @MH4GF in https://github.com/MH4GF/tq/pull/63
 - Add meta key descriptions and fix stale prompt references by @MH4GF in https://github.com/MH4GF/tq/pull/62
