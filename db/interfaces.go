@@ -28,7 +28,7 @@ type CommandWriter interface {
 	EnsureTask(projectID int64, title string) (int64, error)
 	// Project commands
 	InsertProject(name, workDir, metadata string) (int64, error)
-	DeleteProject(id int64) error
+	DeleteProject(id int64, cascade bool) error
 	SetDispatchEnabled(projectID int64, enabled bool) error
 	SetWorkDir(projectID int64, workDir string) error
 	SetAllDispatchEnabled(enabled bool) error

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -19,8 +20,9 @@ var projectCmd = &cobra.Command{
 }
 
 var (
-	projectCreateMeta string
-	projectListLimit  int
+	projectCreateMeta    string
+	projectListLimit     int
+	projectDeleteCascade bool
 )
 
 var projectCreateCmd = &cobra.Command{
@@ -78,7 +80,10 @@ var projectDeleteCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := database.DeleteProject(id); err != nil {
+		if err := database.DeleteProject(id, projectDeleteCascade); err != nil {
+			if !projectDeleteCascade && strings.Contains(err.Error(), "cannot delete without cascade") {
+				return fmt.Errorf("%w; use --cascade to force", err)
+			}
 			return fmt.Errorf("delete project: %w", err)
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "project #%d deleted\n", id)
@@ -143,6 +148,8 @@ func init() {
 	projectUpdateCmd.Flags().StringVar(&projectUpdateWorkDir, "work-dir", "", "Set the working directory")
 	projectListCmd.Flags().IntVar(&projectListLimit, "limit", 0, "Limit number of results (0 = no limit)")
 	projectListCmd.Flags().StringVar(&projectListJQ, "jq", "", jqFlagUsage(projectListFields))
+
+	projectDeleteCmd.Flags().BoolVar(&projectDeleteCascade, "cascade", false, "Delete all tasks, actions, and schedules belonging to this project")
 
 	projectCmd.AddCommand(projectCreateCmd)
 	projectCmd.AddCommand(projectListCmd)

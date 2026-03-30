@@ -3,6 +3,7 @@ package db_test
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/MH4GF/tq/testutil"
@@ -91,7 +92,7 @@ func TestDeleteProject(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := d.DeleteProject(id); err != nil {
+	if err := d.DeleteProject(id, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -104,9 +105,81 @@ func TestDeleteProject(t *testing.T) {
 func TestDeleteProject_NotFound(t *testing.T) {
 	d := testutil.NewTestDB(t)
 
-	err := d.DeleteProject(999)
+	err := d.DeleteProject(999, false)
 	if err == nil {
 		t.Error("expected error for non-existent project")
+	}
+}
+
+func TestDeleteProject_WithTasks_NoCascade(t *testing.T) {
+	d := testutil.NewTestDB(t)
+
+	pid, err := d.InsertProject("haswork", "/tmp/hw", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.InsertTask(pid, "some task", "{}", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	err = d.DeleteProject(pid, false)
+	if err == nil {
+		t.Fatal("expected error when tasks exist and cascade=false")
+	}
+	if !strings.Contains(err.Error(), "cannot delete without cascade") {
+		t.Errorf("error should mention cascade requirement, got: %s", err)
+	}
+
+	// project should still exist
+	if _, err := d.GetProjectByID(pid); err != nil {
+		t.Errorf("project should still exist: %v", err)
+	}
+}
+
+func TestDeleteProject_Cascade(t *testing.T) {
+	d := testutil.NewTestDB(t)
+
+	pid, err := d.InsertProject("cascademe", "/tmp/cm", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tid, err := d.InsertTask(pid, "task1", "{}", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.InsertAction("act1", tid, "{}", "pending"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.InsertSchedule(tid, "do stuff", "sched1", "0 * * * *", "{}"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.DeleteProject(pid, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := d.GetProjectByID(pid); err == nil {
+		t.Error("project should be deleted")
+	}
+	if _, err := d.GetTask(tid); err == nil {
+		t.Error("task should be deleted")
+	}
+}
+
+func TestDeleteProject_Cascade_NoTasks(t *testing.T) {
+	d := testutil.NewTestDB(t)
+
+	pid, err := d.InsertProject("empty", "/tmp/e", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.DeleteProject(pid, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := d.GetProjectByID(pid); err == nil {
+		t.Error("project should be deleted")
 	}
 }
 
