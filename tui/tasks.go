@@ -30,6 +30,17 @@ const (
 	modeViewDetail
 )
 
+type lineType int
+
+const (
+	lineProject lineType = iota
+	lineTask
+	lineAction
+	lineCardTop
+	lineCardBottom
+	lineCardSep
+)
+
 type TasksModel struct {
 	trees      []projectTree
 	cursor     int
@@ -55,6 +66,7 @@ type treeLine struct {
 	projectID  int64
 	action     *db.Action
 	rightLabel string
+	lineType   lineType
 }
 
 type actionAttachedMsg struct {
@@ -64,6 +76,15 @@ type actionAttachedMsg struct {
 
 type tasksLoadedMsg struct {
 	trees []projectTree
+}
+
+// actionStats holds aggregate counts for the status strip and gauge.
+type actionStats struct {
+	running      int
+	pending      int
+	done         int
+	failed       int
+	pendingLabel string
 }
 
 func NewTasksModel(database db.Store, dateFilter string) TasksModel {
@@ -146,6 +167,8 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 		if m.cursor >= len(m.lines) {
 			m.cursor = max(0, len(m.lines)-1)
 		}
+		// Ensure cursor is on a selectable line
+		m.skipDecorativeLines(1)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -165,10 +188,12 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 	case key.Matches(msg, key.NewBinding(key.WithKeys("j", "down"))):
 		if m.cursor < len(m.lines)-1 {
 			m.cursor++
+			m.skipDecorativeLines(1)
 		}
 	case key.Matches(msg, key.NewBinding(key.WithKeys("k", "up"))):
 		if m.cursor > 0 {
 			m.cursor--
+			m.skipDecorativeLines(-1)
 		}
 	case key.Matches(msg, key.NewBinding(key.WithKeys("enter", " "))):
 		if m.cursor < len(m.lines) {
@@ -207,6 +232,18 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 	return m, nil
 }
 
+// skipDecorativeLines moves cursor past card border lines.
+func (m *TasksModel) skipDecorativeLines(dir int) {
+	for m.cursor >= 0 && m.cursor < len(m.lines) {
+		lt := m.lines[m.cursor].lineType
+		if lt != lineCardTop && lt != lineCardBottom && lt != lineCardSep {
+			break
+		}
+		m.cursor += dir
+	}
+	m.cursor = max(0, min(m.cursor, len(m.lines)-1))
+}
+
 func (m TasksModel) updateViewDetail(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 	switch {
 	case key.Matches(msg, key.NewBinding(key.WithKeys("q", "esc"))):
@@ -223,43 +260,107 @@ func (m TasksModel) updateViewDetail(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 	return m, nil
 }
 
+func cardBorder(left, right string, width int) string {
+	return styleBorderChar.Render(left) + styleBorderChar.Render(strings.Repeat("─", max(0, width-2))) + styleBorderChar.Render(right)
+}
+
 func (m *TasksModel) buildLines() {
 	m.lines = nil
-	for _, pt := range m.trees {
+	for pi, pt := range m.trees {
 		projKey := fmt.Sprintf("p:%d", pt.project.ID)
 		arrow := "▸"
 		if m.expanded[projKey] {
 			arrow = "▾"
 		}
-		projLabel := styleProject.Render(pt.project.Name)
+
+		// Card top border
+		projLabel := styleProjectName.Render(pt.project.Name)
 		if !pt.project.DispatchEnabled {
 			projLabel = styleMuted.Render("⊘ " + pt.project.Name)
 		}
+
+		taskCount := len(pt.tasks)
+		badge := ""
+		if taskCount > 0 {
+			badge = styleBadge.Render(fmt.Sprintf(" %d tasks", taskCount))
+		}
+
 		rightLabel := pt.project.WorkDir
+
+		// Build the project header text
+		headerText := fmt.Sprintf("%s %s%s", styleBorderChar.Render(arrow), projLabel, badge)
+
+		// Top border line
 		m.lines = append(m.lines, treeLine{
-			text:       fmt.Sprintf("%s %s", arrow, projLabel),
+			text:     cardBorder("┌", "┐", m.width),
+			lineType: lineCardTop,
+		})
+
+		// Project header (selectable)
+		m.lines = append(m.lines, treeLine{
+			text:       styleBorderChar.Render("│") + " " + headerText,
 			key:        projKey,
 			expandKey:  projKey,
 			projectID:  pt.project.ID,
 			rightLabel: rightLabel,
+			lineType:   lineProject,
 		})
 
 		if !m.expanded[projKey] {
+			// Bottom border
+			m.lines = append(m.lines, treeLine{
+				text:     cardBorder("└", "┘", m.width),
+				lineType: lineCardBottom,
+			})
+			if pi < len(m.trees)-1 {
+				m.lines = append(m.lines, treeLine{text: "", lineType: lineCardSep})
+			}
 			continue
 		}
 
-		for _, tn := range pt.tasks {
+		for ti, tn := range pt.tasks {
 			taskKey := fmt.Sprintf("t:%d", tn.task.ID)
-			tArrow := "  ▸"
+			tArrow := "▸"
 			if m.expanded[taskKey] {
-				tArrow = "  ▾"
+				tArrow = "▾"
 			}
-			st := StatusStyle(tn.task.Status)
+
+			// Task status styling
+			isDone := tn.task.Status == db.TaskStatusDone || tn.task.Status == db.TaskStatusArchived
+			var taskText string
+			if isDone {
+				taskText = fmt.Sprintf("  %s #%d %s",
+					styleBorderChar.Render(tArrow),
+					tn.task.ID,
+					styleDoneDim.Render(tn.task.Title),
+				)
+			} else {
+				actionCount := ""
+				if len(tn.actions) > 0 {
+					actionCount = styleBadge.Render(fmt.Sprintf(" %d actions", len(tn.actions)))
+				}
+				taskText = fmt.Sprintf("  %s %s %s%s",
+					styleBorderChar.Render(tArrow),
+					styleMuted.Render(fmt.Sprintf("#%d", tn.task.ID)),
+					tn.task.Title,
+					actionCount,
+				)
+			}
+
+			// Separator between tasks
+			if ti > 0 {
+				m.lines = append(m.lines, treeLine{
+					text:     cardBorder("│", "│", m.width),
+					lineType: lineCardSep,
+				})
+			}
+
 			m.lines = append(m.lines, treeLine{
-				text:      fmt.Sprintf("%s #%d %s %s", tArrow, tn.task.ID, st.Render(tn.task.Status), tn.task.Title),
+				text:      styleBorderChar.Render("│") + taskText,
 				key:       taskKey,
 				expandKey: taskKey,
 				taskID:    tn.task.ID,
+				lineType:  lineTask,
 			})
 
 			if !m.expanded[taskKey] {
@@ -268,25 +369,39 @@ func (m *TasksModel) buildLines() {
 
 			for _, a := range tn.actions {
 				icon := StatusIcon(a.Status)
-				ast := StatusStyle(a.Status)
+				var actionText string
+				if a.Status == db.ActionStatusDone || a.Status == db.ActionStatusFailed {
+					ds := StatusDimStyle(a.Status)
+					actionText = fmt.Sprintf("    %s %s", ds.Render(icon), ds.Render(a.Title))
+				} else {
+					actionText = fmt.Sprintf("    %s %s", StatusStyle(a.Status).Render(icon), a.Title)
+				}
+
 				m.lines = append(m.lines, treeLine{
-					text: fmt.Sprintf("      %s %-4d %s %s",
-						ast.Render(icon),
-						a.ID,
-						ast.Render(fmt.Sprintf("%-14s", a.Status)),
-						a.Title,
-					),
-					key:    fmt.Sprintf("a:%d", a.ID),
-					taskID: tn.task.ID,
-					action: &a,
+					text:     styleBorderChar.Render("│") + actionText,
+					key:      fmt.Sprintf("a:%d", a.ID),
+					taskID:   tn.task.ID,
+					action:   &a,
+					lineType: lineAction,
 				})
 			}
+		}
+
+		// Bottom border
+		m.lines = append(m.lines, treeLine{
+			text:     cardBorder("└", "┘", m.width),
+			lineType: lineCardBottom,
+		})
+
+		// Gap between project cards
+		if pi < len(m.trees)-1 {
+			m.lines = append(m.lines, treeLine{text: "", lineType: lineCardSep})
 		}
 	}
 }
 
 func (m TasksModel) visibleRange() visibleRange {
-	return calcVisibleRange(m.cursor, len(m.lines), m.height, 3)
+	return calcVisibleRange(m.cursor, len(m.lines), m.height, 0)
 }
 
 func (m TasksModel) View() string {
@@ -299,34 +414,47 @@ func (m TasksModel) View() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(m.summaryLine() + "\n")
 
 	visible := m.visibleRange()
 	for i := visible.start; i < visible.end; i++ {
 		line := m.lines[i]
-		prefix := "  "
-		if i == m.cursor {
-			prefix = "> "
-		}
-		rendered := prefix + line.text
 
-		if i == m.cursor && line.action != nil && line.action.Result.Valid && line.action.Result.String != "" {
-			label := "result"
-			rst := StatusStyle(line.action.Status)
+		// Decorative lines (borders) — render as-is
+		if line.lineType == lineCardTop || line.lineType == lineCardBottom || line.lineType == lineCardSep {
+			b.WriteString(line.text + "\n")
+			continue
+		}
+
+		rendered := line.text
+
+		// Right-aligned label (workdir for projects)
+		if line.rightLabel != "" {
 			lineWidth := lipgloss.Width(rendered)
-			pad := 2
-			labelLen := len(label) + 2
-			remaining := m.width - lineWidth - pad - labelLen
-			if remaining > 10 {
-				rendered += "  " + rst.Render(label+": "+truncateResult(line.action.Result.String, remaining))
-			}
-		} else if line.rightLabel != "" {
-			lineWidth := lipgloss.Width(rendered)
-			labelWidth := lipgloss.Width(line.rightLabel)
-			pad := m.width - lineWidth - labelWidth - 2
+			labelRendered := styleWorkDir.Render(line.rightLabel)
+			labelWidth := lipgloss.Width(labelRendered)
+			borderRight := lipgloss.Width(styleBorderChar.Render("│"))
+			pad := m.width - lineWidth - labelWidth - borderRight - 1
 			if pad > 0 {
-				rendered += strings.Repeat(" ", pad) + styleMuted.Render(line.rightLabel)
+				rendered += strings.Repeat(" ", pad) + labelRendered + styleBorderChar.Render("│")
 			}
+		}
+
+		// Cursor row: accent bar + highlight
+		if i == m.cursor {
+			// Inline result for action under cursor
+			if line.action != nil && line.action.Result.Valid && line.action.Result.String != "" {
+				label := "result"
+				rst := StatusStyle(line.action.Status)
+				lineWidth := lipgloss.Width(rendered)
+				pad := 2
+				labelLen := len(label) + 2
+				remaining := m.width - lineWidth - pad - labelLen
+				if remaining > 10 {
+					rendered += "  " + rst.Render(label+": "+truncateResult(line.action.Result.String, remaining))
+				}
+			}
+
+			rendered = highlightLine(rendered, m.width)
 		}
 
 		b.WriteString(rendered + "\n")
@@ -349,32 +477,32 @@ func (m TasksModel) attachAction(a *db.Action) tea.Cmd {
 	}
 }
 
-func (m TasksModel) summaryLine() string {
-	var running, done, failed int
+// actionStats returns aggregate action counts across all trees.
+func (m TasksModel) actionStats() actionStats {
+	var stats actionStats
 	var pc db.PendingCounts
 	for _, pt := range m.trees {
 		for _, tn := range pt.tasks {
 			for _, a := range tn.actions {
 				switch a.Status {
 				case db.ActionStatusRunning:
-					running++
+					stats.running++
 				case db.ActionStatusPending:
 					pc.Total++
 					if pt.project.DispatchEnabled {
 						pc.Dispatchable++
 					}
 				case db.ActionStatusDone:
-					done++
+					stats.done++
 				case db.ActionStatusFailed:
-					failed++
+					stats.failed++
 				}
 			}
 		}
 	}
-	return styleRunning.Render("●") + fmt.Sprintf(" %d running  ", running) +
-		stylePending.Render("○") + " " + pc.Label() + "  " +
-		styleDone.Render("✓") + fmt.Sprintf(" %d done  ", done) +
-		styleFailed.Render("✗") + fmt.Sprintf(" %d failed", failed)
+	stats.pending = pc.Total
+	stats.pendingLabel = pc.Label()
+	return stats
 }
 
 func taskStatusOrder(status string) int {

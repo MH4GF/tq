@@ -83,12 +83,23 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// Layout constants
+const (
+	headerLines    = 1 // header strip
+	gaugeLine      = 1 // gauge bar
+	statusLine     = 1 // status strip
+	activityLines  = 3 // activity log rows
+	helpLine       = 1 // help bar
+	separators     = 2 // borders between sections
+	layoutOverhead = headerLines + gaugeLine + statusLine + activityLines + helpLine + separators
+)
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		contentHeight := msg.Height - 14
+		contentHeight := msg.Height - layoutOverhead
 		m.tasks = m.tasks.SetSize(msg.Width, contentHeight)
 		m.schedules = m.schedules.SetSize(msg.Width, contentHeight)
 		return m, nil
@@ -171,13 +182,21 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	b.WriteString(m.renderTabs())
-	b.WriteString("\n\n")
+	// Header strip: tq brand + tabs
+	b.WriteString(m.renderHeader())
+	b.WriteString("\n")
 
 	switch m.activeTab {
 	case tabTasks:
+		// Gauge bar + status strip (tasks tab only)
+		stats := m.tasks.actionStats()
+		b.WriteString(renderGaugeBar(stats.running, stats.pending, stats.done, stats.failed, m.width))
+		b.WriteString("\n")
+		b.WriteString(renderStatusStrip(stats.running, stats.pending, stats.done, stats.failed, stats.pendingLabel, m.width))
+		b.WriteString("\n")
 		b.WriteString(m.tasks.View())
 	case tabSchedules:
+		b.WriteString("\n\n") // space where gauge+status would be
 		b.WriteString(m.schedules.View())
 	}
 
@@ -191,26 +210,32 @@ func (m Model) View() string {
 	return b.String()
 }
 
-func (m Model) renderTabs() string {
+func (m Model) renderHeader() string {
+	brand := styleBrand.Render(" tq")
+
 	tabs := []struct {
 		label string
-		key   string
 		t     tab
 	}{
-		{"Tasks", "1", tabTasks},
-		{"Schedules", "2", tabSchedules},
+		{"Tasks", tabTasks},
+		{"Schedules", tabSchedules},
 	}
 
-	var parts []string
+	var tabParts []string
 	for _, t := range tabs {
-		label := fmt.Sprintf("[%s] %s", t.key, t.label)
 		if m.activeTab == t.t {
-			parts = append(parts, styleTabActive.Render(label))
+			tabParts = append(tabParts, styleTabActive.Render(" "+t.label+" "))
 		} else {
-			parts = append(parts, styleTabInactive.Render(label))
+			tabParts = append(tabParts, styleTabInactive.Render(" "+t.label+" "))
 		}
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, strings.Join(parts, "  "))
+	tabStr := strings.Join(tabParts, " ")
+
+	gap := m.width - lipgloss.Width(brand) - lipgloss.Width(tabStr) - 1
+	gap = max(gap, 1)
+
+	inner := brand + strings.Repeat(" ", gap) + tabStr
+	return styleHeaderBar.Width(m.width).Render(inner)
 }
 
 func (m Model) renderHelp() string {
@@ -221,23 +246,24 @@ func (m Model) renderHelp() string {
 	case tabSchedules:
 		keys = m.schedules.HelpKeys()
 	}
-	return styleHelp.Render(formatHelp(keys))
+	inner := " " + formatHelp(keys)
+	return styleHelpBar.Width(m.width).Render(inner)
 }
 
 func (m Model) renderActivity() string {
 	var b strings.Builder
-	b.WriteString(styleMuted.Render("── Activity ──────────────────────") + "\n")
+	b.WriteString(styleBorderChar.Render(strings.Repeat("─", m.width)) + "\n")
 
 	start := 0
-	if len(m.logs) > 9 {
-		start = len(m.logs) - 9
+	if len(m.logs) > activityLines {
+		start = len(m.logs) - activityLines
 	}
 	shown := m.logs[start:]
 	for _, e := range shown {
 		ts := e.Time.Format("15:04")
-		b.WriteString(styleMuted.Render("  "+ts+" ") + e.Message + "\n")
+		b.WriteString(styleActivityTS.Render(" "+ts+" ") + styleActivityMsg.Render(e.Message) + "\n")
 	}
-	for i := len(shown); i < 9; i++ {
+	for i := len(shown); i < activityLines; i++ {
 		b.WriteString("\n")
 	}
 	return b.String()
