@@ -97,38 +97,41 @@ func (m SchedulesModel) View() string {
 	}
 
 	var b strings.Builder
-	header := fmt.Sprintf("  %-4s %-8s %-20s %-16s %-20s %s", "ID", "Enabled", "Title", "Cron", "Next Run", "Last Run")
-	b.WriteString(styleMuted.Render(header) + "\n")
-	b.WriteString(styleMuted.Render(strings.Repeat("─", min(m.width, 100))) + "\n")
+
+	// Header
+	header := fmt.Sprintf(" %-6s %-20s %-16s %-20s %s", "STATE", "TITLE", "SCHEDULE", "NEXT RUN", "LAST RUN")
+	b.WriteString(styleTableHeader.Render(header) + "\n")
+	b.WriteString(styleBorderChar.Render(strings.Repeat("─", min(m.width, 100))) + "\n")
 
 	visible := m.visibleRange()
 	for i := visible.start; i < visible.end; i++ {
 		s := m.schedules[i]
-		prefix := "  "
-		if i == m.cursor {
-			prefix = "> "
-		}
 
-		enabled := styleDone.Render("yes")
+		state := styleDone.Render("● on ")
 		if !s.Enabled {
-			enabled = styleMuted.Render("no ")
+			state = styleMuted.Render("○ off")
 		}
 
-		nextRun := "-"
+		nextRun := "—"
 		if s.Enabled {
 			nextRun = m.computeNextRun(s)
 		}
 
-		lastRun := "-"
+		lastRun := "—"
 		if s.LastRunAt.Valid {
 			lastRun = db.FormatLocal(s.LastRunAt.String)[:16]
 		}
 
-		line := fmt.Sprintf("%s%-4d %s  %-20s %-16s %-20s %s",
-			prefix, s.ID, enabled, s.Title, s.CronExpr, nextRun, lastRun)
+		title := s.Title
+		cron := styleMuted.Render(s.CronExpr)
+		nextRunStyled := styleFieldValue.Render(nextRun)
+		lastRunStyled := styleMuted.Render(lastRun)
+
+		line := fmt.Sprintf(" %s  %-20s %-16s %-20s %s",
+			state, title, cron, nextRunStyled, lastRunStyled)
 
 		if i == m.cursor {
-			line = styleTitle.Render(line)
+			line = highlightLine(line, m.width)
 		}
 
 		b.WriteString(line + "\n")

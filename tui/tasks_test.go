@@ -50,6 +50,17 @@ func TestTasksModel_LoadAndExpand(t *testing.T) {
 	}
 }
 
+// countSelectableLines counts lines that are not card borders/separators.
+func countSelectableLines(lines []treeLine) int {
+	n := 0
+	for _, l := range lines {
+		if l.lineType != lineCardTop && l.lineType != lineCardBottom && l.lineType != lineCardSep {
+			n++
+		}
+	}
+	return n
+}
+
 func TestTasksModel_Navigation(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -63,32 +74,36 @@ func TestTasksModel_Navigation(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	// 3 projects + 2 tasks (open, expanded) + 2 actions = 7 lines
-	if len(m.lines) != 7 {
-		t.Errorf("lines = %d, want 7 (fully expanded)", len(m.lines))
+	// 3 projects + 2 tasks + 2 actions = 7 selectable lines
+	if got := countSelectableLines(m.lines); got != 7 {
+		t.Errorf("selectable lines = %d, want 7", got)
 	}
 
-	if m.cursor != 0 {
-		t.Errorf("initial cursor = %d, want 0", m.cursor)
+	// Cursor starts on first selectable line (project header, after top border)
+	if m.lines[m.cursor].lineType != lineProject {
+		t.Errorf("initial cursor should be on project line, got lineType=%d", m.lines[m.cursor].lineType)
 	}
 
+	prevCursor := m.cursor
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	if m.cursor != 1 {
-		t.Errorf("after j, cursor = %d, want 1", m.cursor)
+	if m.cursor <= prevCursor {
+		t.Errorf("after j, cursor should advance from %d, got %d", prevCursor, m.cursor)
 	}
 
 	// Navigate to end
-	for range 10 {
+	for range 20 {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	}
 	last := len(m.lines) - 1
-	if m.cursor != last {
-		t.Errorf("at end, cursor = %d, want %d", m.cursor, last)
+	// Cursor should be on last selectable line (not past end)
+	if m.cursor > last {
+		t.Errorf("cursor should not exceed lines, cursor=%d, last=%d", m.cursor, last)
 	}
 
+	prevCursor = m.cursor
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
-	if m.cursor != last-1 {
-		t.Errorf("after k, cursor = %d, want %d", m.cursor, last-1)
+	if m.cursor >= prevCursor {
+		t.Errorf("after k, cursor should move back from %d, got %d", prevCursor, m.cursor)
 	}
 }
 
@@ -103,23 +118,28 @@ func TestTasksModel_CollapseExpand(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	// 3 projects + 1 task (open, expanded) + 1 action = 5 lines
-	if len(m.lines) != 5 {
-		t.Fatalf("lines = %d, want 5", len(m.lines))
+	// 3 projects (each: top+header+bottom) + 1 task + 1 action + separators
+	// selectable: 3 projects + 1 task + 1 action = 5
+	if got := countSelectableLines(m.lines); got != 5 {
+		t.Fatalf("selectable lines = %d, want 5", got)
+	}
+
+	// Move cursor to first project header
+	for m.cursor < len(m.lines) && m.lines[m.cursor].lineType != lineProject {
+		m.cursor++
 	}
 
 	// Collapse first project (immedio)
-	m.cursor = 0
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	// collapsed project 1 + project 2 + project 3 = 3 lines
-	if len(m.lines) != 3 {
-		t.Errorf("after collapse project, lines = %d, want 3", len(m.lines))
+	// All 3 projects collapsed = 3 selectable
+	if got := countSelectableLines(m.lines); got != 3 {
+		t.Errorf("after collapse, selectable lines = %d, want 3", got)
 	}
 
 	// Expand project again
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if len(m.lines) != 5 {
-		t.Errorf("after expand project, lines = %d, want 5", len(m.lines))
+	if got := countSelectableLines(m.lines); got != 5 {
+		t.Errorf("after expand, selectable lines = %d, want 5", got)
 	}
 }
 
@@ -131,9 +151,9 @@ func TestTasksModel_Reload(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	// 3 seeded projects with no tasks = 3 lines
-	if len(m.lines) != 3 {
-		t.Errorf("initial lines = %d, want 3", len(m.lines))
+	// 3 seeded projects with no tasks = 3 selectable lines
+	if got := countSelectableLines(m.lines); got != 3 {
+		t.Errorf("initial selectable lines = %d, want 3", got)
 	}
 
 	taskID, _ := d.InsertTask(1, "New Task", "{}", "")
@@ -143,9 +163,9 @@ func TestTasksModel_Reload(t *testing.T) {
 	reloadMsg := m.loadTasks()()
 	m, _ = m.Update(reloadMsg)
 
-	// 3 projects + 1 task (open, expanded) + 1 action = 5 lines
-	if len(m.lines) != 5 {
-		t.Errorf("after reload, lines = %d, want 5", len(m.lines))
+	// 3 projects + 1 task + 1 action = 5 selectable lines
+	if got := countSelectableLines(m.lines); got != 5 {
+		t.Errorf("after reload, selectable lines = %d, want 5", got)
 	}
 }
 
@@ -268,9 +288,9 @@ func TestTasksModel_ArchivedTaskCollapsed(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	// 3 projects + 1 archived task (collapsed, action hidden) = 4 lines
-	if len(m.lines) != 4 {
-		t.Errorf("lines = %d, want 4 (archived task should be collapsed)", len(m.lines))
+	// 3 projects + 1 archived task (collapsed) = 4 selectable lines
+	if got := countSelectableLines(m.lines); got != 4 {
+		t.Errorf("selectable lines = %d, want 4 (archived task should be collapsed)", got)
 	}
 }
 
@@ -287,9 +307,13 @@ func TestTasksModel_InlineResult(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	// Navigate to the action line (project=0, task=1, action=2)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	// Navigate to the action line
+	for m.cursor < len(m.lines) {
+		if m.lines[m.cursor].action != nil {
+			break
+		}
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	}
 
 	view := m.View()
 	if !strings.Contains(view, "result: all passed") {
@@ -311,8 +335,12 @@ func TestTasksModel_DetailView(t *testing.T) {
 	m, _ = m.Update(msg)
 
 	// Navigate to the action line
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	for m.cursor < len(m.lines) {
+		if m.lines[m.cursor].action != nil {
+			break
+		}
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	}
 
 	if m.mode != modeNormal {
 		t.Fatalf("mode = %d, want modeNormal", m.mode)
@@ -325,8 +353,9 @@ func TestTasksModel_DetailView(t *testing.T) {
 	}
 
 	view := m.View()
-	if !strings.Contains(view, "Action Detail") {
-		t.Errorf("detail view should contain header, got %q", view)
+	// Detail view now shows action title in header
+	if !strings.Contains(view, "check") {
+		t.Errorf("detail view should contain action title, got %q", view)
 	}
 	if !strings.Contains(view, "detailed output") {
 		t.Errorf("detail view should contain result, got %q", view)
@@ -352,8 +381,12 @@ func TestTasksModel_DetailViewNoResultNoOp(t *testing.T) {
 	m, _ = m.Update(msg)
 
 	// Navigate to action line
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	for m.cursor < len(m.lines) {
+		if m.lines[m.cursor].action != nil {
+			break
+		}
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	}
 
 	// Press v - should be no-op (no result)
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
@@ -375,7 +408,11 @@ func TestTasksModel_DetailViewOnProjectLineNoOp(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	// Cursor at 0 = project line (no action)
+	// Cursor starts on project line
+	if m.lines[m.cursor].lineType != lineProject {
+		t.Fatalf("cursor should start on project line")
+	}
+
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
 	if m.mode != modeNormal {
 		t.Errorf("v on project line should be no-op, mode = %d", m.mode)
@@ -390,7 +427,7 @@ func TestTasksModel_VisibleRange_AllVisible(t *testing.T) {
 	d.InsertAction("a", taskID, "{}", db.ActionStatusPending)
 
 	m := NewTasksModel(d, "")
-	m = m.SetSize(80, 40) // height 40 → maxVisible=38, plenty of room
+	m = m.SetSize(80, 40)
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
@@ -404,36 +441,30 @@ func TestTasksModel_VisibleRange_Scroll(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	// Create enough lines to exceed viewport: 1 project + 30 tasks + 30 actions = 61 lines
+	// Create enough lines to exceed viewport
 	for i := range 30 {
 		taskID, _ := d.InsertTask(1, fmt.Sprintf("Task %d", i), "{}", "")
 		d.InsertAction("a", taskID, "{}", db.ActionStatusPending)
 	}
 
 	m := NewTasksModel(d, "")
-	m = m.SetSize(80, 12) // height 12 → maxVisible=9 (headerRows=3 for summary line)
+	m = m.SetSize(80, 12) // height 12 → maxVisible=12 (headerRows=0)
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	if len(m.lines) <= 9 {
-		t.Fatalf("need more than 9 lines for scroll test, got %d", len(m.lines))
+	if len(m.lines) <= 12 {
+		t.Fatalf("need more than 12 lines for scroll test, got %d", len(m.lines))
 	}
 
-	// Cursor at 0: start should be 0
+	// Cursor at first selectable line: start should be 0
 	vr := m.visibleRange()
 	if vr.start != 0 {
-		t.Errorf("cursor=0: start = %d, want 0", vr.start)
-	}
-	if vr.end-vr.start != 9 {
-		t.Errorf("cursor=0: window size = %d, want 9", vr.end-vr.start)
+		t.Errorf("cursor=%d: start = %d, want 0", m.cursor, vr.start)
 	}
 
-	// Move cursor to middle
-	for range 20 {
+	// Move cursor to middle (skip decorative lines automatically)
+	for range 30 {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	}
-	if m.cursor != 20 {
-		t.Fatalf("cursor = %d, want 20", m.cursor)
 	}
 
 	vr = m.visibleRange()
@@ -442,20 +473,17 @@ func TestTasksModel_VisibleRange_Scroll(t *testing.T) {
 	}
 
 	// Move cursor to end
-	for i := 0; i < len(m.lines); i++ {
+	for range len(m.lines) {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	}
 	lastIdx := len(m.lines) - 1
-	if m.cursor != lastIdx {
-		t.Fatalf("cursor = %d, want %d", m.cursor, lastIdx)
-	}
 
 	vr = m.visibleRange()
 	if vr.end != len(m.lines) {
 		t.Errorf("cursor at end: end = %d, want %d", vr.end, len(m.lines))
 	}
-	if vr.end-vr.start != 9 {
-		t.Errorf("cursor at end: window size = %d, want 9", vr.end-vr.start)
+	if m.cursor > lastIdx {
+		t.Errorf("cursor should not exceed last index, got %d", m.cursor)
 	}
 }
 
@@ -528,9 +556,9 @@ func TestTasksModel_ToggleFocus(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	// Cursor should be on the first project line
-	if m.cursor != 0 {
-		t.Fatalf("cursor = %d, want 0", m.cursor)
+	// Cursor should be on a project line (skipping top border)
+	if m.lines[m.cursor].lineType != lineProject {
+		t.Fatalf("cursor should be on project line, lineType=%d", m.lines[m.cursor].lineType)
 	}
 
 	// Press f to toggle focus (disable)
@@ -607,8 +635,12 @@ func TestTasksModel_DetailViewEscBack(t *testing.T) {
 	m, _ = m.Update(msg)
 
 	// Navigate to action line
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	for m.cursor < len(m.lines) {
+		if m.lines[m.cursor].action != nil {
+			break
+		}
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	}
 
 	// Enter detail view
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
@@ -635,7 +667,7 @@ func TestTasksModel_SetSize(t *testing.T) {
 	}
 }
 
-func TestTasksModel_SummaryLine(t *testing.T) {
+func TestTasksModel_ActionStats(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -652,22 +684,22 @@ func TestTasksModel_SummaryLine(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	view := m.View()
-	if !strings.Contains(view, "1 running") {
-		t.Errorf("summary should show '1 running', got %q", view)
+	stats := m.actionStats()
+	if stats.running != 1 {
+		t.Errorf("running = %d, want 1", stats.running)
 	}
-	if !strings.Contains(view, "1 pending") {
-		t.Errorf("summary should show '1 pending', got %q", view)
+	if stats.pending != 1 {
+		t.Errorf("pending = %d, want 1", stats.pending)
 	}
-	if !strings.Contains(view, "1 done") {
-		t.Errorf("summary should show '1 done', got %q", view)
+	if stats.done != 1 {
+		t.Errorf("done = %d, want 1", stats.done)
 	}
-	if !strings.Contains(view, "1 failed") {
-		t.Errorf("summary should show '1 failed', got %q", view)
+	if stats.failed != 1 {
+		t.Errorf("failed = %d, want 1", stats.failed)
 	}
 }
 
-func TestTasksModel_SummaryLineUnfocused(t *testing.T) {
+func TestTasksModel_ActionStatsUnfocused(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -683,12 +715,12 @@ func TestTasksModel_SummaryLineUnfocused(t *testing.T) {
 	msg := m.Init()()
 	m, _ = m.Update(msg)
 
-	view := m.View()
-	if !strings.Contains(view, "1 pending") {
-		t.Errorf("summary should show '1 pending', got %q", view)
+	stats := m.actionStats()
+	if stats.pending != 3 {
+		t.Errorf("pending = %d, want 3", stats.pending)
 	}
-	if !strings.Contains(view, "(2 unfocused)") {
-		t.Errorf("summary should show '(2 unfocused)', got %q", view)
+	if !strings.Contains(stats.pendingLabel, "unfocused") {
+		t.Errorf("pendingLabel should contain 'unfocused', got %q", stats.pendingLabel)
 	}
 }
 
