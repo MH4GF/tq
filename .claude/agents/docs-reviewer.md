@@ -35,6 +35,7 @@ Compare ground truth (phases 1–2) against these documents:
 |----------|---------------|
 | `CLAUDE.md` | Build/test commands are documented; architecture layer names are mentioned |
 | `README.md` § CLI Reference | Every tq subcommand is listed; descriptions match `--help` output |
+| `docs/cli-reference.md` | Every tq subcommand is listed; descriptions match `--help` output |
 | `.claude-plugins/tq/README.md` | Commands section lists all files in `tq/commands/*.md`; skills section lists all files in `tq/skills/*/SKILL.md`; descriptions match frontmatter |
 | `.claude-plugins/gh-notifications/README.md` | Commands section lists all files in `gh-notifications/commands/*.md`; descriptions match frontmatter |
 </checks>
