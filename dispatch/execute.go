@@ -88,7 +88,7 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 
 	if err := ValidateActionMetadata(actionMeta); err != nil {
 		_ = params.DB.MarkFailed(action.ID, err.Error())
-		return nil, err
+		return nil, fmt.Errorf("validate action metadata: %w", err)
 	}
 	instruction := actionMeta[MetaKeyInstruction].(string)
 

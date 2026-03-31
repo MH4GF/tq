@@ -70,6 +70,9 @@ func CheckSchedules(database db.Store, now time.Time) error {
 		meta[MetaKeyScheduleID] = fmt.Sprintf("%d", s.ID)
 		if err := ValidateActionMetadata(meta); err != nil {
 			slog.Warn("schedule: invalid metadata", "schedule_id", s.ID, "error", err)
+			if uerr := database.UpdateScheduleLastRunAt(s.ID, now.UTC().Format(db.TimeLayout)); uerr != nil {
+				slog.Error("schedule: update last_run_at failed after invalid metadata", "schedule_id", s.ID, "error", uerr)
+			}
 			continue
 		}
 		metaJSON, err := json.Marshal(meta)
