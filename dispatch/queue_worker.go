@@ -197,7 +197,7 @@ func dispatchOne(ctx context.Context, cfg WorkerConfig) (bool, error) {
 				return fmt.Errorf("count running interactive: %w", err)
 			}
 			if running >= cfg.MaxInteractive {
-				slog.Info("interactive limit reached, deferring", "action_id", a.ID, "running", running, "max", cfg.MaxInteractive)
+				slog.Debug("interactive limit reached, deferring", "action_id", a.ID, "running", running, "max", cfg.MaxInteractive)
 				return ErrInteractiveDeferred
 			}
 			return nil
