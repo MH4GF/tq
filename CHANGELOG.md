@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.21.10](https://github.com/MH4GF/tq/compare/v0.21.9...v0.21.10) - 2026-03-31
+- Fix tq task create invocation in watch.md by @MH4GF in https://github.com/MH4GF/tq/pull/71
+- Redesign TUI with project cards and refined visual hierarchy by @MH4GF in https://github.com/MH4GF/tq/pull/77
+- Add noninteractive stale detection to reapStaleActions by @MH4GF in https://github.com/MH4GF/tq/pull/73
+
 ## [v0.21.9](https://github.com/MH4GF/tq/compare/v0.21.8...v0.21.9) - 2026-03-30
 - Prevent markTerminal from overwriting already-terminal actions by @MH4GF in https://github.com/MH4GF/tq/pull/68
 - Show unfocused hint for action create on unfocused projects by @MH4GF in https://github.com/MH4GF/tq/pull/70
