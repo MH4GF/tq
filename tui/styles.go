@@ -129,7 +129,7 @@ func truncateResult(s string, maxLen int) string {
 func RenderDetailView(a *db.Action, scroll, width, height int) string {
 	var b strings.Builder
 	pad := "  " // 2-col left margin
-	bodyW := min(width, 80) - len(pad)
+	bodyW := max(0, min(width, 80)-len(pad))
 
 	// Top padding
 	b.WriteString("\n")

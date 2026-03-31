@@ -34,6 +34,11 @@ var uiCmd = &cobra.Command{
 		slog.SetDefault(slog.New(handler))
 		defer slog.SetDefault(prevLogger)
 
+		effectiveMaxInteractive := uiMaxInteractive
+		if effectiveMaxInteractive <= 0 {
+			effectiveMaxInteractive = dispatch.DefaultMaxInteractive
+		}
+
 		workerBg := func(ctx context.Context) error {
 			cfg := dispatch.WorkerConfig{
 				DispatchConfig: dispatch.DispatchConfig{
@@ -56,14 +61,14 @@ var uiCmd = &cobra.Command{
 					},
 					TmuxSession: uiSession,
 				},
-				MaxInteractive: uiMaxInteractive,
+				MaxInteractive: effectiveMaxInteractive,
 				PollInterval:   uiPollInterval,
 				TmuxChecker:    &dispatch.ExecTmuxChecker{Runner: &dispatch.ExecRunner{}},
 			}
 			return dispatch.RunWorker(ctx, cfg)
 		}
 
-		m := tui.New(database, logCh, uiMaxInteractive, workerBg)
+		m := tui.New(database, logCh, effectiveMaxInteractive, workerBg)
 		p := tea.NewProgram(m, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("tui: %w", err)

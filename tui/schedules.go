@@ -193,7 +193,7 @@ func (m SchedulesModel) View() string {
 func (m SchedulesModel) renderDetail(s *db.Schedule) string {
 	var b strings.Builder
 	pad := "  "
-	bodyW := min(m.width, 80) - len(pad)
+	bodyW := max(0, min(m.width, 80)-len(pad))
 
 	b.WriteString("\n")
 
@@ -244,8 +244,10 @@ func (m SchedulesModel) renderDetail(s *db.Schedule) string {
 	// Instruction
 	b.WriteString("\n")
 	b.WriteString(pad + styleMuted.Render("Instruction:") + "\n")
-	for _, line := range wrapLine(s.Instruction, bodyW) {
-		b.WriteString(pad + line + "\n")
+	for raw := range strings.SplitSeq(s.Instruction, "\n") {
+		for _, line := range wrapLine(raw, bodyW) {
+			b.WriteString(pad + line + "\n")
+		}
 	}
 
 	return b.String()
@@ -281,7 +283,7 @@ func (m SchedulesModel) HelpKeys() []HelpKey {
 	}
 	keys := commonHelpKeys()
 	if m.selectedSchedule() != nil {
-		keys = append(keys, HelpKey{"v", "view detail"}, HelpKey{"e", "enable/disable"}, HelpKey{"d", "delete"})
+		keys = append(keys, HelpKey{"v/enter", "view detail"}, HelpKey{"e", "enable/disable"}, HelpKey{"d", "delete"})
 	}
 	return keys
 }
