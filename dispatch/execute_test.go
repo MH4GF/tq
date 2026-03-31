@@ -220,6 +220,57 @@ func TestWrapInstruction(t *testing.T) {
 	}
 }
 
+func TestValidateActionMetadata(t *testing.T) {
+	tests := []struct {
+		name    string
+		meta    map[string]any
+		wantErr bool
+	}{
+		{
+			name:    "valid instruction",
+			meta:    map[string]any{MetaKeyInstruction: "do something"},
+			wantErr: false,
+		},
+		{
+			name:    "missing instruction key",
+			meta:    map[string]any{"mode": "interactive"},
+			wantErr: true,
+		},
+		{
+			name:    "empty instruction",
+			meta:    map[string]any{MetaKeyInstruction: ""},
+			wantErr: true,
+		},
+		{
+			name:    "whitespace-only instruction",
+			meta:    map[string]any{MetaKeyInstruction: "   "},
+			wantErr: true,
+		},
+		{
+			name:    "non-string instruction",
+			meta:    map[string]any{MetaKeyInstruction: 123},
+			wantErr: true,
+		},
+		{
+			name:    "empty metadata",
+			meta:    map[string]any{},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateActionMetadata(tc.meta)
+			if tc.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestExecuteAction_NoInstruction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

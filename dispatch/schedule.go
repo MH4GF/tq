@@ -68,6 +68,10 @@ func CheckSchedules(database db.Store, now time.Time) error {
 		}
 		meta[MetaKeyInstruction] = s.Instruction
 		meta[MetaKeyScheduleID] = fmt.Sprintf("%d", s.ID)
+		if err := ValidateActionMetadata(meta); err != nil {
+			slog.Warn("schedule: invalid metadata", "schedule_id", s.ID, "error", err)
+			continue
+		}
 		metaJSON, err := json.Marshal(meta)
 		if err != nil {
 			slog.Error("schedule: marshal metadata failed", "schedule_id", s.ID, "error", err)

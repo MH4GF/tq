@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/MH4GF/tq/db"
 )
@@ -85,11 +86,11 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 		return nil, fmt.Errorf("parse action metadata: %w", err)
 	}
 
-	instruction, ok := actionMeta[MetaKeyInstruction].(string)
-	if !ok || instruction == "" {
-		_ = params.DB.MarkFailed(action.ID, "no instruction in metadata")
-		return nil, errors.New("no instruction in metadata")
+	if err := ValidateActionMetadata(actionMeta); err != nil {
+		_ = params.DB.MarkFailed(action.ID, err.Error())
+		return nil, err
 	}
+	instruction := actionMeta[MetaKeyInstruction].(string)
 
 	cfg := ActionConfig{Mode: ModeInteractive}
 	if modeStr, ok := actionMeta[MetaKeyMode].(string); ok {
@@ -189,6 +190,14 @@ func wrapInstruction(instruction string, taskID int64, mode string) string {
 		result += "\n\nWhen you finish, run `/tq:done` to mark this action as complete."
 	}
 	return result
+}
+
+func ValidateActionMetadata(meta map[string]any) error {
+	inst, ok := meta[MetaKeyInstruction].(string)
+	if !ok || strings.TrimSpace(inst) == "" {
+		return errors.New("metadata must contain a non-empty \"instruction\" field")
+	}
+	return nil
 }
 
 func parseMetadata(raw string) (map[string]any, error) {
