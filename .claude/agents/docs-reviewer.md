@@ -36,7 +36,7 @@ Compare ground truth (phases 1–2) against these documents:
 | `CLAUDE.md` | Build/test commands are documented; architecture layer names are mentioned |
 | `README.md` § CLI Reference | Every tq subcommand is listed; descriptions match `--help` output |
 | `.claude-plugins/tq/README.md` | Commands section lists all files in `tq/commands/*.md`; skills section lists all files in `tq/skills/*/SKILL.md`; descriptions match frontmatter |
-| `.claude-plugins/gh-notifications/README.md` | Commands section lists all files in `gh-notifications/commands/*.md`; descriptions match frontmatter |
+| `.claude-plugins/gh-ops/README.md` | Commands section lists all files in `gh-ops/commands/*.md`; descriptions match frontmatter |
 </checks>
 
 IMPORTANT: If no drift is found, report "No drift detected." and stop. Do NOT proceed to phase 4.

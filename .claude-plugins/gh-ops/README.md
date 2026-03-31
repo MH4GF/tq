@@ -1,10 +1,10 @@
-# gh-notifications plugin
+# gh-ops plugin
 
 GitHub notification watcher and classifier for tq.
 
 ## Commands
 
-### `/gh-notifications:watch`
+### `/gh-ops:watch`
 
 Fetches GitHub notifications, classifies them by type and priority, and creates tq actions for each actionable notification.
 
@@ -19,19 +19,19 @@ The following commands are created as tq action instructions by `watch`, and can
 
 | Command | Description |
 |---|---|
-| `/gh-notifications:review-pr <PR_URL>` | Review another person's PR |
-| `/gh-notifications:fix-conflict <PR_URL>` | Resolve merge conflicts |
-| `/gh-notifications:fix-ci <PR_URL>` | Fix CI failures |
-| `/gh-notifications:respond-review <PR_URL>` | Respond to review comments |
-| `/gh-notifications:merge-pr <PR_URL>` | Judge and execute PR merge |
-| `/gh-notifications:self-review <PR_URL>` | Self-review before requesting review |
+| `/gh-ops:review-pr <PR_URL>` | Review another person's PR |
+| `/gh-ops:fix-conflict <PR_URL>` | Resolve merge conflicts |
+| `/gh-ops:fix-ci <PR_URL>` | Fix CI failures |
+| `/gh-ops:respond-review <PR_URL>` | Respond to review comments |
+| `/gh-ops:merge-pr <PR_URL>` | Judge and execute PR merge |
+| `/gh-ops:self-review <PR_URL>` | Self-review before requesting review |
 
 ## Usage
 
 Triggered automatically via `tq schedule` or invoke manually:
 
 ```text
-/gh-notifications:watch
+/gh-ops:watch
 ```
 
 ## Installation
@@ -41,7 +41,7 @@ Add to `~/.claude/settings.json`:
 ```json
 {
   "enabledPlugins": {
-    "gh-notifications@tq-marketplace": true
+    "gh-ops@tq-marketplace": true
   }
 }
 ```

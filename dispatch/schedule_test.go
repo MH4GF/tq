@@ -110,7 +110,7 @@ func TestCheckSchedules_InstructionBasedAction(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertSchedule(taskID, "/gh-notifications:watch", "Watch notifications", "* * * * *", `{}`)
+	d.InsertSchedule(taskID, "/gh-ops:watch", "Watch notifications", "* * * * *", `{}`)
 	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
 
 	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")

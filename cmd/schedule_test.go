@@ -42,7 +42,7 @@ func TestScheduleCreate_WithInstruction(t *testing.T) {
 	out := new(bytes.Buffer)
 	root.SetOut(out)
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"schedule", "create", "--instruction", "/gh-notifications:watch", "--task", "1", "--cron", "*/10 * * * *", "--title", "Watch notifications"})
+	root.SetArgs([]string{"schedule", "create", "--instruction", "/gh-ops:watch", "--task", "1", "--cron", "*/10 * * * *", "--title", "Watch notifications"})
 
 	err := root.Execute()
 	if err != nil {
@@ -56,8 +56,8 @@ func TestScheduleCreate_WithInstruction(t *testing.T) {
 	if len(schedules) != 1 {
 		t.Fatalf("expected 1 schedule, got %d", len(schedules))
 	}
-	if schedules[0].Instruction != "/gh-notifications:watch" {
-		t.Errorf("instruction = %q, want %q", schedules[0].Instruction, "/gh-notifications:watch")
+	if schedules[0].Instruction != "/gh-ops:watch" {
+		t.Errorf("instruction = %q, want %q", schedules[0].Instruction, "/gh-ops:watch")
 	}
 }
 
@@ -90,7 +90,7 @@ func TestScheduleUpdate_Success(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-	d.InsertSchedule(taskID, "/gh-notifications:watch", "Watch", "* * * * *", "{}")
+	d.InsertSchedule(taskID, "/gh-ops:watch", "Watch", "* * * * *", "{}")
 
 	root := cmd.GetRootCmd()
 	out := new(bytes.Buffer)
