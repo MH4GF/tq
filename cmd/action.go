@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -56,6 +55,8 @@ var actionUpdateCmd = &cobra.Command{
 	},
 }
 
+var actionGetJQ string
+
 var actionGetCmd = &cobra.Command{
 	Use:   "get <ID>",
 	Short: "Get an action by ID (JSON output)",
@@ -69,9 +70,7 @@ var actionGetCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("get action: %w", err)
 		}
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(actionToMap(*action))
+		return WriteJSON(cmd.OutOrStdout(), actionToMap(*action), actionGetJQ, listFields)
 	},
 }
 
@@ -80,6 +79,7 @@ func init() {
 	actionUpdateCmd.Flags().Int64("task", 0, "Task ID")
 	actionUpdateCmd.Flags().String("meta", "", `JSON metadata for dispatch control (keys: mode, permission_mode, worktree)`)
 
+	actionGetCmd.Flags().StringVar(&actionGetJQ, "jq", "", jqFlagUsage(listFields))
 	actionCmd.AddCommand(actionGetCmd)
 	actionCmd.AddCommand(actionUpdateCmd)
 }
