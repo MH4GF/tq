@@ -99,16 +99,16 @@ Additional metadata keys:
 | Command | Description |
 |---------|-------------|
 | `tq project create <NAME> <WORK_DIR>` | Register a project |
-| `tq project list` | List projects (JSON) |
+| `tq project list` | List projects (JSON, `--jq`) |
 | `tq project update <ID>` | Update a project |
 | `tq project delete <ID>` | Delete a project |
 | `tq task create <TITLE> --project <ID>` | Create a task |
-| `tq task list` | List tasks with nested actions (JSON) |
-| `tq task get <ID>` | Get a task by ID (JSON) |
+| `tq task list` | List tasks with nested actions (JSON, `--jq`) |
+| `tq task get <ID>` | Get a task by ID (JSON, `--jq`) |
 | `tq task update <ID> --status <STATUS>` | Update task status |
 | `tq action create <INSTRUCTION> --task <ID> --title <TITLE>` | Create an action |
-| `tq action list` | List actions (JSON) |
-| `tq action get <ID>` | Get an action by ID (JSON) |
+| `tq action list` | List actions (JSON, `--jq`) |
+| `tq action get <ID>` | Get an action by ID (JSON, `--jq`) |
 | `tq action update <ID>` | Update an action |
 | `tq action done <ID> [RESULT]` | Mark action as done |
 | `tq action cancel <ID>` | Cancel an action |
@@ -116,13 +116,13 @@ Additional metadata keys:
 | `tq action reset <ID>` | Reset action to pending |
 | `tq action dispatch <ACTION_ID>` | Dispatch an action by ID |
 | `tq schedule create --instruction <TEXT> --task <ID> --cron <EXPR> [--meta <JSON>]` | Create a schedule |
-| `tq schedule list` | List schedules (JSON) |
+| `tq schedule list` | List schedules (JSON, `--jq`) |
 | `tq schedule update <ID>` | Update a schedule |
 | `tq schedule delete <ID>` | Delete a schedule |
 | `tq schedule enable <ID>` | Enable a schedule |
 | `tq schedule disable <ID>` | Disable a schedule |
-| `tq event list` | List events |
-| `tq search <KEYWORD>` | Search tasks and actions |
+| `tq event list` | List events (JSON, `--jq`) |
+| `tq search <KEYWORD>` | Search tasks and actions (JSON, `--jq`) |
 | `tq ui` | Launch TUI with queue worker |
 
 ## License
