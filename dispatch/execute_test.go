@@ -203,7 +203,13 @@ func TestWrapInstruction(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := wrapInstruction("Fix the bug", 42, tc.mode)
+			got := wrapInstruction("Fix the bug", 99, 42, tc.mode)
+			if !strings.Contains(got, "action #99") {
+				t.Error("should contain action ID")
+			}
+			if !strings.Contains(got, "task #42") {
+				t.Error("should contain task ID")
+			}
 			if tc.wantHistory && !strings.Contains(got, "tq action list --task 42") {
 				t.Error("should contain preamble with tq action list and task ID")
 			}

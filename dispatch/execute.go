@@ -103,7 +103,7 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 		cfg.Worktree = wt
 	}
 
-	instruction = wrapInstruction(instruction, action.TaskID, cfg.Mode)
+	instruction = wrapInstruction(instruction, action.ID, action.TaskID, cfg.Mode)
 
 	workDir := resolveWorkDir(params.DB, action)
 
@@ -183,8 +183,9 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 	return &ExecuteResult{Mode: ModeNonInteractive, Output: result}, nil
 }
 
-func wrapInstruction(instruction string, taskID int64, mode string) string {
-	preamble := fmt.Sprintf("First, run `tq action list --task %d` to understand the task history (completed actions, their results, etc.).\n\n", taskID)
+func wrapInstruction(instruction string, actionID, taskID int64, mode string) string {
+	preamble := fmt.Sprintf("You are executing action #%d (task #%d).\n\n", actionID, taskID)
+	preamble += fmt.Sprintf("First, run `tq action list --task %d` to understand the task history (completed actions, their results, etc.).\n\n", taskID)
 	result := preamble + instruction
 	if mode != ModeRemote {
 		result += "\n\nWhen you finish, run `/tq:done` to mark this action as complete."
