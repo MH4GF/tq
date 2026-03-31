@@ -430,6 +430,71 @@ func TestReapStaleActions_CustomSession(t *testing.T) {
 	}
 }
 
+func TestReapStaleActions_NonInteractiveStale(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+	d.Exec("UPDATE actions SET started_at = datetime('now', '-15 minutes') WHERE id = 1")
+
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{DB: d},
+		TmuxChecker:    nil,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != db.ActionStatusFailed {
+		t.Errorf("action status = %q, want %q", action.Status, db.ActionStatusFailed)
+	}
+	if !action.Result.Valid || !strings.Contains(action.Result.String, "noninteractive") {
+		t.Errorf("expected result containing 'noninteractive', got %v", action.Result)
+	}
+}
+
+func TestReapStaleActions_NonInteractiveNotYetStale(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+	d.Exec("UPDATE actions SET started_at = datetime('now', '-3 minutes') WHERE id = 1")
+
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{DB: d},
+		TmuxChecker:    nil,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != db.ActionStatusRunning {
+		t.Errorf("action status = %q, want %q (within threshold)", action.Status, db.ActionStatusRunning)
+	}
+}
+
+func TestReapStaleActions_NonInteractiveNoStartedAt(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{DB: d},
+		TmuxChecker:    nil,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != db.ActionStatusRunning {
+		t.Errorf("action status = %q, want %q (no started_at)", action.Status, db.ActionStatusRunning)
+	}
+}
+
 func TestDispatchOne_NoPending(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
