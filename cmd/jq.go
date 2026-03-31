@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 
 	"github.com/itchyny/gojq"
@@ -14,6 +15,11 @@ func jqFlagUsage(fields []string) string {
 }
 
 func WriteJSON(w io.Writer, data any, jqExpr string, fields []string) error {
+	// Normalize nil slices to empty slices so JSON output is "[]" not "null".
+	if v := reflect.ValueOf(data); v.Kind() == reflect.Slice && v.IsNil() {
+		data = []any{}
+	}
+
 	if jqExpr == "" {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")

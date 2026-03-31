@@ -189,6 +189,8 @@ func taskToMap(t db.Task, actions []db.Action) map[string]any {
 	return row
 }
 
+var taskGetJQ string
+
 var taskGetCmd = &cobra.Command{
 	Use:   "get <ID>",
 	Short: "Get a task by ID (JSON output, includes nested actions)",
@@ -206,9 +208,7 @@ var taskGetCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("list actions: %w", err)
 		}
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(taskToMap(*task, actions))
+		return WriteJSON(cmd.OutOrStdout(), taskToMap(*task, actions), taskGetJQ, taskListFields)
 	},
 }
 
@@ -237,5 +237,6 @@ func init() {
 	taskCmd.AddCommand(taskListCmd)
 	taskCmd.AddCommand(taskCreateCmd)
 	taskCmd.AddCommand(taskUpdateCmd)
+	taskGetCmd.Flags().StringVar(&taskGetJQ, "jq", "", jqFlagUsage(taskListFields))
 	taskCmd.AddCommand(taskGetCmd)
 }

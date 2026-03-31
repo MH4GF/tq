@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -10,9 +9,11 @@ import (
 )
 
 var (
-	eventEntity string
-	eventID     int64
-	eventLimit  int
+	eventEntity     string
+	eventID         int64
+	eventLimit      int
+	eventListJQ     string
+	eventListFields = []string{"id", "entity_type", "entity_id", "event_type", "payload", "created_at"}
 )
 
 var eventCmd = &cobra.Command{
@@ -43,15 +44,7 @@ Use --entity and --id together to filter events for a specific entity.`,
 		if err != nil {
 			return fmt.Errorf("list events: %w", err)
 		}
-
-		if len(events) == 0 {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
-			return nil
-		}
-
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(events)
+		return WriteJSON(cmd.OutOrStdout(), events, eventListJQ, eventListFields)
 	},
 }
 
@@ -60,6 +53,7 @@ func init() {
 
 	eventListCmd.Flags().Int64Var(&eventID, "id", 0, "Filter by entity ID (requires --entity)")
 	eventListCmd.Flags().IntVar(&eventLimit, "limit", 50, "Number of recent events to show")
+	eventListCmd.Flags().StringVar(&eventListJQ, "jq", "", jqFlagUsage(eventListFields))
 	eventCmd.AddCommand(eventListCmd)
 	rootCmd.AddCommand(eventCmd)
 }
