@@ -63,8 +63,8 @@ project → task → action
 ```
 
 - **project**: groups tasks, sets default working directory
-- **task**: unit of work (status: open, review, done, blocked, archived)
-- **action**: dispatchable unit — an instruction that becomes a Claude Code session (status: pending, running, done, failed, cancelled)
+- **task**: unit of work (status: open, done, archived)
+- **action**: dispatchable unit of work with an instruction (status: pending, running, done, failed, cancelled)
 
 ### Design Principles
 
