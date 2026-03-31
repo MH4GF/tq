@@ -14,12 +14,12 @@ import (
 var (
 	// Surface / background
 	colorSurface   = lipgloss.Color("234") // panels, header, help bar
-	colorHighlight = lipgloss.Color("236") // cursor row background
-	colorBorder    = lipgloss.Color("235") // card borders
+	colorHighlight = lipgloss.Color("237") // cursor row background
+	colorBorder    = lipgloss.Color("240") // card borders
 
 	// Text hierarchy
 	colorTextSecondary = lipgloss.Color("245") // secondary
-	colorTextMuted     = lipgloss.Color("239") // dimmed
+	colorTextMuted     = lipgloss.Color("243") // dimmed
 
 	// Semantic status
 	colorRunning = lipgloss.Color("75")  // #5fafff blue
@@ -29,8 +29,8 @@ var (
 	colorAccent  = lipgloss.Color("80")  // #5fd7d7 teal
 	colorWarning = lipgloss.Color("213") // magenta
 
-	colorDoneDim   = lipgloss.Color("236") // very dim green for done actions
-	colorFailedDim = lipgloss.Color("95")  // dim red-ish for failed actions
+	colorDoneDim   = lipgloss.Color("65")  // dim green for done actions
+	colorFailedDim = lipgloss.Color("131") // dim red for failed actions
 )
 
 // ── Status styles ──
@@ -53,7 +53,6 @@ var (
 var (
 	// Header / tabs
 	styleHeaderBar   = lipgloss.NewStyle().Background(colorSurface)
-	styleBrand       = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
 	styleTabActive   = lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Background(lipgloss.Color("236"))
 	styleTabInactive = lipgloss.NewStyle().Foreground(colorTextMuted)
 
@@ -66,32 +65,29 @@ var (
 	styleBorderChar  = lipgloss.NewStyle().Foreground(colorBorder)
 	styleProjectName = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
 	styleBadge       = lipgloss.NewStyle().Foreground(colorTextMuted)
-	styleWorkDir     = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
-
-	// Tree text
-	styleHelp = lipgloss.NewStyle().Foreground(colorTextMuted)
+	styleWorkDir     = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 
 	// Help bar
 	styleHelpBar = lipgloss.NewStyle().Background(colorSurface)
+	styleHelpKey = lipgloss.NewStyle().Italic(true).Foreground(colorTextSecondary)
 
 	// Activity
-	styleActivityTS  = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
-	styleActivityMsg = lipgloss.NewStyle().Foreground(lipgloss.Color("239"))
+	styleActivityTS  = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	styleActivityMsg = lipgloss.NewStyle().Foreground(lipgloss.Color("243"))
 
 	// Detail view
-	styleDetailHeader = lipgloss.NewStyle().Background(colorSurface).Foreground(colorAccent).Bold(true)
-	styleDetailBack   = lipgloss.NewStyle().Foreground(colorTextMuted)
-	styleFieldLabel   = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
-	styleFieldValue   = lipgloss.NewStyle().Foreground(colorTextSecondary)
+	styleDetailBack = lipgloss.NewStyle().Foreground(colorTextMuted)
+	styleFieldLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	styleFieldValue = lipgloss.NewStyle().Foreground(colorTextSecondary)
 
 	// Gauge bar segments
 	styleGaugeRunning = lipgloss.NewStyle().Foreground(colorRunning)
 	styleGaugePending = lipgloss.NewStyle().Foreground(colorPending)
-	styleGaugeDone    = lipgloss.NewStyle().Foreground(lipgloss.Color("22")) // dark green
+	styleGaugeDone    = lipgloss.NewStyle().Foreground(lipgloss.Color("28")) // visible dark green
 	styleGaugeFailed  = lipgloss.NewStyle().Foreground(colorFailed)
 
 	// Schedule table
-	styleTableHeader = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
+	styleTableHeader = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
 func StatusStyle(status string) lipgloss.Style {
@@ -132,17 +128,24 @@ func truncateResult(s string, maxLen int) string {
 
 func RenderDetailView(a *db.Action, scroll, width, height int) string {
 	var b strings.Builder
-	maxW := min(width, 80)
+	pad := "  " // 2-col left margin
+	bodyW := min(width, 80) - len(pad)
 
-	// Header strip: ← esc  title  [status]
+	// Top padding
+	b.WriteString("\n")
+
+	// Header strip: ← esc  title  status icon + status
 	st := StatusStyle(a.Status)
-	headerLine := fmt.Sprintf(" %s  %s  %s",
+	icon := StatusIcon(a.Status)
+	headerLine := fmt.Sprintf("%s%s  %s  %s %s",
+		pad,
 		styleDetailBack.Render("← esc"),
-		styleDetailHeader.Render(a.Title),
+		lipgloss.NewStyle().Bold(true).Render(a.Title),
+		st.Render(icon),
 		st.Render(a.Status),
 	)
 	b.WriteString(headerLine + "\n")
-	b.WriteString(styleBorderChar.Render(strings.Repeat("─", maxW)) + "\n")
+	b.WriteString(pad + styleBorderChar.Render(strings.Repeat("─", bodyW)) + "\n")
 
 	// Metadata grid
 	fields := []struct{ label, value string }{
@@ -153,22 +156,27 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 		fields = append(fields, struct{ label, value string }{"Completed", db.FormatLocal(a.CompletedAt.String)})
 	}
 	for _, f := range fields {
-		fmt.Fprintf(&b, "  %s  %s\n",
+		fmt.Fprintf(&b, "%s%s  %s\n",
+			pad,
 			styleFieldLabel.Render(f.label),
 			styleFieldValue.Render(f.value),
 		)
 	}
-	b.WriteString(styleBorderChar.Render(strings.Repeat("─", maxW)) + "\n")
+	b.WriteString(pad + styleBorderChar.Render(strings.Repeat("─", bodyW)) + "\n")
 
-	// Result body
+	// Result body with word wrap
 	result := ""
 	if a.Result.Valid {
 		result = a.Result.String
 	}
-	lines := strings.Split(result, "\n")
+	var lines []string
+	for rawLine := range strings.SplitSeq(result, "\n") {
+		lines = append(lines, wrapLine(rawLine, bodyW)...)
+	}
 
-	headerLines := 7 + len(fields)
-	bodyHeight := height - headerLines
+	// top(1) + header(1) + separator(1) + fields + separator(1) + padding before help(1) = 5 + len(fields)
+	chromeLines := 5 + len(fields)
+	bodyHeight := height - chromeLines
 	if bodyHeight < 1 {
 		bodyHeight = 10
 	}
@@ -179,12 +187,93 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 
 	end := min(scroll+bodyHeight, len(lines))
 	for _, line := range lines[scroll:end] {
-		b.WriteString("  " + line + "\n")
+		b.WriteString(pad + line + "\n")
 	}
 
-	b.WriteString("\n")
-	b.WriteString(styleHelp.Render("  " + formatHelp(detailHelpKeys())))
+	// Scroll indicator
+	if len(lines) > bodyHeight {
+		page := scroll/bodyHeight + 1
+		totalPages := (len(lines)-1)/bodyHeight + 1
+		indicator := styleMuted.Render(fmt.Sprintf("[%d/%d]", page, totalPages))
+		b.WriteString(pad + indicator)
+	}
+
 	return b.String()
+}
+
+// wrapLine wraps a single line to fit within maxWidth display columns.
+// Uses lipgloss.Width for correct CJK/fullwidth character handling.
+func wrapLine(line string, maxWidth int) []string {
+	if maxWidth <= 0 || lipgloss.Width(line) <= maxWidth {
+		return []string{line}
+	}
+	runes := []rune(line)
+	var wrapped []string
+	for len(runes) > 0 {
+		w := 0
+		breakAt := 0
+		lastSpace := -1
+		for i, r := range runes {
+			cw := lipgloss.Width(string(r))
+			if w+cw > maxWidth {
+				break
+			}
+			w += cw
+			breakAt = i + 1
+			if r == ' ' {
+				lastSpace = i
+			}
+		}
+		if breakAt == 0 {
+			breakAt = 1 // at least one rune
+		}
+		// Prefer breaking at space if we're not at the end
+		if breakAt < len(runes) && lastSpace > breakAt/2 {
+			breakAt = lastSpace
+		}
+		wrapped = append(wrapped, string(runes[:breakAt]))
+		runes = runes[breakAt:]
+		// Skip leading space on continuation
+		if len(runes) > 0 && runes[0] == ' ' {
+			runes = runes[1:]
+		}
+	}
+	return wrapped
+}
+
+// padRight pads a string to the given display width using spaces.
+// Handles CJK/fullwidth characters correctly via lipgloss.Width.
+func padRight(s string, width int) string {
+	w := lipgloss.Width(s)
+	if w >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-w)
+}
+
+// truncateDisplay truncates a string to fit within maxWidth display columns.
+func truncateDisplay(s string, maxWidth int) string {
+	runes := []rune(s)
+	w := 0
+	for i, r := range runes {
+		cw := lipgloss.Width(string(r))
+		if w+cw > maxWidth {
+			return string(runes[:i])
+		}
+		w += cw
+	}
+	return s
+}
+
+// padWithBorder pads a line to width and appends a right border character.
+func padWithBorder(line string, width int, border string) string {
+	lineW := lipgloss.Width(line)
+	borderW := lipgloss.Width(border)
+	pad := width - lineW - borderW
+	if pad > 0 {
+		return line + strings.Repeat(" ", pad) + border
+	}
+	return line + border
 }
 
 func highlightLine(line string, width int) string {
@@ -252,12 +341,22 @@ func renderGaugeBar(running, pending, done, failed, width int) string {
 }
 
 // renderStatusStrip renders the status numbers strip.
-func renderStatusStrip(running, pending, done, failed int, pendingLabel string, width int) string {
+func renderStatusStrip(stats actionStats, maxInteractive, width int) string {
 	parts := []string{
-		styleStatNum.Foreground(colorRunning).Render(fmt.Sprintf("%d", running)) + " " + styleStatLabel.Render("running"),
-		styleStatNum.Foreground(colorPending).Render(fmt.Sprintf("%d", pending)) + " " + styleStatLabel.Render(pendingLabel),
-		styleStatNum.Foreground(colorDone).Render(fmt.Sprintf("%d", done)) + " " + styleStatLabel.Render("done"),
-		styleStatNum.Foreground(colorFailed).Render(fmt.Sprintf("%d", failed)) + " " + styleStatLabel.Render("failed"),
+		styleStatNum.Foreground(colorRunning).Render(fmt.Sprintf("%d", stats.running)) + " " + styleStatLabel.Render("running"),
+		styleStatNum.Foreground(colorPending).Render(fmt.Sprintf("%d", stats.pending)) + " " + styleStatLabel.Render(stats.pendingLabel),
+		styleStatNum.Foreground(colorDone).Render(fmt.Sprintf("%d", stats.done)) + " " + styleStatLabel.Render("done"),
+		styleStatNum.Foreground(colorFailed).Render(fmt.Sprintf("%d", stats.failed)) + " " + styleStatLabel.Render("failed"),
+	}
+	if maxInteractive > 0 {
+		slotsColor := colorAccent
+		if stats.runningInteractive >= maxInteractive {
+			slotsColor = colorWarning
+		}
+		parts = append(parts,
+			lipgloss.NewStyle().Foreground(slotsColor).Render("⚡")+
+				styleStatNum.Foreground(slotsColor).Render(fmt.Sprintf("%d/%d", stats.runningInteractive, maxInteractive))+
+				" "+styleStatLabel.Render("slots"))
 	}
 	inner := " " + strings.Join(parts, "   ")
 	return styleStatusStrip.Width(width).Render(inner)

@@ -63,7 +63,7 @@ var uiCmd = &cobra.Command{
 			return dispatch.RunWorker(ctx, cfg)
 		}
 
-		m := tui.New(database, logCh, workerBg)
+		m := tui.New(database, logCh, uiMaxInteractive, workerBg)
 		p := tea.NewProgram(m, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("tui: %w", err)
