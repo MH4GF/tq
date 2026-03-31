@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/spf13/cobra"
@@ -42,6 +43,10 @@ Metadata keys for dispatch control:
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		instruction := args[0]
+
+		if strings.TrimSpace(instruction) == "" {
+			return fmt.Errorf("instruction must not be empty")
+		}
 
 		if addTitle == "" {
 			return fmt.Errorf("--title is required: set a concise, descriptive title (max %d chars) that explains what this action does", maxActionTitleLength)
