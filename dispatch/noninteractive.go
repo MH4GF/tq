@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	defaultTimeout                = 300
+	defaultTimeout                = 600
 	nonInteractiveStaleMultiplier = 2
 )
 

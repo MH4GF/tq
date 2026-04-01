@@ -436,7 +436,7 @@ func TestReapStaleActions_NonInteractiveStale(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
 	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
-	d.Exec("UPDATE actions SET started_at = datetime('now', '-15 minutes') WHERE id = 1")
+	d.Exec("UPDATE actions SET started_at = datetime('now', '-25 minutes') WHERE id = 1")
 
 	cfg := WorkerConfig{
 		DispatchConfig: DispatchConfig{DB: d},
@@ -460,7 +460,7 @@ func TestReapStaleActions_NonInteractiveNotYetStale(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
 	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
-	d.Exec("UPDATE actions SET started_at = datetime('now', '-3 minutes') WHERE id = 1")
+	d.Exec("UPDATE actions SET started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	cfg := WorkerConfig{
 		DispatchConfig: DispatchConfig{DB: d},
