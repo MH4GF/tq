@@ -364,7 +364,24 @@ func (db *DB) ListRunningInteractive() ([]Action, error) {
 }
 
 func (db *DB) ListRunningNonInteractive() ([]Action, error) {
-	return db.listRunningBySession(false)
+	rows, err := db.Query(
+		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND json_extract(metadata, '$.mode') = 'noninteractive' ORDER BY id",
+		ActionStatusRunning,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var actions []Action
+	for rows.Next() {
+		var a Action
+		if err := rows.Scan(a.scanFields()...); err != nil {
+			return nil, err
+		}
+		actions = append(actions, a)
+	}
+	return actions, rows.Err()
 }
 
 func (db *DB) CountRunningInteractive() (int, error) {
