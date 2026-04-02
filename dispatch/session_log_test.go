@@ -16,6 +16,8 @@ func TestEncodeCwd(t *testing.T) {
 		{"/Users/user/project", "-Users-user-project"},
 		{"/", "-"},
 		{"/a/b/c", "-a-b-c"},
+		{"/Users/user/ghq/github.com/org/repo", "-Users-user-ghq-github-com-org-repo"},
+		{"/path/to/.claude/worktrees/name", "-path-to--claude-worktrees-name"},
 	}
 	for _, tt := range tests {
 		got := encodeCwd(tt.input)

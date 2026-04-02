@@ -99,7 +99,8 @@ func pathHasPrefix(path, prefix string) bool {
 }
 
 func encodeCwd(cwd string) string {
-	return strings.ReplaceAll(cwd, "/", "-")
+	r := strings.NewReplacer("/", "-", ".", "-")
+	return r.Replace(cwd)
 }
 
 func sessionLogPath(homeDir, cwd, sessionID string) string {
