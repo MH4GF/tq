@@ -61,9 +61,10 @@ var uiCmd = &cobra.Command{
 					},
 					TmuxSession: uiSession,
 				},
-				MaxInteractive: effectiveMaxInteractive,
-				PollInterval:   uiPollInterval,
-				TmuxChecker:    &dispatch.ExecTmuxChecker{Runner: &dispatch.ExecRunner{}},
+				MaxInteractive:    effectiveMaxInteractive,
+				PollInterval:      uiPollInterval,
+				TmuxChecker:       &dispatch.ExecTmuxChecker{Runner: &dispatch.ExecRunner{}},
+				SessionLogChecker: &dispatch.FileSessionLogChecker{},
 			}
 			return dispatch.RunWorker(ctx, cfg)
 		}
