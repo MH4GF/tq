@@ -495,6 +495,201 @@ func TestReapStaleActions_NonInteractiveNoStartedAt(t *testing.T) {
 	}
 }
 
+type mockSessionLogChecker struct {
+	active    bool
+	sessionID string
+	err       error
+}
+
+func (m *mockSessionLogChecker) IsSessionActive(workDir string, freshnessThreshold time.Duration) (bool, string, error) {
+	return m.active, m.sessionID, m.err
+}
+
+func TestReapStaleActions_InteractiveLogFresh(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix"}`, db.ActionStatusRunning)
+	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
+
+	// tmux window is gone, but session log is fresh
+	checker := &mockTmuxChecker{windows: []string{"zsh"}}
+	sessionChecker := &mockSessionLogChecker{active: true, sessionID: "sess-123"}
+
+	cfg := WorkerConfig{
+		DispatchConfig:     DispatchConfig{DB: d},
+		TmuxChecker:        checker,
+		SessionLogChecker:  sessionChecker,
+		StaleGracePeriod:   30 * time.Second,
+		HeartbeatFreshness: 120 * time.Second,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != db.ActionStatusRunning {
+		t.Errorf("action status = %q, want %q (session log fresh)", action.Status, db.ActionStatusRunning)
+	}
+}
+
+func TestReapStaleActions_InteractiveLogStale(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix"}`, db.ActionStatusRunning)
+	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
+
+	// tmux window gone AND session log stale
+	checker := &mockTmuxChecker{windows: []string{"zsh"}}
+	sessionChecker := &mockSessionLogChecker{active: false}
+
+	cfg := WorkerConfig{
+		DispatchConfig:     DispatchConfig{DB: d},
+		TmuxChecker:        checker,
+		SessionLogChecker:  sessionChecker,
+		StaleGracePeriod:   30 * time.Second,
+		HeartbeatFreshness: 120 * time.Second,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != db.ActionStatusFailed {
+		t.Errorf("action status = %q, want %q", action.Status, db.ActionStatusFailed)
+	}
+}
+
+func TestReapStaleActions_InteractiveNilChecker(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix"}`, db.ActionStatusRunning)
+	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
+
+	// No session log checker, tmux window gone → fallback to tmux check → reaped
+	checker := &mockTmuxChecker{windows: []string{"zsh"}}
+
+	cfg := WorkerConfig{
+		DispatchConfig:   DispatchConfig{DB: d},
+		TmuxChecker:      checker,
+		StaleGracePeriod: 30 * time.Second,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != db.ActionStatusFailed {
+		t.Errorf("action status = %q, want %q (nil checker, window gone)", action.Status, db.ActionStatusFailed)
+	}
+}
+
+func TestReapStaleActions_NonInteractiveSkippedByHeartbeat(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+	d.Exec("UPDATE actions SET started_at = datetime('now', '-25 minutes') WHERE id = 1")
+
+	sessionChecker := &mockSessionLogChecker{active: true, sessionID: "sess-456"}
+
+	cfg := WorkerConfig{
+		DispatchConfig:     DispatchConfig{DB: d},
+		SessionLogChecker:  sessionChecker,
+		HeartbeatFreshness: 120 * time.Second,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != db.ActionStatusRunning {
+		t.Errorf("action status = %q, want %q (heartbeat active)", action.Status, db.ActionStatusRunning)
+	}
+}
+
+func TestReapStaleActions_NonInteractiveReapedByStaleHeartbeat(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+	d.Exec("UPDATE actions SET started_at = datetime('now', '-25 minutes') WHERE id = 1")
+
+	sessionChecker := &mockSessionLogChecker{active: false}
+
+	cfg := WorkerConfig{
+		DispatchConfig:     DispatchConfig{DB: d},
+		SessionLogChecker:  sessionChecker,
+		HeartbeatFreshness: 120 * time.Second,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != db.ActionStatusFailed {
+		t.Errorf("action status = %q, want %q", action.Status, db.ActionStatusFailed)
+	}
+}
+
+func TestReapStaleActions_NonInteractiveCheckerError(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+	d.Exec("UPDATE actions SET started_at = datetime('now', '-25 minutes') WHERE id = 1")
+
+	sessionChecker := &mockSessionLogChecker{err: fmt.Errorf("permission denied")}
+
+	cfg := WorkerConfig{
+		DispatchConfig:     DispatchConfig{DB: d},
+		SessionLogChecker:  sessionChecker,
+		HeartbeatFreshness: 120 * time.Second,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != db.ActionStatusFailed {
+		t.Errorf("action status = %q, want %q (checker error → fallthrough)", action.Status, db.ActionStatusFailed)
+	}
+}
+
+func TestReapStaleActions_SavesSessionIdToMetadata(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+	d.Exec("UPDATE actions SET started_at = datetime('now', '-25 minutes') WHERE id = 1")
+
+	sessionChecker := &mockSessionLogChecker{active: true, sessionID: "sess-789"}
+
+	cfg := WorkerConfig{
+		DispatchConfig:     DispatchConfig{DB: d},
+		SessionLogChecker:  sessionChecker,
+		HeartbeatFreshness: 120 * time.Second,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != db.ActionStatusRunning {
+		t.Fatalf("action status = %q, want %q", action.Status, db.ActionStatusRunning)
+	}
+
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(action.Metadata), &meta); err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+	if meta["claude_session_id"] != "sess-789" {
+		t.Errorf("claude_session_id = %v, want %q", meta["claude_session_id"], "sess-789")
+	}
+}
+
 func TestDispatchOne_NoPending(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
