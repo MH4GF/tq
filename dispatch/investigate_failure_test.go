@@ -148,3 +148,98 @@ func TestCreateInvestigateFailureAction_SkipsInvestigationItself(t *testing.T) {
 		t.Errorf("expected 0 pending investigate actions (skip self), got %d", pendingCount)
 	}
 }
+
+func TestCreateInvestigateFailureAction_SkipsAlreadyTerminal(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
+	actionID, _ := d.InsertAction("watch-notifications", taskID, "{}", "pending")
+	// Simulate: action completed via /tq:done, then process was killed by timeout
+	d.MarkDone(actionID, "outcome: processed 0 notifications")
+	action, _ := d.GetAction(actionID)
+
+	CreateInvestigateFailureAction(d, action, "signal: killed")
+
+	actions, _ := d.ListActions("", nil, 0)
+	for _, a := range actions {
+		if hasMetaKey(a.Metadata, "is_investigate_failure") {
+			t.Error("should not create investigate action for already-terminal action")
+		}
+	}
+}
+
+func TestCreateInvestigateFailureAction_SkipsScheduledTimeout(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
+
+	t.Run("skips for signal killed", func(t *testing.T) {
+		meta := `{"schedule_id":"4","instruction":"test"}`
+		actionID, _ := d.InsertAction("watch", taskID, meta, "failed")
+		action, _ := d.GetAction(actionID)
+
+		CreateInvestigateFailureAction(d, action, "signal: killed")
+
+		actions, _ := d.ListActions("", nil, 0)
+		for _, a := range actions {
+			if hasMetaKey(a.Metadata, "is_investigate_failure") {
+				t.Error("should not create investigate action for scheduled timeout")
+			}
+		}
+	})
+
+	t.Run("skips for context deadline exceeded", func(t *testing.T) {
+		meta := `{"schedule_id":"4","instruction":"test"}`
+		actionID, _ := d.InsertAction("watch", taskID, meta, "failed")
+		action, _ := d.GetAction(actionID)
+
+		CreateInvestigateFailureAction(d, action, "context deadline exceeded")
+
+		actions, _ := d.ListActions("", nil, 0)
+		for _, a := range actions {
+			if hasMetaKey(a.Metadata, "is_investigate_failure") {
+				t.Error("should not create investigate action for scheduled deadline exceeded")
+			}
+		}
+	})
+
+	t.Run("skips for stale noninteractive timeout", func(t *testing.T) {
+		meta := `{"schedule_id":"4","instruction":"test"}`
+		actionID, _ := d.InsertAction("watch", taskID, meta, "failed")
+		action, _ := d.GetAction(actionID)
+
+		CreateInvestigateFailureAction(d, action, "stale: noninteractive action exceeded timeout (20m0s)")
+
+		actions, _ := d.ListActions("", nil, 0)
+		for _, a := range actions {
+			if hasMetaKey(a.Metadata, "is_investigate_failure") {
+				t.Error("should not create investigate action for stale noninteractive timeout")
+			}
+		}
+	})
+}
+
+func TestCreateInvestigateFailureAction_DoesNotSkipScheduledNonTimeout(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
+	meta := `{"schedule_id":"4","instruction":"test"}`
+	actionID, _ := d.InsertAction("watch", taskID, meta, "failed")
+	action, _ := d.GetAction(actionID)
+
+	CreateInvestigateFailureAction(d, action, "API Error: Unable to connect")
+
+	actions, _ := d.ListActions("", nil, 0)
+	investigateCount := 0
+	for _, a := range actions {
+		if hasMetaKey(a.Metadata, "is_investigate_failure") {
+			investigateCount++
+		}
+	}
+	if investigateCount != 1 {
+		t.Errorf("expected 1 investigate action for non-timeout failure, got %d", investigateCount)
+	}
+}

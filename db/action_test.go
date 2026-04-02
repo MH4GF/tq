@@ -322,6 +322,29 @@ func TestListRunningInteractive(t *testing.T) {
 	}
 }
 
+func TestListRunningNonInteractive(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+
+	d.InsertAction("ni-action", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+	d.InsertAction("worktree-action", taskID, `{"instruction":"fix","permission_mode":"plan","worktree":true}`, db.ActionStatusRunning)
+	d.InsertAction("interactive-action", taskID, `{}`, db.ActionStatusRunning)
+	d.InsertAction("pending-ni", taskID, `{"mode":"noninteractive"}`, db.ActionStatusPending)
+
+	actions, err := d.ListRunningNonInteractive()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if actions[0].Title != "ni-action" {
+		t.Errorf("expected title 'ni-action', got %s", actions[0].Title)
+	}
+}
+
 func TestCountRunningInteractive(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

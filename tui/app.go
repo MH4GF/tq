@@ -26,18 +26,19 @@ const (
 type BackgroundFunc func(ctx context.Context) error
 
 type Model struct {
-	activeTab   tab
-	tasks       TasksModel
-	schedules   SchedulesModel
-	width       int
-	height      int
-	quitting    bool
-	cancel      context.CancelFunc
-	bgCtx       context.Context
-	backgrounds []BackgroundFunc
-	statusLine  string
-	logCh       <-chan LogEntry
-	logs        []LogEntry
+	activeTab      tab
+	tasks          TasksModel
+	schedules      SchedulesModel
+	width          int
+	height         int
+	quitting       bool
+	cancel         context.CancelFunc
+	bgCtx          context.Context
+	backgrounds    []BackgroundFunc
+	statusLine     string
+	logCh          <-chan LogEntry
+	logs           []LogEntry
+	maxInteractive int
 }
 
 type tickMsg time.Time
@@ -52,17 +53,18 @@ type backgroundStatusMsg struct {
 	err error
 }
 
-func New(database db.Store, logCh <-chan LogEntry, backgrounds ...BackgroundFunc) Model {
+func New(database db.Store, logCh <-chan LogEntry, maxInteractive int, backgrounds ...BackgroundFunc) Model {
 	today := time.Now().Format("2006-01-02")
 	ctx, cancel := context.WithCancel(context.Background())
 	return Model{
-		activeTab:   tabTasks,
-		tasks:       NewTasksModel(database, today),
-		schedules:   NewSchedulesModel(database),
-		backgrounds: backgrounds,
-		logCh:       logCh,
-		cancel:      cancel,
-		bgCtx:       ctx,
+		activeTab:      tabTasks,
+		tasks:          NewTasksModel(database, today),
+		schedules:      NewSchedulesModel(database),
+		backgrounds:    backgrounds,
+		logCh:          logCh,
+		cancel:         cancel,
+		bgCtx:          ctx,
+		maxInteractive: maxInteractive,
 	}
 }
 
@@ -121,15 +123,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		// When tasks tab is in a sub-mode, delegate all keys to it
+		// When a tab is in a sub-mode, delegate all keys to it
 		if m.activeTab == tabTasks && m.tasks.Mode() != modeNormal {
 			var cmd tea.Cmd
 			m.tasks, cmd = m.tasks.Update(msg)
 			return m, cmd
 		}
+		if m.activeTab == tabSchedules && m.schedules.Mode() != schedModeNormal {
+			var cmd tea.Cmd
+			m.schedules, cmd = m.schedules.Update(msg)
+			return m, cmd
+		}
 
 		switch {
-		case key.Matches(msg, key.NewBinding(key.WithKeys("q", "ctrl+c"))):
+		case key.Matches(msg, key.NewBinding(key.WithKeys("q", "esc", "ctrl+c"))):
 			m.quitting = true
 			if m.cancel != nil {
 				m.cancel()
@@ -182,7 +189,21 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	// Header strip: tq brand + tabs
+	// Detail views: full-screen mode — no gauge, status strip, or activity log
+	if m.activeTab == tabTasks && m.tasks.Mode() == modeViewDetail {
+		detailTasks := m.tasks.SetSize(m.width, m.height-1)
+		b.WriteString(detailTasks.View())
+		b.WriteString(m.renderHelp())
+		return b.String()
+	}
+	if m.activeTab == tabSchedules && m.schedules.Mode() == schedModeDetail {
+		detailScheds := m.schedules.SetSize(m.width, m.height-1)
+		b.WriteString(detailScheds.View())
+		b.WriteString(m.renderHelp())
+		return b.String()
+	}
+
+	// Header strip
 	b.WriteString(m.renderHeader())
 	b.WriteString("\n")
 
@@ -192,7 +213,7 @@ func (m Model) View() string {
 		stats := m.tasks.actionStats()
 		b.WriteString(renderGaugeBar(stats.running, stats.pending, stats.done, stats.failed, m.width))
 		b.WriteString("\n")
-		b.WriteString(renderStatusStrip(stats.running, stats.pending, stats.done, stats.failed, stats.pendingLabel, m.width))
+		b.WriteString(renderStatusStrip(stats, m.maxInteractive, m.width))
 		b.WriteString("\n")
 		b.WriteString(m.tasks.View())
 	case tabSchedules:
@@ -211,8 +232,6 @@ func (m Model) View() string {
 }
 
 func (m Model) renderHeader() string {
-	brand := styleBrand.Render(" tq")
-
 	tabs := []struct {
 		label string
 		t     tab
@@ -231,10 +250,10 @@ func (m Model) renderHeader() string {
 	}
 	tabStr := strings.Join(tabParts, " ")
 
-	gap := m.width - lipgloss.Width(brand) - lipgloss.Width(tabStr) - 1
+	gap := m.width - lipgloss.Width(tabStr) - 1
 	gap = max(gap, 1)
 
-	inner := brand + strings.Repeat(" ", gap) + tabStr
+	inner := strings.Repeat(" ", gap) + tabStr
 	return styleHeaderBar.Width(m.width).Render(inner)
 }
 
@@ -246,8 +265,8 @@ func (m Model) renderHelp() string {
 	case tabSchedules:
 		keys = m.schedules.HelpKeys()
 	}
-	inner := " " + formatHelp(keys)
-	return styleHelpBar.Width(m.width).Render(inner)
+	inner := "  " + formatHelp(keys)
+	return "\n" + styleHelpBar.Width(m.width).Render(inner)
 }
 
 func (m Model) renderActivity() string {
@@ -261,10 +280,7 @@ func (m Model) renderActivity() string {
 	shown := m.logs[start:]
 	for _, e := range shown {
 		ts := e.Time.Format("15:04")
-		b.WriteString(styleActivityTS.Render(" "+ts+" ") + styleActivityMsg.Render(e.Message) + "\n")
-	}
-	for i := len(shown); i < activityLines; i++ {
-		b.WriteString("\n")
+		b.WriteString(styleActivityTS.Render("  "+ts+" ") + styleActivityMsg.Render(e.Message) + "\n")
 	}
 	return b.String()
 }

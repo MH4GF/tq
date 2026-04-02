@@ -52,6 +52,9 @@ type TasksModel struct {
 	message    string
 	dateFilter string
 
+	// Cached stats
+	runningInteractive int
+
 	// Detail view state
 	mode         tasksMode
 	detailAction *db.Action
@@ -75,16 +78,18 @@ type actionAttachedMsg struct {
 }
 
 type tasksLoadedMsg struct {
-	trees []projectTree
+	trees              []projectTree
+	runningInteractive int
 }
 
 // actionStats holds aggregate counts for the status strip and gauge.
 type actionStats struct {
-	running      int
-	pending      int
-	done         int
-	failed       int
-	pendingLabel string
+	running            int
+	runningInteractive int
+	pending            int
+	done               int
+	failed             int
+	pendingLabel       string
 }
 
 func NewTasksModel(database db.Store, dateFilter string) TasksModel {
@@ -127,6 +132,9 @@ func (m TasksModel) loadTasks() tea.Cmd {
 						actions = db.FilterForOpenTask(actions, m.dateFilter)
 					}
 				}
+				sort.SliceStable(actions, func(i, j int) bool {
+					return actionStatusOrder(actions[i].Status) < actionStatusOrder(actions[j].Status)
+				})
 				nodes = append(nodes, taskNode{task: t, actions: actions})
 			}
 			sort.SliceStable(nodes, func(i, j int) bool {
@@ -134,7 +142,11 @@ func (m TasksModel) loadTasks() tea.Cmd {
 			})
 			trees = append(trees, projectTree{project: p, tasks: nodes})
 		}
-		return tasksLoadedMsg{trees: trees}
+		var ri int
+		if n, err := m.database.CountRunningInteractive(); err == nil {
+			ri = n
+		}
+		return tasksLoadedMsg{trees: trees, runningInteractive: ri}
 	}
 }
 
@@ -151,6 +163,7 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 		return m, nil
 	case tasksLoadedMsg:
 		m.trees = msg.trees
+		m.runningInteractive = msg.runningInteractive
 		for _, pt := range m.trees {
 			projKey := fmt.Sprintf("p:%d", pt.project.ID)
 			if _, ok := m.expanded[projKey]; !ok {
@@ -266,7 +279,7 @@ func cardBorder(left, right string, width int) string {
 
 func (m *TasksModel) buildLines() {
 	m.lines = nil
-	for pi, pt := range m.trees {
+	for _, pt := range m.trees {
 		projKey := fmt.Sprintf("p:%d", pt.project.ID)
 		arrow := "▸"
 		if m.expanded[projKey] {
@@ -312,13 +325,26 @@ func (m *TasksModel) buildLines() {
 				text:     cardBorder("└", "┘", m.width),
 				lineType: lineCardBottom,
 			})
-			if pi < len(m.trees)-1 {
-				m.lines = append(m.lines, treeLine{text: "", lineType: lineCardSep})
-			}
 			continue
 		}
 
+		// Separator between project header and first task
+		if len(pt.tasks) > 0 {
+			m.lines = append(m.lines, treeLine{
+				text:     cardBorder("│", "│", m.width),
+				lineType: lineCardSep,
+			})
+		}
+
 		for ti, tn := range pt.tasks {
+			// Blank line between tasks
+			if ti > 0 {
+				m.lines = append(m.lines, treeLine{
+					text:     padWithBorder(styleBorderChar.Render("│"), m.width, styleBorderChar.Render("│")),
+					lineType: lineCardSep,
+				})
+			}
+
 			taskKey := fmt.Sprintf("t:%d", tn.task.ID)
 			tArrow := "▸"
 			if m.expanded[taskKey] {
@@ -329,30 +355,19 @@ func (m *TasksModel) buildLines() {
 			isDone := tn.task.Status == db.TaskStatusDone || tn.task.Status == db.TaskStatusArchived
 			var taskText string
 			if isDone {
-				taskText = fmt.Sprintf("  %s #%d %s",
+				taskText = fmt.Sprintf(" %s %s %s %s",
 					styleBorderChar.Render(tArrow),
-					tn.task.ID,
+					styleDoneDim.Render("✓"),
+					styleDoneDim.Render(fmt.Sprintf("#%d", tn.task.ID)),
 					styleDoneDim.Render(tn.task.Title),
 				)
 			} else {
-				actionCount := ""
-				if len(tn.actions) > 0 {
-					actionCount = styleBadge.Render(fmt.Sprintf(" %d actions", len(tn.actions)))
-				}
-				taskText = fmt.Sprintf("  %s %s %s%s",
+				taskText = fmt.Sprintf(" %s %s %s %s",
 					styleBorderChar.Render(tArrow),
+					stylePending.Render("○"),
 					styleMuted.Render(fmt.Sprintf("#%d", tn.task.ID)),
 					tn.task.Title,
-					actionCount,
 				)
-			}
-
-			// Separator between tasks
-			if ti > 0 {
-				m.lines = append(m.lines, treeLine{
-					text:     cardBorder("│", "│", m.width),
-					lineType: lineCardSep,
-				})
 			}
 
 			m.lines = append(m.lines, treeLine{
@@ -370,11 +385,12 @@ func (m *TasksModel) buildLines() {
 			for _, a := range tn.actions {
 				icon := StatusIcon(a.Status)
 				var actionText string
+				idStr := styleMuted.Render(fmt.Sprintf("#%d", a.ID))
 				if a.Status == db.ActionStatusDone || a.Status == db.ActionStatusFailed {
 					ds := StatusDimStyle(a.Status)
-					actionText = fmt.Sprintf("    %s %s", ds.Render(icon), ds.Render(a.Title))
+					actionText = fmt.Sprintf("     %s %s %s", ds.Render(icon), idStr, ds.Render(a.Title))
 				} else {
-					actionText = fmt.Sprintf("    %s %s", StatusStyle(a.Status).Render(icon), a.Title)
+					actionText = fmt.Sprintf("     %s %s %s", StatusStyle(a.Status).Render(icon), idStr, a.Title)
 				}
 
 				m.lines = append(m.lines, treeLine{
@@ -393,10 +409,6 @@ func (m *TasksModel) buildLines() {
 			lineType: lineCardBottom,
 		})
 
-		// Gap between project cards
-		if pi < len(m.trees)-1 {
-			m.lines = append(m.lines, treeLine{text: "", lineType: lineCardSep})
-		}
 	}
 }
 
@@ -426,34 +438,45 @@ func (m TasksModel) View() string {
 		}
 
 		rendered := line.text
+		rightBorder := styleBorderChar.Render("│")
+		borderW := lipgloss.Width(rightBorder)
+
+		// Inline result for cursor on action
+		if i == m.cursor && line.action != nil && line.action.Result.Valid && line.action.Result.String != "" {
+			label := "result"
+			rst := StatusStyle(line.action.Status)
+			lineWidth := lipgloss.Width(rendered)
+			remaining := m.width - lineWidth - borderW - len(label) - 4
+			if remaining > 10 {
+				rendered += "  " + rst.Render(label+": "+truncateResult(line.action.Result.String, remaining))
+			}
+		}
 
 		// Right-aligned label (workdir for projects)
 		if line.rightLabel != "" {
 			lineWidth := lipgloss.Width(rendered)
-			labelRendered := styleWorkDir.Render(line.rightLabel)
-			labelWidth := lipgloss.Width(labelRendered)
-			borderRight := lipgloss.Width(styleBorderChar.Render("│"))
-			pad := m.width - lineWidth - labelWidth - borderRight - 1
-			if pad > 0 {
-				rendered += strings.Repeat(" ", pad) + labelRendered + styleBorderChar.Render("│")
+			label := line.rightLabel
+			// 1sp gap before right border
+			availW := m.width - lineWidth - borderW - 2 // 1sp min gap left + 1sp right
+			if availW < 10 {
+				// Not enough room, skip label
+				rendered = padWithBorder(rendered, m.width, rightBorder)
+			} else {
+				if len(label) > availW {
+					label = "..." + label[len(label)-availW+3:]
+				}
+				labelRendered := styleWorkDir.Render(label)
+				labelWidth := lipgloss.Width(labelRendered)
+				pad := m.width - lineWidth - labelWidth - borderW - 1 // 1sp before border
+				pad = max(pad, 1)
+				rendered += strings.Repeat(" ", pad) + labelRendered + " " + rightBorder
 			}
+		} else {
+			rendered = padWithBorder(rendered, m.width, rightBorder)
 		}
 
-		// Cursor row: accent bar + highlight
+		// Cursor highlight
 		if i == m.cursor {
-			// Inline result for action under cursor
-			if line.action != nil && line.action.Result.Valid && line.action.Result.String != "" {
-				label := "result"
-				rst := StatusStyle(line.action.Status)
-				lineWidth := lipgloss.Width(rendered)
-				pad := 2
-				labelLen := len(label) + 2
-				remaining := m.width - lineWidth - pad - labelLen
-				if remaining > 10 {
-					rendered += "  " + rst.Render(label+": "+truncateResult(line.action.Result.String, remaining))
-				}
-			}
-
 			rendered = highlightLine(rendered, m.width)
 		}
 
@@ -502,6 +525,7 @@ func (m TasksModel) actionStats() actionStats {
 	}
 	stats.pending = pc.Total
 	stats.pendingLabel = pc.Label()
+	stats.runningInteractive = m.runningInteractive
 	return stats
 }
 
@@ -515,6 +539,23 @@ func taskStatusOrder(status string) int {
 		return 3
 	default:
 		return 2
+	}
+}
+
+func actionStatusOrder(status string) int {
+	switch status {
+	case db.ActionStatusDone:
+		return 1
+	case db.ActionStatusFailed, db.ActionStatusCancelled:
+		return 2
+	case db.ActionStatusRunning:
+		return 3
+	case db.ActionStatusDispatched:
+		return 4
+	case db.ActionStatusPending:
+		return 5
+	default:
+		return 3
 	}
 }
 

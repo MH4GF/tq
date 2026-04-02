@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/MH4GF/tq/db"
 )
@@ -85,11 +86,11 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 		return nil, fmt.Errorf("parse action metadata: %w", err)
 	}
 
-	instruction, ok := actionMeta[MetaKeyInstruction].(string)
-	if !ok || instruction == "" {
-		_ = params.DB.MarkFailed(action.ID, "no instruction in metadata")
-		return nil, errors.New("no instruction in metadata")
+	if err := ValidateActionMetadata(actionMeta); err != nil {
+		_ = params.DB.MarkFailed(action.ID, err.Error())
+		return nil, fmt.Errorf("validate action metadata: %w", err)
 	}
+	instruction := actionMeta[MetaKeyInstruction].(string)
 
 	cfg := ActionConfig{Mode: ModeInteractive}
 	if modeStr, ok := actionMeta[MetaKeyMode].(string); ok {
@@ -102,7 +103,7 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 		cfg.Worktree = wt
 	}
 
-	instruction = wrapInstruction(instruction, action.TaskID, cfg.Mode)
+	instruction = wrapInstruction(instruction, action.ID, action.TaskID, cfg.Mode)
 
 	workDir := resolveWorkDir(params.DB, action)
 
@@ -182,13 +183,22 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 	return &ExecuteResult{Mode: ModeNonInteractive, Output: result}, nil
 }
 
-func wrapInstruction(instruction string, taskID int64, mode string) string {
-	preamble := fmt.Sprintf("First, run `tq action list --task %d` to understand the task history (completed actions, their results, etc.).\n\n", taskID)
+func wrapInstruction(instruction string, actionID, taskID int64, mode string) string {
+	preamble := fmt.Sprintf("You are executing action #%d (task #%d).\n\n", actionID, taskID)
+	preamble += fmt.Sprintf("First, run `tq action list --task %d` to understand the task history (completed actions, their results, etc.).\n\n", taskID)
 	result := preamble + instruction
 	if mode != ModeRemote {
 		result += "\n\nWhen you finish, run `/tq:done` to mark this action as complete."
 	}
 	return result
+}
+
+func ValidateActionMetadata(meta map[string]any) error {
+	inst, ok := meta[MetaKeyInstruction].(string)
+	if !ok || strings.TrimSpace(inst) == "" {
+		return errors.New("metadata must contain a non-empty \"instruction\" field")
+	}
+	return nil
 }
 
 func parseMetadata(raw string) (map[string]any, error) {

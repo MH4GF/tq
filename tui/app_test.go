@@ -13,7 +13,7 @@ func TestNew(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil)
+	m := New(d, nil, 3)
 	if m.ActiveTab() != tabTasks {
 		t.Errorf("initial tab = %d, want tabTasks(0)", m.ActiveTab())
 	}
@@ -26,7 +26,7 @@ func TestTabSwitch(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil)
+	m := New(d, nil, 3)
 
 	// Tab key switches Tasks → Schedules
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
@@ -60,7 +60,7 @@ func TestQuit(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil)
+	m := New(d, nil, 3)
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	m = updated.(Model)
 
@@ -79,7 +79,7 @@ func TestWindowResize(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil)
+	m := New(d, nil, 3)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updated.(Model)
 
@@ -92,7 +92,7 @@ func TestInit(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil)
+	m := New(d, nil, 3)
 	cmd := m.Init()
 	if cmd == nil {
 		t.Error("Init should return a batch command")
@@ -103,7 +103,7 @@ func TestViewContainsTabs(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil)
+	m := New(d, nil, 3)
 	view := m.View()
 	if !strings.Contains(view, "Tasks") {
 		t.Errorf("view should contain 'Tasks', got %q", view)
@@ -117,7 +117,7 @@ func TestApp_DateFilterDefault(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil)
+	m := New(d, nil, 3)
 
 	if m.tasks.dateFilter == "" {
 		t.Error("initial tasks dateFilter should be today's date, got empty")
@@ -128,14 +128,14 @@ func TestHelpText(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil)
+	m := New(d, nil, 3)
 
 	// Tasks tab help (default tab)
 	view := m.View()
-	if !strings.Contains(view, "j/k: navigate") {
+	if !strings.Contains(view, "j/k") || !strings.Contains(view, "navigate") {
 		t.Errorf("tasks help missing navigate, got %q", view)
 	}
-	if !strings.Contains(view, "tab: switch") {
+	if !strings.Contains(view, "tab") || !strings.Contains(view, "switch") {
 		t.Errorf("tasks help missing tab switch, got %q", view)
 	}
 }
