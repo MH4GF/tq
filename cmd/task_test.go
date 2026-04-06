@@ -473,6 +473,24 @@ func TestTaskUpdate_InvalidMeta(t *testing.T) {
 	}
 }
 
+func TestTaskUpdate_InvalidStatus(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "task", "{}", "")
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"task", "update", "1", "--status", "closed"})
+
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected error for invalid status")
+	}
+}
+
 func TestTaskGet(t *testing.T) {
 	tests := []struct {
 		name      string

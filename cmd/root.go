@@ -24,7 +24,7 @@ var rootCmd = &cobra.Command{
 
 Data model: project → task → action.
   - project: groups tasks, sets working directory
-  - task: unit of work (status: open, review, done, blocked, archived)
+  - task: unit of work (status: open, done, archived)
   - action: dispatchable unit of work with an instruction (status: pending, running, done, failed, cancelled)
 
 Typical flow: create a task, then create actions under it.

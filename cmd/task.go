@@ -69,7 +69,7 @@ var taskListCmd = &cobra.Command{
 	Example: `  tq task list
   tq task list --project 1
   tq task list --status open
-  tq task list --project 2 --status review`,
+  tq task list --project 2 --status done`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		tasks, err := database.ListTasks(taskListProjectID, taskListStatus, taskListLimit)
 		if err != nil {
@@ -106,7 +106,7 @@ var taskUpdateCmd = &cobra.Command{
 	Long: `Update a task's status, project, working directory, or metadata.
 At least one of --status, --project, --work-dir, or --meta is required.`,
 	Example: `  tq task update 1 --status done
-  tq task update 3 --status review
+  tq task update 3 --status archived
   tq task update 5 --project 2 --work-dir ~/src/other
   tq task update 7 --meta '{"url":"https://github.com/org/repo/pull/99"}'`,
 	Args: cobra.ExactArgs(1),
@@ -224,13 +224,13 @@ func init() {
 		panic(err)
 	}
 
-	taskUpdateCmd.Flags().StringVar(&taskUpdateStatus, "status", "", "New status (open, review, done, blocked, archived)")
+	taskUpdateCmd.Flags().StringVar(&taskUpdateStatus, "status", "", "New status (open, done, archived)")
 	taskUpdateCmd.Flags().Int64Var(&taskUpdateProjectID, "project", 0, "Project ID")
 	taskUpdateCmd.Flags().StringVar(&taskUpdateWorkDir, "work-dir", "", "Working directory")
 	taskUpdateCmd.Flags().StringVar(&taskUpdateMeta, "meta", "", `JSON metadata to merge (e.g. {"url":"https://..."})`)
 
 	taskListCmd.Flags().Int64Var(&taskListProjectID, "project", 0, "Filter by project ID (see: tq project list)")
-	taskListCmd.Flags().StringVar(&taskListStatus, "status", "", "Filter by status (open, review, done, blocked, archived)")
+	taskListCmd.Flags().StringVar(&taskListStatus, "status", "", "Filter by status (open, done, archived)")
 	taskListCmd.Flags().IntVar(&taskListLimit, "limit", 0, "Limit number of results (0 = no limit)")
 	taskListCmd.Flags().StringVar(&taskListJQ, "jq", "", jqFlagUsage(taskListFields))
 
