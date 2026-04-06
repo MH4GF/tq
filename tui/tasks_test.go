@@ -245,9 +245,10 @@ func TestTasksModel_DateFilter_ArchivedTaskFiltered(t *testing.T) {
 
 	// Archived task with old dates — should be filtered out
 	taskID, _ := d.InsertTask(1, "Old archived", "{}", "")
-	d.InsertAction("old-action", taskID, "{}", db.ActionStatusPending)
+	actionID, _ := d.InsertAction("old-action", taskID, "{}", db.ActionStatusPending)
+	d.MarkCancelled(actionID, "")
 	d.UpdateTask(taskID, db.TaskStatusArchived, "")
-	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE title ='old-action'")
+	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00', completed_at = '2025-01-01 00:00:00' WHERE title ='old-action'")
 	d.Exec(fmt.Sprintf("UPDATE tasks SET created_at = '2025-01-01 00:00:00', updated_at = '2025-01-01 00:00:00' WHERE id = %d", taskID))
 
 	// Open task — should always appear
@@ -281,7 +282,8 @@ func TestTasksModel_ArchivedTaskCollapsed(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Archived task", "{}", "")
-	d.InsertAction("check", taskID, "{}", db.ActionStatusPending)
+	actionID, _ := d.InsertAction("check", taskID, "{}", db.ActionStatusPending)
+	d.MarkCancelled(actionID, "")
 	d.UpdateTask(taskID, db.TaskStatusArchived, "")
 
 	m := NewTasksModel(d, "")

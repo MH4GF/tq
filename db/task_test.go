@@ -3,6 +3,7 @@ package db_test
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/MH4GF/tq/db"
@@ -350,6 +351,40 @@ func TestUpdateTask_BlockedByActiveSchedule(t *testing.T) {
 				t.Errorf("UpdateTask(%q) error = %v, wantErr %v", tc.status, err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestUpdateTask_BlockedByActiveActions(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+
+	// Insert a pending action
+	actionID, _ := d.InsertAction("pending action", taskID, "{}", db.ActionStatusPending)
+
+	// Archiving should be blocked
+	err := d.UpdateTask(taskID, db.TaskStatusArchived, "")
+	if err == nil {
+		t.Fatal("expected error when archiving task with pending action")
+	}
+	if !strings.Contains(err.Error(), "pending/running action(s)") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+
+	// done should still be allowed (only archived is blocked)
+	err = d.UpdateTask(taskID, db.TaskStatusDone, "")
+	if err != nil {
+		t.Errorf("UpdateTask(done) should succeed with active actions, got: %v", err)
+	}
+
+	// Reset to open for next test
+	d.UpdateTask(taskID, db.TaskStatusOpen, "")
+
+	// Cancel the action, archiving should now succeed
+	d.MarkCancelled(actionID, "")
+	err = d.UpdateTask(taskID, db.TaskStatusArchived, "")
+	if err != nil {
+		t.Errorf("UpdateTask(archived) should succeed after cancelling actions, got: %v", err)
 	}
 }
 
