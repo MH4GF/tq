@@ -224,13 +224,13 @@ func init() {
 		panic(err)
 	}
 
-	taskUpdateCmd.Flags().StringVar(&taskUpdateStatus, "status", "", "New status (open, review, done, blocked, archived)")
+	taskUpdateCmd.Flags().StringVar(&taskUpdateStatus, "status", "", "New status (open, done, archived)")
 	taskUpdateCmd.Flags().Int64Var(&taskUpdateProjectID, "project", 0, "Project ID")
 	taskUpdateCmd.Flags().StringVar(&taskUpdateWorkDir, "work-dir", "", "Working directory")
 	taskUpdateCmd.Flags().StringVar(&taskUpdateMeta, "meta", "", `JSON metadata to merge (e.g. {"url":"https://..."})`)
 
 	taskListCmd.Flags().Int64Var(&taskListProjectID, "project", 0, "Filter by project ID (see: tq project list)")
-	taskListCmd.Flags().StringVar(&taskListStatus, "status", "", "Filter by status (open, review, done, blocked, archived)")
+	taskListCmd.Flags().StringVar(&taskListStatus, "status", "", "Filter by status (open, done, archived)")
 	taskListCmd.Flags().IntVar(&taskListLimit, "limit", 0, "Limit number of results (0 = no limit)")
 	taskListCmd.Flags().StringVar(&taskListJQ, "jq", "", jqFlagUsage(taskListFields))
 
