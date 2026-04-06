@@ -81,6 +81,8 @@ Addressed.
 
 After all responses are complete, re-request review from the reviewer.
 
+Skip re-request for bot reviewers (e.g., `devin-ai-integration[bot]`). Only re-request from human reviewers.
+
 ```bash
 gh pr edit $ARGUMENTS --add-reviewer <REVIEWER_LOGIN>
 ```
