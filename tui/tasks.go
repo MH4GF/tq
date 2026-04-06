@@ -352,14 +352,15 @@ func (m *TasksModel) buildLines() {
 			}
 
 			// Task status styling
-			isDone := tn.task.Status == db.TaskStatusDone || tn.task.Status == db.TaskStatusArchived
+			isTerminal := tn.task.Status == db.TaskStatusDone || tn.task.Status == db.TaskStatusArchived
 			var taskText string
-			if isDone {
+			if isTerminal {
+				ds := StatusDimStyle(tn.task.Status)
 				taskText = fmt.Sprintf(" %s %s %s %s",
 					styleBorderChar.Render(tArrow),
-					styleDoneDim.Render("✓"),
-					styleDoneDim.Render(fmt.Sprintf("#%d", tn.task.ID)),
-					styleDoneDim.Render(tn.task.Title),
+					ds.Render(StatusIcon(tn.task.Status)),
+					ds.Render(fmt.Sprintf("#%d", tn.task.ID)),
+					ds.Render(tn.task.Title),
 				)
 			} else {
 				taskText = fmt.Sprintf(" %s %s %s %s",
@@ -386,7 +387,7 @@ func (m *TasksModel) buildLines() {
 				icon := StatusIcon(a.Status)
 				var actionText string
 				idStr := styleMuted.Render(fmt.Sprintf("#%d", a.ID))
-				if a.Status == db.ActionStatusDone || a.Status == db.ActionStatusFailed {
+				if a.Status == db.ActionStatusDone || a.Status == db.ActionStatusFailed || a.Status == db.ActionStatusCancelled {
 					ds := StatusDimStyle(a.Status)
 					actionText = fmt.Sprintf("     %s %s %s", ds.Render(icon), idStr, ds.Render(a.Title))
 				} else {

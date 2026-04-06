@@ -31,6 +31,7 @@ var (
 
 	colorDoneDim   = lipgloss.Color("65")  // dim green for done actions
 	colorFailedDim = lipgloss.Color("131") // dim red for failed actions
+	colorInactive  = lipgloss.Color("242") // gray for archived/cancelled
 )
 
 // ── Status styles ──
@@ -46,6 +47,7 @@ var (
 
 	styleDoneDim   = lipgloss.NewStyle().Foreground(colorDoneDim)
 	styleFailedDim = lipgloss.NewStyle().Foreground(colorFailedDim)
+	styleInactive  = lipgloss.NewStyle().Foreground(colorInactive)
 )
 
 // ── UI component styles ──
@@ -102,6 +104,8 @@ func StatusStyle(status string) lipgloss.Style {
 		return styleFailed
 	case db.ActionStatusDispatched:
 		return styleDispatched
+	case db.ActionStatusCancelled, db.TaskStatusArchived:
+		return styleInactive
 	default:
 		return styleMuted
 	}
@@ -113,6 +117,8 @@ func StatusDimStyle(status string) lipgloss.Style {
 		return styleDoneDim
 	case db.ActionStatusFailed:
 		return styleFailedDim
+	case db.ActionStatusCancelled, db.TaskStatusArchived:
+		return styleInactive
 	default:
 		return StatusStyle(status)
 	}
@@ -296,6 +302,10 @@ func StatusIcon(status string) string {
 		return "✗"
 	case db.ActionStatusDispatched:
 		return "⇢"
+	case db.ActionStatusCancelled:
+		return "⊘"
+	case db.TaskStatusArchived:
+		return "▪"
 	default:
 		return "?"
 	}
