@@ -117,7 +117,7 @@ func StatusDimStyle(status string) lipgloss.Style {
 		return styleDoneDim
 	case db.ActionStatusFailed:
 		return styleFailedDim
-	case db.ActionStatusCancelled:
+	case db.ActionStatusCancelled, db.TaskStatusArchived:
 		return styleInactive
 	default:
 		return StatusStyle(status)

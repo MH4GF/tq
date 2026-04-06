@@ -352,21 +352,15 @@ func (m *TasksModel) buildLines() {
 			}
 
 			// Task status styling
-			isDone := tn.task.Status == db.TaskStatusDone || tn.task.Status == db.TaskStatusArchived
+			isTerminal := tn.task.Status == db.TaskStatusDone || tn.task.Status == db.TaskStatusArchived
 			var taskText string
-			if tn.task.Status == db.TaskStatusArchived {
+			if isTerminal {
+				ds := StatusDimStyle(tn.task.Status)
 				taskText = fmt.Sprintf(" %s %s %s %s",
 					styleBorderChar.Render(tArrow),
-					styleInactive.Render(StatusIcon(db.TaskStatusArchived)),
-					styleInactive.Render(fmt.Sprintf("#%d", tn.task.ID)),
-					styleInactive.Render(tn.task.Title),
-				)
-			} else if isDone {
-				taskText = fmt.Sprintf(" %s %s %s %s",
-					styleBorderChar.Render(tArrow),
-					styleDoneDim.Render("✓"),
-					styleDoneDim.Render(fmt.Sprintf("#%d", tn.task.ID)),
-					styleDoneDim.Render(tn.task.Title),
+					ds.Render(StatusIcon(tn.task.Status)),
+					ds.Render(fmt.Sprintf("#%d", tn.task.ID)),
+					ds.Render(tn.task.Title),
 				)
 			} else {
 				taskText = fmt.Sprintf(" %s %s %s %s",
