@@ -378,10 +378,14 @@ func TestUpdateTask_BlockedByActiveActions(t *testing.T) {
 	}
 
 	// Reset to open for next test
-	d.UpdateTask(taskID, db.TaskStatusOpen, "")
+	if err := d.UpdateTask(taskID, db.TaskStatusOpen, ""); err != nil {
+		t.Fatalf("reset to open: %v", err)
+	}
 
 	// Cancel the action, archiving should now succeed
-	d.MarkCancelled(actionID, "")
+	if err := d.MarkCancelled(actionID, ""); err != nil {
+		t.Fatalf("cancel action: %v", err)
+	}
 	err = d.UpdateTask(taskID, db.TaskStatusArchived, "")
 	if err != nil {
 		t.Errorf("UpdateTask(archived) should succeed after cancelling actions, got: %v", err)
