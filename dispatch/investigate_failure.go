@@ -30,10 +30,10 @@ func CreateInvestigateFailureAction(database db.Store, action *db.Action, failur
 		return
 	}
 
-	// Skip investigate for scheduled actions that failed due to timeout/kill.
-	// These are transient and auto-recover on the next schedule run.
-	if _, isScheduled := meta[MetaKeyScheduleID]; isScheduled && isTimeoutFailure(failureResult) {
-		slog.Info("skipping investigate-failure for scheduled action timeout", "action_id", action.ID, "schedule_id", meta[MetaKeyScheduleID])
+	// Skip investigate for actions that failed due to timeout/kill.
+	// Timeouts are self-explanatory and don't need investigation.
+	if isTimeoutFailure(failureResult) {
+		slog.Info("skipping investigate-failure for timeout", "action_id", action.ID)
 		return
 	}
 
