@@ -51,16 +51,16 @@ For actionable notifications, select the **first matching** instruction by prior
 
 | Priority | Condition | Instruction |
 |---|---|---|
-| 1 | `reason=review_requested` + not yet reviewed | `/gh-notifications:review-pr <PR_URL>` |
-| 2 | `mergeStateStatus: "BEHIND"` or conflicting | `/gh-notifications:fix-conflict <PR_URL>` |
-| 3 | statusCheckRollup has failure | `/gh-notifications:fix-ci <PR_URL>` |
-| 4 | `reviewDecision: "CHANGES_REQUESTED"` / unaddressed review comments | `/gh-notifications:respond-review <PR_URL>` |
-| 5 | `reviewDecision: "APPROVED"` + CI pass + mergeable | `/gh-notifications:merge-pr <PR_URL>` |
-| 6 | Own PR, not yet reviewed | `/gh-notifications:self-review <PR_URL>` |
+| 1 | `reason=review_requested` + not yet reviewed | `/gh-ops:review-pr <PR_URL>` |
+| 2 | `mergeStateStatus: "BEHIND"` or conflicting | `/gh-ops:fix-conflict <PR_URL>` |
+| 3 | statusCheckRollup has failure | `/gh-ops:fix-ci <PR_URL>` |
+| 4 | `reviewDecision: "CHANGES_REQUESTED"` / unaddressed review comments | `/gh-ops:respond-review <PR_URL>` |
+| 5 | `reviewDecision: "APPROVED"` + CI pass + mergeable | `/gh-ops:merge-pr <PR_URL>` |
+| 6 | Own PR, not yet reviewed | `/gh-ops:self-review <PR_URL>` |
 
 If no condition matches, do NOT use a slash command. Instead, write a detailed free-text instruction describing what needs to be done — include the PR/issue URL, the context from the notification, and specific next steps.
 
-**Excluded prompts** (never select these): `classify-gh-notification`, `classify-next-action`, `watch-gh-notifications`
+**Excluded prompts** (never select these): `classify-gh-notification`, `classify-next-action`, `watch-gh-ops`
 
 #### 2e. Match existing task
 

@@ -1,7 +1,7 @@
 ---
 description: Self-review a PR before requesting review
 argument-hint: "<PR_URL>"
-allowed-tools: Bash(gh pr checks *), Bash(gh pr view *), Bash(gh pr diff *), Bash(**/scripts/gh-unresolved-threads *), Read, Edit, Write, Grep, Glob, Skill(gh-notifications:respond-review)
+allowed-tools: Bash(gh pr checks *), Bash(gh pr view *), Bash(gh pr diff *), Bash(**/scripts/gh-unresolved-threads *), Read, Edit, Write, Grep, Glob, Skill(gh-ops:respond-review)
 ---
 
 # Self-Review
@@ -96,7 +96,7 @@ Record resolution for each:
 ${CLAUDE_PLUGIN_ROOT}/scripts/gh-unresolved-threads $ARGUMENTS
 ```
 
-If unresolved comments exist → record as a finding. Handle via `/gh-notifications:respond-review $ARGUMENTS`.
+If unresolved comments exist → record as a finding. Handle via `/gh-ops:respond-review $ARGUMENTS`.
 
 ## Phase 2: Report and discuss
 
@@ -118,7 +118,7 @@ If 0 findings → report that and finish.
 
 ## Phase 3: Execute
 
-Implement fixes per the agreed plan. For unresolved comments, follow `/gh-notifications:respond-review $ARGUMENTS`.
+Implement fixes per the agreed plan. For unresolved comments, follow `/gh-ops:respond-review $ARGUMENTS`.
 
 ## Phase 4: Mark ready
 

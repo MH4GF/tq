@@ -158,7 +158,7 @@ var scheduleUpdateCmd = &cobra.Command{
 	Short: "Update a schedule",
 	Example: `  tq schedule update 1 --cron "0 10 * * *"
   tq schedule update 2 --title "Weekly sync" --task 3
-  tq schedule update 4 --instruction "/gh-notifications:watch"`,
+  tq schedule update 4 --instruction "/gh-ops:watch"`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := parseID(args[0])

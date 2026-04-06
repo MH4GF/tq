@@ -1,7 +1,7 @@
 ---
 description: Judge and execute PR merge
 argument-hint: "<PR_URL>"
-allowed-tools: Bash(gh pr view *), Skill(gh-notifications:self-review)
+allowed-tools: Bash(gh pr view *), Skill(gh-ops:self-review)
 ---
 
 # Merge Decision
@@ -12,9 +12,9 @@ Decision level: **L1 (report + propose)** — default. AI presents rationale for
 
 ### 1. Self-review
 
-Run `/gh-notifications:self-review $ARGUMENTS` and confirm no unresolved findings remain. Do not proceed to merge if findings remain.
+Run `/gh-ops:self-review $ARGUMENTS` and confirm no unresolved findings remain. Do not proceed to merge if findings remain.
 
-**Non-blocking threads**: Threads that are purely informational/knowledge-sharing (FYI, no action needed) do not block merge even if unresolved. All other unresolved threads must be resolved (see `/gh-notifications:respond-review $ARGUMENTS`). When in doubt, treat as a blocker and confirm with the user.
+**Non-blocking threads**: Threads that are purely informational/knowledge-sharing (FYI, no action needed) do not block merge even if unresolved. All other unresolved threads must be resolved (see `/gh-ops:respond-review $ARGUMENTS`). When in doubt, treat as a blocker and confirm with the user.
 
 ### 2. Merge gate
 

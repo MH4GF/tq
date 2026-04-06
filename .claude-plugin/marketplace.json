@@ -10,8 +10,8 @@
       "author": { "name": "MH4GF" }
     },
     {
-      "name": "gh-notifications",
-      "source": "./.claude-plugins/gh-notifications",
+      "name": "gh-ops",
+      "source": "./.claude-plugins/gh-ops",
       "description": "GitHub notification watcher and classifier",
       "version": "0.1.0",
       "author": { "name": "MH4GF" }
