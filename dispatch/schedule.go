@@ -81,7 +81,7 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			continue
 		}
 
-		id, err := database.InsertAction(s.Title, s.TaskID, string(metaJSON), db.ActionStatusPending)
+		id, err := database.InsertAction(s.Title, s.TaskID, string(metaJSON), db.ActionStatusPending, nil)
 		if err != nil {
 			slog.Error("schedule: insert action failed", "schedule_id", s.ID, "error", err)
 			continue
