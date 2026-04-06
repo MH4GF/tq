@@ -72,7 +72,7 @@ func TestCheckSchedules_DuplicateSkipped(t *testing.T) {
 	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
 
 	// Insert an active action for the same task/prompt
-	d.InsertAction("existing", taskID, `{"schedule_id":"1"}`, db.ActionStatusPending)
+	d.InsertAction("existing", taskID, `{"schedule_id":"1"}`, db.ActionStatusPending, nil)
 
 	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
 	if err := dispatch.CheckSchedules(d, now); err != nil {

@@ -16,7 +16,7 @@ func TestDone(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusRunning)
+	id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusRunning, nil)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -52,7 +52,7 @@ func TestDone_NoResult(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("test", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("test", taskID, "{}", db.ActionStatusRunning, nil)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)

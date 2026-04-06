@@ -66,7 +66,7 @@ func TestExecuteAction(t *testing.T) {
 
 			meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": tc.promptMode})
 			taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-			d.InsertAction("test-"+tc.promptMode, taskID, string(meta), db.ActionStatusPending)
+			d.InsertAction("test-"+tc.promptMode, taskID, string(meta), db.ActionStatusPending, nil)
 
 			action, _ := d.NextPending(context.Background())
 
@@ -120,7 +120,7 @@ func TestExecuteAction_InstructionOnly(t *testing.T) {
 
 	meta, _ := json.Marshal(map[string]any{"instruction": "/github-pr review this"})
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("review", taskID, string(meta), db.ActionStatusPending)
+	d.InsertAction("review", taskID, string(meta), db.ActionStatusPending, nil)
 
 	action, _ := d.NextPending(context.Background())
 
@@ -152,7 +152,7 @@ func TestExecuteAction_InstructionWithModeOverride(t *testing.T) {
 
 	meta, _ := json.Marshal(map[string]any{"instruction": "do something", "mode": "noninteractive"})
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("task", taskID, string(meta), db.ActionStatusPending)
+	d.InsertAction("task", taskID, string(meta), db.ActionStatusPending, nil)
 
 	action, _ := d.NextPending(context.Background())
 
@@ -282,7 +282,7 @@ func TestExecuteAction_NoInstruction(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("task", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("task", taskID, "{}", db.ActionStatusPending, nil)
 
 	action, _ := d.NextPending(context.Background())
 

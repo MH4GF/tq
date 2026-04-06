@@ -550,7 +550,7 @@ func TestTaskGet(t *testing.T) {
 			args := tc.args
 			if tc.setupTask {
 				taskID, _ := d.InsertTask(1, "my task", `{"url":"https://example.com"}`, "")
-				d.InsertAction("review action", taskID, `{"pr":1}`, db.ActionStatusPending)
+				d.InsertAction("review action", taskID, `{"pr":1}`, db.ActionStatusPending, nil)
 				args = []string{"task", "get", fmt.Sprintf("%d", taskID)}
 			}
 
@@ -585,8 +585,8 @@ func TestTaskList_WithActions(t *testing.T) {
 
 	taskID1, _ := d.InsertTask(1, "task with actions", "{}", "")
 	taskID2, _ := d.InsertTask(1, "task without actions", "{}", "")
-	d.InsertAction("review-pr", taskID1, `{"pr":1}`, db.ActionStatusPending)
-	d.InsertAction("implement", taskID1, "{}", db.ActionStatusDone)
+	d.InsertAction("review-pr", taskID1, `{"pr":1}`, db.ActionStatusPending, nil)
+	d.InsertAction("implement", taskID1, "{}", db.ActionStatusDone, nil)
 	_ = taskID2
 
 	root := cmd.GetRootCmd()

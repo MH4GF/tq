@@ -29,7 +29,7 @@ func TestRunWorker_ProcessesAndStops(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, db.ActionStatusPending)
+	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, db.ActionStatusPending, nil)
 
 	worker := &countingWorker{result: `{"ok":true}`}
 
@@ -70,9 +70,9 @@ func TestRunWorker_InteractiveLimitEnforced(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix conflict","mode":"interactive"}`, db.ActionStatusPending)
+	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix conflict","mode":"interactive"}`, db.ActionStatusPending, nil)
 
-	d.InsertAction("respond-review", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("respond-review", taskID, "{}", db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET session_id = 'session-1' WHERE id = 2")
 
 	interactiveWorker := &countingWorker{result: "interactive:session=test"}
@@ -106,7 +106,7 @@ func TestRunWorker_FailureEscalation(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, db.ActionStatusPending)
+	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, db.ActionStatusPending, nil)
 
 	worker := &countingWorker{err: context.DeadlineExceeded}
 
@@ -140,7 +140,7 @@ func TestRunWorker_FailureCreatesInvestigateAction(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, "pending")
+	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, "pending", nil)
 
 	worker := &countingWorker{err: fmt.Errorf("something went wrong")}
 
@@ -202,7 +202,7 @@ func TestReapStaleActions_DetectsStale(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "other-window"}}
@@ -229,7 +229,7 @@ func TestReapStaleActions_SkipsLiveWindows(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}}
@@ -253,7 +253,7 @@ func TestReapStaleActions_GracePeriod(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now') WHERE id = 1")
 
 	checker := &mockTmuxChecker{windows: []string{"zsh"}}
@@ -277,7 +277,7 @@ func TestReapStaleActions_TmuxError(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{err: fmt.Errorf("tmux not available")}
@@ -301,7 +301,7 @@ func TestReapStaleActions_NilChecker(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1' WHERE id = 1")
 
 	cfg := WorkerConfig{
@@ -322,7 +322,7 @@ func TestRunWorker_RemoteDispatch(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Remote task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("remote-task", taskID, `{"instruction":"do remote task","mode":"remote"}`, db.ActionStatusPending)
+	d.InsertAction("remote-task", taskID, `{"instruction":"do remote task","mode":"remote"}`, db.ActionStatusPending, nil)
 
 	remoteWorker := &countingWorker{result: "remote:session=https://console.anthropic.com/p/abc"}
 
@@ -363,10 +363,10 @@ func TestRunWorker_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("remote-task", taskID, `{"instruction":"do remote task","mode":"remote"}`, db.ActionStatusPending)
-	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix conflict","mode":"interactive"}`, db.ActionStatusPending)
+	d.InsertAction("remote-task", taskID, `{"instruction":"do remote task","mode":"remote"}`, db.ActionStatusPending, nil)
+	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix conflict","mode":"interactive"}`, db.ActionStatusPending, nil)
 
-	d.InsertAction("respond-review", taskID, `{"instruction":"respond to review","mode":"interactive"}`, db.ActionStatusRunning)
+	d.InsertAction("respond-review", taskID, `{"instruction":"respond to review","mode":"interactive"}`, db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET session_id = 'session-1' WHERE id = 3")
 
 	remoteWorker := &countingWorker{result: "remote:session=https://example.com"}
@@ -407,7 +407,7 @@ func TestReapStaleActions_CustomSession(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET session_id = 'work', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	checker := &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}}
@@ -435,7 +435,7 @@ func TestReapStaleActions_NonInteractiveStale(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET started_at = datetime('now', '-25 minutes') WHERE id = 1")
 
 	cfg := WorkerConfig{
@@ -459,7 +459,7 @@ func TestReapStaleActions_NonInteractiveNotYetStale(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	cfg := WorkerConfig{
@@ -480,7 +480,7 @@ func TestReapStaleActions_NonInteractiveNoStartedAt(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
 
 	cfg := WorkerConfig{
 		DispatchConfig: DispatchConfig{DB: d},
@@ -510,7 +510,7 @@ func TestReapStaleActions_InteractiveLogFresh(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix"}`, db.ActionStatusRunning)
+	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix"}`, db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	// tmux window is gone, but session log is fresh
@@ -538,7 +538,7 @@ func TestReapStaleActions_InteractiveLogStale(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix"}`, db.ActionStatusRunning)
+	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix"}`, db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	// tmux window gone AND session log stale
@@ -566,7 +566,7 @@ func TestReapStaleActions_InteractiveNilChecker(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix"}`, db.ActionStatusRunning)
+	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix"}`, db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1', started_at = datetime('now', '-5 minutes') WHERE id = 1")
 
 	// No session log checker, tmux window gone → fallback to tmux check → reaped
@@ -591,7 +591,7 @@ func TestReapStaleActions_NonInteractiveSkippedByHeartbeat(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET started_at = datetime('now', '-25 minutes') WHERE id = 1")
 
 	sessionChecker := &mockSessionLogChecker{active: true, sessionID: "sess-456"}
@@ -615,7 +615,7 @@ func TestReapStaleActions_NonInteractiveReapedByStaleHeartbeat(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET started_at = datetime('now', '-25 minutes') WHERE id = 1")
 
 	sessionChecker := &mockSessionLogChecker{active: false}
@@ -639,7 +639,7 @@ func TestReapStaleActions_NonInteractiveCheckerError(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET started_at = datetime('now', '-25 minutes') WHERE id = 1")
 
 	sessionChecker := &mockSessionLogChecker{err: fmt.Errorf("permission denied")}
@@ -663,7 +663,7 @@ func TestReapStaleActions_SavesSessionIdToMetadata(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning)
+	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET started_at = datetime('now', '-25 minutes') WHERE id = 1")
 
 	sessionChecker := &mockSessionLogChecker{active: true, sessionID: "sess-789"}
