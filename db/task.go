@@ -75,6 +75,20 @@ func (db *DB) UpdateTask(id int64, status, reason string) error {
 		}
 	}
 
+	if status == TaskStatusArchived {
+		var activeCount int
+		err := db.QueryRow(
+			"SELECT COUNT(*) FROM actions WHERE task_id = ? AND status IN (?, ?)",
+			id, ActionStatusPending, ActionStatusRunning,
+		).Scan(&activeCount)
+		if err != nil {
+			return fmt.Errorf("check active actions: %w", err)
+		}
+		if activeCount > 0 {
+			return fmt.Errorf("task #%d has %d pending/running action(s). Cancel or complete them before archiving", id, activeCount)
+		}
+	}
+
 	_, err := db.Exec(
 		"UPDATE tasks SET status = ?, updated_at = datetime('now') WHERE id = ?",
 		status, id,
