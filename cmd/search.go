@@ -1,10 +1,14 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
+)
+
+var (
+	searchJQ     string
+	searchFields = []string{"entity_type", "entity_id", "task_id", "field", "snippet", "status", "created_at"}
 )
 
 var searchCmd = &cobra.Command{
@@ -19,14 +23,10 @@ var searchCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("search: %w", err)
 		}
-
-		if len(results) == 0 {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "[]")
-			return nil
-		}
-
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(results)
+		return WriteJSON(cmd.OutOrStdout(), results, searchJQ, searchFields)
 	},
+}
+
+func init() {
+	searchCmd.Flags().StringVar(&searchJQ, "jq", "", jqFlagUsage(searchFields))
 }

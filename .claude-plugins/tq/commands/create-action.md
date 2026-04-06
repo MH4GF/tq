@@ -8,7 +8,7 @@ allowed-tools: Bash(tq *)
 
 **CRITICAL: DO NOT execute the user's instruction yourself. Your ONLY job is to create a pending action that delegates the work to a queue worker.**
 
-IMPORTANT: Run `tq action create --help` first to understand meta format and best practices.
+IMPORTANT: Run !`tq action create --help` first to understand meta format and best practices.
 
 ## Workflow
 
@@ -19,7 +19,7 @@ If no matching task exists, create one with `tq task create`.
 
 ### 2. Build instruction
 
-Consult `tq action create --help` for instruction format guidance.
+Consult !`tq action create --help` for instruction format guidance.
 Use only information from the current session — do not investigate files (that is the worker's job).
 
 ### 3. Create

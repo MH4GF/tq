@@ -8,9 +8,10 @@ allowed-tools: Bash(tq *)
 
 ## Find action_id
 
-1. Environment variable `TQ_ACTION_ID` — always check this first. It is pre-set by the dispatcher and avoids an extra CLI call.
-2. Search running actions: `tq action list --status running`
-3. If neither works, ask the user
+1. `$ARGUMENTS` if numeric
+2. The action/task IDs stated in the dispatch preamble (e.g. "You are executing action #123 (task #45)")
+3. Search running actions: `tq action list --status running`
+4. If none works, ask the user
 
 ## Next Action
 
@@ -30,7 +31,7 @@ Constraints:
 
 ## Execute
 
-IMPORTANT: Run `tq action done --help` for the full result format guidance.
+IMPORTANT: Run !`tq action done --help` for the full result format guidance.
 
 `tq action done <action_id> '<result>'`
 

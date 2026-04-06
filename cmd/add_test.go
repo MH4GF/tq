@@ -164,6 +164,40 @@ func TestAdd_UnfocusedProject(t *testing.T) {
 	}
 }
 
+func TestAdd_InvalidInstruction(t *testing.T) {
+	tests := []struct {
+		name        string
+		instruction string
+	}{
+		{"empty", ""},
+		{"whitespace only", "   "},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+
+			d.InsertTask(1, "test task", "{}", "")
+
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs([]string{"action", "create", tc.instruction, "--task", "1", "--title", "test"})
+
+			err := root.Execute()
+			if err == nil {
+				t.Fatal("expected error for invalid instruction")
+			}
+			if !contains(err.Error(), "instruction must not be empty") {
+				t.Errorf("error = %q, want to contain 'instruction must not be empty'", err.Error())
+			}
+		})
+	}
+}
+
 func TestAdd_InvalidMeta(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

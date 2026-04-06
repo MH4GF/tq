@@ -76,7 +76,7 @@ Try in order, use the first match:
 
 ```bash
 # If new task needed
-tq task create --project <project_name> --title "<title>" --url "<url>"
+tq task create "<title>" --project <project_id> --meta '{"url":"<url>"}'
 
 # Create action (instruction is the slash command from 2d)
 tq action create <instruction> --task <task_id> --title "<title>"

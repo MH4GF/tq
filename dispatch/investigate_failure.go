@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/MH4GF/tq/db"
 )
@@ -16,6 +17,23 @@ func CreateInvestigateFailureAction(database db.Store, action *db.Action, failur
 	meta, _ := parseMetadata(action.Metadata)
 	if _, ok := meta[MetaKeyIsInvestigation]; ok {
 		slog.Info("skipping investigate-failure for investigation action itself", "action_id", action.ID)
+		return
+	}
+
+	// Skip if the action has already completed successfully or been cancelled
+	// (race condition: action completed via /tq:done but process was killed
+	// by timeout afterward). We do NOT skip for "failed" status, since that
+	// is the expected state when this function is called legitimately.
+	fresh, err := database.GetAction(action.ID)
+	if err == nil && (fresh.Status == db.ActionStatusDone || fresh.Status == db.ActionStatusCancelled) {
+		slog.Info("skipping investigate-failure for already terminal action", "action_id", action.ID, "status", fresh.Status)
+		return
+	}
+
+	// Skip investigate for scheduled actions that failed due to timeout/kill.
+	// These are transient and auto-recover on the next schedule run.
+	if _, isScheduled := meta[MetaKeyScheduleID]; isScheduled && isTimeoutFailure(failureResult) {
+		slog.Info("skipping investigate-failure for scheduled action timeout", "action_id", action.ID, "schedule_id", meta[MetaKeyScheduleID])
 		return
 	}
 
@@ -51,4 +69,10 @@ func CreateInvestigateFailureAction(database db.Store, action *db.Action, failur
 	}
 
 	slog.Info("investigate-failure action created", "action_id", id, "failed_action_id", action.ID)
+}
+
+func isTimeoutFailure(result string) bool {
+	return strings.Contains(result, "signal: killed") ||
+		strings.Contains(result, "context deadline exceeded") ||
+		strings.Contains(result, "stale: noninteractive action exceeded timeout")
 }

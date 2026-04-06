@@ -18,14 +18,14 @@ func commonHelpKeys() []HelpKey {
 	return []HelpKey{
 		{"j/k", "navigate"},
 		{"tab", "switch"},
-		{"q", "quit"},
+		{"esc/q", "quit"},
 	}
 }
 
 func formatHelp(keys []HelpKey) string {
 	parts := make([]string, len(keys))
 	for i, k := range keys {
-		parts[i] = k.Key + ": " + k.Desc
+		parts[i] = styleHelpKey.Render(k.Key + ": " + k.Desc)
 	}
 	return strings.Join(parts, "  ")
 }

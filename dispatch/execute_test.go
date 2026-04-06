@@ -203,7 +203,13 @@ func TestWrapInstruction(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := wrapInstruction("Fix the bug", 42, tc.mode)
+			got := wrapInstruction("Fix the bug", 99, 42, tc.mode)
+			if !strings.Contains(got, "action #99") {
+				t.Error("should contain action ID")
+			}
+			if !strings.Contains(got, "task #42") {
+				t.Error("should contain task ID")
+			}
 			if tc.wantHistory && !strings.Contains(got, "tq action list --task 42") {
 				t.Error("should contain preamble with tq action list and task ID")
 			}
@@ -215,6 +221,57 @@ func TestWrapInstruction(t *testing.T) {
 			}
 			if !tc.wantDone && strings.Contains(got, "/tq:done") {
 				t.Error("should NOT contain /tq:done postamble")
+			}
+		})
+	}
+}
+
+func TestValidateActionMetadata(t *testing.T) {
+	tests := []struct {
+		name    string
+		meta    map[string]any
+		wantErr bool
+	}{
+		{
+			name:    "valid instruction",
+			meta:    map[string]any{MetaKeyInstruction: "do something"},
+			wantErr: false,
+		},
+		{
+			name:    "missing instruction key",
+			meta:    map[string]any{"mode": "interactive"},
+			wantErr: true,
+		},
+		{
+			name:    "empty instruction",
+			meta:    map[string]any{MetaKeyInstruction: ""},
+			wantErr: true,
+		},
+		{
+			name:    "whitespace-only instruction",
+			meta:    map[string]any{MetaKeyInstruction: "   "},
+			wantErr: true,
+		},
+		{
+			name:    "non-string instruction",
+			meta:    map[string]any{MetaKeyInstruction: 123},
+			wantErr: true,
+		},
+		{
+			name:    "empty metadata",
+			meta:    map[string]any{},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateActionMetadata(tc.meta)
+			if tc.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
 			}
 		})
 	}

@@ -7,7 +7,10 @@ import (
 	"time"
 )
 
-const defaultTimeout = 300
+const (
+	defaultTimeout                = 600
+	nonInteractiveStaleMultiplier = 2
+)
 
 type claudeJSONOutput struct {
 	Subtype string `json:"subtype"`

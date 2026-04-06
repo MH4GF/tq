@@ -7,8 +7,16 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/MH4GF/tq/db"
+)
+
+type schedulesMode int
+
+const (
+	schedModeNormal schedulesMode = iota
+	schedModeDetail
 )
 
 type SchedulesModel struct {
@@ -18,6 +26,8 @@ type SchedulesModel struct {
 	height    int
 	database  db.Store
 	message   string
+	mode      schedulesMode
+	detailIdx int
 }
 
 type schedulesLoadedMsg struct {
@@ -50,6 +60,9 @@ func (m SchedulesModel) Update(msg tea.Msg) (SchedulesModel, tea.Cmd) {
 			m.cursor = max(0, len(m.schedules)-1)
 		}
 	case tea.KeyMsg:
+		if m.mode == schedModeDetail {
+			return m.updateDetail(msg)
+		}
 		m.message = ""
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("j", "down"))):
@@ -60,17 +73,14 @@ func (m SchedulesModel) Update(msg tea.Msg) (SchedulesModel, tea.Cmd) {
 			if m.cursor > 0 {
 				m.cursor--
 			}
+		case key.Matches(msg, key.NewBinding(key.WithKeys("v", "enter"))):
+			if m.selectedSchedule() != nil {
+				m.detailIdx = m.cursor
+				m.mode = schedModeDetail
+			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("e"))):
 			if s := m.selectedSchedule(); s != nil {
-				newEnabled := !s.Enabled
-				if err := m.database.UpdateScheduleEnabled(s.ID, newEnabled); err == nil {
-					action := "enabled"
-					if !newEnabled {
-						action = "disabled"
-					}
-					m.message = fmt.Sprintf("schedule #%d %s", s.ID, action)
-				}
-				return m, m.loadSchedules()
+				return m.toggleEnabled(s)
 			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("d"))):
 			if s := m.selectedSchedule(); s != nil {
@@ -84,6 +94,30 @@ func (m SchedulesModel) Update(msg tea.Msg) (SchedulesModel, tea.Cmd) {
 	return m, nil
 }
 
+func (m SchedulesModel) updateDetail(msg tea.KeyMsg) (SchedulesModel, tea.Cmd) {
+	switch {
+	case key.Matches(msg, key.NewBinding(key.WithKeys("q", "esc"))):
+		m.mode = schedModeNormal
+	case key.Matches(msg, key.NewBinding(key.WithKeys("e"))):
+		if m.detailIdx >= 0 && m.detailIdx < len(m.schedules) {
+			return m.toggleEnabled(&m.schedules[m.detailIdx])
+		}
+	}
+	return m, nil
+}
+
+func (m SchedulesModel) toggleEnabled(s *db.Schedule) (SchedulesModel, tea.Cmd) {
+	newEnabled := !s.Enabled
+	if err := m.database.UpdateScheduleEnabled(s.ID, newEnabled); err == nil {
+		action := "enabled"
+		if !newEnabled {
+			action = "disabled"
+		}
+		m.message = fmt.Sprintf("schedule #%d %s", s.ID, action)
+	}
+	return m, m.loadSchedules()
+}
+
 func (m SchedulesModel) selectedSchedule() *db.Schedule {
 	if m.cursor >= 0 && m.cursor < len(m.schedules) {
 		return &m.schedules[m.cursor]
@@ -92,43 +126,58 @@ func (m SchedulesModel) selectedSchedule() *db.Schedule {
 }
 
 func (m SchedulesModel) View() string {
+	if m.mode == schedModeDetail && m.detailIdx >= 0 && m.detailIdx < len(m.schedules) {
+		return m.renderDetail(&m.schedules[m.detailIdx])
+	}
+
 	if len(m.schedules) == 0 {
 		return styleMuted.Render("  No schedules")
 	}
 
+	const (
+		titleW   = 30
+		nextRunW = 18
+	)
+
 	var b strings.Builder
-	header := fmt.Sprintf("  %-4s %-8s %-20s %-16s %-20s %s", "ID", "Enabled", "Title", "Cron", "Next Run", "Last Run")
-	b.WriteString(styleMuted.Render(header) + "\n")
-	b.WriteString(styleMuted.Render(strings.Repeat("─", min(m.width, 100))) + "\n")
+
+	// Header
+	header := "  " + padRight("TITLE", titleW) + " " + padRight("NEXT RUN", nextRunW) + " " + "LAST RUN"
+	b.WriteString(styleTableHeader.Render(header) + "\n")
+	b.WriteString(styleBorderChar.Render(strings.Repeat("─", min(m.width, 100))) + "\n")
 
 	visible := m.visibleRange()
 	for i := visible.start; i < visible.end; i++ {
 		s := m.schedules[i]
-		prefix := "  "
-		if i == m.cursor {
-			prefix = "> "
-		}
 
-		enabled := styleDone.Render("yes")
+		// State: dot only
+		dot := styleDone.Render("●")
 		if !s.Enabled {
-			enabled = styleMuted.Render("no ")
+			dot = styleMuted.Render("○")
 		}
 
-		nextRun := "-"
+		nextRun := "—"
 		if s.Enabled {
 			nextRun = m.computeNextRun(s)
 		}
 
-		lastRun := "-"
+		lastRun := "never"
 		if s.LastRunAt.Valid {
 			lastRun = db.FormatLocal(s.LastRunAt.String)[:16]
 		}
 
-		line := fmt.Sprintf("%s%-4d %s  %-20s %-16s %-20s %s",
-			prefix, s.ID, enabled, s.Title, s.CronExpr, nextRun, lastRun)
+		// Truncate title
+		title := s.Title
+		if lipgloss.Width(title) > titleW {
+			title = truncateDisplay(title, titleW-1) + "…"
+		}
+
+		line := " " + dot + " " + padRight(title, titleW) + " " +
+			padRight(styleFieldValue.Render(nextRun), nextRunW) + " " +
+			styleMuted.Render(lastRun)
 
 		if i == m.cursor {
-			line = styleTitle.Render(line)
+			line = highlightLine(line, m.width)
 		}
 
 		b.WriteString(line + "\n")
@@ -136,6 +185,69 @@ func (m SchedulesModel) View() string {
 
 	if m.message != "" {
 		b.WriteString("\n  " + styleDone.Render(m.message) + "\n")
+	}
+
+	return b.String()
+}
+
+func (m SchedulesModel) renderDetail(s *db.Schedule) string {
+	var b strings.Builder
+	pad := "  "
+	bodyW := max(0, min(m.width, 80)-len(pad))
+
+	b.WriteString("\n")
+
+	// Header: ← esc  title  enabled/disabled
+	dot := styleDone.Render("●")
+	stateLabel := styleDone.Render("enabled")
+	if !s.Enabled {
+		dot = styleMuted.Render("○")
+		stateLabel = styleMuted.Render("disabled")
+	}
+	headerLine := fmt.Sprintf("%s%s  %s  %s %s",
+		pad,
+		styleDetailBack.Render("← esc"),
+		lipgloss.NewStyle().Bold(true).Render(s.Title),
+		dot,
+		stateLabel,
+	)
+	b.WriteString(headerLine + "\n")
+	b.WriteString(pad + styleBorderChar.Render(strings.Repeat("─", bodyW)) + "\n")
+
+	// Metadata
+	nextRun := "—"
+	if s.Enabled {
+		nextRun = m.computeNextRun(*s)
+	}
+	lastRun := "never"
+	if s.LastRunAt.Valid {
+		lastRun = db.FormatLocal(s.LastRunAt.String)[:16]
+	}
+
+	fields := []struct{ label, value string }{
+		{"       ID", fmt.Sprintf("#%d", s.ID)},
+		{"     Task", fmt.Sprintf("#%d", s.TaskID)},
+		{"     Cron", s.CronExpr},
+		{" Next Run", nextRun},
+		{" Last Run", lastRun},
+		{"  Created", db.FormatLocal(s.CreatedAt)[:16]},
+	}
+	for _, f := range fields {
+		fmt.Fprintf(&b, "%s%s  %s\n",
+			pad,
+			styleFieldLabel.Render(f.label),
+			styleFieldValue.Render(f.value),
+		)
+	}
+	b.WriteString(pad + styleBorderChar.Render(strings.Repeat("─", bodyW)) + "\n")
+
+	// Instruction
+	b.WriteString("\n")
+	b.WriteString(pad + styleMuted.Render("Instruction:") + "\n")
+	for raw := range strings.SplitSeq(s.Instruction, "\n") {
+		for _, line := range wrapLine(raw, bodyW) {
+			b.WriteString(pad + line + "\n")
+		}
 	}
 
 	return b.String()
@@ -163,9 +275,15 @@ func (m SchedulesModel) visibleRange() visibleRange {
 }
 
 func (m SchedulesModel) HelpKeys() []HelpKey {
+	if m.mode == schedModeDetail {
+		return []HelpKey{
+			{"esc/q", "back"},
+			{"e", "enable/disable"},
+		}
+	}
 	keys := commonHelpKeys()
 	if m.selectedSchedule() != nil {
-		keys = append(keys, HelpKey{"e", "enable/disable"}, HelpKey{"d", "delete"})
+		keys = append(keys, HelpKey{"v/enter", "view detail"}, HelpKey{"e", "enable/disable"}, HelpKey{"d", "delete"})
 	}
 	return keys
 }
@@ -174,4 +292,8 @@ func (m SchedulesModel) SetSize(w, h int) SchedulesModel {
 	m.width = w
 	m.height = h
 	return m
+}
+
+func (m SchedulesModel) Mode() schedulesMode {
+	return m.mode
 }

@@ -334,9 +334,38 @@ func (db *DB) IsActionDispatchEnabled(actionID int64) (bool, error) {
 	return enabled, nil
 }
 
-func (db *DB) ListRunningInteractive() ([]Action, error) {
+func (db *DB) listRunningBySession(hasSession bool) ([]Action, error) {
+	cond := "IS NULL"
+	if hasSession {
+		cond = "IS NOT NULL"
+	}
 	rows, err := db.Query(
-		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND session_id IS NOT NULL ORDER BY id",
+		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND session_id "+cond+" ORDER BY id",
+		ActionStatusRunning,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var actions []Action
+	for rows.Next() {
+		var a Action
+		if err := rows.Scan(a.scanFields()...); err != nil {
+			return nil, err
+		}
+		actions = append(actions, a)
+	}
+	return actions, rows.Err()
+}
+
+func (db *DB) ListRunningInteractive() ([]Action, error) {
+	return db.listRunningBySession(true)
+}
+
+func (db *DB) ListRunningNonInteractive() ([]Action, error) {
+	rows, err := db.Query(
+		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND json_extract(metadata, '$.mode') = 'noninteractive' ORDER BY id",
 		ActionStatusRunning,
 	)
 	if err != nil {
