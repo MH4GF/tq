@@ -45,7 +45,7 @@ project → task → action
 ```
 
 - **project**: groups tasks, sets default working directory
-- **task**: unit of work (status: open, review, done, blocked, archived)
+- **task**: unit of work (status: open, done, archived)
 - **action**: dispatchable unit of work with an instruction (status: pending, running, done, failed, cancelled)
 
 ### Design Principles

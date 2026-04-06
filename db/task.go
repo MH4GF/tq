@@ -67,7 +67,7 @@ func (db *DB) InsertTask(projectID int64, title, metadata, workDir string) (int6
 
 func (db *DB) UpdateTask(id int64, status, reason string) error {
 	if !ValidTaskStatuses[status] {
-		return fmt.Errorf("invalid task status %q (valid: open, done, archived)", status)
+		return fmt.Errorf("invalid task status %q: must be one of open, done, archived", status)
 	}
 
 	var from string
