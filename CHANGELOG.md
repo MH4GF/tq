@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.21.11](https://github.com/MH4GF/tq/compare/v0.21.10...v0.21.11) - 2026-04-06
+- Improve dispatch prompt and action metadata validation by @MH4GF in https://github.com/MH4GF/tq/pull/74
+- Polish TUI: contrast, detail views, interactive slots by @MH4GF in https://github.com/MH4GF/tq/pull/80
+- Add --jq flag to all JSON-outputting commands by @MH4GF in https://github.com/MH4GF/tq/pull/75
+- Fix noninteractive timeout kills and unnecessary investigate actions by @MH4GF in https://github.com/MH4GF/tq/pull/82
+- Fix worktree+plan actions being falsely reaped by noninteractive stale check by @MH4GF in https://github.com/MH4GF/tq/pull/83
+- セッションログハートビートによるstale検知 by @MH4GF in https://github.com/MH4GF/tq/pull/84
+- Fix tq plugin README documentation drift by @MH4GF in https://github.com/MH4GF/tq/pull/86
+
 ## [v0.21.10](https://github.com/MH4GF/tq/compare/v0.21.9...v0.21.10) - 2026-03-31
 - Fix tq task create invocation in watch.md by @MH4GF in https://github.com/MH4GF/tq/pull/71
 - Redesign TUI with project cards and refined visual hierarchy by @MH4GF in https://github.com/MH4GF/tq/pull/77
