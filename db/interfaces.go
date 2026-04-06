@@ -8,7 +8,7 @@ import (
 // CommandWriter defines all write operations.
 type CommandWriter interface {
 	// Action commands
-	InsertAction(title string, taskID int64, metadata, status string) (int64, error)
+	InsertAction(title string, taskID int64, metadata, status string, dispatchAfter *string) (int64, error)
 	MarkDone(id int64, result string) error
 	MarkFailed(id int64, result string) error
 	MarkCancelled(id int64, result string) error

@@ -19,17 +19,18 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 
 CREATE TABLE IF NOT EXISTS actions (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  title        TEXT NOT NULL DEFAULT '',
-  task_id      INTEGER NOT NULL REFERENCES tasks(id),
-  metadata     TEXT NOT NULL DEFAULT '{}',
-  status       TEXT DEFAULT 'pending',
-  result       TEXT,
-  session_id   TEXT,
-  tmux_pane    TEXT,
-  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-  started_at   TEXT,
-  completed_at TEXT
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  title           TEXT NOT NULL DEFAULT '',
+  task_id         INTEGER NOT NULL REFERENCES tasks(id),
+  metadata        TEXT NOT NULL DEFAULT '{}',
+  status          TEXT DEFAULT 'pending',
+  result          TEXT,
+  session_id      TEXT,
+  tmux_pane       TEXT,
+  dispatch_after  TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  started_at      TEXT,
+  completed_at    TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_actions_dispatch ON actions(status, id ASC);

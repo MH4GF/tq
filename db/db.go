@@ -227,6 +227,15 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	// Add dispatch_after column to actions (idempotent)
+	if has, err := db.hasColumn("actions", "dispatch_after"); err != nil {
+		return fmt.Errorf("migrate dispatch_after: check column: %w", err)
+	} else if !has {
+		if _, err := db.Exec("ALTER TABLE actions ADD COLUMN dispatch_after TEXT"); err != nil {
+			return fmt.Errorf("migrate dispatch_after: alter table: %w", err)
+		}
+	}
+
 	return nil
 }
 
