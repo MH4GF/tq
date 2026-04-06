@@ -336,7 +336,7 @@ func TestUpdateTask_BlockedByActiveSchedule(t *testing.T) {
 	}{
 		{"done blocked by active schedule", db.TaskStatusDone, nil, true},
 		{"archived blocked by active schedule", db.TaskStatusArchived, nil, true},
-		{"review allowed with active schedule", "review", nil, false},
+		{"invalid status rejected", "review", nil, true},
 		{"done allowed after disable", db.TaskStatusDone, func() { d.UpdateScheduleEnabled(schedID, false) }, false},
 	}
 

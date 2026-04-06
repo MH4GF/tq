@@ -14,6 +14,12 @@ const (
 	TaskStatusArchived = "archived"
 )
 
+var ValidTaskStatuses = map[string]bool{
+	TaskStatusOpen:     true,
+	TaskStatusDone:     true,
+	TaskStatusArchived: true,
+}
+
 type Task struct {
 	ID        int64
 	ProjectID int64
@@ -60,6 +66,10 @@ func (db *DB) InsertTask(projectID int64, title, metadata, workDir string) (int6
 }
 
 func (db *DB) UpdateTask(id int64, status, reason string) error {
+	if !ValidTaskStatuses[status] {
+		return fmt.Errorf("invalid task status %q (valid: open, done, archived)", status)
+	}
+
 	var from string
 	if err := db.QueryRow("SELECT status FROM tasks WHERE id = ?", id).Scan(&from); err != nil {
 		return fmt.Errorf("get current status: %w", err)
