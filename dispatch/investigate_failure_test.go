@@ -192,7 +192,7 @@ func TestCreateInvestigateFailureAction_SkipsTimeout(t *testing.T) {
 
 	t.Run("skips for signal killed (non-scheduled)", func(t *testing.T) {
 		meta := `{"instruction":"test"}`
-		actionID, _ := d.InsertAction("deploy", taskID, meta, "failed")
+		actionID, _ := d.InsertAction("deploy", taskID, meta, "failed", nil)
 		action, _ := d.GetAction(actionID)
 
 		CreateInvestigateFailureAction(d, action, "signal: killed")

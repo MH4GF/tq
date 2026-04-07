@@ -360,7 +360,7 @@ func TestUpdateTask_BlockedByActiveActions(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 
 	// Insert a pending action
-	actionID, _ := d.InsertAction("pending action", taskID, "{}", db.ActionStatusPending)
+	actionID, _ := d.InsertAction("pending action", taskID, "{}", db.ActionStatusPending, nil)
 
 	// Archiving should be blocked
 	err := d.UpdateTask(taskID, db.TaskStatusArchived, "")
