@@ -25,7 +25,7 @@ For each notification, execute in order:
 
 Extract repo name and number from subject_url, then fetch by subject_type:
 
-- **PullRequest**: `gh pr view <number> --repo <owner/repo> --json url,state,author,headRefName,reviewDecision,mergeStateStatus,statusCheckRollup,isDraft,reviews`
+- **PullRequest**: `gh pr view <number> --repo <owner/repo> --json url,state,author,headRefName,reviewDecision,mergeStateStatus,statusCheckRollup,isDraft,reviews,reviewRequests`
 - **Issue**: `gh issue view <number> --repo <owner/repo> --json url,state,author`
 - **Discussion/Release**: fetch via `gh api`
 
@@ -33,6 +33,7 @@ Extract repo name and number from subject_url, then fetch by subject_type:
 
 Mark as read and skip if:
 - `reason=review_requested` and already reviewed (reviews contain own APPROVED/CHANGES_REQUESTED)
+- `reason=review_requested` but own login (`gh api /user --jq .login`) is NOT in reviewRequests (neither as user nor as member of a requested team) — team review request where someone else was randomly assigned
 
 #### 2c. Remote action PR detection
 
