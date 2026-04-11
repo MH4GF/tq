@@ -56,6 +56,15 @@ The agent will tune the instruction, associate it with the right task, create th
 
 See [CLI Reference](docs/cli-reference.md) for the full command list.
 
+## Configuration
+
+The database lives at `~/.config/tq/tq.db` by default. Override with:
+
+- `--db <path>` flag (highest precedence)
+- `TQ_DB_PATH` environment variable
+
+Useful for running multiple isolated queues (e.g. a separate DB for demos or testing).
+
 ## Data Model
 
 ```

@@ -15,6 +15,7 @@ var (
 	database          db.Store
 	dbInjected        bool
 	configDirOverride string
+	dbPathFlag        string
 )
 
 var rootCmd = &cobra.Command{
@@ -30,6 +31,11 @@ Data model: project → task → action.
 Typical flow: create a task, then create actions under it.
 Pending actions are auto-dispatched by the queue worker (tq ui), or manually via tq action dispatch.
 
+Database location precedence:
+  1. --db flag
+  2. TQ_DB_PATH environment variable
+  3. ~/.config/tq/tq.db (default)
+
 All list commands output JSON.`,
 	Example: `  # Quick start
   tq project create myapp ~/src/myapp
@@ -42,11 +48,13 @@ All list commands output JSON.`,
 		if database != nil {
 			return nil
 		}
-		dir, err := configDir()
+		dbPath, err := resolveDBPath()
 		if err != nil {
 			return err
 		}
-		dbPath := filepath.Join(dir, "tq.db")
+		if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+			return fmt.Errorf("create db dir: %w", err)
+		}
 		database, err = db.Open(dbPath)
 		if err != nil {
 			return fmt.Errorf("open db: %w", err)
@@ -64,6 +72,20 @@ All list commands output JSON.`,
 	},
 }
 
+func resolveDBPath() (string, error) {
+	if dbPathFlag != "" {
+		return dbPathFlag, nil
+	}
+	if p := os.Getenv("TQ_DB_PATH"); p != "" {
+		return p, nil
+	}
+	dir, err := configDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "tq.db"), nil
+}
+
 func configDir() (string, error) {
 	if configDirOverride != "" {
 		return configDirOverride, nil
@@ -72,15 +94,13 @@ func configDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("user home dir: %w", err)
 	}
-	dir := filepath.Join(home, ".config", "tq")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("create config dir: %w", err)
-	}
-	return dir, nil
+	return filepath.Join(home, ".config", "tq"), nil
 }
 
 func init() {
 	rootCmd.Version = version
+	rootCmd.PersistentFlags().StringVar(&dbPathFlag, "db", "",
+		"SQLite database path (overrides TQ_DB_PATH; default: ~/.config/tq/tq.db)")
 	rootCmd.AddCommand(taskCmd)
 	rootCmd.AddCommand(actionCmd)
 	rootCmd.AddCommand(uiCmd)
