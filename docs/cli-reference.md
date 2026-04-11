@@ -91,6 +91,7 @@ At least one flag is required.
 | `tq action get <ID>` | Get an action by ID (JSON) |
 | `tq action update <ID>` | Update an action |
 | `tq action done <ID> [RESULT]` | Mark action as done |
+| `tq action fail <ID> [REASON]` | Mark action as failed when the goal could not be achieved |
 | `tq action cancel <ID> [REASON]` | Cancel an action |
 | `tq action attach <ID>` | Attach to a running action's tmux window |
 | `tq action reset <ID>` | Reset action to pending |
@@ -133,6 +134,26 @@ RESULT is free-form text. Recommended structure:
 - **decisions** — What was decided and why
 - **artifacts** — PR numbers, file paths, commit SHAs, URLs
 - **remaining** — Unfinished work, known issues, follow-up needed
+
+### `tq action fail`
+
+```
+tq action fail <ACTION_ID> [REASON]
+```
+
+Mark a non-terminal action (pending, running, or dispatched) as failed when the goal could not be achieved despite genuine effort. Use this for missing permissions, broken environment, external API outages, or other blockers. Failed actions can be reset to pending with `tq action reset` for retry.
+
+Distinction:
+- **done** — work completed successfully
+- **fail** — work attempted but blocked (retryable)
+- **cancel** — work intentionally aborted (not needed, superseded)
+
+REASON is free-form text. Recommended structure (same as `done`):
+
+- **outcome** — What could not be achieved (the concrete blocker)
+- **decisions** — What was tried and why it did not work
+- **artifacts** — Partial PRs, files, log excerpts, error messages
+- **remaining** — What is needed to unblock (env fix, external response, retry conditions)
 
 ### `tq action cancel`
 

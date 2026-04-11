@@ -188,7 +188,8 @@ func wrapInstruction(instruction string, actionID, taskID int64, mode string) st
 	preamble += fmt.Sprintf("First, run `tq action list --task %d` to understand the task history (completed actions, their results, etc.).\n\n", taskID)
 	result := preamble + instruction
 	if mode != ModeRemote {
-		result += "\n\nWhen you finish, run `/tq:done` to mark this action as complete."
+		result += "\n\nWhen you finish, run `/tq:done` to mark this action as complete." +
+			"\nIf you cannot complete the action (missing permissions, broken environment, external blocker, etc.), run `/tq:failed` instead."
 	}
 	return result
 }

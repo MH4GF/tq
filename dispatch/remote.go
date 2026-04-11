@@ -45,7 +45,7 @@ func remoteRules(actionID int64) string {
 ## Remote Execution Rules
 - Branch name MUST start with `+"`tq-%d-`"+` (e.g. tq-%d-add-feature)
 - Create a Pull Request when work is complete — this is the completion signal
-- /tq:done is NOT available in remote sessions`, actionID, actionID)
+- /tq:done and /tq:failed are NOT available in remote sessions`, actionID, actionID)
 }
 
 // extractDiagnosis reads the debug log file and extracts ERROR lines for diagnosis.
