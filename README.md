@@ -122,6 +122,7 @@ Controlled via `--meta` on `action create` / `schedule create`:
 Additional metadata keys:
 - `permission_mode` — Claude permission mode (e.g. `"plan"`, `"auto"`)
 - `worktree` — Run in a git worktree for isolation (`true`/`false`)
+- `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--max-turns","5"]`)
 
 ## License
 

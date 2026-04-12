@@ -21,6 +21,8 @@ const (
 	MetaKeyInstruction       = "instruction"
 	MetaKeyMode              = "mode"
 	MetaKeyPermissionMode    = "permission_mode"
+	MetaKeyWorktree          = "worktree"
+	MetaKeyClaudeArgs        = "claude_args"
 	MetaKeyScheduleID        = "schedule_id"
 	MetaKeyIsInvestigation   = "is_investigate_failure"
 	MetaKeyFailedActionID    = "failed_action_id"
@@ -72,6 +74,7 @@ type ActionConfig struct {
 	Mode           string
 	PermissionMode string
 	Worktree       bool
+	ClaudeArgs     []string
 }
 
 func (c ActionConfig) IsInteractive() bool    { return c.Mode == ModeInteractive }
@@ -101,8 +104,16 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 	if permMode, ok := actionMeta[MetaKeyPermissionMode].(string); ok {
 		cfg.PermissionMode = permMode
 	}
-	if wt, ok := actionMeta["worktree"].(bool); ok {
+	if wt, ok := actionMeta[MetaKeyWorktree].(bool); ok {
 		cfg.Worktree = wt
+	}
+	if rawArgs, ok := actionMeta[MetaKeyClaudeArgs].([]any); ok {
+		cfg.ClaudeArgs = toStringSlice(rawArgs)
+	}
+	if err := ValidateClaudeArgs(cfg.ClaudeArgs); err != nil {
+		failMsg := fmt.Sprintf("validate claude_args: %v", err)
+		_ = params.DB.MarkFailed(action.ID, failMsg)
+		return nil, fmt.Errorf("validate claude_args: %w", err)
 	}
 
 	instruction = wrapInstruction(instruction, action.ID, action.TaskID, cfg.Mode)
@@ -247,4 +258,30 @@ func expandHome(path string) string {
 		}
 	}
 	return path
+}
+
+func toStringSlice(raw []any) []string {
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if s, ok := v.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+var blockedClaudeArgs = map[string]bool{
+	"-p":              true,
+	"--print":         true,
+	"--output-format": true,
+	"--remote":        true,
+}
+
+func ValidateClaudeArgs(args []string) error {
+	for _, arg := range args {
+		if blockedClaudeArgs[arg] {
+			return fmt.Errorf("claude_args cannot include %q (managed by tq internally)", arg)
+		}
+	}
+	return nil
 }
