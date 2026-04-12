@@ -107,8 +107,8 @@ func TestList_JQ(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "task1", "{}", "")
-	d.InsertAction("review-pr", taskID, "{}", db.ActionStatusPending)
-	d.InsertAction("deploy", taskID, "{}", db.ActionStatusRunning)
+	d.InsertAction("review-pr", taskID, "{}", db.ActionStatusPending, nil)
+	d.InsertAction("deploy", taskID, "{}", db.ActionStatusRunning, nil)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -140,7 +140,7 @@ func TestActionGet_JQ(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "task1", "{}", "")
-	actionID, _ := d.InsertAction("review-pr", taskID, "{}", db.ActionStatusPending)
+	actionID, _ := d.InsertAction("review-pr", taskID, "{}", db.ActionStatusPending, nil)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -163,7 +163,7 @@ func TestTaskGet_JQ(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "my-task", "{}", "")
-	d.InsertAction("action1", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("action1", taskID, "{}", db.ActionStatusPending, nil)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -186,7 +186,7 @@ func TestSearch_JQ(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "login-bug", "{}", "")
-	d.InsertAction("fix-login", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("fix-login", taskID, "{}", db.ActionStatusPending, nil)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -215,7 +215,7 @@ func TestEventList_JQ(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "task1", "{}", "")
-	d.InsertAction("action1", taskID, "{}", db.ActionStatusPending)
+	d.InsertAction("action1", taskID, "{}", db.ActionStatusPending, nil)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)

@@ -17,7 +17,7 @@ func TestActionUpdate(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-	actionID, _ := d.InsertAction("original", taskID, `{"k":"v"}`, db.ActionStatusPending)
+	actionID, _ := d.InsertAction("original", taskID, `{"k":"v"}`, db.ActionStatusPending, nil)
 
 	root := cmd.GetRootCmd()
 	out := new(bytes.Buffer)
@@ -48,7 +48,7 @@ func TestActionUpdate_NoFlags(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-	actionID, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending)
+	actionID, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending, nil)
 
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
@@ -71,7 +71,7 @@ func TestActionUpdate_DoneAction(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-	actionID, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending)
+	actionID, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending, nil)
 	d.MarkDone(actionID, "done")
 
 	root := cmd.GetRootCmd()
@@ -95,7 +95,7 @@ func TestActionUpdate_InvalidMeta(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-	actionID, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending)
+	actionID, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending, nil)
 
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))

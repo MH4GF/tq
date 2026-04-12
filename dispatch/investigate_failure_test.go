@@ -24,7 +24,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-		actionID, _ := d.InsertAction("my-prompt", taskID, "{}", "failed")
+		actionID, _ := d.InsertAction("my-prompt", taskID, "{}", "failed", nil)
 		action, _ := d.GetAction(actionID)
 
 		CreateInvestigateFailureAction(d, action, "worker error: timeout")
@@ -62,7 +62,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-		actionID, _ := d.InsertAction("my-prompt", taskID, "{}", "failed")
+		actionID, _ := d.InsertAction("my-prompt", taskID, "{}", "failed", nil)
 		action, _ := d.GetAction(actionID)
 
 		// Create first investigation
@@ -87,9 +87,9 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-		action1ID, _ := d.InsertAction("prompt-a", taskID, "{}", "failed")
+		action1ID, _ := d.InsertAction("prompt-a", taskID, "{}", "failed", nil)
 		action1, _ := d.GetAction(action1ID)
-		action2ID, _ := d.InsertAction("prompt-b", taskID, "{}", "failed")
+		action2ID, _ := d.InsertAction("prompt-b", taskID, "{}", "failed", nil)
 		action2, _ := d.GetAction(action2ID)
 
 		CreateInvestigateFailureAction(d, action1, "error 1")
@@ -112,7 +112,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-		actionID, _ := d.InsertAction("deploy", taskID, "{}", "failed")
+		actionID, _ := d.InsertAction("deploy", taskID, "{}", "failed", nil)
 		action, _ := d.GetAction(actionID)
 
 		CreateInvestigateFailureAction(d, action, "deploy failed")
@@ -131,7 +131,7 @@ func TestCreateInvestigateFailureAction_SkipsInvestigationItself(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	actionID, _ := d.InsertAction("internal:investigate-failure", taskID, `{"is_investigate_failure":true}`, "failed")
+	actionID, _ := d.InsertAction("internal:investigate-failure", taskID, `{"is_investigate_failure":true}`, "failed", nil)
 	action, _ := d.GetAction(actionID)
 
 	CreateInvestigateFailureAction(d, action, "investigation itself failed")
@@ -154,7 +154,7 @@ func TestCreateInvestigateFailureAction_SkipsAlreadyTerminal(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	actionID, _ := d.InsertAction("watch-notifications", taskID, "{}", "pending")
+	actionID, _ := d.InsertAction("watch-notifications", taskID, "{}", "pending", nil)
 	// Simulate: action completed via /tq:done, then process was killed by timeout
 	d.MarkDone(actionID, "outcome: processed 0 notifications")
 	action, _ := d.GetAction(actionID)
@@ -177,7 +177,7 @@ func TestCreateInvestigateFailureAction_SkipsTimeout(t *testing.T) {
 
 	t.Run("skips for signal killed (scheduled)", func(t *testing.T) {
 		meta := `{"schedule_id":"4","instruction":"test"}`
-		actionID, _ := d.InsertAction("watch", taskID, meta, "failed")
+		actionID, _ := d.InsertAction("watch", taskID, meta, "failed", nil)
 		action, _ := d.GetAction(actionID)
 
 		CreateInvestigateFailureAction(d, action, "signal: killed")
@@ -192,7 +192,7 @@ func TestCreateInvestigateFailureAction_SkipsTimeout(t *testing.T) {
 
 	t.Run("skips for signal killed (non-scheduled)", func(t *testing.T) {
 		meta := `{"instruction":"test"}`
-		actionID, _ := d.InsertAction("deploy", taskID, meta, "failed")
+		actionID, _ := d.InsertAction("deploy", taskID, meta, "failed", nil)
 		action, _ := d.GetAction(actionID)
 
 		CreateInvestigateFailureAction(d, action, "signal: killed")
@@ -206,7 +206,7 @@ func TestCreateInvestigateFailureAction_SkipsTimeout(t *testing.T) {
 	})
 
 	t.Run("skips for context deadline exceeded", func(t *testing.T) {
-		actionID, _ := d.InsertAction("build", taskID, "{}", "failed")
+		actionID, _ := d.InsertAction("build", taskID, "{}", "failed", nil)
 		action, _ := d.GetAction(actionID)
 
 		CreateInvestigateFailureAction(d, action, "context deadline exceeded")
@@ -220,7 +220,7 @@ func TestCreateInvestigateFailureAction_SkipsTimeout(t *testing.T) {
 	})
 
 	t.Run("skips for stale noninteractive timeout", func(t *testing.T) {
-		actionID, _ := d.InsertAction("sync", taskID, "{}", "failed")
+		actionID, _ := d.InsertAction("sync", taskID, "{}", "failed", nil)
 		action, _ := d.GetAction(actionID)
 
 		CreateInvestigateFailureAction(d, action, "stale: noninteractive action exceeded timeout (20m0s)")
@@ -239,7 +239,7 @@ func TestCreateInvestigateFailureAction_DoesNotSkipNonTimeout(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	actionID, _ := d.InsertAction("deploy", taskID, "{}", "failed")
+	actionID, _ := d.InsertAction("deploy", taskID, "{}", "failed", nil)
 	action, _ := d.GetAction(actionID)
 
 	CreateInvestigateFailureAction(d, action, "API Error: Unable to connect")

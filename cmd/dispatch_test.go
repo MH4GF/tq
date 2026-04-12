@@ -44,7 +44,7 @@ func TestDispatch_Success(t *testing.T) {
 	cmd.SetConfigDir(t.TempDir())
 
 	taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
-	d.InsertAction("review-pr", taskID, `{"instruction":"Review PR for Fix bug.","mode":"noninteractive"}`, db.ActionStatusPending)
+	d.InsertAction("review-pr", taskID, `{"instruction":"Review PR for Fix bug.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{result: `{"review":"approved"}`}
@@ -87,8 +87,8 @@ func TestDispatch_WithActionID(t *testing.T) {
 	cmd.SetConfigDir(t.TempDir())
 
 	taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
-	d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending)
-	d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending)
+	d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+	d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{result: `{"review":"approved"}`}
@@ -154,7 +154,7 @@ func TestDispatch_WorkerError(t *testing.T) {
 	cmd.SetConfigDir(t.TempDir())
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("test", taskID, `{"instruction":"Do something.","mode":"noninteractive"}`, db.ActionStatusPending)
+	d.InsertAction("test", taskID, `{"instruction":"Do something.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
 
 	cmd.SetWorkerFactory(func() dispatch.Worker {
 		return &mockWorker{err: context.DeadlineExceeded}

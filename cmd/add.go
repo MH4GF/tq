@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/spf13/cobra"
@@ -23,6 +24,7 @@ var (
 	addTask   int64
 	addMeta   string
 	addStatus string
+	addAfter  string
 )
 
 var addCmd = &cobra.Command{
@@ -68,17 +70,34 @@ Metadata keys for dispatch control:
 			return err
 		}
 
+		var dispatchAfter *string
+		if addAfter != "" {
+			t, err := time.ParseInLocation("2006-01-02 15:04", addAfter, time.Local)
+			if err != nil {
+				return fmt.Errorf("invalid --after format (expected YYYY-MM-DD HH:MM): %w", err)
+			}
+			if !t.After(time.Now()) {
+				return fmt.Errorf("--after must be in the future (got %s)", addAfter)
+			}
+			s := t.UTC().Format(db.TimeLayout)
+			dispatchAfter = &s
+		}
+
 		merged, err := mergeInstruction(addMeta, instruction)
 		if err != nil {
 			return err
 		}
 
-		id, err := database.InsertAction(addTitle, addTask, merged, status)
+		id, err := database.InsertAction(addTitle, addTask, merged, status, dispatchAfter)
 		if err != nil {
 			return fmt.Errorf("insert action: %w", err)
 		}
 		w := cmd.OutOrStdout()
-		_, _ = fmt.Fprintf(w, "action #%d created (status: %s)\n", id, status)
+		if dispatchAfter != nil {
+			_, _ = fmt.Fprintf(w, "action #%d created (status: %s, dispatch after: %s)\n", id, status, db.FormatLocal(*dispatchAfter))
+		} else {
+			_, _ = fmt.Fprintf(w, "action #%d created (status: %s)\n", id, status)
+		}
 		if status == db.ActionStatusPending {
 			printQueueStatus(w, id)
 		}
@@ -154,5 +173,6 @@ func init() {
 	}
 	addCmd.Flags().StringVar(&addMeta, "meta", "{}", `JSON metadata for dispatch control (keys: mode, permission_mode, worktree)`)
 	addCmd.Flags().StringVar(&addStatus, "status", "", "Initial status (default: pending)")
+	addCmd.Flags().StringVar(&addAfter, "after", "", "Dispatch after this time (YYYY-MM-DD HH:MM, local timezone)")
 	actionCmd.AddCommand(addCmd)
 }

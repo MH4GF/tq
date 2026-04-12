@@ -17,7 +17,7 @@ func TestSearch(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "Fix login bug", "{}", "")
-	actionID, _ := d.InsertAction("review login fix", taskID, "{}", db.ActionStatusPending)
+	actionID, _ := d.InsertAction("review login fix", taskID, "{}", db.ActionStatusPending, nil)
 	d.MarkDone(actionID, "resolved the login issue successfully")
 
 	root := cmd.GetRootCmd()
