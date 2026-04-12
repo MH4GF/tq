@@ -16,7 +16,7 @@ func TestFail(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusRunning)
+	id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusRunning, nil)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -58,7 +58,7 @@ func TestFail_NoReason(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending)
+	id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending, nil)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)
@@ -123,7 +123,7 @@ func TestFail_AlreadyTerminal(t *testing.T) {
 			cmd.ResetForTest()
 
 			taskID, _ := d.InsertTask(1, "test", "{}", "")
-			d.InsertAction("test", taskID, "{}", tc.startStatus)
+			d.InsertAction("test", taskID, "{}", tc.startStatus, nil)
 
 			root := cmd.GetRootCmd()
 			root.SetOut(new(bytes.Buffer))
@@ -148,7 +148,7 @@ func TestFail_FromDispatched(t *testing.T) {
 	cmd.ResetForTest()
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusDispatched)
+	id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusDispatched, nil)
 
 	root := cmd.GetRootCmd()
 	buf := new(bytes.Buffer)

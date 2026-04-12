@@ -16,7 +16,7 @@ func TestCreatePermissionBlockAction(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-		actionID, _ := d.InsertAction("watch", taskID, `{"instruction":"x","mode":"noninteractive"}`, db.ActionStatusDone)
+		actionID, _ := d.InsertAction("watch", taskID, `{"instruction":"x","mode":"noninteractive"}`, db.ActionStatusDone, nil)
 		action, _ := d.GetAction(actionID)
 
 		denials := []PermissionDenial{
@@ -82,7 +82,7 @@ func TestCreatePermissionBlockAction(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-		actionID, _ := d.InsertAction("watch", taskID, `{}`, db.ActionStatusDone)
+		actionID, _ := d.InsertAction("watch", taskID, `{}`, db.ActionStatusDone, nil)
 		action, _ := d.GetAction(actionID)
 
 		denials := []PermissionDenial{{ToolName: "Bash", Input: map[string]any{"command": "x"}}}
@@ -106,8 +106,8 @@ func TestCreatePermissionBlockAction(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-		id1, _ := d.InsertAction("a", taskID, `{}`, db.ActionStatusDone)
-		id2, _ := d.InsertAction("b", taskID, `{}`, db.ActionStatusDone)
+		id1, _ := d.InsertAction("a", taskID, `{}`, db.ActionStatusDone, nil)
+		id2, _ := d.InsertAction("b", taskID, `{}`, db.ActionStatusDone, nil)
 		a1, _ := d.GetAction(id1)
 		a2, _ := d.GetAction(id2)
 
@@ -132,7 +132,7 @@ func TestCreatePermissionBlockAction(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-		actionID, _ := d.InsertAction("self", taskID, `{"is_permission_block":true}`, db.ActionStatusRunning)
+		actionID, _ := d.InsertAction("self", taskID, `{"is_permission_block":true}`, db.ActionStatusRunning, nil)
 		action, _ := d.GetAction(actionID)
 
 		denials := []PermissionDenial{{ToolName: "Bash", Input: map[string]any{"command": "x"}}}
@@ -155,7 +155,7 @@ func TestCreatePermissionBlockAction(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-		actionID, _ := d.InsertAction("a", taskID, `{}`, db.ActionStatusDone)
+		actionID, _ := d.InsertAction("a", taskID, `{}`, db.ActionStatusDone, nil)
 		action, _ := d.GetAction(actionID)
 
 		CreatePermissionBlockAction(d, action, nil)
