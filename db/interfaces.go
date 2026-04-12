@@ -80,10 +80,21 @@ type QueryReader interface {
 	Search(keyword string) ([]SearchResult, error)
 }
 
+// TestHelper provides test-seam methods for test setup.
+// These methods bypass validation and do not emit events.
+type TestHelper interface {
+	SetActionSessionInfoForTest(id int64, sessionID, tmuxPane *string, startedAt *time.Time) error
+	SetScheduleTimestampsForTest(id int64, createdAt, lastRunAt *time.Time) error
+	SetActionTimestampsForTest(id int64, createdAt, completedAt *time.Time) error
+	SetTaskTimestampsForTest(id int64, createdAt, updatedAt *time.Time) error
+	SetActionStatusForTest(id int64, status string) error
+}
+
 // Store implements both CommandWriter and QueryReader.
 type Store interface {
 	CommandWriter
 	QueryReader
+	TestHelper
 	Migrate() error
 	Close() error
 }

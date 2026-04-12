@@ -17,7 +17,8 @@ func TestCheckSchedules_ActionCreated(t *testing.T) {
 	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", `{"key":"val"}`)
 
 	// Set created_at to 2 minutes ago so cron is due
-	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
+	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:58:00")
+	d.SetScheduleTimestampsForTest(1, &createdAt, nil)
 
 	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
 	if err := dispatch.CheckSchedules(d, now); err != nil {
@@ -50,7 +51,8 @@ func TestCheckSchedules_NotDueYet(t *testing.T) {
 	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "0 */3 * * *", "{}")
 
 	// created_at is now, next run is 3 hours later
-	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:00:00' WHERE id = 1")
+	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:00:00")
+	d.SetScheduleTimestampsForTest(1, &createdAt, nil)
 
 	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:30:00")
 	if err := dispatch.CheckSchedules(d, now); err != nil {
@@ -69,7 +71,8 @@ func TestCheckSchedules_DuplicateSkipped(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
-	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
+	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:58:00")
+	d.SetScheduleTimestampsForTest(1, &createdAt, nil)
 
 	// Insert an active action for the same task/prompt
 	d.InsertAction("existing", taskID, `{"schedule_id":"1"}`, db.ActionStatusPending, nil)
@@ -91,7 +94,8 @@ func TestCheckSchedules_DisabledSkipped(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
-	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = ?", id)
+	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:58:00")
+	d.SetScheduleTimestampsForTest(id, &createdAt, nil)
 	d.UpdateScheduleEnabled(id, false)
 
 	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
@@ -111,7 +115,8 @@ func TestCheckSchedules_InstructionBasedAction(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertSchedule(taskID, "/gh-ops:watch", "Watch notifications", "* * * * *", `{}`)
-	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
+	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:58:00")
+	d.SetScheduleTimestampsForTest(1, &createdAt, nil)
 
 	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
 	if err := dispatch.CheckSchedules(d, now); err != nil {
@@ -130,7 +135,8 @@ func TestCheckSchedules_LastRunAtStoredAsUTC(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
-	d.Exec("UPDATE schedules SET created_at = '2026-03-12 09:58:00' WHERE id = 1")
+	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:58:00")
+	d.SetScheduleTimestampsForTest(1, &createdAt, nil)
 
 	// Simulate calling CheckSchedules with a JST time (UTC+9)
 	jst := time.FixedZone("JST", 9*3600)
@@ -158,7 +164,9 @@ func TestCheckSchedules_UsesLastRunAt(t *testing.T) {
 	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "0 */3 * * *", "{}")
 
 	// Set created_at far in the past, last_run_at to recent
-	d.Exec("UPDATE schedules SET created_at = '2026-03-01 00:00:00', last_run_at = '2026-03-12 09:00:00' WHERE id = ?", id)
+	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-01 00:00:00")
+	lastRunAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:00:00")
+	d.SetScheduleTimestampsForTest(id, &createdAt, &lastRunAt)
 
 	// now is 09:30, next run from 09:00 is 12:00 → should NOT trigger
 	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:30:00")

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -177,12 +178,13 @@ func TestTasksModel_DateFilter(t *testing.T) {
 	d.InsertAction("today-action", taskID1, "{}", db.ActionStatusPending, nil)
 
 	taskID2, _ := d.InsertTask(1, "Old task", "{}", "")
-	d.InsertAction("old-action", taskID2, "{}", db.ActionStatusPending, nil)
+	oldActionID, _ := d.InsertAction("old-action", taskID2, "{}", db.ActionStatusPending, nil)
 	d.UpdateTask(taskID2, db.TaskStatusDone, "")
 
 	// Set old-action and old task dates to a different date
-	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE title ='old-action'")
-	d.Exec(fmt.Sprintf("UPDATE tasks SET created_at = '2025-01-01 00:00:00', updated_at = '2025-01-01 00:00:00' WHERE id = %d", taskID2))
+	oldDate := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	d.SetActionTimestampsForTest(oldActionID, &oldDate, nil)
+	d.SetTaskTimestampsForTest(taskID2, &oldDate, &oldDate)
 
 	// Get today's date from the first action
 	actions, _ := d.ListActions("", nil, 0)
@@ -226,8 +228,9 @@ func TestTasksModel_DateFilter_NonDoneTaskShown(t *testing.T) {
 
 	// Open task with action on a different date
 	taskID, _ := d.InsertTask(1, "Open no-match task", "{}", "")
-	d.InsertAction("old-action", taskID, "{}", db.ActionStatusPending, nil)
-	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00' WHERE title ='old-action'")
+	oldActionID, _ := d.InsertAction("old-action", taskID, "{}", db.ActionStatusPending, nil)
+	oldDate := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	d.SetActionTimestampsForTest(oldActionID, &oldDate, nil)
 
 	m := NewTasksModel(d, "2026-03-03")
 	msg := m.Init()()
@@ -248,8 +251,9 @@ func TestTasksModel_DateFilter_ArchivedTaskFiltered(t *testing.T) {
 	actionID, _ := d.InsertAction("old-action", taskID, "{}", db.ActionStatusPending, nil)
 	d.MarkCancelled(actionID, "")
 	d.UpdateTask(taskID, db.TaskStatusArchived, "")
-	d.Exec("UPDATE actions SET created_at = '2025-01-01 00:00:00', completed_at = '2025-01-01 00:00:00' WHERE title ='old-action'")
-	d.Exec(fmt.Sprintf("UPDATE tasks SET created_at = '2025-01-01 00:00:00', updated_at = '2025-01-01 00:00:00' WHERE id = %d", taskID))
+	oldDate := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	d.SetActionTimestampsForTest(actionID, &oldDate, &oldDate)
+	d.SetTaskTimestampsForTest(taskID, &oldDate, &oldDate)
 
 	// Open task — should always appear
 	taskID2, _ := d.InsertTask(1, "Open task", "{}", "")
