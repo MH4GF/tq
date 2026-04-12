@@ -94,12 +94,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 - Why: If upper-layer tests bypass `db.Store` to tweak rows directly (e.g., setting `created_at` for time-travel tests), they escape the interface contract. Schema changes silently break those tests, and the interface stops being a meaningful boundary. The fix is to extend `db.Store` with the test-seam methods those tests need (e.g., `SetActionStartedAt`) and route tests through the interface.
 - Verify: Go test harness `internal/goldenrules/` scans for SQL keywords in `cmd/`, `dispatch/`, `tui/`. Ceiling-based: violations below the ceiling pass, regressions fail. Run `go test ./internal/goldenrules/`.
-- Current violations: **30** across 4 files:
-  - `dispatch/queue_worker_test.go`: 17 matches (all `d.Exec("UPDATE actions SET ...")` for setting `session_id`, `tmux_pane`, `started_at`)
-  - `dispatch/schedule_test.go`: 7 matches (all `d.Exec("UPDATE schedules SET created_at = ...")`)
-  - `tui/tasks_test.go`: 5 matches (all `d.Exec("UPDATE ... SET created_at = ...")`)
-  - `cmd/reset_test.go`: 1 match (`d.Exec("UPDATE actions SET status = 'open' WHERE id = 1")`)
-- Remediation sketch (to be handled by Phase 2 GC action, not this PR): expose narrow test-seam methods on `db.Store` — e.g., `db.SetActionTimestampsForTest`, `db.SetScheduleCreatedAtForTest` — guarded by a build tag or a `TestHelper` sub-interface. All 30 call sites then route through those methods.
+- Current violations: 0 (resolved by adding `TestHelper` sub-interface with test-seam methods: `SetActionSessionInfoForTest`, `SetScheduleTimestampsForTest`, `SetActionTimestampsForTest`, `SetTaskTimestampsForTest`, `SetActionStatusForTest`).
 
 ### CLI output shape
 
@@ -154,7 +149,7 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 8 Error wrapping | OK | OK | OK | OK |
 | 9 Custom error Unwrap | — | OK (1) | — | — |
 | 10 Metadata via constants | — | OK | OK | OK |
-| 11 SQL in db/ only | — | **24** | **5** | **1** |
+| 11 SQL in db/ only | — | OK | OK | OK |
 | 12 CLI WriteJSON | — | — | — | OK |
 
-Totals (as of this file's introduction): **30** current violations, all against Rule 11, all in test files.
+Totals: **0** current violations.
