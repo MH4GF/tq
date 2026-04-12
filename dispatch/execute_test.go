@@ -183,19 +183,19 @@ func TestWrapInstruction(t *testing.T) {
 		wantHistory bool
 	}{
 		{
-			name:        "interactive includes /tq:done",
+			name:        "interactive includes /tq:done and /tq:failed",
 			mode:        ModeInteractive,
 			wantDone:    true,
 			wantHistory: true,
 		},
 		{
-			name:        "noninteractive includes /tq:done",
+			name:        "noninteractive includes /tq:done and /tq:failed",
 			mode:        ModeNonInteractive,
 			wantDone:    true,
 			wantHistory: true,
 		},
 		{
-			name:        "remote excludes /tq:done",
+			name:        "remote excludes /tq:done and /tq:failed",
 			mode:        ModeRemote,
 			wantDone:    false,
 			wantHistory: true,
@@ -221,6 +221,12 @@ func TestWrapInstruction(t *testing.T) {
 			}
 			if !tc.wantDone && strings.Contains(got, "/tq:done") {
 				t.Error("should NOT contain /tq:done postamble")
+			}
+			if tc.wantDone && !strings.Contains(got, "/tq:failed") {
+				t.Error("should contain /tq:failed postamble")
+			}
+			if !tc.wantDone && strings.Contains(got, "/tq:failed") {
+				t.Error("should NOT contain /tq:failed postamble")
 			}
 		})
 	}

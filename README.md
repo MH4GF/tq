@@ -113,7 +113,7 @@ Controlled via `--meta` on `action create` / `schedule create`:
 
 | mode | Description |
 |------|-------------|
-| `interactive` (default) | `claude` in tmux — fire-and-forget, worker reports via `tq action done` |
+| `interactive` (default) | `claude` in tmux — fire-and-forget, worker reports via `tq action done` / `tq action fail` |
 | `noninteractive` | `claude -p` — captures stdout, auto-completes |
 | `remote` | Dispatched to remote worker |
 
