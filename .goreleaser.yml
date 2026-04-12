@@ -12,3 +12,13 @@ archives:
         formats: [zip]
 changelog:
   sort: asc
+homebrew_casks:
+  - name: tq
+    binaries:
+      - tq
+    homepage: "https://github.com/MH4GF/tq"
+    description: "Job-queue based orchestration system for Claude Code"
+    repository:
+      owner: MH4GF
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
