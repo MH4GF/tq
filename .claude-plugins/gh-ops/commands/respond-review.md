@@ -1,70 +1,69 @@
 ---
 description: Respond to review comments on a PR
 argument-hint: "<PR_URL>"
-allowed-tools: Bash(**/scripts/gh-unresolved-threads *), Bash(**/scripts/gh-reply-review-thread *), Bash(**/scripts/gh-resolve-review-thread *), Bash(gh pr edit *), Read, Edit, Write, Grep, Glob
+allowed-tools: Bash(**/scripts/gh-prepare-review-replies *), Bash(**/scripts/gh-reply-review-thread *), Bash(**/scripts/gh-resolve-review-thread *), Bash(gh pr edit *), Read, Edit, Grep, Glob
 ---
 
 # Respond to Review Comments
 
 Respond to reviewer comments. Process in batches by phase, not one-by-one sequentially.
 
-## Phase 1: Analysis (no changes)
-
-### 1. Fetch unresolved comments
+## Phase 1: Generate draft file
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/gh-unresolved-threads $ARGUMENTS
+${CLAUDE_PLUGIN_ROOT}/scripts/gh-prepare-review-replies $ARGUMENTS
 ```
 
-### 2. Classify
+The script writes a Markdown draft to `.claude/tmp/pr${NUMBER}-review-replies-${TIMESTAMP}.md` containing every unresolved thread (Thread ID, file:line, author, original quoted comment, empty Classification/Reply draft fields). It prints the generated path on stdout.
 
-Classify each comment:
+If stdout is empty (stderr says `No unresolved threads`) → report and finish.
 
-**No action needed (do NOT resolve):**
-- Code explanation comments, FYI information sharing, already-addressed findings
-- Leave the thread unresolved. Reviewer insights and supplementary info are worth keeping on the thread
+## Phase 2: Classify and draft in tmp file
 
-**No code change needed but resolve required:**
-- Will address in a separate issue/PR → post the issue URL and resolve
-- Not addressing a nit/optional → state the reason and resolve
+Read the file path printed by Phase 1 and fill in each thread:
 
-**Action required:**
-- Threads with open discussion or awaiting a response
+- **Classification**: one of
+  - `No action` — code explanation, FYI, already-addressed findings. Do NOT resolve.
+  - `Resolve without code change` — nit declined / deferred to another issue. Resolve after replying.
+  - `Action required` — code change needed. Resolve after the fix.
+- **Reply draft**: the body to post on the thread.
+  - `Action required`: write the body assuming an `addressed in abc1234` style commit hash will be appended after the fix.
+  - `Resolve without code change`: write the final body to be posted as-is.
+  - `No action`: usually empty. Fill in only if you want to post a comment without resolving.
 
-## Phase 2: Report and discuss
+For judgment calls (naming, value selection, design decisions), include precedent research and rationale in the draft.
 
-MUST: Present the classification to the user and discuss the resolution for each comment. Do not start fixing without agreement.
+After editing, present the file to the user and reach agreement. The user may edit the file directly. Do NOT start Phase 3 without agreement.
 
-| # | Thread | Classification | Proposed action |
-|---|--------|----------------|-----------------|
-| 1 | Summary of the location | Action required / No action | Fix approach or reason for no action |
-| ... | ... | ... | ... |
-
-For items requiring judgment (value selection, naming, design decisions), provide precedent research and rationale.
-
-If 0 unresolved comments → report that and finish.
+**Skip Phase 3 entirely** when every thread is `No action` and every Reply draft is empty. Report `all no-op` and finish.
 
 ## Phase 3: Execute
 
-Implement per the agreed plan, in batch.
+Execute strictly in this order. Each step is a no-op if its target set is empty.
 
-### Step 1: Declare intent
+### Step 1: Post "will address" replies
+Post `Will address` on every `Action required` thread (intent declaration before starting work). Run all posts **in parallel** (single message, multiple Bash tool calls).
 
-Comment "Will address" on all threads (communicate intent before starting work).
+Skip if no `Action required` threads.
 
-### Step 2: Implement
+### Step 2: Apply code changes
+Implement every fix called out in Reply drafts. Bundle all changes into one commit.
 
-Implement all fixes together and commit.
+Skip if no `Action required` threads.
 
 ### Step 3: Push
+`git push` to remote. Required so GitHub linkifies the commit hash.
 
-Push commits to remote. Required for GitHub to linkify commit hashes.
+Skip if Step 2 produced no commit.
 
-### Step 4: Report completion
+### Step 4: Post replies
+- `Action required`: post the completion comment with the commit hash spliced into the Reply draft.
+- `Resolve without code change`: post the Reply draft as-is.
+- `No action` with a Reply draft: post the Reply draft as-is.
 
-Comment and resolve all threads in batch.
+Run all posts **in parallel** (single message, multiple Bash tool calls).
 
-Completion comments must include the commit hash and rationale. Keep it brief when self-evident.
+**Do NOT resolve in this step.** Posting must always precede resolving.
 
 <example>
 # Good: commit hash + rationale
@@ -73,15 +72,15 @@ Addressed in abc1234. The nil check was missing, which could cause a panic.
 # Good: self-evident case
 Fixed in abc1234. Typo fix.
 
-# Bad: no commit hash
+# Bad: no commit hash on an Action required thread
 Addressed.
 </example>
 
-### Step 5: Re-request review
+### Step 5: Resolve threads
+Resolve every thread that received a reply in Step 4 EXCEPT `No action` threads (those keep the comment without resolving). Run all resolves **in parallel**.
 
-After all responses are complete, re-request review from the reviewer.
-
-Skip re-request for bot reviewers (e.g., `devin-ai-integration[bot]`). Only re-request from human reviewers.
+### Step 6: Re-request review
+Re-request review from human reviewers. Skip bot reviewers (e.g., `devin-ai-integration[bot]`).
 
 ```bash
 gh pr edit $ARGUMENTS --add-reviewer <REVIEWER_LOGIN>
@@ -91,7 +90,7 @@ gh pr edit $ARGUMENTS --add-reviewer <REVIEWER_LOGIN>
 
 ### Reply to a thread
 
-Use the `id` (THREAD_ID) from `gh-unresolved-threads` output to reply:
+Use the Thread ID listed in the tmp file generated by `gh-prepare-review-replies`:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/scripts/gh-reply-review-thread "<THREAD_ID>" "Reply content"
