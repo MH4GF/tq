@@ -631,6 +631,64 @@ func TestTaskList_WithActions(t *testing.T) {
 	}
 }
 
+func TestTaskCreateHelp_WithProjects(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "create", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !contains(out, "Create a new task under a project") {
+		t.Errorf("output missing standard help text:\n%s", out)
+	}
+	if !contains(out, "[agent hint] Available projects:") {
+		t.Errorf("output missing agent hint:\n%s", out)
+	}
+	if !contains(out, "1: immedio") {
+		t.Errorf("output missing project 1:\n%s", out)
+	}
+	if !contains(out, "2: hearable") {
+		t.Errorf("output missing project 2:\n%s", out)
+	}
+	if !contains(out, "3: works") {
+		t.Errorf("output missing project 3:\n%s", out)
+	}
+}
+
+func TestTaskCreateHelp_NoProjects(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "create", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !contains(out, "Create a new task under a project") {
+		t.Errorf("output missing standard help text:\n%s", out)
+	}
+	if contains(out, "[agent hint]") {
+		t.Errorf("output should not contain agent hint when no projects exist:\n%s", out)
+	}
+}
+
 func contains(s, substr string) bool {
 	return bytes.Contains([]byte(s), []byte(substr))
 }
