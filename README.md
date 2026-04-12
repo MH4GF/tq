@@ -22,9 +22,6 @@ Prerequisites: [tmux](https://github.com/tmux/tmux) (required for dispatching in
 # Homebrew (macOS / Linux)
 brew install MH4GF/tap/tq
 
-# Go
-go install github.com/MH4GF/tq@latest
-
 # Claude Code Plugin
 claude plugin marketplace add MH4GF/tq
 claude plugin install tq@tq-marketplace
