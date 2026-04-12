@@ -53,7 +53,6 @@ type WorkerConfig struct {
 	PollInterval       time.Duration
 	TmuxChecker        TmuxChecker
 	StaleGracePeriod   time.Duration
-	SessionLogChecker  SessionLogChecker
 	HeartbeatFreshness time.Duration
 }
 
@@ -226,9 +225,9 @@ func reapCheckSessionLog(cfg WorkerConfig, a *db.Action) bool {
 
 	// Save sessionId to metadata for future use (claude --resume, log investigation).
 	// Skip if already saved to avoid redundant DB writes on every poll cycle.
-	if sessionID != "" && !metadataHasValue(a.Metadata, "claude_session_id", sessionID) {
+	if sessionID != "" && !metadataHasValue(a.Metadata, MetaKeyClaudeSessionID, sessionID) {
 		if err := cfg.DB.MergeActionMetadata(a.ID, map[string]any{
-			"claude_session_id": sessionID,
+			MetaKeyClaudeSessionID: sessionID,
 		}); err != nil {
 			slog.Warn("failed to save session id to metadata", "action_id", a.ID, "error", err)
 		}

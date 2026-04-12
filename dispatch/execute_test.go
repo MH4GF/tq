@@ -410,3 +410,98 @@ func TestExecuteAction_NoInstruction(t *testing.T) {
 		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusFailed)
 	}
 }
+
+func TestExecuteAction_NonInteractiveSavesSessionID(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
+	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+	d.InsertAction("check", taskID, string(meta), db.ActionStatusPending, nil)
+
+	action, _ := d.NextPending(context.Background())
+
+	worker := &countingWorker{result: `{"ok":true}`}
+	checker := &mockSessionLogChecker{active: true, sessionID: "sess-noninteractive"}
+
+	_, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: func() Worker { return worker },
+			InteractiveFunc:    func() Worker { return worker },
+			RemoteFunc:         func() Worker { return worker },
+			SessionLogChecker:  checker,
+		},
+	}, action)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	a, _ := d.GetAction(action.ID)
+	var m map[string]any
+	json.Unmarshal([]byte(a.Metadata), &m)
+	if m["claude_session_id"] != "sess-noninteractive" {
+		t.Errorf("claude_session_id = %v, want %q", m["claude_session_id"], "sess-noninteractive")
+	}
+}
+
+func TestExecuteAction_NonInteractiveFailureSavesSessionID(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
+	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+	d.InsertAction("check", taskID, string(meta), db.ActionStatusPending, nil)
+
+	action, _ := d.NextPending(context.Background())
+
+	worker := &countingWorker{err: context.DeadlineExceeded}
+	checker := &mockSessionLogChecker{active: true, sessionID: "sess-failed"}
+
+	_, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: func() Worker { return worker },
+			InteractiveFunc:    func() Worker { return worker },
+			RemoteFunc:         func() Worker { return worker },
+			SessionLogChecker:  checker,
+		},
+	}, action)
+
+	var af *ActionFailedError
+	if !errors.As(err, &af) {
+		t.Fatalf("expected ActionFailedError, got %v", err)
+	}
+
+	a, _ := d.GetAction(action.ID)
+	var m map[string]any
+	json.Unmarshal([]byte(a.Metadata), &m)
+	if m["claude_session_id"] != "sess-failed" {
+		t.Errorf("claude_session_id = %v, want %q", m["claude_session_id"], "sess-failed")
+	}
+}
+
+func TestExecuteAction_NonInteractiveNilCheckerNoError(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
+	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+	d.InsertAction("check", taskID, string(meta), db.ActionStatusPending, nil)
+
+	action, _ := d.NextPending(context.Background())
+
+	worker := &countingWorker{result: `{"ok":true}`}
+
+	_, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: func() Worker { return worker },
+			InteractiveFunc:    func() Worker { return worker },
+			RemoteFunc:         func() Worker { return worker },
+		},
+	}, action)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
