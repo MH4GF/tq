@@ -1,55 +1,63 @@
 ---
-description: openタスクの棚卸し。状況確認→整理提案→実行
+description: Inventory and organize open tasks - review status, propose cleanup, execute
 argument-hint: "[project_name]"
 ---
 
 # tq triage
 
-open タスクを棚卸しして整理する。
+Inventory and organize open tasks.
 
-## 手順
+## Steps
 
-### 1. 収集
+### 1. Collect
 
-`tq task list --status open` で open タスクとその全アクション履歴を取得する。`$ARGUMENTS` があれば `--project` でフィルタする。
+Run `tq task list --status open` to fetch open tasks with their full action history. Filter by `--project` if `$ARGUMENTS` is given.
 
-### 2. フェーズ判定
+### 2. Project consistency check
 
-各タスクのアクション履歴を時系列で読み、現在フェーズを判定する。
+Detect and fix tasks that landed in the wrong project due to auto-creation (e.g. `gh-ops:watch`). Run `tq project list` to get the project list with metadata, then infer the expected project from each task's `metadata.url`, title, and action history (instruction / result), and compare against the current `project_id`.
 
-**実作業アクションの特定**: `classify-next-action` は自動振り分けアクションであり、タスクの進捗を表さない。`classify-next-action` を除外した全アクションを実作業アクションとして扱い、直近の result を読む。
+**Present mismatches and fix**: If mismatches are found, present them in the table below and confirm **one at a time** via AskUserQuestion (choices: move / skip). On each approval, run `tq task update <ID> --project <new_id>`. Do not batch-approve even if many tasks are affected (to minimize the impact of misjudgment).
 
-**running アクションの判定**: running の実作業アクションがある場合、tmux pane の生存を確認する。pane が存在しなければ stale とみなし「停滞」として扱う。
-
-**フェーズ判定基準**:
-
-- **未着手**: 実作業アクションなし
-- **実装中**: 最新の実作業が running/pending
-- **レビュー待ち**: implement が done で、result に「push完了」「レビュー」等の記述あり
-- **デプロイ待ち**: review/self-review が done で、マージ・デプロイが残っている
-- **停滞**: 失敗が続いている・running だが stale・長期間動きなし
-- **ブロック中**: 停滞のうち、result に権限エラー・外部依存待ち等、自力で解消できない要因が明記されているもの
-- **完了見込み**: 全要件を満たす result があるがタスクが open のまま
-
-### 3. サマリー
-
-プロジェクト別にテーブルで提示する:
-
-| ID | タイトル | 経過 | フェーズ | 直近の実作業 |
+| ID | Title | Current | Expected | Evidence |
 |---|---|---|---|---|
-| 157 | 機能Aの実装 | 3日 | レビュー待ち | #815 implement done — 実装完了・push済 |
-| 55 | バグBの修正 | 5日 | 未着手 | — |
+| 420 | Respond to PR #55 | works | immedio | metadata.url: github.com/immedioinc/app/pull/55 |
 
-### 4. 提案
+### 3. Phase detection
 
-AskUserQuestion で整理アクションを提案する。**提案には必ず判断根拠となる result の要約を添える**。
+Read each task's action history in chronological order and determine its current phase.
 
-判断観点:
+**Identifying real-work actions**: `classify-next-action` is an auto-routing action and does not represent task progress. Treat all actions other than `classify-next-action` as real-work actions and read the most recent result.
 
-- **完了見込み**: 実作業の result がタスク要件を満たしている → done を提案。result から根拠を引用する
-- **次フェーズへの移行**: 実装完了→レビュー、レビュー完了→デプロイ等 → 次の action 作成を提案。result の「次のアクション」記述があれば参照する
-- **未着手**: 実作業アクションなし → まだやるか確認し、やるなら action 作成、やらないなら archived
-- **停滞**: 失敗が続いている・長期間動きなし → result から失敗原因を引用し、アプローチ変更か archived かを提案
-- **ブロック中**: result からブロック要因を引用し、解消策を提案
+**Phase criteria**:
 
-提案はユーザー承認後に実行する。
+- **Not started**: No real-work action
+- **In progress**: Latest real-work action is running/pending
+- **Awaiting review**: `implement` is done and the result mentions "push complete", "review", etc.
+- **Awaiting deploy**: `review` / `self-review` is done and merge/deploy remains
+- **Stalled**: Persistent failures (including `stale: ...`) or no activity for a long time
+- **Blocked**: Stalled with a result that explicitly states a blocker (permission error, external dependency, etc.) that cannot be resolved independently
+- **Likely complete**: A result satisfies all requirements but the task remains open
+
+### 4. Summary
+
+Present by project in a table:
+
+| ID | Title | Age | Phase | Latest real-work |
+|---|---|---|---|---|
+| 157 | Implement feature A | 3d | Awaiting review | #815 implement done — implementation complete, pushed |
+| 55 | Fix bug B | 5d | Not started | — |
+
+### 5. Proposals
+
+Propose cleanup actions via AskUserQuestion. **Every proposal MUST include a summary of the result that justifies the decision.**
+
+Decision criteria:
+
+- **Likely complete**: The real-work result satisfies the task requirements → propose `done`. Quote the evidence from the result.
+- **Advance to next phase**: implementation done → review, review done → deploy, etc. → propose creating the next action. Reference the "next action" note in the result if present.
+- **Not started**: No real-work action → ask whether to proceed; if yes, create an action, otherwise `archived`.
+- **Stalled**: Persistent failures / long idle → quote the failure cause from the result and propose either changing approach or `archived`.
+- **Blocked**: Quote the blocker from the result and propose a way to unblock.
+
+Execute proposals only after user approval.
