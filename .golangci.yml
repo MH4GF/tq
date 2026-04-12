@@ -29,8 +29,16 @@ linters:
     - dupword
     - misspell
     - depguard
+    - forbidigo
 
   settings:
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: '^db\.Open$'
+          msg: "use testutil.NewTestDB(t) instead of db.Open in tests (golden-rule-5)"
+        - pattern: '^fmt\.Println$'
+          msg: "use WriteJSON for structured CLI output (golden-rule-12)"
     depguard:
       rules:
         deny-upward-from-db:
@@ -88,3 +96,13 @@ linters:
         linters:
           - errcheck
           - gosec
+      # golden-rule-5: db.Open forbidden only in test files; suppress in non-test files
+      - path-except: _test\.go
+        linters:
+          - forbidigo
+        text: golden-rule-5
+      # golden-rule-12: fmt.Println forbidden only in cmd/; suppress elsewhere
+      - path-except: ^cmd/
+        linters:
+          - forbidigo
+        text: golden-rule-12

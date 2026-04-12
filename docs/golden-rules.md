@@ -8,9 +8,9 @@ This file is the single source of truth for agent-driven "tech-debt garbage coll
 
 Classification:
 
-- **[enforced]** — already enforced mechanically by lint / compile / depguard. Deviations fail CI.
-- **[mechanical]** — detectable by grep / ast-grep / a trivial script. Not yet wired into CI.
-- **[agent]** — requires LLM judgment. Checked by the periodic GC action (Phase 2 deliverable).
+- **[enforced]** — enforced mechanically by lint (depguard, forbidigo, errorlint) or Go test harness (`internal/goldenrules/`). Deviations fail CI.
+- **[mechanical]** — detectable by grep / script but not yet wired into CI.
+- **[agent]** — requires LLM judgment. Checked by the periodic GC action.
 
 Current status totals are captured after each rule as `current violations: N`. A non-zero count is **not** a bug in the rule — it is tech debt to be tracked in `docs/tech-debt-tracker.md` (Phase 2 deliverable) and burned down by GC action PRs.
 
@@ -40,24 +40,24 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 ### DB access abstraction
 
-**Rule 4 [mechanical] — Upper layers depend on the `db.Store` interface, not the concrete `*db.DB` type.**
+**Rule 4 [enforced] — Upper layers depend on the `db.Store` interface, not the concrete `*db.DB` type.**
 
 - Why: The `Store` interface (composed of `CommandWriter` + `QueryReader`, defined in `db/interfaces.go`) is the contract upper layers rely on. Depending on `*db.DB` directly leaks implementation details and blocks substitution in tests.
-- Verify: `grep -rn '\*db\.DB' cmd/ dispatch/ tui/` must return zero matches.
+- Verify: Go test harness `internal/goldenrules/` scans for `*db.DB` in `cmd/`, `dispatch/`, `tui/`. Run `go test ./internal/goldenrules/`.
 - Current violations: 0.
 
 ### Test strategy
 
-**Rule 5 [mechanical] — Tests use `testutil.NewTestDB(t)` (in-memory SQLite) rather than calling `db.Open` directly.**
+**Rule 5 [enforced] — Tests use `testutil.NewTestDB(t)` (in-memory SQLite) rather than calling `db.Open` directly.**
 
 - Why: `testutil.NewTestDB` guarantees migration is applied and cleanup is registered with `t.Cleanup`. Hand-rolled `db.Open(":memory:")` calls diverge from this and silently skip migrations.
-- Verify: `grep -rn --include='*_test.go' 'db\.Open(' .` must return zero matches.
+- Verify: `forbidigo` in `.golangci.yml` blocks `db.Open` calls in `_test.go` files. Run `golangci-lint run ./...`.
 - Current violations: 0.
 
-**Rule 6 [mechanical] — No `db.Store` mocks or fakes in `db/` tests.**
+**Rule 6 [enforced] — No `db.Store` mocks or fakes in `db/` tests.**
 
 - Why: The whole point of running against real in-memory SQLite is to exercise the real SQL and schema. Mocks in the foundation layer would hide the failure modes this test suite exists to catch (e.g., migration regressions, constraint violations).
-- Verify: `grep -rn 'type \(mock\|fake\|Mock\|Fake\)\w*' db/` must return zero matches.
+- Verify: Go test harness `internal/goldenrules/` scans for `type Mock*/Fake*` in `db/`. Run `go test ./internal/goldenrules/`.
 - Current violations: 0.
 
 **Rule 7 [agent] — Test functions use table-driven patterns (`tests := []struct{ name string; ... }`) when exercising multiple cases.**
@@ -74,26 +74,26 @@ Current status totals are captured after each rule as `current violations: N`. A
 - Verify: `errorlint` is enabled in `.golangci.yml`. Run `golangci-lint run ./...`.
 - Current violations: 0.
 
-**Rule 9 [mechanical] — Custom error types (any `type *Error struct`) MUST implement `Unwrap() error`.**
+**Rule 9 [enforced] — Custom error types (any `type *Error struct`) MUST implement `Unwrap() error`.**
 
 - Why: Rule 8 relies on unwrapping. A custom error type without `Unwrap` silently breaks `errors.As`/`errors.Is` at the outermost frame (see `dispatch.ActionFailedError` as the canonical example at `dispatch/execute.go:48`).
-- Verify: For each type matched by `grep -rn 'type \w*Error struct'`, confirm an `Unwrap() error` method exists in the same package.
+- Verify: Go test harness `internal/goldenrules/` finds all `type *Error struct` and checks for `Unwrap() error` in the same package. Run `go test ./internal/goldenrules/`.
 - Current violations: 0 (1 type: `dispatch.ActionFailedError`, verified to implement `Unwrap`).
 
 ### Metadata access
 
-**Rule 10 [mechanical] — Action/task metadata keys are accessed via the `MetaKey*` constants in `dispatch/execute.go`, not via string literals.**
+**Rule 10 [enforced] — Action/task metadata keys are accessed via the `MetaKey*` constants in `dispatch/execute.go`, not via string literals.**
 
 - Why: Metadata is JSON blob storage; literal keys scattered across layers become typo vectors and make key renames painful. Constants localize the allowlist at the dispatch boundary — mirrors the article's "validate at boundaries" example.
-- Verify: `grep -rn 'metadata\["' cmd/ dispatch/ tui/` must return zero matches.
+- Verify: Go test harness `internal/goldenrules/` scans for `metadata["` in `cmd/`, `dispatch/`, `tui/`. Run `go test ./internal/goldenrules/`.
 - Current violations: 0.
 
 ### SQL placement
 
-**Rule 11 [mechanical] — Raw SQL string literals live only in `db/`. No `UPDATE`, `INSERT`, `DELETE`, `SELECT`, or `CREATE TABLE` strings in `cmd/`, `dispatch/`, or `tui/` (including tests).**
+**Rule 11 [enforced] — Raw SQL string literals live only in `db/`. No `UPDATE`, `INSERT`, `DELETE`, `SELECT`, or `CREATE TABLE` strings in `cmd/`, `dispatch/`, or `tui/` (including tests).**
 
 - Why: If upper-layer tests bypass `db.Store` to tweak rows directly (e.g., setting `created_at` for time-travel tests), they escape the interface contract. Schema changes silently break those tests, and the interface stops being a meaningful boundary. The fix is to extend `db.Store` with the test-seam methods those tests need (e.g., `SetActionStartedAt`) and route tests through the interface.
-- Verify: `grep -rn -E '"(SELECT|INSERT |UPDATE |DELETE FROM|CREATE TABLE)' cmd/ dispatch/ tui/` must return zero matches.
+- Verify: Go test harness `internal/goldenrules/` scans for SQL keywords in `cmd/`, `dispatch/`, `tui/`. Ceiling-based: violations below the ceiling pass, regressions fail. Run `go test ./internal/goldenrules/`.
 - Current violations: **30** across 4 files:
   - `dispatch/queue_worker_test.go`: 17 matches (all `d.Exec("UPDATE actions SET ...")` for setting `session_id`, `tmux_pane`, `started_at`)
   - `dispatch/schedule_test.go`: 7 matches (all `d.Exec("UPDATE schedules SET created_at = ...")`)
@@ -103,10 +103,10 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 ### CLI output shape
 
-**Rule 12 [mechanical] — `cmd/` list and show commands output JSON via the shared `WriteJSON` helper. No `fmt.Println` for structured data.**
+**Rule 12 [enforced] — `cmd/` list and show commands output JSON via the shared `WriteJSON` helper. No `fmt.Println` for structured data.**
 
 - Why: tq's CLI contract is JSON + `--jq` for filtering. Any command that prints structured data via `fmt.Println` breaks `--jq` and forces downstream callers to parse ad-hoc text.
-- Verify: `grep -rn 'fmt\.Println' cmd/` must return zero matches for structured-output cases. (Plain progress or error messages going to stderr are fine, but no cmd/ file currently uses `fmt.Println` at all, which is a cleaner state than the rule requires.)
+- Verify: `forbidigo` in `.golangci.yml` blocks `fmt.Println` calls in `cmd/`. Run `golangci-lint run ./...`.
 - Current violations: 0.
 
 ---
@@ -131,12 +131,16 @@ Current status totals are captured after each rule as `current violations: N`. A
 2. Add the rule under the relevant heading. Preserve the numbering; never reuse a number after deletion.
 3. Record `current violations: N` at the time of introduction. A non-zero N is fine — the rule still captures intent and becomes Phase 2 GC fuel.
 4. No update to `CLAUDE.md` is needed — the single-line pointer in CLAUDE.md already resolves here.
+5. Choose the enforcement method by priority:
+   1. **Existing linter** (depguard, forbidigo, errorlint, etc.) — widely used, stable, and already integrated into CI. Prefer this when a linter can express the rule.
+   2. **Go test harness** (`internal/goldenrules/goldenrules_test.go`) — runs via `go test ./...` in CI. Use for rules that need file scanning or cross-file correlation beyond what linters support.
+   3. **Custom `go/analysis` analyzer** — powerful but heavy to implement. Use only as a last resort.
 
 ---
 
 ## Per-layer quality grades
 
-Tracking placeholder for Phase 2. The GC action will populate this matrix weekly. A cell is `OK` if the rule has zero violations in that layer, or `N` (the current violation count) otherwise. `—` means the rule does not apply to that layer.
+A cell is `OK` if the rule has zero violations in that layer, or `N` (the current violation count) otherwise. `—` means the rule does not apply to that layer. Detailed violation lists are in `docs/tech-debt-tracker.md`.
 
 | Rule | db | dispatch | tui | cmd |
 |---|---|---|---|---|
