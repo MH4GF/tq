@@ -211,7 +211,7 @@ func TestWrapInstruction(t *testing.T) {
 				t.Error("should contain task ID")
 			}
 			if tc.wantHistory && !strings.Contains(got, "tq action list --task 42") {
-				t.Error("should contain preamble with tq action list and task ID")
+				t.Error("should contain postamble with tq action list and task ID")
 			}
 			if !strings.Contains(got, "Fix the bug") {
 				t.Error("should contain the original instruction")
@@ -229,6 +229,13 @@ func TestWrapInstruction(t *testing.T) {
 				t.Error("should NOT contain /tq:failed postamble")
 			}
 		})
+	}
+}
+
+func TestWrapInstruction_InstructionComesFirst(t *testing.T) {
+	got := wrapInstruction("/daily-report", 100, 50, ModeNonInteractive)
+	if !strings.HasPrefix(got, "/daily-report") {
+		t.Errorf("instruction should be the first line, got: %q", got[:min(len(got), 80)])
 	}
 }
 

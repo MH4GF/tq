@@ -192,14 +192,13 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 }
 
 func wrapInstruction(instruction string, actionID, taskID int64, mode string) string {
-	preamble := fmt.Sprintf("You are executing action #%d (task #%d).\n\n", actionID, taskID)
-	preamble += fmt.Sprintf("First, run `tq action list --task %d` to understand the task history (completed actions, their results, etc.).\n\n", taskID)
-	result := preamble + instruction
+	postamble := fmt.Sprintf("\n\nYou are executing action #%d (task #%d).\n\n", actionID, taskID)
+	postamble += fmt.Sprintf("First, run `tq action list --task %d` to understand the task history (completed actions, their results, etc.).", taskID)
 	if mode != ModeRemote {
-		result += "\n\nWhen you finish, run `/tq:done` to mark this action as complete." +
+		postamble += "\n\nWhen you finish, run `/tq:done` to mark this action as complete." +
 			"\nIf you cannot complete the action (missing permissions, broken environment, external blocker, etc.), run `/tq:failed` instead."
 	}
-	return result
+	return instruction + postamble
 }
 
 func ValidateActionMetadata(meta map[string]any) error {
