@@ -4,6 +4,8 @@ Job-queue based orchestration system for Claude Code. Combines a CLI/TUI with a 
 
 Humans give instructions in natural language and monitor progress via TUI. The manager agent handles task breakdown, prompt tuning, and dispatching actions to worker sessions.
 
+![tq demo](docs/tq.gif)
+
 ## Highlights
 
 - **Job queue model** — actions are queued and processed asynchronously by workers, with configurable concurrency limits (default: 3 interactive sessions)
