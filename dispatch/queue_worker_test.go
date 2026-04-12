@@ -518,9 +518,8 @@ func TestReapStaleActions_InteractiveLogFresh(t *testing.T) {
 	sessionChecker := &mockSessionLogChecker{active: true, sessionID: "sess-123"}
 
 	cfg := WorkerConfig{
-		DispatchConfig:     DispatchConfig{DB: d},
+		DispatchConfig:     DispatchConfig{DB: d, SessionLogChecker: sessionChecker},
 		TmuxChecker:        checker,
-		SessionLogChecker:  sessionChecker,
 		StaleGracePeriod:   30 * time.Second,
 		HeartbeatFreshness: 120 * time.Second,
 	}
@@ -546,9 +545,8 @@ func TestReapStaleActions_InteractiveLogStale(t *testing.T) {
 	sessionChecker := &mockSessionLogChecker{active: false}
 
 	cfg := WorkerConfig{
-		DispatchConfig:     DispatchConfig{DB: d},
+		DispatchConfig:     DispatchConfig{DB: d, SessionLogChecker: sessionChecker},
 		TmuxChecker:        checker,
-		SessionLogChecker:  sessionChecker,
 		StaleGracePeriod:   30 * time.Second,
 		HeartbeatFreshness: 120 * time.Second,
 	}
@@ -597,8 +595,7 @@ func TestReapStaleActions_NonInteractiveSkippedByHeartbeat(t *testing.T) {
 	sessionChecker := &mockSessionLogChecker{active: true, sessionID: "sess-456"}
 
 	cfg := WorkerConfig{
-		DispatchConfig:     DispatchConfig{DB: d},
-		SessionLogChecker:  sessionChecker,
+		DispatchConfig:     DispatchConfig{DB: d, SessionLogChecker: sessionChecker},
 		HeartbeatFreshness: 120 * time.Second,
 	}
 
@@ -621,8 +618,7 @@ func TestReapStaleActions_NonInteractiveReapedByStaleHeartbeat(t *testing.T) {
 	sessionChecker := &mockSessionLogChecker{active: false}
 
 	cfg := WorkerConfig{
-		DispatchConfig:     DispatchConfig{DB: d},
-		SessionLogChecker:  sessionChecker,
+		DispatchConfig:     DispatchConfig{DB: d, SessionLogChecker: sessionChecker},
 		HeartbeatFreshness: 120 * time.Second,
 	}
 
@@ -645,8 +641,7 @@ func TestReapStaleActions_NonInteractiveCheckerError(t *testing.T) {
 	sessionChecker := &mockSessionLogChecker{err: fmt.Errorf("permission denied")}
 
 	cfg := WorkerConfig{
-		DispatchConfig:     DispatchConfig{DB: d},
-		SessionLogChecker:  sessionChecker,
+		DispatchConfig:     DispatchConfig{DB: d, SessionLogChecker: sessionChecker},
 		HeartbeatFreshness: 120 * time.Second,
 	}
 
@@ -669,8 +664,7 @@ func TestReapStaleActions_SavesSessionIdToMetadata(t *testing.T) {
 	sessionChecker := &mockSessionLogChecker{active: true, sessionID: "sess-789"}
 
 	cfg := WorkerConfig{
-		DispatchConfig:     DispatchConfig{DB: d},
-		SessionLogChecker:  sessionChecker,
+		DispatchConfig:     DispatchConfig{DB: d, SessionLogChecker: sessionChecker},
 		HeartbeatFreshness: 120 * time.Second,
 	}
 
