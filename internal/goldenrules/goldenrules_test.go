@@ -152,8 +152,7 @@ func TestGoldenRules(t *testing.T) {
 	})
 
 	t.Run("rule-11-raw-sql-only-in-db", func(t *testing.T) {
-		// Ceiling: 30 as of 2026-04-12. Lower this as violations are fixed.
-		const ceiling = 30
+		const ceiling = 0
 		violations := scanFiles(t, root, scanConfig{
 			Dirs:        upperLayers,
 			FilePattern: "*.go",
