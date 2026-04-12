@@ -91,7 +91,7 @@ func parsePermissionDenials(raw json.RawMessage) []PermissionDenial {
 	var entries []map[string]any
 	if err := json.Unmarshal(raw, &entries); err != nil {
 		slog.Warn("failed to parse permission_denials, schema may have changed",
-			"error", err, "raw", string(raw))
+			"error", err, "raw_size_bytes", len(raw))
 		return nil
 	}
 	if len(entries) == 0 {
@@ -106,7 +106,13 @@ func parsePermissionDenials(raw json.RawMessage) []PermissionDenial {
 		if input, ok := e["tool_input"].(map[string]any); ok {
 			d.Input = input
 		}
+		if d.ToolName == "" && len(d.Input) == 0 {
+			continue
+		}
 		out = append(out, d)
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
