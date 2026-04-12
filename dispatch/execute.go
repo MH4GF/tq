@@ -18,12 +18,14 @@ const (
 	ModeInteractive    = "interactive"
 	ModeNonInteractive = "noninteractive"
 
-	MetaKeyInstruction     = "instruction"
-	MetaKeyMode            = "mode"
-	MetaKeyPermissionMode  = "permission_mode"
-	MetaKeyScheduleID      = "schedule_id"
-	MetaKeyIsInvestigation = "is_investigate_failure"
-	MetaKeyFailedActionID  = "failed_action_id"
+	MetaKeyInstruction       = "instruction"
+	MetaKeyMode              = "mode"
+	MetaKeyPermissionMode    = "permission_mode"
+	MetaKeyScheduleID        = "schedule_id"
+	MetaKeyIsInvestigation   = "is_investigate_failure"
+	MetaKeyFailedActionID    = "failed_action_id"
+	MetaKeyIsPermissionBlock = "is_permission_block"
+	MetaKeyBlockedActionID   = "blocked_action_id"
 )
 
 // DispatchConfig holds shared dispatch settings used by both WorkerConfig and ExecuteParams.
@@ -174,6 +176,12 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 		_ = params.DB.MarkFailed(action.ID, err.Error())
 		CreateInvestigateFailureAction(params.DB, action, err.Error())
 		return nil, &ActionFailedError{ActionID: action.ID, Err: err}
+	}
+
+	if p, ok := worker.(interface{ LastDenials() []PermissionDenial }); ok {
+		if denials := p.LastDenials(); len(denials) > 0 {
+			CreatePermissionBlockAction(params.DB, action, denials)
+		}
 	}
 
 	if err := params.DB.MarkDone(action.ID, result); err != nil {

@@ -277,6 +277,103 @@ func TestValidateActionMetadata(t *testing.T) {
 	}
 }
 
+type denialsWorker struct {
+	result  string
+	denials []PermissionDenial
+}
+
+func (w *denialsWorker) Execute(_ context.Context, _ string, _ ActionConfig, _ string, _, _ int64) (string, error) {
+	return w.result, nil
+}
+
+func (w *denialsWorker) LastDenials() []PermissionDenial {
+	return w.denials
+}
+
+func TestExecuteAction_NonInteractiveDenialsCreatesFollowUp(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
+	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+	d.InsertAction("watch", taskID, string(meta), db.ActionStatusPending)
+
+	action, _ := d.NextPending(context.Background())
+
+	worker := &denialsWorker{
+		result: "ok",
+		denials: []PermissionDenial{
+			{ToolName: "Bash", Input: map[string]any{"command": "gh api notifications"}},
+		},
+	}
+	workerFunc := func() Worker { return worker }
+
+	result, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+	}, action)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Mode != ModeNonInteractive {
+		t.Errorf("mode = %q, want %q", result.Mode, ModeNonInteractive)
+	}
+
+	// Original action is done
+	a, _ := d.GetAction(action.ID)
+	if a.Status != db.ActionStatusDone {
+		t.Errorf("original action status = %q, want done", a.Status)
+	}
+
+	// Follow-up permission_block action exists in pending
+	actions, _ := d.ListActions("", nil, 0)
+	var followupCount int
+	for _, x := range actions {
+		if hasMetaKey(x.Metadata, MetaKeyIsPermissionBlock) && x.Status == db.ActionStatusPending {
+			followupCount++
+		}
+	}
+	if followupCount != 1 {
+		t.Errorf("expected 1 pending permission-block follow-up, got %d", followupCount)
+	}
+}
+
+func TestExecuteAction_NonInteractiveNoDenials(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
+	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+	d.InsertAction("watch", taskID, string(meta), db.ActionStatusPending)
+
+	action, _ := d.NextPending(context.Background())
+
+	worker := &denialsWorker{result: "ok", denials: nil}
+	workerFunc := func() Worker { return worker }
+
+	if _, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+	}, action); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	actions, _ := d.ListActions("", nil, 0)
+	for _, x := range actions {
+		if hasMetaKey(x.Metadata, MetaKeyIsPermissionBlock) {
+			t.Errorf("did not expect permission-block follow-up, found one")
+		}
+	}
+}
+
 func TestExecuteAction_NoInstruction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

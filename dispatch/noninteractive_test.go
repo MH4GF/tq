@@ -10,12 +10,13 @@ import (
 
 func TestNonInteractiveWorker_Execute(t *testing.T) {
 	tests := []struct {
-		name       string
-		cfg        ActionConfig
-		prompt     string
-		output     string
-		wantArgs   []string
-		wantResult string
+		name           string
+		cfg            ActionConfig
+		prompt         string
+		output         string
+		wantArgs       []string
+		wantResult     string
+		wantDenialsLen int
 	}{
 		{
 			name:       "basic",
@@ -49,6 +50,31 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 			wantArgs:   []string{"-p", "process data", "--output-format", "json"},
 			wantResult: `{"status":"success","data":[1,2,3]}`,
 		},
+		{
+			name:           "permission denials present",
+			cfg:            ActionConfig{},
+			prompt:         "fetch user",
+			output:         `{"type":"result","subtype":"success","result":"done","permission_denials":[{"tool_name":"Bash","tool_use_id":"toolu_1","tool_input":{"command":"gh api user","description":"fetch"}},{"tool_name":"Bash","tool_use_id":"toolu_2","tool_input":{"command":"gh api notifications","description":"list"}}]}`,
+			wantArgs:       []string{"-p", "fetch user", "--output-format", "json"},
+			wantResult:     "done\n\n⚠️ permission_denials: 2件\n- Bash: gh api user\n- Bash: gh api notifications\n",
+			wantDenialsLen: 2,
+		},
+		{
+			name:       "permission denials empty array",
+			cfg:        ActionConfig{},
+			prompt:     "do something",
+			output:     `{"type":"result","subtype":"success","result":"ok","permission_denials":[]}`,
+			wantArgs:   []string{"-p", "do something", "--output-format", "json"},
+			wantResult: "ok",
+		},
+		{
+			name:       "permission denials malformed schema",
+			cfg:        ActionConfig{},
+			prompt:     "do something",
+			output:     `{"type":"result","subtype":"success","result":"ok","permission_denials":"unexpected-string"}`,
+			wantArgs:   []string{"-p", "do something", "--output-format", "json"},
+			wantResult: "ok",
+		},
 	}
 
 	for _, tc := range tests {
@@ -65,6 +91,10 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 				t.Errorf("result = %q, want %q", result, tc.wantResult)
 			}
 
+			if got := len(w.LastDenials()); got != tc.wantDenialsLen {
+				t.Errorf("LastDenials len = %d, want %d", got, tc.wantDenialsLen)
+			}
+
 			c := runner.calls[0]
 			if c.name != "claude" {
 				t.Errorf("name = %q, want %q", c.name, "claude")
@@ -76,6 +106,65 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 				if c.args[i] != a {
 					t.Errorf("args[%d] = %q, want %q", i, c.args[i], a)
 				}
+			}
+		})
+	}
+}
+
+func TestNonInteractiveWorker_Execute_DenialsResetBetweenCalls(t *testing.T) {
+	outputs := [][]byte{
+		[]byte(`{"type":"result","subtype":"success","result":"ok","permission_denials":[{"tool_name":"Bash","tool_input":{"command":"x"}}]}`),
+		[]byte(`{"type":"result","subtype":"success","result":"ok"}`),
+	}
+	runner := &sequenceRunner{outputs: outputs}
+	w := &NonInteractiveWorker{Runner: runner}
+
+	if _, err := w.Execute(context.Background(), "first", ActionConfig{}, "/work", 1, 10); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	if got := len(w.LastDenials()); got != 1 {
+		t.Errorf("after first call: LastDenials len = %d, want 1", got)
+	}
+
+	if _, err := w.Execute(context.Background(), "second", ActionConfig{}, "/work", 1, 10); err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if got := w.LastDenials(); got != nil {
+		t.Errorf("after second call: LastDenials = %v, want nil", got)
+	}
+}
+
+func TestPermissionDenial_Summary(t *testing.T) {
+	tests := []struct {
+		name string
+		d    PermissionDenial
+		want string
+	}{
+		{
+			name: "Bash with command",
+			d:    PermissionDenial{ToolName: "Bash", Input: map[string]any{"command": "gh api user"}},
+			want: "Bash: gh api user",
+		},
+		{
+			name: "Edit with file_path",
+			d:    PermissionDenial{ToolName: "Edit", Input: map[string]any{"file_path": "/tmp/foo.go"}},
+			want: "Edit: /tmp/foo.go",
+		},
+		{
+			name: "tool only",
+			d:    PermissionDenial{ToolName: "WebFetch", Input: map[string]any{}},
+			want: "WebFetch",
+		},
+		{
+			name: "nil input",
+			d:    PermissionDenial{ToolName: "Bash"},
+			want: "Bash",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.d.Summary(); got != tc.want {
+				t.Errorf("Summary() = %q, want %q", got, tc.want)
 			}
 		})
 	}
