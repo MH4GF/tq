@@ -38,7 +38,8 @@ Instruction is provided as a positional argument.
 Metadata keys for dispatch control:
   mode             Execution mode: "interactive" (default), "noninteractive", "remote"
   permission_mode  Claude permission mode (e.g. "plan", "auto")
-  worktree         Run in git worktree: true/false`,
+  worktree         Run in git worktree: true/false
+  claude_args      Additional CLI arguments for claude (JSON array of strings)`,
 	Example: `  tq action create "/github-pr review this" --task 1 --title "Review PR"
   tq action create "Add JWT auth middleware" --task 2 --title "Add auth middleware"
   tq action create "/review" --task 3 --title "Plan review" --meta '{"permission_mode":"plan","worktree":true}'`,
@@ -171,7 +172,7 @@ func init() {
 	if err := addCmd.MarkFlagRequired("task"); err != nil {
 		panic(err)
 	}
-	addCmd.Flags().StringVar(&addMeta, "meta", "{}", `JSON metadata for dispatch control (keys: mode, permission_mode, worktree)`)
+	addCmd.Flags().StringVar(&addMeta, "meta", "{}", `JSON metadata for dispatch control (keys: mode, permission_mode, worktree, claude_args)`)
 	addCmd.Flags().StringVar(&addStatus, "status", "", "Initial status (default: pending)")
 	addCmd.Flags().StringVar(&addAfter, "after", "", "Dispatch after this time (YYYY-MM-DD HH:MM, local timezone)")
 	actionCmd.AddCommand(addCmd)
