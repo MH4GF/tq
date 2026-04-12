@@ -25,7 +25,10 @@ func (db *DB) execTestUpdate(table string, id int64, clauses []setClause, caller
 	}
 	args[len(clauses)] = id
 	_, err := db.Exec("UPDATE "+table+" SET "+strings.Join(sets, ", ")+" WHERE id = ?", args...)
-	return err
+	if err != nil {
+		return fmt.Errorf("%s: %w", caller, err)
+	}
+	return nil
 }
 
 func (db *DB) SetActionSessionInfoForTest(id int64, sessionID, tmuxPane *string, startedAt *time.Time) error {
@@ -77,5 +80,8 @@ func (db *DB) SetTaskTimestampsForTest(id int64, createdAt, updatedAt *time.Time
 
 func (db *DB) SetActionStatusForTest(id int64, status string) error {
 	_, err := db.Exec("UPDATE actions SET status = ? WHERE id = ?", status, id)
-	return err
+	if err != nil {
+		return fmt.Errorf("SetActionStatusForTest: %w", err)
+	}
+	return nil
 }
