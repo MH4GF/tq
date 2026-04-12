@@ -23,6 +23,14 @@ type scanConfig struct {
 	LineRegexp  *regexp.Regexp
 }
 
+func shouldSkipDir(name string) bool {
+	switch name {
+	case ".git", "vendor", ".claude", "node_modules":
+		return true
+	}
+	return false
+}
+
 func projectRoot(t *testing.T) string {
 	t.Helper()
 	_, filename, _, ok := runtime.Caller(0)
@@ -55,8 +63,7 @@ func scanFiles(t *testing.T, root string, cfg scanConfig) []violation {
 				return err
 			}
 			if d.IsDir() {
-				name := d.Name()
-				if name == ".git" || name == "vendor" || name == ".claude" || name == "node_modules" {
+				if shouldSkipDir(d.Name()) {
 					return filepath.SkipDir
 				}
 				return nil
@@ -129,9 +136,7 @@ func TestGoldenRules(t *testing.T) {
 	t.Run("rule-09-custom-errors-implement-Unwrap", func(t *testing.T) {
 		violations := checkErrorUnwrap(t, root)
 		if len(violations) > 0 {
-			for _, v := range violations {
-				t.Errorf("%s:%d: type %s has no Unwrap() error method", v.File, v.Line, v.Text)
-			}
+			reportViolations(t, violations)
 		}
 	})
 
@@ -220,45 +225,48 @@ func checkErrorUnwrap(t *testing.T, root string) []violation {
 		t.Fatalf("walking for error types: %v", err)
 	}
 
-	// Pass 2: check each type has Unwrap method
-	var violations []violation
-	for _, et := range types {
-		unwrapPattern := regexp.MustCompile(
-			fmt.Sprintf(`func\s+\(\w+\s+\*%s\)\s+Unwrap\(\)\s+error`, regexp.QuoteMeta(et.Name)),
-		)
-		found := false
-		err := filepath.WalkDir(et.PkgDir, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if d.IsDir() && path != et.PkgDir {
+	// Pass 2: collect all Unwrap method receivers across the project
+	unwrapPattern := regexp.MustCompile(`func\s+\(\w+\s+\*(\w+)\)\s+Unwrap\(\)\s+error`)
+	unwrapSet := make(map[string]bool) // key: "pkgDir:TypeName"
+	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if shouldSkipDir(d.Name()) {
 				return filepath.SkipDir
 			}
-			if !strings.HasSuffix(path, ".go") {
-				return nil
-			}
-			f, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			scanner := bufio.NewScanner(f)
-			for scanner.Scan() {
-				if unwrapPattern.MatchString(scanner.Text()) {
-					found = true
-					return filepath.SkipAll
-				}
-			}
 			return nil
-		})
-		if err != nil {
-			t.Fatalf("checking Unwrap for %s: %v", et.Name, err)
 		}
-		if !found {
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		pkgDir := filepath.Dir(path)
+		for scanner.Scan() {
+			if matches := unwrapPattern.FindStringSubmatch(scanner.Text()); matches != nil {
+				unwrapSet[pkgDir+":"+matches[1]] = true
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking for Unwrap methods: %v", err)
+	}
+
+	// Check each error type has a corresponding Unwrap
+	var violations []violation
+	for _, et := range types {
+		if !unwrapSet[et.PkgDir+":"+et.Name] {
 			violations = append(violations, violation{
 				File: et.File,
 				Line: et.Line,
-				Text: et.Name,
+				Text: fmt.Sprintf("type %s has no Unwrap() error method", et.Name),
 			})
 		}
 	}
