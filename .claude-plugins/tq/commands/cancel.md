@@ -11,7 +11,7 @@ IMPORTANT: Run !`tq action cancel --help` first to understand the expected reaso
 ## Find action_id
 
 1. `$ARGUMENTS` if numeric
-2. The action/task IDs stated in the dispatch preamble (e.g. "You are executing action #123 (task #45)")
+2. The action/task IDs stated in the dispatch postamble (e.g. "You are executing action #123 (task #45)")
 3. Search running actions: `tq action list --status running`
 4. If none works, ask the user
 
