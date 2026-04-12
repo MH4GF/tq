@@ -59,7 +59,7 @@ func CreatePermissionBlockAction(database db.Store, action *db.Action, denials [
 	}
 
 	title := fmt.Sprintf("Investigate permission block in action #%d", action.ID)
-	id, err := database.InsertAction(title, action.TaskID, string(metaJSON), db.ActionStatusPending)
+	id, err := database.InsertAction(title, action.TaskID, string(metaJSON), db.ActionStatusPending, nil)
 	if err != nil {
 		slog.Error("create permission-block action", "error", err)
 		return

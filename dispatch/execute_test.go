@@ -302,7 +302,7 @@ func TestExecuteAction_NonInteractiveDenialsCreatesFollowUp(t *testing.T) {
 
 	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
 	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("watch", taskID, string(meta), db.ActionStatusPending)
+	d.InsertAction("watch", taskID, string(meta), db.ActionStatusPending, nil)
 
 	action, _ := d.NextPending(context.Background())
 
@@ -354,7 +354,7 @@ func TestExecuteAction_NonInteractiveNoDenials(t *testing.T) {
 
 	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
 	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("watch", taskID, string(meta), db.ActionStatusPending)
+	d.InsertAction("watch", taskID, string(meta), db.ActionStatusPending, nil)
 
 	action, _ := d.NextPending(context.Background())
 
