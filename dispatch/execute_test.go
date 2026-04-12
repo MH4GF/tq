@@ -380,6 +380,131 @@ func TestExecuteAction_NonInteractiveNoDenials(t *testing.T) {
 	}
 }
 
+func TestExecuteAction_ClaudeArgs(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	meta, _ := json.Marshal(map[string]any{
+		"instruction": "do the task",
+		"mode":        "noninteractive",
+		"claude_args": []string{"--max-turns", "5", "--model", "opus"},
+	})
+	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+	d.InsertAction("with-args", taskID, string(meta), db.ActionStatusPending, nil)
+
+	action, _ := d.NextPending(context.Background())
+
+	worker := &countingWorker{result: `{"ok":true}`}
+	workerFunc := func() Worker { return worker }
+
+	result, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+	}, action)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Mode != ModeNonInteractive {
+		t.Errorf("mode = %q, want %q", result.Mode, ModeNonInteractive)
+	}
+}
+
+func TestExecuteAction_ClaudeArgsBlocked(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	meta, _ := json.Marshal(map[string]any{
+		"instruction": "do the task",
+		"mode":        "noninteractive",
+		"claude_args": []string{"--output-format", "text"},
+	})
+	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+	d.InsertAction("blocked-args", taskID, string(meta), db.ActionStatusPending, nil)
+
+	action, _ := d.NextPending(context.Background())
+
+	worker := &countingWorker{}
+	workerFunc := func() Worker { return worker }
+
+	_, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+	}, action)
+	if err == nil {
+		t.Fatal("expected error for blocked claude_args")
+	}
+	if !strings.Contains(err.Error(), "claude_args cannot include") {
+		t.Errorf("error = %q, want to contain 'claude_args cannot include'", err.Error())
+	}
+
+	a, _ := d.GetAction(action.ID)
+	if a.Status != db.ActionStatusFailed {
+		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusFailed)
+	}
+}
+
+func TestValidateClaudeArgs(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr bool
+	}{
+		{name: "nil", args: nil, wantErr: false},
+		{name: "empty", args: []string{}, wantErr: false},
+		{name: "valid", args: []string{"--max-turns", "5", "--model", "opus"}, wantErr: false},
+		{name: "blocked -p", args: []string{"-p"}, wantErr: true},
+		{name: "blocked --print", args: []string{"--print"}, wantErr: true},
+		{name: "blocked --output-format", args: []string{"--output-format", "json"}, wantErr: true},
+		{name: "blocked --remote", args: []string{"--remote"}, wantErr: true},
+		{name: "blocked mixed", args: []string{"--max-turns", "3", "--remote"}, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateClaudeArgs(tc.args)
+			if tc.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestToStringSlice(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  []any
+		want []string
+	}{
+		{name: "strings", raw: []any{"--max-turns", "5"}, want: []string{"--max-turns", "5"}},
+		{name: "mixed types", raw: []any{"--max-turns", 5}, want: []string{"--max-turns"}},
+		{name: "empty", raw: []any{}, want: []string{}},
+		{name: "nil", raw: nil, want: []string{}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := toStringSlice(tc.raw)
+			if len(got) != len(tc.want) {
+				t.Fatalf("len = %d, want %d: %v", len(got), len(tc.want), got)
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Errorf("[%d] = %q, want %q", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
 func TestExecuteAction_NoInstruction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

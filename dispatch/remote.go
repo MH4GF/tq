@@ -26,6 +26,9 @@ func (w *RemoteWorker) Execute(ctx context.Context, instruction string, cfg Acti
 	// claude --remote requires a TTY (without one, claude switches to --print mode).
 	// Use `script -q /dev/null` to allocate a PTY.
 	args := []string{"-q", "/dev/null", "claude", "--remote", remotePrompt, "--debug-file", debugFile}
+	if len(cfg.ClaudeArgs) > 0 {
+		args = append(args, cfg.ClaudeArgs...)
+	}
 	env := buildTQEnv(actionID, taskID)
 
 	output, err := w.Runner.Run(ctx, "script", args, workDir, env)

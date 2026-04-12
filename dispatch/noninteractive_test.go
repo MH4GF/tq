@@ -43,6 +43,22 @@ func TestNonInteractiveWorker_Execute(t *testing.T) {
 			wantResult: "ok",
 		},
 		{
+			name:       "claude_args",
+			cfg:        ActionConfig{ClaudeArgs: []string{"--max-turns", "5", "--model", "opus"}},
+			prompt:     "do something",
+			output:     `{"type":"result","subtype":"success","result":"ok"}`,
+			wantArgs:   []string{"-p", "do something", "--output-format", "json", "--max-turns", "5", "--model", "opus"},
+			wantResult: "ok",
+		},
+		{
+			name:       "claude_args with permission mode",
+			cfg:        ActionConfig{PermissionMode: "plan", ClaudeArgs: []string{"--max-turns", "3"}},
+			prompt:     "plan",
+			output:     `{"type":"result","subtype":"success","result":"ok"}`,
+			wantArgs:   []string{"-p", "plan", "--output-format", "json", "--permission-mode", "plan", "--max-turns", "3"},
+			wantResult: "ok",
+		},
+		{
 			name:       "complex output",
 			cfg:        ActionConfig{},
 			prompt:     "process data",
