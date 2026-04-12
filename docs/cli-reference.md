@@ -109,6 +109,7 @@ tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--st
   - `mode` — `"interactive"` (default), `"noninteractive"`, `"remote"`
   - `permission_mode` — Claude permission mode (e.g. `"plan"`, `"auto"`)
   - `worktree` — Run in git worktree (`true`/`false`)
+  - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--max-turns","5"]`)
 - `--status` — Initial status (default: `pending`)
 
 ### `tq action list`
