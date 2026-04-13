@@ -1,5 +1,24 @@
 # Changelog
 
+## [v0.21.12](https://github.com/MH4GF/tq/compare/v0.21.11...v0.21.12) - 2026-04-13
+- Add distinct gray styling for archived/cancelled statuses in TUI by @MH4GF in https://github.com/MH4GF/tq/pull/87
+- Revise README and add CLI reference docs by @MH4GF in https://github.com/MH4GF/tq/pull/79
+- Skip investigate-failure for all timeout failures by @MH4GF in https://github.com/MH4GF/tq/pull/90
+- Add skip condition for team review requests in watch by @MH4GF in https://github.com/MH4GF/tq/pull/91
+- Add --db flag and TQ_DB_PATH env var for DB path override by @MH4GF in https://github.com/MH4GF/tq/pull/96
+- Fix tagpr versionFile path after gh-ops rename by @MH4GF in https://github.com/MH4GF/tq/pull/95
+- Add tmp file draft workflow to respond-review by @MH4GF in https://github.com/MH4GF/tq/pull/93
+- Detect permission_denials in noninteractive worker by @MH4GF in https://github.com/MH4GF/tq/pull/94
+- Add tq action fail CLI and /tq:failed slash command by @MH4GF in https://github.com/MH4GF/tq/pull/92
+- Add dispatch_after for scheduled action dispatch by @MH4GF in https://github.com/MH4GF/tq/pull/89
+- Add missing dispatchAfter arg to InsertAction calls by @MH4GF in https://github.com/MH4GF/tq/pull/100
+- Add demo GIF to README by @MH4GF in https://github.com/MH4GF/tq/pull/99
+- Add automated golden rule violation detection (Phase 2) by @MH4GF in https://github.com/MH4GF/tq/pull/101
+- Resolve all 30 Rule 11 violations via db.Store test-seam methods by @MH4GF in https://github.com/MH4GF/tq/pull/106
+- Add claude_args metadata key for dispatch by @MH4GF in https://github.com/MH4GF/tq/pull/105
+- Show available projects in task create help by @MH4GF in https://github.com/MH4GF/tq/pull/103
+- Add Homebrew cask distribution via GoReleaser by @MH4GF in https://github.com/MH4GF/tq/pull/107
+
 ## [v0.21.11](https://github.com/MH4GF/tq/compare/v0.21.10...v0.21.11) - 2026-04-06
 - Improve dispatch prompt and action metadata validation by @MH4GF in https://github.com/MH4GF/tq/pull/74
 - Polish TUI: contrast, detail views, interactive slots by @MH4GF in https://github.com/MH4GF/tq/pull/80
