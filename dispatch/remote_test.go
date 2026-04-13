@@ -48,6 +48,36 @@ func TestRemoteWorker_Execute(t *testing.T) {
 	}
 }
 
+func TestRemoteWorker_Execute_ClaudeArgs(t *testing.T) {
+	runner := &mockRunner{
+		output: []byte("https://console.anthropic.com/p/abc123\n"),
+		failAt: -1,
+	}
+
+	w := &RemoteWorker{Runner: runner}
+	cfg := ActionConfig{Mode: "remote", ClaudeArgs: []string{"--max-turns", "10"}}
+	_, err := w.Execute(context.Background(), "do the thing", cfg, "/tmp/work", 42, 10)
+	if err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+
+	c := runner.calls[0]
+	// claude_args should appear after --debug-file <path>
+	debugIdx := -1
+	for i, a := range c.args {
+		if a == "--debug-file" {
+			debugIdx = i
+			break
+		}
+	}
+	if debugIdx < 0 || debugIdx+2 >= len(c.args) {
+		t.Fatalf("--debug-file not found or args too short: %v", c.args)
+	}
+	if c.args[debugIdx+2] != "--max-turns" || c.args[debugIdx+3] != "10" {
+		t.Errorf("claude_args not appended correctly, got args: %v", c.args)
+	}
+}
+
 func TestRemoteWorker_ExecuteError(t *testing.T) {
 	runner := &mockRunner{
 		err:    context.DeadlineExceeded,

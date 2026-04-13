@@ -76,6 +76,26 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 			},
 		},
 		{
+			name:     "claude_args",
+			cfg:      ActionConfig{ClaudeArgs: []string{"--max-turns", "5"}},
+			prompt:   "Fix the bug",
+			actionID: 42,
+			taskID:   10,
+			wantContains: []string{
+				"'--max-turns' '5'",
+			},
+		},
+		{
+			name:     "claude_args with special characters",
+			cfg:      ActionConfig{ClaudeArgs: []string{"--system-prompt", "you're a helper"}},
+			prompt:   "Fix the bug",
+			actionID: 42,
+			taskID:   10,
+			wantContains: []string{
+				"'you'\\''re a helper'",
+			},
+		},
+		{
 			name:     "single quote escape",
 			cfg:      ActionConfig{},
 			prompt:   "it's a test",

@@ -59,6 +59,9 @@ func (w *NonInteractiveWorker) Execute(ctx context.Context, instruction string, 
 	if cfg.Worktree {
 		args = append(args, "--worktree")
 	}
+	if len(cfg.ClaudeArgs) > 0 {
+		args = append(args, cfg.ClaudeArgs...)
+	}
 	env := buildTQEnv(actionID, taskID)
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, defaultTimeout*time.Second)
