@@ -10,9 +10,9 @@ Classification:
 
 - **[enforced]** — enforced mechanically by lint (depguard, forbidigo, errorlint) or Go test harness (`internal/goldenrules/`). Deviations fail CI.
 - **[mechanical]** — detectable by grep / script but not yet wired into CI.
-- **[agent]** — requires LLM judgment. Checked by the periodic GC action.
+- **[agent]** — requires LLM judgment. Checked by the periodic GC action (`/gc-golden-rules`).
 
-Current status totals are captured after each rule as `current violations: N`. A non-zero count is **not** a bug in the rule — it is tech debt to be tracked in `docs/tech-debt-tracker.md` (Phase 2 deliverable) and burned down by GC action PRs.
+Current status totals are captured after each rule as `current violations: N`. A non-zero count is **not** a bug in the rule — it is tech debt to be burned down by GC actions (`/gc-golden-rules`).
 
 ---
 
@@ -114,17 +114,17 @@ Current status totals are captured after each rule as `current violations: N`. A
 - When a rule gets in your way, the correct move is to **question the rule, not to work around it silently**. Open a PR that edits this file with the rationale for deleting or relaxing the rule, and let the reviewer decide.
 - Do **not** add new rules based on personal taste. A rule belongs here only if you can write its `Verify` column as a runnable command or a specific agent check.
 
-**During periodic GC (Phase 2 / 3, not yet wired):**
+**During periodic GC (`/gc-golden-rules`, weekly via tq schedule):**
 
-- A weekly GC action scans the repo against each `[mechanical]` rule, and runs agent checks for `[agent]` rules.
-- Violations are appended to `docs/tech-debt-tracker.md` (also a Phase 2 deliverable) with file path, rule number, and a one-line reason.
-- The GC action auto-opens targeted refactor PRs — each small enough to review in under a minute — that convert a single violation into a compliant form.
+- Mechanical rules (1-6, 8-12) are enforced by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
+- For each violation found, the GC command creates a tq action via `/tq:create-action` with `worktree: true` for isolated execution.
+- The created actions handle the actual fixes — each targeted to a single violation.
 
 **Adding a new rule:**
 
 1. The rule MUST have a `Verify` column with a runnable command or a precise agent check. "Looks cleaner" is not a verify clause.
 2. Add the rule under the relevant heading. Preserve the numbering; never reuse a number after deletion.
-3. Record `current violations: N` at the time of introduction. A non-zero N is fine — the rule still captures intent and becomes Phase 2 GC fuel.
+3. Record `current violations: N` at the time of introduction. A non-zero N is fine — the rule still captures intent and the GC action will create tq actions to burn it down.
 4. No update to `CLAUDE.md` is needed — the single-line pointer in CLAUDE.md already resolves here.
 5. Choose the enforcement method by priority:
    1. **Existing linter** (depguard, forbidigo, errorlint, etc.) — widely used, stable, and already integrated into CI. Prefer this when a linter can express the rule.
@@ -135,7 +135,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 ## Per-layer quality grades
 
-A cell is `OK` if the rule has zero violations in that layer, or `N` (the current violation count) otherwise. `—` means the rule does not apply to that layer. Detailed violation lists are in `docs/tech-debt-tracker.md`.
+A cell is `OK` if the rule has zero violations in that layer, or `N` (the current violation count) otherwise. `—` means the rule does not apply to that layer.
 
 | Rule | db | dispatch | tui | cmd |
 |---|---|---|---|---|
