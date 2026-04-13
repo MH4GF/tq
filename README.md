@@ -19,8 +19,8 @@ Humans give instructions in natural language and monitor progress via TUI. The m
 Prerequisites: [tmux](https://github.com/tmux/tmux) (required for dispatching interactive sessions)
 
 ```bash
-# CLI
-go install github.com/MH4GF/tq@latest
+# Homebrew (macOS / Linux)
+brew install MH4GF/tap/tq
 
 # Claude Code Plugin
 claude plugin marketplace add MH4GF/tq
