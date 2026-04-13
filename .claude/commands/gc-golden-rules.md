@@ -7,7 +7,11 @@ Detect violations that CI cannot catch: Rule 7 (table-driven tests) and document
 
 IMPORTANT: If no violations found, report "No violations detected" and stop. Do NOT create actions when there is nothing to fix.
 
-## Phase 1: Rule 7 — Table-driven test scan
+## Phase 1: Parallel scan
+
+Run both checks simultaneously in a single message with two Agent tool calls.
+
+### Check A: Rule 7 — Table-driven tests
 
 Scan `*_test.go` in `cmd/`, `dispatch/`, `tui/`, `db/`.
 
@@ -25,7 +29,7 @@ NOT violations:
 
 Record per finding: file path, function name, line range, why it should be table-driven.
 
-## Phase 2: Documentation drift
+### Check B: Documentation drift
 
 Delegate to docs-reviewer agent:
 
@@ -35,7 +39,7 @@ Agent(subagent_type: "docs-reviewer")
 
 Collect findings (file, section, issue, severity).
 
-## Phase 3: Create tq actions
+## Phase 2: Create tq actions
 
 For each violation, run `/tq:create-action`.
 
