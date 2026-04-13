@@ -223,6 +223,10 @@ func init() {
 	if err := taskCreateCmd.MarkFlagRequired("project"); err != nil {
 		panic(err)
 	}
+	taskCreateCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		cmd.Root().HelpFunc()(cmd, args)
+		writeProjectHint(cmd.OutOrStdout())
+	})
 
 	taskUpdateCmd.Flags().StringVar(&taskUpdateStatus, "status", "", "New status (open, done, archived)")
 	taskUpdateCmd.Flags().Int64Var(&taskUpdateProjectID, "project", 0, "Project ID")

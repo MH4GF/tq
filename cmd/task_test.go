@@ -631,6 +631,70 @@ func TestTaskList_WithActions(t *testing.T) {
 	}
 }
 
+func TestTaskCreateHelp(t *testing.T) {
+	tests := []struct {
+		name            string
+		seedProjects    bool
+		wantContains    []string
+		wantNotContains []string
+	}{
+		{
+			name:         "with projects",
+			seedProjects: true,
+			wantContains: []string{
+				"Create a new task under a project",
+				"[agent hint] Available projects:",
+				"1: immedio",
+				"2: hearable",
+				"3: works",
+			},
+		},
+		{
+			name:         "no projects",
+			seedProjects: false,
+			wantContains: []string{
+				"Create a new task under a project",
+			},
+			wantNotContains: []string{
+				"[agent hint]",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			if tc.seedProjects {
+				testutil.SeedTestProjects(t, d)
+			}
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs([]string{"task", "create", "--help"})
+
+			if err := root.Execute(); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			out := buf.String()
+			for _, s := range tc.wantContains {
+				if !contains(out, s) {
+					t.Errorf("output missing %q:\n%s", s, out)
+				}
+			}
+			for _, s := range tc.wantNotContains {
+				if contains(out, s) {
+					t.Errorf("output should not contain %q:\n%s", s, out)
+				}
+			}
+		})
+	}
+}
+
 func contains(s, substr string) bool {
 	return bytes.Contains([]byte(s), []byte(substr))
 }
