@@ -204,12 +204,12 @@ func saveSessionID(store db.Store, checker SessionLogChecker, actionID int64, wo
 	if checker == nil {
 		return
 	}
-	_, sessionID, err := checker.IsSessionActive(workDir, postExecutionFreshness)
+	active, sessionID, err := checker.IsSessionActive(workDir, postExecutionFreshness)
 	if err != nil {
 		slog.Warn("post-execution session log check failed", "action_id", actionID, "error", err)
 		return
 	}
-	if sessionID == "" {
+	if !active || sessionID == "" {
 		return
 	}
 	if err := store.MergeActionMetadata(actionID, map[string]any{
