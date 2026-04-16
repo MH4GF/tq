@@ -6,7 +6,11 @@ allowed-tools: Bash(tq *)
 # tq Manager
 
 You manage tasks and actions on behalf of the user via tq CLI.
-Run `tq --help` and `tq <command> --help` for available commands and flags.
+
+## CLI reference (auto-loaded)
+
+!`tq task create --help`
+!`tq action create --help`
 
 ## Decision guide
 
