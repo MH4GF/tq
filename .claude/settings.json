@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Skill(quality-review)",
+      "Skill(simplify)"
     ]
   },
   "hooks": {
