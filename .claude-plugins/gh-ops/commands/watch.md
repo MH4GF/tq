@@ -25,7 +25,7 @@ For each notification, execute in order:
 
 Extract repo name and number from subject_url, then fetch by subject_type:
 
-- **PullRequest**: `gh pr view <number> --repo <owner/repo> --json url,state,author,headRefName,reviewDecision,mergeStateStatus,statusCheckRollup,isDraft,reviews,reviewRequests`
+- **PullRequest**: `gh pr view <number> --repo <owner/repo> --json url,state,author,headRefName,reviewDecision,mergeStateStatus,statusCheckRollup,isDraft,reviews,reviewRequests,comments`
 - **Issue**: `gh issue view <number> --repo <owner/repo> --json url,state,author`
 - **Discussion/Release**: fetch via `gh api`
 
@@ -104,3 +104,4 @@ Execute `/tq:done`.
 
 1. One action per notification. Do not batch.
 2. Use only `gh` CLI (GitHub API tokens are managed by `gh`).
+3. **Never use `gh api /repos`** for PR or issue data. Use `gh pr view --json` / `gh issue view --json` instead.

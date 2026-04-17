@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(gh api /notifications:*)",
+      "Bash(gh api notifications:*)",
+      "Bash(gh api /user:*)"
     ]
   },
   "hooks": {
