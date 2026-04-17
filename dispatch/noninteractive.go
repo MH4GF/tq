@@ -69,6 +69,9 @@ func (w *NonInteractiveWorker) Execute(ctx context.Context, instruction string, 
 
 	output, err := w.Runner.Run(timeoutCtx, "claude", args, workDir, env)
 	if err != nil {
+		if len(output) > 0 {
+			return "", fmt.Errorf("%w\noutput: %s", err, truncate(output, 2000))
+		}
 		return "", err
 	}
 
@@ -118,6 +121,13 @@ func parsePermissionDenials(raw json.RawMessage) []PermissionDenial {
 		return nil
 	}
 	return out
+}
+
+func truncate(b []byte, max int) []byte {
+	if len(b) <= max {
+		return b
+	}
+	return b[:max]
 }
 
 func formatDenialsWarning(denials []PermissionDenial) string {
