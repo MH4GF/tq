@@ -16,6 +16,12 @@ import (
 
 const postExecutionFreshness = 5 * time.Minute
 
+// dirExists reports whether the given path exists on disk.
+var dirExists = func(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 const (
 	ModeRemote         = "remote"
 	ModeInteractive    = "interactive"
@@ -260,14 +266,54 @@ func parseMetadata(raw string) (map[string]any, error) {
 }
 
 // resolveWorkDir returns the effective working directory for action execution.
+// When the task's work_dir does not exist on disk, it falls back to the
+// project's work_dir and auto-corrects the task record in the database.
 func resolveWorkDir(database db.Store, action *db.Action) string {
 	task, err := database.GetTask(action.TaskID)
 	if err != nil {
 		return "."
 	}
+
 	if task.WorkDir != "" {
-		return expandHome(task.WorkDir)
+		expanded := expandHome(task.WorkDir)
+		if dirExists(expanded) {
+			return expanded
+		}
+
+		project, err := database.GetProjectByID(task.ProjectID)
+		if err != nil {
+			slog.Warn("work_dir recovery: task work_dir missing and project lookup failed",
+				"task_id", task.ID,
+				"missing_path", expanded,
+				"error", err,
+			)
+			return "."
+		}
+
+		fallback := "."
+		if project.WorkDir != "" {
+			projExpanded := expandHome(project.WorkDir)
+			if dirExists(projExpanded) {
+				fallback = projExpanded
+			}
+		}
+
+		slog.Warn("work_dir auto-recovery: task work_dir does not exist, falling back",
+			"task_id", task.ID,
+			"missing_path", expanded,
+			"fallback_path", fallback,
+		)
+
+		if err := database.UpdateTaskWorkDir(task.ID, ""); err != nil {
+			slog.Warn("work_dir auto-recovery: failed to clear task work_dir",
+				"task_id", task.ID,
+				"error", err,
+			)
+		}
+
+		return fallback
 	}
+
 	project, err := database.GetProjectByID(task.ProjectID)
 	if err != nil {
 		return "."
