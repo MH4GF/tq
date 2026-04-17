@@ -458,6 +458,90 @@ func TestExecuteAction_ClaudeArgsBlocked(t *testing.T) {
 	}
 }
 
+func TestResolveWorkDir_Recovery(t *testing.T) {
+	tests := []struct {
+		name          string
+		taskWorkDir   string
+		existingPaths map[string]bool // path -> exists
+		wantSuffix    string          // expected suffix of returned path, or exact "."
+		wantDBCleared bool            // whether task.WorkDir should be cleared to ""
+	}{
+		{
+			name:          "task work_dir exists on disk",
+			taskWorkDir:   "/valid/path",
+			existingPaths: map[string]bool{"/valid/path": true},
+			wantSuffix:    "/valid/path",
+			wantDBCleared: false,
+		},
+		{
+			name:          "task work_dir missing, project work_dir exists",
+			taskWorkDir:   "/gone/worktree",
+			existingPaths: map[string]bool{"/gone/worktree": false, "/project/dir": true},
+			wantSuffix:    "/project/dir",
+			wantDBCleared: true,
+		},
+		{
+			name:          "task work_dir missing, project work_dir also missing",
+			taskWorkDir:   "/gone/worktree",
+			existingPaths: map[string]bool{"/gone/worktree": false, "/project/dir": false},
+			wantSuffix:    ".",
+			wantDBCleared: true,
+		},
+		{
+			name:          "task work_dir not set, falls through to project",
+			taskWorkDir:   "",
+			existingPaths: map[string]bool{"/project/dir": true},
+			wantSuffix:    "/project/dir",
+			wantDBCleared: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			restore := SetDirExists(func(path string) bool {
+				if exists, ok := tc.existingPaths[path]; ok {
+					return exists
+				}
+				return false
+			})
+			defer restore()
+
+			d := testutil.NewTestDB(t)
+			projID, err := d.InsertProject("test-proj", "/project/dir", "{}")
+			if err != nil {
+				t.Fatal(err)
+			}
+			taskID, err := d.InsertTask(projID, "test-task", "{}", tc.taskWorkDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			meta, _ := json.Marshal(map[string]any{MetaKeyInstruction: "do something"})
+			actionID, err := d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			action, err := d.GetAction(actionID)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got := resolveWorkDir(d, action)
+			if got != tc.wantSuffix {
+				t.Errorf("resolveWorkDir() = %q, want %q", got, tc.wantSuffix)
+			}
+
+			task, _ := d.GetTask(taskID)
+			if tc.wantDBCleared && task.WorkDir != "" {
+				t.Errorf("task.WorkDir = %q, want cleared to empty", task.WorkDir)
+			}
+			if !tc.wantDBCleared && task.WorkDir != tc.taskWorkDir {
+				t.Errorf("task.WorkDir = %q, want unchanged %q", task.WorkDir, tc.taskWorkDir)
+			}
+		})
+	}
+}
+
 func TestValidateClaudeArgs(t *testing.T) {
 	tests := []struct {
 		name    string
