@@ -17,7 +17,7 @@ You manage tasks and actions on behalf of the user via tq CLI.
 - **Which project?** Ask if ambiguous. Check `tq project list` for IDs.
 - **Which instruction?** Infer from context. If the user provides a direct instruction (e.g., a slash command), pass it as a positional argument to `tq action create`.
 - **Dispatch immediately?** Only when user says "割り込み" or "すぐ実行". Otherwise create as pending.
-- **Looking for past context?** Use `tq search "<keyword>"` to find tasks/actions by keyword.
+- **Looking for past context?** Use `tq search "<keyword>" --project <id>` to search within a specific project. Omit `--project` only when the target project is unknown.
 - **Schedule mode?** Use `--meta` to control dispatch behavior. Run `tq schedule create --help` for available metadata keys.
 
 ## Filtering output
