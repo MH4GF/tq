@@ -19,8 +19,9 @@ IMPORTANT: Run !`tq action create --help` first to understand meta format and be
 
 ### 1. Find task_id
 
-Infer from session context. Use `tq search "<keyword>"` to find matching tasks by keyword.
-If no matching task exists, create one with `tq task create`.
+1. Identify the target project: check `tq project list` and match by work_dir or repo context.
+2. Search within that project: `tq search "<keyword>" --project <project_id>`.
+3. If a matching task exists, use its task_id. Otherwise create one with `tq task create --project <project_id>`.
 
 ### 2. Build instruction
 
