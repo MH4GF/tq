@@ -178,12 +178,13 @@ func TestTasksModel_DateFilter(t *testing.T) {
 	d.InsertAction("today-action", taskID1, "{}", db.ActionStatusPending, nil)
 
 	taskID2, _ := d.InsertTask(1, "Old task", "{}", "")
-	oldActionID, _ := d.InsertAction("old-action", taskID2, "{}", db.ActionStatusPending, nil)
+	oldActionID, _ := d.InsertAction("old-action", taskID2, "{}", db.ActionStatusRunning, nil)
+	d.MarkDone(oldActionID, "")
 	d.UpdateTask(taskID2, db.TaskStatusDone, "")
 
 	// Set old-action and old task dates to a different date
 	oldDate := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	d.SetActionTimestampsForTest(oldActionID, &oldDate, nil)
+	d.SetActionTimestampsForTest(oldActionID, &oldDate, &oldDate)
 	d.SetTaskTimestampsForTest(taskID2, &oldDate, &oldDate)
 
 	// Get today's date from the first action
