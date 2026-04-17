@@ -78,7 +78,7 @@ type QueryReader interface {
 	ListEvents(entityType string, entityID int64) ([]Event, error)
 	ListRecentEvents(limit int) ([]Event, error)
 	// Search
-	Search(keyword string) ([]SearchResult, error)
+	Search(keyword string, projectID int64) ([]SearchResult, error)
 }
 
 // TestHelper provides test-seam methods for test setup.
