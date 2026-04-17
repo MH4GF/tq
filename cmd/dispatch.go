@@ -97,6 +97,7 @@ var actionDispatchCmd = &cobra.Command{
 				NonInteractiveFunc: getWorkerFactory(),
 				InteractiveFunc:    getInteractiveWorkerFactory(),
 				RemoteFunc:         getRemoteWorkerFactory(),
+				SessionLogChecker:  &dispatch.FileSessionLogChecker{},
 			},
 		}, action)
 

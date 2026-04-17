@@ -9,9 +9,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/MH4GF/tq/db"
 )
+
+const postExecutionFreshness = 5 * time.Minute
 
 const (
 	ModeRemote         = "remote"
@@ -28,6 +31,7 @@ const (
 	MetaKeyFailedActionID    = "failed_action_id"
 	MetaKeyIsPermissionBlock = "is_permission_block"
 	MetaKeyBlockedActionID   = "blocked_action_id"
+	MetaKeyClaudeSessionID   = "claude_session_id"
 )
 
 // DispatchConfig holds shared dispatch settings used by both WorkerConfig and ExecuteParams.
@@ -37,6 +41,7 @@ type DispatchConfig struct {
 	InteractiveFunc    func() Worker
 	RemoteFunc         func() Worker
 	TmuxSession        string
+	SessionLogChecker  SessionLogChecker
 }
 
 type ExecuteParams struct {
@@ -183,6 +188,10 @@ func executeInteractive(ctx context.Context, params ExecuteParams, action *db.Ac
 func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db.Action, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
 	worker := params.NonInteractiveFunc()
 	result, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
+
+	// The worker polling loop cannot discover session ID during synchronous execution.
+	saveSessionID(params.DB, params.SessionLogChecker, action.ID, workDir)
+
 	if err != nil {
 		_ = params.DB.MarkFailed(action.ID, err.Error())
 		CreateInvestigateFailureAction(params.DB, action, err.Error())
@@ -200,6 +209,25 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 	}
 
 	return &ExecuteResult{Mode: ModeNonInteractive, Output: result}, nil
+}
+
+func saveSessionID(store db.Store, checker SessionLogChecker, actionID int64, workDir string) {
+	if checker == nil {
+		return
+	}
+	active, sessionID, err := checker.IsSessionActive(workDir, postExecutionFreshness)
+	if err != nil {
+		slog.Warn("post-execution session log check failed", "action_id", actionID, "error", err)
+		return
+	}
+	if !active || sessionID == "" {
+		return
+	}
+	if err := store.MergeActionMetadata(actionID, map[string]any{
+		MetaKeyClaudeSessionID: sessionID,
+	}); err != nil {
+		slog.Warn("failed to save session id to metadata", "action_id", actionID, "error", err)
+	}
 }
 
 func wrapInstruction(instruction string, actionID, taskID int64, mode string) string {
