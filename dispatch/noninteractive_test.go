@@ -238,6 +238,13 @@ func TestNonInteractiveWorker_Execute_Error(t *testing.T) {
 			wantErrText: "command failed",
 		},
 		{
+			name:        "runner error with output",
+			output:      "Error: API key invalid",
+			runnerErr:   errors.New("exit status 1"),
+			failAt:      0,
+			wantErrText: "output: Error: API key invalid",
+		},
+		{
 			name:        "error subtype",
 			output:      `{"type":"result","subtype":"error","result":"model refused"}`,
 			failAt:      -1,
