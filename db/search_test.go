@@ -78,11 +78,12 @@ func TestExtractSnippet(t *testing.T) {
 
 func TestSearch(t *testing.T) {
 	tests := []struct {
-		name    string
-		keyword string
-		setup   func(d *db.DB)
-		wantLen int
-		check   func(t *testing.T, results []db.SearchResult)
+		name      string
+		keyword   string
+		projectID int64
+		setup     func(d *db.DB)
+		wantLen   int
+		check     func(t *testing.T, results []db.SearchResult)
 	}{
 		{
 			name:    "match task title",
@@ -230,6 +231,48 @@ func TestSearch(t *testing.T) {
 			},
 			wantLen: 1,
 		},
+		{
+			name:    "project_id included in results",
+			keyword: "deploy",
+			setup: func(d *db.DB) {
+				taskID, _ := d.InsertTask(2, "Deploy hearable", "{}", "")
+				d.InsertAction("deploy step", taskID, "{}", db.ActionStatusPending, nil)
+			},
+			wantLen: 2,
+			check: func(t *testing.T, results []db.SearchResult) {
+				t.Helper()
+				for _, r := range results {
+					if r.ProjectID != 2 {
+						t.Errorf("project_id = %d, want 2", r.ProjectID)
+					}
+				}
+			},
+		},
+		{
+			name:      "filter by project",
+			keyword:   "shared",
+			projectID: 1,
+			setup: func(d *db.DB) {
+				d.InsertTask(1, "shared feature", "{}", "")
+				d.InsertTask(2, "shared feature", "{}", "")
+			},
+			wantLen: 1,
+			check: func(t *testing.T, results []db.SearchResult) {
+				t.Helper()
+				if results[0].ProjectID != 1 {
+					t.Errorf("project_id = %d, want 1", results[0].ProjectID)
+				}
+			},
+		},
+		{
+			name:      "filter by project no match",
+			keyword:   "unique",
+			projectID: 3,
+			setup: func(d *db.DB) {
+				d.InsertTask(1, "unique task", "{}", "")
+			},
+			wantLen: 0,
+		},
 	}
 
 	for _, tt := range tests {
@@ -238,7 +281,7 @@ func TestSearch(t *testing.T) {
 			testutil.SeedTestProjects(t, d)
 			tt.setup(d)
 
-			results, err := d.Search(tt.keyword)
+			results, err := d.Search(tt.keyword, tt.projectID)
 			if err != nil {
 				t.Fatalf("Search() error: %v", err)
 			}
