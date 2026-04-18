@@ -6,6 +6,8 @@ import (
 	"log/slog"
 )
 
+const EventTaskStatusChanged = "task.status_changed"
+
 type Event struct {
 	ID         int64  `json:"id"`
 	EntityType string `json:"entity_type"`

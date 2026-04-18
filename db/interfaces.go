@@ -61,6 +61,7 @@ type QueryReader interface {
 	ListTasksByProject(projectID int64) ([]Task, error)
 	ListTasksByStatus(status string) ([]Task, error)
 	GetOrCreateTriageTask(projectID int64) (int64, error)
+	TaskStatusHistory(taskID int64) ([]TaskStatusHistoryEntry, error)
 	// Project queries
 	GetProjectByID(id int64) (*Project, error)
 	GetProjectByName(name string) (*Project, error)

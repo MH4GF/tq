@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 )
 
@@ -104,11 +105,47 @@ func (db *DB) UpdateTask(id int64, status, reason string) error {
 		status, id,
 	)
 	if err == nil {
-		db.emitEvent("task", id, "task.status_changed", map[string]any{
+		db.emitEvent("task", id, EventTaskStatusChanged, map[string]any{
 			"from": from, "to": status, "reason": reason,
 		})
 	}
 	return err
+}
+
+type TaskStatusHistoryEntry struct {
+	From   string `json:"from"`
+	To     string `json:"to"`
+	Reason string `json:"reason,omitempty"`
+	At     string `json:"at"`
+}
+
+func (db *DB) TaskStatusHistory(taskID int64) ([]TaskStatusHistoryEntry, error) {
+	events, err := db.ListEvents("task", taskID)
+	if err != nil {
+		return nil, err
+	}
+	history := make([]TaskStatusHistoryEntry, 0)
+	for _, e := range events {
+		if e.EventType != EventTaskStatusChanged {
+			continue
+		}
+		var p struct {
+			From   string `json:"from"`
+			To     string `json:"to"`
+			Reason string `json:"reason"`
+		}
+		if err := json.Unmarshal([]byte(e.Payload), &p); err != nil {
+			slog.Warn("status_history: parse payload", "event_id", e.ID, "error", err)
+			continue
+		}
+		history = append(history, TaskStatusHistoryEntry{
+			From:   p.From,
+			To:     p.To,
+			Reason: p.Reason,
+			At:     FormatLocal(e.CreatedAt),
+		})
+	}
+	return history, nil
 }
 
 func (db *DB) UpdateTaskProject(id, projectID int64) error {
