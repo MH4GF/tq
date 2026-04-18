@@ -1,6 +1,6 @@
 {
   "name": "tq",
   "description": "tq task queue worker commands",
-  "version": "0.21.12",
+  "version": "0.21.13",
   "author": { "name": "MH4GF" }
 }

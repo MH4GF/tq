@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.21.13](https://github.com/MH4GF/tq/compare/v0.21.12...v0.21.13) - 2026-04-17
+- Add gc-golden-rules periodic GC command (Phase 3) by @MH4GF in https://github.com/MH4GF/tq/pull/109
+- quality-review: fix code-simplifier agent type not found error by @MH4GF in https://github.com/MH4GF/tq/pull/111
+- Move dispatch context from preamble to postamble by @MH4GF in https://github.com/MH4GF/tq/pull/104
+- Replace text help instruction with auto-exec in manager SKILL.md by @MH4GF in https://github.com/MH4GF/tq/pull/112
+- gh-ops:watch の gh api /repos 呼び出しを専用サブコマンドに置換 by @MH4GF in https://github.com/MH4GF/tq/pull/113
+- Include CLI output in noninteractive worker error messages by @MH4GF in https://github.com/MH4GF/tq/pull/117
+- Fix noninteractive actions not saving claude_session_id by @MH4GF in https://github.com/MH4GF/tq/pull/102
+- Add work_dir auto-recovery for stale worktree paths by @MH4GF in https://github.com/MH4GF/tq/pull/118
+
 ## [v0.21.12](https://github.com/MH4GF/tq/compare/v0.21.11...v0.21.12) - 2026-04-13
 - Add distinct gray styling for archived/cancelled statuses in TUI by @MH4GF in https://github.com/MH4GF/tq/pull/87
 - Revise README and add CLI reference docs by @MH4GF in https://github.com/MH4GF/tq/pull/79
