@@ -65,7 +65,13 @@ If no condition matches, do NOT use a slash command. Instead, write a detailed f
 
 #### 2e. Match existing task
 
-Use `tq search "<keyword>"` to find matching tasks. Extract keywords from the notification title (PR number `#123`, ticket ID `PROJ-456`, repo name, feature name, etc.) and search.
+Identify the target project from the notification's repo (check `tq project list` metadata for matching `repos`). Then search within that project:
+
+```bash
+tq search "<keyword>" --project <project_id>
+```
+
+Extract keywords from the notification title (PR number `#123`, ticket ID `PROJ-456`, repo name, feature name, etc.).
 
 Try in order, use the first match:
 
