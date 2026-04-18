@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -98,15 +99,17 @@ var (
 	taskUpdateProjectID int64
 	taskUpdateWorkDir   string
 	taskUpdateMeta      string
+	taskUpdateNote      string
 )
 
 var taskUpdateCmd = &cobra.Command{
 	Use:   "update <ID>",
 	Short: "Update a task",
 	Long: `Update a task's status, project, working directory, or metadata.
-At least one of --status, --project, --work-dir, or --meta is required.`,
-	Example: `  tq task update 1 --status done
-  tq task update 3 --status archived
+At least one of --status, --project, --work-dir, or --meta is required.
+--status and --note must be specified together: --note records the reason for the transition.`,
+	Example: `  tq task update 1 --status done --note "merged in PR #99"
+  tq task update 3 --status archived --note "superseded by task #42"
   tq task update 5 --project 2 --work-dir ~/src/other
   tq task update 7 --meta '{"url":"https://github.com/org/repo/pull/99"}'`,
 	Args: cobra.ExactArgs(1),
@@ -118,6 +121,12 @@ At least one of --status, --project, --work-dir, or --meta is required.`,
 		}
 		if taskUpdateStatus == "" && taskUpdateProjectID == 0 && taskUpdateWorkDir == "" && taskUpdateMeta == "" {
 			return fmt.Errorf("at least one of --status, --project, --work-dir, or --meta is required")
+		}
+		if taskUpdateStatus != "" && taskUpdateNote == "" {
+			return fmt.Errorf("--note is required when --status is given (record the reason for the transition)")
+		}
+		if taskUpdateNote != "" && taskUpdateStatus == "" {
+			return fmt.Errorf("--note requires --status (note is recorded only on status changes)")
 		}
 
 		var metaMap map[string]any
@@ -155,7 +164,7 @@ At least one of --status, --project, --work-dir, or --meta is required.`,
 		}
 
 		if taskUpdateStatus != "" {
-			if err := database.UpdateTask(taskUpdateID, taskUpdateStatus, ""); err != nil {
+			if err := database.UpdateTask(taskUpdateID, taskUpdateStatus, taskUpdateNote); err != nil {
 				return fmt.Errorf("update task: %w", err)
 			}
 			updates = append(updates, fmt.Sprintf("status: %s", taskUpdateStatus))
@@ -191,9 +200,11 @@ func taskToMap(t db.Task, actions []db.Action) map[string]any {
 
 var taskGetJQ string
 
+var taskGetFields = append(slices.Clone(taskListFields), "status_history")
+
 var taskGetCmd = &cobra.Command{
 	Use:   "get <ID>",
-	Short: "Get a task by ID (JSON output, includes nested actions)",
+	Short: "Get a task by ID (JSON output, includes nested actions and status_history)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := parseID(args[0])
@@ -208,7 +219,13 @@ var taskGetCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("list actions: %w", err)
 		}
-		return WriteJSON(cmd.OutOrStdout(), taskToMap(*task, actions), taskGetJQ, taskListFields)
+		history, err := database.TaskStatusHistory(id)
+		if err != nil {
+			return fmt.Errorf("status history: %w", err)
+		}
+		row := taskToMap(*task, actions)
+		row["status_history"] = history
+		return WriteJSON(cmd.OutOrStdout(), row, taskGetJQ, taskGetFields)
 	},
 }
 
@@ -232,6 +249,7 @@ func init() {
 	taskUpdateCmd.Flags().Int64Var(&taskUpdateProjectID, "project", 0, "Project ID")
 	taskUpdateCmd.Flags().StringVar(&taskUpdateWorkDir, "work-dir", "", "Working directory")
 	taskUpdateCmd.Flags().StringVar(&taskUpdateMeta, "meta", "", `JSON metadata to merge (e.g. {"url":"https://..."})`)
+	taskUpdateCmd.Flags().StringVar(&taskUpdateNote, "note", "", "Reason for the status change (required when --status is given)")
 
 	taskListCmd.Flags().Int64Var(&taskListProjectID, "project", 0, "Filter by project ID (see: tq project list)")
 	taskListCmd.Flags().StringVar(&taskListStatus, "status", "", "Filter by status (open, done, archived)")
@@ -241,6 +259,6 @@ func init() {
 	taskCmd.AddCommand(taskListCmd)
 	taskCmd.AddCommand(taskCreateCmd)
 	taskCmd.AddCommand(taskUpdateCmd)
-	taskGetCmd.Flags().StringVar(&taskGetJQ, "jq", "", jqFlagUsage(taskListFields))
+	taskGetCmd.Flags().StringVar(&taskGetJQ, "jq", "", jqFlagUsage(taskGetFields))
 	taskCmd.AddCommand(taskGetCmd)
 }

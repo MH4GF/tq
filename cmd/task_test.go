@@ -363,7 +363,7 @@ func TestTaskUpdate_StatusAndProject(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"task", "update", "1", "--status", "done", "--project", "2"})
+	root.SetArgs([]string{"task", "update", "1", "--status", "done", "--note", "test transition", "--project", "2"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -484,10 +484,185 @@ func TestTaskUpdate_InvalidStatus(t *testing.T) {
 	root := cmd.GetRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "update", "1", "--status", "closed"})
+	root.SetArgs([]string{"task", "update", "1", "--status", "closed", "--note", "irrelevant"})
 
 	if err := root.Execute(); err == nil {
 		t.Fatal("expected error for invalid status")
+	}
+}
+
+func TestTaskUpdate_WithNote(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	id, _ := d.InsertTask(1, "task with note", "{}", "")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "update", fmt.Sprintf("%d", id), "--status", "done", "--note", "merged in PR #99"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	events, err := d.ListEvents("task", id)
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	var found bool
+	for _, e := range events {
+		if e.EventType != "task.status_changed" {
+			continue
+		}
+		var p map[string]any
+		if err := json.Unmarshal([]byte(e.Payload), &p); err != nil {
+			t.Fatalf("parse payload: %v", err)
+		}
+		if p["reason"] != "merged in PR #99" {
+			t.Errorf("reason = %v, want %q", p["reason"], "merged in PR #99")
+		}
+		if p["from"] != "open" || p["to"] != "done" {
+			t.Errorf("from/to = %v/%v, want open/done", p["from"], p["to"])
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("expected task.status_changed event")
+	}
+}
+
+func TestTaskUpdate_StatusRequiresNote(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "task", "{}", "")
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"task", "update", "1", "--status", "done"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error when --status is given without --note")
+	}
+	if !contains(err.Error(), "--note is required when --status is given") {
+		t.Errorf("error = %q, want to contain '--note is required when --status is given'", err.Error())
+	}
+}
+
+func TestTaskUpdate_NoteRequiresStatus(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	d.InsertTask(1, "task", "{}", "")
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"task", "update", "1", "--note", "stray note", "--project", "2"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error when --note is given without --status")
+	}
+	if !contains(err.Error(), "--note requires --status") {
+		t.Errorf("error = %q, want to contain '--note requires --status'", err.Error())
+	}
+}
+
+func TestTaskGet_StatusHistory(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	id, _ := d.InsertTask(1, "task with history", "{}", "")
+	if err := d.UpdateTask(id, db.TaskStatusDone, "first reason"); err != nil {
+		t.Fatalf("update 1: %v", err)
+	}
+	if err := d.UpdateTask(id, db.TaskStatusOpen, ""); err != nil {
+		t.Fatalf("update 2: %v", err)
+	}
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "get", fmt.Sprintf("%d", id)})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var row map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &row); err != nil {
+		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
+	}
+	history, ok := row["status_history"].([]any)
+	if !ok {
+		t.Fatalf("status_history missing or wrong type: %v", row["status_history"])
+	}
+	if len(history) != 2 {
+		t.Fatalf("expected 2 history entries, got %d: %v", len(history), history)
+	}
+
+	first := history[0].(map[string]any)
+	if first["from"] != "open" || first["to"] != "done" {
+		t.Errorf("first entry from/to = %v/%v, want open/done", first["from"], first["to"])
+	}
+	if first["reason"] != "first reason" {
+		t.Errorf("first entry reason = %v, want %q", first["reason"], "first reason")
+	}
+	if first["at"] == nil || first["at"] == "" {
+		t.Errorf("first entry at missing: %v", first["at"])
+	}
+
+	second := history[1].(map[string]any)
+	if second["from"] != "done" || second["to"] != "open" {
+		t.Errorf("second entry from/to = %v/%v, want done/open", second["from"], second["to"])
+	}
+	if _, hasReason := second["reason"]; hasReason {
+		t.Errorf("second entry should omit reason when empty, got %v", second["reason"])
+	}
+}
+
+func TestTaskGet_StatusHistory_Empty(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	id, _ := d.InsertTask(1, "fresh task", "{}", "")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "get", fmt.Sprintf("%d", id)})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var row map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &row); err != nil {
+		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
+	}
+	history, ok := row["status_history"].([]any)
+	if !ok {
+		t.Fatalf("status_history should be empty array, got: %v", row["status_history"])
+	}
+	if len(history) != 0 {
+		t.Errorf("expected empty history for new task, got %d entries", len(history))
 	}
 }
 
