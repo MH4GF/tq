@@ -10,99 +10,98 @@ import (
 )
 
 func TestFail(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusRunning, nil)
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"action", "fail", "1", "outcome: API down"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	tests := []struct {
+		name               string
+		startStatus        string
+		args               []string
+		wantErr            bool
+		wantOutContains    []string
+		wantOutNotContains []string
+		wantResult         string
+	}{
+		{
+			name:            "with reason",
+			startStatus:     db.ActionStatusRunning,
+			args:            []string{"action", "fail", "1", "outcome: API down"},
+			wantOutContains: []string{"action #1 failed", "outcome: API down"},
+			wantResult:      "outcome: API down",
+		},
+		{
+			name:               "without reason",
+			startStatus:        db.ActionStatusPending,
+			args:               []string{"action", "fail", "1"},
+			wantOutContains:    []string{"action #1 failed"},
+			wantOutNotContains: []string{"reason:"},
+		},
+		{
+			name:    "invalid ID",
+			args:    []string{"action", "fail", "999"},
+			wantErr: true,
+		},
+		{
+			name:        "from dispatched",
+			startStatus: db.ActionStatusDispatched,
+			args:        []string{"action", "fail", "1", "stuck"},
+		},
 	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
 
-	out := buf.String()
-	if !contains(out, "action #1 failed") {
-		t.Errorf("output = %q, want to contain 'action #1 failed'", out)
-	}
-	if !contains(out, "outcome: API down") {
-		t.Errorf("output = %q, want to contain reason", out)
-	}
+			var id int64
+			if tc.startStatus != "" {
+				taskID, _ := d.InsertTask(1, "test", "{}", "")
+				id, _ = d.InsertAction("test", taskID, "{}", tc.startStatus, nil)
+			}
 
-	a, err := d.GetAction(id)
-	if err != nil {
-		t.Fatalf("get action: %v", err)
-	}
-	if a.Status != db.ActionStatusFailed {
-		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusFailed)
-	}
-	if !a.Result.Valid || a.Result.String != "outcome: API down" {
-		t.Errorf("result = %v, want %q", a.Result, "outcome: API down")
-	}
-	if !a.CompletedAt.Valid {
-		t.Error("completed_at should be set")
-	}
-}
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs(tc.args)
 
-func TestFail_NoReason(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
+			err := root.Execute()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending, nil)
+			out := buf.String()
+			for _, want := range tc.wantOutContains {
+				if !contains(out, want) {
+					t.Errorf("output = %q, want to contain %q", out, want)
+				}
+			}
+			for _, notWant := range tc.wantOutNotContains {
+				if contains(out, notWant) {
+					t.Errorf("output = %q, should NOT contain %q", out, notWant)
+				}
+			}
 
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"action", "fail", "1"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	out := buf.String()
-	if !contains(out, "action #1 failed") {
-		t.Errorf("output = %q, want to contain 'action #1 failed'", out)
-	}
-	if contains(out, "reason:") {
-		t.Errorf("output = %q, should NOT contain 'reason:' when no reason given", out)
-	}
-
-	a, err := d.GetAction(id)
-	if err != nil {
-		t.Fatalf("get action: %v", err)
-	}
-	if a.Status != db.ActionStatusFailed {
-		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusFailed)
-	}
-	if !a.CompletedAt.Valid {
-		t.Error("completed_at should be set")
-	}
-}
-
-func TestFail_InvalidID(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"action", "fail", "999"})
-
-	if err := root.Execute(); err == nil {
-		t.Fatal("expected error for non-existent action ID")
+			a, err := d.GetAction(id)
+			if err != nil {
+				t.Fatalf("get action: %v", err)
+			}
+			if a.Status != db.ActionStatusFailed {
+				t.Errorf("status = %q, want %q", a.Status, db.ActionStatusFailed)
+			}
+			if tc.wantResult != "" {
+				if !a.Result.Valid || a.Result.String != tc.wantResult {
+					t.Errorf("result = %v, want %q", a.Result, tc.wantResult)
+				}
+			}
+			if !a.CompletedAt.Valid {
+				t.Error("completed_at should be set")
+			}
+		})
 	}
 }
 
@@ -138,29 +137,5 @@ func TestFail_AlreadyTerminal(t *testing.T) {
 				t.Errorf("error = %q, want to contain 'already'", err.Error())
 			}
 		})
-	}
-}
-
-func TestFail_FromDispatched(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusDispatched, nil)
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"action", "fail", "1", "stuck"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	a, _ := d.GetAction(id)
-	if a.Status != db.ActionStatusFailed {
-		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusFailed)
 	}
 }
