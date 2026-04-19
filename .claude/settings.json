@@ -18,6 +18,17 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/check-quality-review.sh"
+          }
+        ]
+      }
     ]
   }
 }
