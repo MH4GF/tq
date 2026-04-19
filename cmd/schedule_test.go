@@ -9,78 +9,72 @@ import (
 	"github.com/MH4GF/tq/testutil"
 )
 
-func TestScheduleCreate_InvalidMeta(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	d.InsertTask(1, "test task", "{}", "")
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"schedule", "create", "--instruction", "daily-review", "--task", "1", "--cron", "0 9 * * *", "--meta", "{invalid}"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected error for invalid JSON meta")
+func TestScheduleCreate(t *testing.T) {
+	tests := []struct {
+		name            string
+		args            []string
+		wantErr         string
+		wantOutContains string
+		wantInstruction string
+	}{
+		{
+			name:    "invalid meta",
+			args:    []string{"schedule", "create", "--instruction", "daily-review", "--task", "1", "--cron", "0 9 * * *", "--meta", "{invalid}"},
+			wantErr: "invalid JSON for --meta (must be a JSON object)",
+		},
+		{
+			name:            "with instruction",
+			args:            []string{"schedule", "create", "--instruction", "/gh-ops:watch", "--task", "1", "--cron", "*/10 * * * *", "--title", "Watch notifications"},
+			wantOutContains: "schedule #",
+			wantInstruction: "/gh-ops:watch",
+		},
+		{
+			name:    "no instruction",
+			args:    []string{"schedule", "create", "--task", "1", "--cron", "0 9 * * *"},
+			wantErr: "--instruction is required",
+		},
 	}
-	if !contains(err.Error(), "invalid JSON for --meta (must be a JSON object)") {
-		t.Errorf("error = %q, want to contain 'invalid JSON for --meta (must be a JSON object)'", err.Error())
-	}
-}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
 
-func TestScheduleCreate_WithInstruction(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
+			d.InsertTask(1, "test task", "{}", "")
 
-	d.InsertTask(1, "test task", "{}", "")
+			root := cmd.GetRootCmd()
+			out := new(bytes.Buffer)
+			root.SetOut(out)
+			root.SetErr(new(bytes.Buffer))
+			root.SetArgs(tc.args)
 
-	root := cmd.GetRootCmd()
-	out := new(bytes.Buffer)
-	root.SetOut(out)
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"schedule", "create", "--instruction", "/gh-ops:watch", "--task", "1", "--cron", "*/10 * * * *", "--title", "Watch notifications"})
-
-	err := root.Execute()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !contains(out.String(), "schedule #") {
-		t.Errorf("output = %q, want to contain 'schedule #'", out.String())
-	}
-
-	schedules, _ := d.ListSchedules(0)
-	if len(schedules) != 1 {
-		t.Fatalf("expected 1 schedule, got %d", len(schedules))
-	}
-	if schedules[0].Instruction != "/gh-ops:watch" {
-		t.Errorf("instruction = %q, want %q", schedules[0].Instruction, "/gh-ops:watch")
-	}
-}
-
-func TestScheduleCreate_NoInstruction(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	d.InsertTask(1, "test task", "{}", "")
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"schedule", "create", "--task", "1", "--cron", "0 9 * * *"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected error when --instruction is not provided")
-	}
-	if !contains(err.Error(), "--instruction is required") {
-		t.Errorf("error = %q, want to contain '--instruction is required'", err.Error())
+			err := root.Execute()
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tc.wantErr)
+				}
+				if !contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %q, want to contain %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.wantOutContains != "" && !contains(out.String(), tc.wantOutContains) {
+				t.Errorf("output = %q, want to contain %q", out.String(), tc.wantOutContains)
+			}
+			if tc.wantInstruction != "" {
+				schedules, _ := d.ListSchedules(0)
+				if len(schedules) != 1 {
+					t.Fatalf("expected 1 schedule, got %d", len(schedules))
+				}
+				if schedules[0].Instruction != tc.wantInstruction {
+					t.Errorf("instruction = %q, want %q", schedules[0].Instruction, tc.wantInstruction)
+				}
+			}
+		})
 	}
 }
 
