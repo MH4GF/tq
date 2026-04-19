@@ -258,6 +258,16 @@ func TestAdd_ClaudeArgsInvalidType(t *testing.T) {
 			meta:    `{"claude_args":["--output-format","text"]}`,
 			wantErr: "claude_args cannot include",
 		},
+		{
+			name:    "legacy permission_mode rejected",
+			meta:    `{"permission_mode":"plan"}`,
+			wantErr: `metadata key "permission_mode" is no longer supported`,
+		},
+		{
+			name:    "legacy worktree rejected",
+			meta:    `{"worktree":true}`,
+			wantErr: `metadata key "worktree" is no longer supported`,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
