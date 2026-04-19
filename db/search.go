@@ -81,26 +81,34 @@ func (db *DB) Search(keyword string) ([]SearchResult, error) {
 	escaped := escapeLike(keyword)
 
 	//nolint:dupword
-	query := `
+	query := fmt.Sprintf(`
 		SELECT 'task' AS entity_type, t.id AS entity_id, t.id AS task_id, 'title' AS field, t.title AS value, t.status, t.created_at
-		FROM tasks t WHERE t.title LIKE '%' || ? || '%' ESCAPE '\'
+		FROM tasks t WHERE t.title LIKE '%%' || ? || '%%' ESCAPE '\'
 		UNION ALL
 		SELECT 'task', t.id, t.id, 'metadata', t.metadata, t.status, t.created_at
-		FROM tasks t WHERE t.metadata LIKE '%' || ? || '%' ESCAPE '\'
+		FROM tasks t WHERE t.metadata LIKE '%%' || ? || '%%' ESCAPE '\'
 		UNION ALL
 		SELECT 'action', a.id, a.task_id, 'title', a.title, a.status, a.created_at
-		FROM actions a WHERE a.title LIKE '%' || ? || '%' ESCAPE '\'
+		FROM actions a WHERE a.title LIKE '%%' || ? || '%%' ESCAPE '\'
 		UNION ALL
 		SELECT 'action', a.id, a.task_id, 'result', COALESCE(a.result, ''), a.status, a.created_at
-		FROM actions a WHERE COALESCE(a.result, '') LIKE '%' || ? || '%' ESCAPE '\'
+		FROM actions a WHERE COALESCE(a.result, '') LIKE '%%' || ? || '%%' ESCAPE '\'
 		UNION ALL
 		SELECT 'action', a.id, a.task_id, 'metadata', a.metadata, a.status, a.created_at
-		FROM actions a WHERE a.metadata LIKE '%' || ? || '%' ESCAPE '\'
-		ORDER BY task_id DESC, entity_id DESC
+		FROM actions a WHERE a.metadata LIKE '%%' || ? || '%%' ESCAPE '\'
+		UNION ALL
+		SELECT 'task', e.entity_id, e.entity_id, 'status_history_reason',
+		       json_extract(e.payload, '$.reason') AS value,
+		       t.status, e.created_at
+		FROM events e JOIN tasks t ON t.id = e.entity_id
+		WHERE e.entity_type = 'task'
+		  AND e.event_type = %q
+		  AND json_extract(e.payload, '$.reason') LIKE '%%' || ? || '%%' ESCAPE '\'
+		ORDER BY task_id DESC, entity_id DESC, created_at DESC
 		LIMIT 500
-	`
+	`, EventTaskStatusChanged)
 
-	rows, err := db.Query(query, escaped, escaped, escaped, escaped, escaped)
+	rows, err := db.Query(query, escaped, escaped, escaped, escaped, escaped, escaped)
 	if err != nil {
 		return nil, fmt.Errorf("search: %w", err)
 	}

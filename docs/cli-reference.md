@@ -245,7 +245,7 @@ tq event list [--entity <TYPE>] [--id <ID>] [--limit <N>]
 tq search <KEYWORD>
 ```
 
-Full-text search across task titles, task metadata, action titles, action results, and action metadata. Output is JSON.
+Full-text search across task titles, task metadata, task status change reasons, action titles, action results, and action metadata. Output is JSON.
 
 ## ui
 
