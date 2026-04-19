@@ -236,7 +236,6 @@ func (db *DB) Migrate() error {
 		}
 	}
 
-	// Migrate legacy permission_mode/worktree metadata keys → claude_args (idempotent)
 	if err := db.migrateLegacyClaudeFlags("actions"); err != nil {
 		return fmt.Errorf("migrate legacy claude flags in actions: %w", err)
 	}
@@ -247,9 +246,6 @@ func (db *DB) Migrate() error {
 	return nil
 }
 
-// migrateLegacyClaudeFlags rewrites permission_mode/worktree metadata keys into
-// claude_args entries on the given table. Idempotent: rows without legacy keys
-// are skipped.
 func (db *DB) migrateLegacyClaudeFlags(table string) error {
 	rows, err := db.Query(fmt.Sprintf(
 		"SELECT id, metadata FROM %s WHERE metadata LIKE '%%permission_mode%%' OR metadata LIKE '%%worktree%%'",
@@ -292,9 +288,6 @@ func (db *DB) migrateLegacyClaudeFlags(table string) error {
 	return nil
 }
 
-// convertLegacyClaudeFlags translates a metadata JSON string by appending
-// permission_mode/worktree values to claude_args and removing the legacy keys.
-// Returns the new JSON, whether any change was made, and any error.
 func convertLegacyClaudeFlags(metaJSON string) (string, bool, error) {
 	if metaJSON == "" || metaJSON == "{}" {
 		return metaJSON, false, nil
@@ -331,11 +324,7 @@ func convertLegacyClaudeFlags(metaJSON string) (string, bool, error) {
 		delete(m, "worktree")
 	}
 	if len(args) > 0 {
-		anyArgs := make([]any, len(args))
-		for i, s := range args {
-			anyArgs[i] = s
-		}
-		m["claude_args"] = anyArgs
+		m["claude_args"] = args
 	}
 
 	out, err := json.Marshal(m)
