@@ -77,7 +77,7 @@ var actionGetCmd = &cobra.Command{
 func init() {
 	actionUpdateCmd.Flags().String("title", "", "Action title")
 	actionUpdateCmd.Flags().Int64("task", 0, "Task ID")
-	actionUpdateCmd.Flags().String("meta", "", `JSON metadata for dispatch control (keys: mode, permission_mode, worktree)`)
+	actionUpdateCmd.Flags().String("meta", "", `JSON metadata for dispatch control (keys: mode, claude_args)`)
 
 	actionGetCmd.Flags().StringVar(&actionGetJQ, "jq", "", jqFlagUsage(listFields))
 	actionCmd.AddCommand(actionGetCmd)

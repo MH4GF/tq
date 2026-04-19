@@ -46,7 +46,7 @@ For each violation, run `/tq:create-action`.
 <constraints>
 - One action per violation (group tightly related violations in the same file)
 - Include file:line and what to fix in the instruction
-- Set `--meta '{"permission_mode":"auto","worktree":true}'`
+- Set `--meta '{"claude_args":["--permission-mode","auto","--worktree"]}'`
 - Use the same task as this GC action (check session context)
 </constraints>
 

@@ -430,7 +430,7 @@ func TestListRunningNonInteractive(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 
 	d.InsertAction("ni-action", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
-	d.InsertAction("worktree-action", taskID, `{"instruction":"fix","permission_mode":"plan","worktree":true}`, db.ActionStatusRunning, nil)
+	d.InsertAction("worktree-action", taskID, `{"instruction":"fix","claude_args":["--permission-mode","plan","--worktree"]}`, db.ActionStatusRunning, nil)
 	d.InsertAction("interactive-action", taskID, `{}`, db.ActionStatusRunning, nil)
 	d.InsertAction("pending-ni", taskID, `{"mode":"noninteractive"}`, db.ActionStatusPending, nil)
 

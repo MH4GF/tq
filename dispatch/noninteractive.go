@@ -53,12 +53,6 @@ func (w *NonInteractiveWorker) Execute(ctx context.Context, instruction string, 
 	w.lastDenials = nil
 
 	args := []string{"-p", instruction, "--output-format", "json"}
-	if cfg.PermissionMode != "" {
-		args = append(args, "--permission-mode", cfg.PermissionMode)
-	}
-	if cfg.Worktree {
-		args = append(args, "--worktree")
-	}
 	if len(cfg.ClaudeArgs) > 0 {
 		args = append(args, cfg.ClaudeArgs...)
 	}

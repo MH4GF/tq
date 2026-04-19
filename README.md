@@ -120,9 +120,7 @@ Controlled via `--meta` on `action create` / `schedule create`:
 | `remote` | Dispatched to remote worker |
 
 Additional metadata keys:
-- `permission_mode` — Claude permission mode (e.g. `"plan"`, `"auto"`)
-- `worktree` — Run in a git worktree for isolation (`true`/`false`)
-- `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--max-turns","5"]`)
+- `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--permission-mode","plan","--worktree","--max-turns","5"]`)
 
 ## License
 

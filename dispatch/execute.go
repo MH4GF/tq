@@ -29,8 +29,6 @@ const (
 
 	MetaKeyInstruction       = "instruction"
 	MetaKeyMode              = "mode"
-	MetaKeyPermissionMode    = "permission_mode"
-	MetaKeyWorktree          = "worktree"
 	MetaKeyClaudeArgs        = "claude_args"
 	MetaKeyScheduleID        = "schedule_id"
 	MetaKeyIsInvestigation   = "is_investigate_failure"
@@ -82,10 +80,8 @@ func WindowName(actionID int64) string {
 
 // ActionConfig holds execution configuration extracted from action metadata.
 type ActionConfig struct {
-	Mode           string
-	PermissionMode string
-	Worktree       bool
-	ClaudeArgs     []string
+	Mode       string
+	ClaudeArgs []string
 }
 
 func (c ActionConfig) IsInteractive() bool    { return c.Mode == ModeInteractive }
@@ -111,12 +107,6 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 	cfg := ActionConfig{Mode: ModeInteractive}
 	if modeStr, ok := actionMeta[MetaKeyMode].(string); ok {
 		cfg.Mode = modeStr
-	}
-	if permMode, ok := actionMeta[MetaKeyPermissionMode].(string); ok {
-		cfg.PermissionMode = permMode
-	}
-	if wt, ok := actionMeta[MetaKeyWorktree].(bool); ok {
-		cfg.Worktree = wt
 	}
 	if rawArgs, ok := actionMeta[MetaKeyClaudeArgs].([]any); ok {
 		cfg.ClaudeArgs = toStringSlice(rawArgs)

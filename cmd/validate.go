@@ -12,6 +12,11 @@ func validateMetaJSON(meta string) error {
 	if err := json.Unmarshal([]byte(meta), &obj); err != nil {
 		return fmt.Errorf("invalid JSON for --meta (must be a JSON object): %s", meta)
 	}
+	for _, key := range []string{"permission_mode", "worktree"} {
+		if _, exists := obj[key]; exists {
+			return fmt.Errorf("metadata key %q is no longer supported; use claude_args instead (e.g. \"claude_args\":[\"--permission-mode\",\"plan\"])", key)
+		}
+	}
 	if rawArgs, exists := obj[dispatch.MetaKeyClaudeArgs]; exists {
 		arr, ok := rawArgs.([]any)
 		if !ok {

@@ -33,15 +33,6 @@ func (w *InteractiveWorker) Execute(ctx context.Context, instruction string, cfg
 	tmuxTarget := fmt.Sprintf("%s:%s", session, windowName)
 	escapedPrompt := strings.ReplaceAll(instruction, "'", "'\\''")
 	envPrefix := fmt.Sprintf("TQ_ACTION_ID=%d TQ_TASK_ID=%d", actionID, taskID)
-	permFlag := ""
-	if cfg.PermissionMode != "" {
-		escapedMode := strings.ReplaceAll(cfg.PermissionMode, "'", "'\\''")
-		permFlag = " --permission-mode '" + escapedMode + "'"
-	}
-	worktreeFlag := ""
-	if cfg.Worktree {
-		worktreeFlag = " --worktree"
-	}
 	var claudeArgsBuf strings.Builder
 	for _, arg := range cfg.ClaudeArgs {
 		escaped := strings.ReplaceAll(arg, "'", "'\\''")
@@ -49,8 +40,7 @@ func (w *InteractiveWorker) Execute(ctx context.Context, instruction string, cfg
 		claudeArgsBuf.WriteString(escaped)
 		claudeArgsBuf.WriteByte('\'')
 	}
-	claudeArgsStr := claudeArgsBuf.String()
-	claudeCmd := fmt.Sprintf("%s claude%s '%s'%s%s", envPrefix, permFlag, escapedPrompt, worktreeFlag, claudeArgsStr)
+	claudeCmd := fmt.Sprintf("%s claude '%s'%s", envPrefix, escapedPrompt, claudeArgsBuf.String())
 	out, err = w.Runner.Run(ctx, "tmux", []string{
 		"send-keys", "-t", tmuxTarget, claudeCmd,
 	}, workDir, nil)

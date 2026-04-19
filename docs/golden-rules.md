@@ -117,7 +117,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 **During periodic GC (`/gc-golden-rules`, weekly via tq schedule):**
 
 - Mechanical rules (1-6, 8-12) are enforced by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
-- For each violation found, the GC command creates a tq action via `/tq:create-action` with `worktree: true` for isolated execution.
+- For each violation found, the GC command creates a tq action via `/tq:create-action` with `claude_args: ["--worktree"]` for isolated execution.
 - The created actions handle the actual fixes — each targeted to a single violation.
 
 **Adding a new rule:**
