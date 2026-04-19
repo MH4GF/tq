@@ -21,13 +21,13 @@ func hasMetaKey(metadata, key string) bool {
 func TestCreateInvestigateFailureAction(t *testing.T) {
 	tests := []struct {
 		name        string
-		setupAction func(*db.DB) int64
+		setupAction func(db.Store) int64
 		wantCount   int
 		wantTitle   string
 	}{
 		{
 			name: "creates investigation action on same task",
-			setupAction: func(d *db.DB) int64 {
+			setupAction: func(d db.Store) int64 {
 				taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 				actionID, _ := d.InsertAction("my-prompt", taskID, "{}", "failed", nil)
 				action, _ := d.GetAction(actionID)
@@ -38,7 +38,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		},
 		{
 			name: "skips duplicate for same failed action",
-			setupAction: func(d *db.DB) int64 {
+			setupAction: func(d db.Store) int64 {
 				taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 				actionID, _ := d.InsertAction("my-prompt", taskID, "{}", "failed", nil)
 				action, _ := d.GetAction(actionID)
@@ -50,7 +50,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		},
 		{
 			name: "creates separate investigations for different failed actions",
-			setupAction: func(d *db.DB) int64 {
+			setupAction: func(d db.Store) int64 {
 				taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 				action1ID, _ := d.InsertAction("prompt-a", taskID, "{}", "failed", nil)
 				action1, _ := d.GetAction(action1ID)
@@ -64,7 +64,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		},
 		{
 			name: "title includes action ID",
-			setupAction: func(d *db.DB) int64 {
+			setupAction: func(d db.Store) int64 {
 				taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 				actionID, _ := d.InsertAction("deploy", taskID, "{}", "failed", nil)
 				action, _ := d.GetAction(actionID)
