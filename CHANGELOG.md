@@ -1,5 +1,21 @@
 # Changelog
 
+## [v0.21.13](https://github.com/MH4GF/tq/compare/v0.21.12...v0.21.13) - 2026-04-19
+- Add gc-golden-rules periodic GC command (Phase 3) by @MH4GF in https://github.com/MH4GF/tq/pull/109
+- quality-review: fix code-simplifier agent type not found error by @MH4GF in https://github.com/MH4GF/tq/pull/111
+- Move dispatch context from preamble to postamble by @MH4GF in https://github.com/MH4GF/tq/pull/104
+- Replace text help instruction with auto-exec in manager SKILL.md by @MH4GF in https://github.com/MH4GF/tq/pull/112
+- gh-ops:watch の gh api /repos 呼び出しを専用サブコマンドに置換 by @MH4GF in https://github.com/MH4GF/tq/pull/113
+- Include CLI output in noninteractive worker error messages by @MH4GF in https://github.com/MH4GF/tq/pull/117
+- Fix noninteractive actions not saving claude_session_id by @MH4GF in https://github.com/MH4GF/tq/pull/102
+- Add work_dir auto-recovery for stale worktree paths by @MH4GF in https://github.com/MH4GF/tq/pull/118
+- Add project consistency check step to triage command by @MH4GF in https://github.com/MH4GF/tq/pull/97
+- Record task status transition history with required --note by @MH4GF in https://github.com/MH4GF/tq/pull/120
+- feat(schedule): support claude_args metadata key by @MH4GF in https://github.com/MH4GF/tq/pull/121
+- Search task status change reasons via events payload by @MH4GF in https://github.com/MH4GF/tq/pull/122
+- feat: drop permission_mode/worktree metadata in favor of claude_args by @MH4GF in https://github.com/MH4GF/tq/pull/123
+- Rewrite tq:triage for lightweight collection and actionable proposals by @MH4GF in https://github.com/MH4GF/tq/pull/124
+
 ## [v0.21.13](https://github.com/MH4GF/tq/compare/v0.21.12...v0.21.13) - 2026-04-17
 - Add gc-golden-rules periodic GC command (Phase 3) by @MH4GF in https://github.com/MH4GF/tq/pull/109
 - quality-review: fix code-simplifier agent type not found error by @MH4GF in https://github.com/MH4GF/tq/pull/111
