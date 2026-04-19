@@ -47,10 +47,8 @@ func TestCwdPrefixMatch(t *testing.T) {
 	}
 }
 
-func setupTestSessionDir(t *testing.T, homeDir, cwd, sessionID string, logAge time.Duration) {
+func writeSessionMeta(t *testing.T, homeDir, cwd, sessionID string) {
 	t.Helper()
-
-	// Create session metadata file
 	sessionsDir := filepath.Join(homeDir, ".claude", "sessions")
 	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -60,8 +58,10 @@ func setupTestSessionDir(t *testing.T, homeDir, cwd, sessionID string, logAge ti
 	if err := os.WriteFile(filepath.Join(sessionsDir, "12345.json"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
 
-	// Create session log file
+func writeSessionLog(t *testing.T, homeDir, cwd, sessionID string, logAge time.Duration) {
+	t.Helper()
 	logDir := filepath.Join(homeDir, ".claude", "projects", encodeCwd(cwd))
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -70,122 +70,95 @@ func setupTestSessionDir(t *testing.T, homeDir, cwd, sessionID string, logAge ti
 	if err := os.WriteFile(logPath, []byte(`{"type":"user"}`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
-	// Set modification time
 	modTime := time.Now().Add(-logAge)
 	if err := os.Chtimes(logPath, modTime, modTime); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestFileSessionLogChecker_ActiveSession(t *testing.T) {
-	homeDir := t.TempDir()
-	setupTestSessionDir(t, homeDir, "/test/project", "session-abc", 10*time.Second)
-
-	checker := &FileSessionLogChecker{HomeDir: homeDir}
-	active, sessionID, err := checker.IsSessionActive("/test/project", 120*time.Second)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !active {
-		t.Error("expected active=true")
-	}
-	if sessionID != "session-abc" {
-		t.Errorf("sessionID = %q, want %q", sessionID, "session-abc")
-	}
-}
-
-func TestFileSessionLogChecker_StaleSession(t *testing.T) {
-	homeDir := t.TempDir()
-	setupTestSessionDir(t, homeDir, "/test/project", "session-abc", 300*time.Second)
-
-	checker := &FileSessionLogChecker{HomeDir: homeDir}
-	active, sessionID, err := checker.IsSessionActive("/test/project", 120*time.Second)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if active {
-		t.Error("expected active=false for stale session")
-	}
-	if sessionID != "" {
-		t.Errorf("sessionID = %q, want empty", sessionID)
-	}
-}
-
-func TestFileSessionLogChecker_NoMatchingSession(t *testing.T) {
-	homeDir := t.TempDir()
-	setupTestSessionDir(t, homeDir, "/other/project", "session-abc", 10*time.Second)
-
-	checker := &FileSessionLogChecker{HomeDir: homeDir}
-	active, sessionID, err := checker.IsSessionActive("/test/project", 120*time.Second)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if active {
-		t.Error("expected active=false for non-matching session")
-	}
-	if sessionID != "" {
-		t.Errorf("sessionID = %q, want empty", sessionID)
-	}
-}
-
-func TestFileSessionLogChecker_MissingLogFile(t *testing.T) {
-	homeDir := t.TempDir()
-
-	// Create session metadata but no log file
-	sessionsDir := filepath.Join(homeDir, ".claude", "sessions")
-	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	meta := claudeSessionMeta{PID: 12345, SessionID: "session-abc", Cwd: "/test/project"}
-	data, _ := json.Marshal(meta)
-	if err := os.WriteFile(filepath.Join(sessionsDir, "12345.json"), data, 0o644); err != nil {
-		t.Fatal(err)
+func TestFileSessionLogChecker(t *testing.T) {
+	tests := []struct {
+		name          string
+		sessionCwd    string
+		sessionID     string
+		logAge        time.Duration
+		skipLog       bool
+		cwd           string
+		wantActive    bool
+		wantSessionID string
+		wantErr       bool
+	}{
+		{
+			name:          "active session",
+			sessionCwd:    "/test/project",
+			sessionID:     "session-abc",
+			logAge:        10 * time.Second,
+			cwd:           "/test/project",
+			wantActive:    true,
+			wantSessionID: "session-abc",
+		},
+		{
+			name:       "stale session",
+			sessionCwd: "/test/project",
+			sessionID:  "session-abc",
+			logAge:     300 * time.Second,
+			cwd:        "/test/project",
+		},
+		{
+			name:       "no matching session",
+			sessionCwd: "/other/project",
+			sessionID:  "session-abc",
+			logAge:     10 * time.Second,
+			cwd:        "/test/project",
+		},
+		{
+			name:       "missing log file",
+			sessionCwd: "/test/project",
+			sessionID:  "session-abc",
+			skipLog:    true,
+			cwd:        "/test/project",
+		},
+		{
+			name:          "worktree prefix match",
+			sessionCwd:    "/test/project/.claude/worktrees/gentle-wobbling-rossum",
+			sessionID:     "session-wt",
+			logAge:        10 * time.Second,
+			cwd:           "/test/project",
+			wantActive:    true,
+			wantSessionID: "session-wt",
+		},
+		{
+			name:    "no sessions dir",
+			cwd:     "/test/project",
+			wantErr: true,
+		},
 	}
 
-	checker := &FileSessionLogChecker{HomeDir: homeDir}
-	active, sessionID, err := checker.IsSessionActive("/test/project", 120*time.Second)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if active {
-		t.Error("expected active=false when log file missing")
-	}
-	if sessionID != "" {
-		t.Errorf("sessionID = %q, want empty", sessionID)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			homeDir := t.TempDir()
+			if tt.sessionCwd != "" {
+				writeSessionMeta(t, homeDir, tt.sessionCwd, tt.sessionID)
+				if !tt.skipLog {
+					writeSessionLog(t, homeDir, tt.sessionCwd, tt.sessionID, tt.logAge)
+				}
+			}
 
-func TestFileSessionLogChecker_WorktreePrefixMatch(t *testing.T) {
-	homeDir := t.TempDir()
-	worktreeCwd := "/test/project/.claude/worktrees/gentle-wobbling-rossum"
-	setupTestSessionDir(t, homeDir, worktreeCwd, "session-wt", 10*time.Second)
-
-	checker := &FileSessionLogChecker{HomeDir: homeDir}
-	active, sessionID, err := checker.IsSessionActive("/test/project", 120*time.Second)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !active {
-		t.Error("expected active=true for worktree prefix match")
-	}
-	if sessionID != "session-wt" {
-		t.Errorf("sessionID = %q, want %q", sessionID, "session-wt")
-	}
-}
-
-func TestFileSessionLogChecker_NoSessionsDir(t *testing.T) {
-	homeDir := t.TempDir()
-
-	checker := &FileSessionLogChecker{HomeDir: homeDir}
-	active, sessionID, err := checker.IsSessionActive("/test/project", 120*time.Second)
-	if err == nil {
-		t.Error("expected error when sessions dir does not exist")
-	}
-	if active {
-		t.Error("expected active=false on error")
-	}
-	if sessionID != "" {
-		t.Errorf("sessionID = %q, want empty", sessionID)
+			checker := &FileSessionLogChecker{HomeDir: homeDir}
+			active, sessionID, err := checker.IsSessionActive(tt.cwd, 120*time.Second)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if active != tt.wantActive {
+				t.Errorf("active = %v, want %v", active, tt.wantActive)
+			}
+			if sessionID != tt.wantSessionID {
+				t.Errorf("sessionID = %q, want %q", sessionID, tt.wantSessionID)
+			}
+		})
 	}
 }
