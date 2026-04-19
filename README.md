@@ -105,7 +105,8 @@ project → task → action
                 └───────────────────────┘          │
                 └──────────────────────────────────┘
 
-  * running → pending: reset command (kills tmux pane)
+  * cancel/fail/reset only update the DB; tmux panes are not terminated
+  * to restart a running action, run `tq action cancel` or `fail` first, then `reset`
   * done is terminal, but on_done can spawn a new action
 ```
 

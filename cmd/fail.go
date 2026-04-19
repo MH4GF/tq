@@ -2,14 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/MH4GF/tq/db"
-	"github.com/MH4GF/tq/dispatch"
 )
 
 func init() {
@@ -62,10 +60,6 @@ Session logs already capture that.`,
 
 		if action.Status == db.ActionStatusDone || action.Status == db.ActionStatusFailed || action.Status == db.ActionStatusCancelled {
 			return fmt.Errorf("action #%d is already %q, cannot mark as failed (only pending, running, or dispatched actions can be failed)", id, action.Status)
-		}
-
-		if action.Status == db.ActionStatusRunning && action.TmuxPane.Valid {
-			_ = exec.Command("tmux", "kill-window", "-t", "main:"+dispatch.WindowName(id)).Run()
 		}
 
 		reason := ""
