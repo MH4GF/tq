@@ -13,18 +13,18 @@ import (
 func TestProjectCreate(t *testing.T) {
 	tests := []struct {
 		name            string
-		preSeed         func(*db.DB)
+		preSeed         func(db.Store)
 		args            []string
 		wantOutContains []string
 		wantErr         bool
 		wantErrContains string
-		verify          func(*testing.T, *db.DB)
+		verify          func(*testing.T, db.Store)
 	}{
 		{
 			name:            "success with meta",
 			args:            []string{"project", "create", "myapp", "/tmp/myapp", "--meta", `{"key":"val"}`},
 			wantOutContains: []string{"project #1 created", "myapp"},
-			verify: func(t *testing.T, d *db.DB) {
+			verify: func(t *testing.T, d db.Store) {
 				t.Helper()
 				p, err := d.GetProjectByName("myapp")
 				if err != nil {
@@ -48,7 +48,7 @@ func TestProjectCreate(t *testing.T) {
 		},
 		{
 			name:    "duplicate name",
-			preSeed: func(d *db.DB) { d.InsertProject("dup", "/tmp/dup", "{}") },
+			preSeed: func(d db.Store) { d.InsertProject("dup", "/tmp/dup", "{}") },
 			args:    []string{"project", "create", "dup", "/tmp/dup2"},
 			wantErr: true,
 		},
