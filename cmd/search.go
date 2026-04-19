@@ -14,7 +14,7 @@ var (
 var searchCmd = &cobra.Command{
 	Use:   "search <keyword>",
 	Short: "Search tasks and actions",
-	Long:  `Full-text search across task titles, task metadata, action titles, action results, and action metadata. Output is JSON.`,
+	Long:  `Full-text search across task titles, task metadata, task status change reasons, action titles, action results, and action metadata. Output is JSON.`,
 	Example: `  tq search "login bug"
   tq search deploy`,
 	Args: cobra.ExactArgs(1),

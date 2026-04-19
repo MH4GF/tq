@@ -1,6 +1,7 @@
 package db_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/MH4GF/tq/db"
@@ -229,6 +230,37 @@ func TestSearch(t *testing.T) {
 				d.InsertTask(1, "fooXbar", "{}", "")
 			},
 			wantLen: 1,
+		},
+		{
+			name:    "match task status_changed reason",
+			keyword: "CSRF",
+			setup: func(d *db.DB) {
+				taskID, _ := d.InsertTask(1, "Auth work", "{}", "")
+				_ = d.UpdateTask(taskID, db.TaskStatusDone, "fixed the login CSRF bug")
+			},
+			wantLen: 1,
+			check: func(t *testing.T, results []db.SearchResult) {
+				t.Helper()
+				r := results[0]
+				if r.EntityType != "task" {
+					t.Errorf("entity_type = %q, want task", r.EntityType)
+				}
+				if r.Field != "status_history_reason" {
+					t.Errorf("field = %q, want status_history_reason", r.Field)
+				}
+				if !strings.Contains(r.Snippet, "CSRF") {
+					t.Errorf("snippet = %q, want to contain CSRF", r.Snippet)
+				}
+			},
+		},
+		{
+			name:    "empty reason is not matched",
+			keyword: "done",
+			setup: func(d *db.DB) {
+				taskID, _ := d.InsertTask(1, "Old task", "{}", "")
+				_ = d.UpdateTask(taskID, db.TaskStatusDone, "")
+			},
+			wantLen: 0,
 		},
 	}
 
