@@ -19,10 +19,7 @@ tq task list --status open --jq '
     id, project_id, title, updated_at,
     metadata_url: (.metadata // "{}" | try fromjson.url // null),
     latest: (
-      [.actions[]
-        | select(((.metadata // "{}" | try fromjson.instruction // "")
-                  | test("classify-next-action") | not))]
-      | sort_by(.created_at) | last
+      .actions | sort_by(.created_at) | last
       | if . then {id, title, status, completed_at,
                     result_head: ((.result // "")[0:300])} else null end
     )
@@ -31,8 +28,6 @@ tq task list --status open --jq '
 ```
 
 Filter by `--project <id>` if `$ARGUMENTS` is given.
-
-`classify-next-action` entries are filtered out because they are auto-routing and do not represent progress.
 
 ### 2. Project consistency check (before phase detection)
 
@@ -60,10 +55,10 @@ Classify each task from the Step 1 output. Inspect `latest.status` and keywords 
 - **Blocked**: Stalled with a result that explicitly states a blocker (permission error, external dependency, etc.) that cannot be resolved independently.
 - **Likely complete**: `state == MERGED` from the PR-state pre-fetch (below), or `latest.status == done` with `merged` / `done` / `complete` in the result.
 
-**Deep-dive condition**: If `latest.status == done` AND `len(result_head) == 300` (truncated) AND none of the keywords `push complete`, `review`, `merged`, `stale`, `blocked`, `failed`, `done` appear in `result_head` (case-insensitive), fetch the latest real-work action's full result:
+**Deep-dive condition**: If `latest.status == done` AND `len(result_head) == 300` (truncated) AND none of the keywords `push complete`, `review`, `merged`, `stale`, `blocked`, `failed`, `done` appear in `result_head` (case-insensitive), fetch the latest action's full result:
 
 ```bash
-tq task get <ID> --jq '.actions | map(select(((.metadata // "{}" | try fromjson.instruction // "") | test("classify-next-action") | not))) | sort_by(.created_at) | last | {status, result}'
+tq task get <ID> --jq '.actions | sort_by(.created_at) | last | {status, result}'
 ```
 
 If multiple tasks need deep-dive, issue the `tq task get` calls in parallel (single message, multiple Bash calls). Skip deep-dive when `latest.status ∈ {running, pending}` or when the truncated head already contains a decisive keyword.
@@ -78,7 +73,7 @@ Finalize classification using the state: `state == MERGED` → **Likely complete
 
 Present tasks by project in a table:
 
-| ID | Title | Age | Phase | Latest real-work |
+| ID | Title | Age | Phase | Latest action |
 |---|---|---|---|---|
 | 157 | Implement feature A | 3d | Awaiting review | #815 implement done — implementation complete, pushed |
 | 55 | Fix bug B | 5d | Not started | — |
@@ -91,7 +86,7 @@ Use the post-move `project_id` (tasks moved in Step 2 appear under their new pro
 
 **Per-option `description` must contain** the material a user needs to decide without scrolling back:
 
-- 1-2 line summary of the latest real-work `result`.
+- 1-2 line summary of the latest `result`.
 - For PR-related tasks: PR number + state from the Step 4 PR-state cache.
 - Days since last update (`updated_at` vs today).
 
