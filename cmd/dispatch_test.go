@@ -20,167 +20,141 @@ func (m *mockWorker) Execute(ctx context.Context, prompt string, cfg dispatch.Ac
 	return m.result, m.err
 }
 
-func TestDispatch_NoArgs(t *testing.T) {
-	cmd.ResetForTest()
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"action", "dispatch"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected error when no args provided")
-	}
-}
-
-func TestDispatch_Success(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	cmd.SetConfigDir(t.TempDir())
-
-	taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
-	d.InsertAction("review-pr", taskID, `{"instruction":"Review PR for Fix bug.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
-
-	cmd.SetWorkerFactory(func() dispatch.Worker {
-		return &mockWorker{result: `{"review":"approved"}`}
-	})
-	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"action", "dispatch", "1"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestDispatch(t *testing.T) {
+	type wantAction struct {
+		id     int64
+		status string
+		result string
 	}
 
-	out := buf.String()
-	if !contains(out, "action #1 done") {
-		t.Errorf("output = %q, want to contain 'action #1 done'", out)
+	tests := []struct {
+		name            string
+		setup           func(d db.Store)
+		workerResult    string
+		workerErr       error
+		useWorker       bool
+		args            []string
+		wantErr         bool
+		wantErrContains string
+		wantOutContains string
+		wantActions     []wantAction
+	}{
+		{
+			name:    "no args",
+			args:    []string{"action", "dispatch"},
+			wantErr: true,
+		},
+		{
+			name: "success",
+			setup: func(d db.Store) {
+				taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
+				d.InsertAction("review-pr", taskID, `{"instruction":"Review PR for Fix bug.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+			},
+			useWorker:       true,
+			workerResult:    `{"review":"approved"}`,
+			args:            []string{"action", "dispatch", "1"},
+			wantOutContains: "action #1 done",
+			wantActions: []wantAction{
+				{id: 1, status: db.ActionStatusDone, result: `{"review":"approved"}`},
+			},
+		},
+		{
+			name: "with action id",
+			setup: func(d db.Store) {
+				taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
+				d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+				d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+			},
+			useWorker:       true,
+			workerResult:    `{"review":"approved"}`,
+			args:            []string{"action", "dispatch", "2"},
+			wantOutContains: "action #2 done",
+			wantActions: []wantAction{
+				{id: 1, status: db.ActionStatusPending},
+				{id: 2, status: db.ActionStatusDone},
+			},
+		},
+		{
+			name:            "invalid action id",
+			args:            []string{"action", "dispatch", "999"},
+			wantErr:         true,
+			wantErrContains: "not found",
+		},
+		{
+			name: "worker error",
+			setup: func(d db.Store) {
+				taskID, _ := d.InsertTask(1, "test", "{}", "")
+				d.InsertAction("test", taskID, `{"instruction":"Do something.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+			},
+			useWorker:       true,
+			workerErr:       context.DeadlineExceeded,
+			args:            []string{"action", "dispatch", "1"},
+			wantOutContains: "failed",
+			wantActions: []wantAction{
+				{id: 1, status: db.ActionStatusFailed},
+			},
+		},
 	}
 
-	a, err := d.GetAction(1)
-	if err != nil {
-		t.Fatalf("get action: %v", err)
-	}
-	if a.Status != db.ActionStatusDone {
-		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusDone)
-	}
-	if !a.Result.Valid || a.Result.String != `{"review":"approved"}` {
-		t.Errorf("result = %v, want %q", a.Result, `{"review":"approved"}`)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+			cmd.SetConfigDir(t.TempDir())
 
-func TestDispatch_WithActionID(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
+			if tt.setup != nil {
+				tt.setup(d)
+			}
 
-	cmd.SetConfigDir(t.TempDir())
+			if tt.useWorker {
+				worker := &mockWorker{result: tt.workerResult, err: tt.workerErr}
+				cmd.SetWorkerFactory(func() dispatch.Worker { return worker })
+				t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
+			}
 
-	taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
-	d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
-	d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs(tt.args)
 
-	cmd.SetWorkerFactory(func() dispatch.Worker {
-		return &mockWorker{result: `{"review":"approved"}`}
-	})
-	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
+			err := root.Execute()
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if tt.wantErrContains != "" && !contains(err.Error(), tt.wantErrContains) {
+					t.Errorf("error = %q, want to contain %q", err, tt.wantErrContains)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"action", "dispatch", "2"})
+			if tt.wantOutContains != "" {
+				out := buf.String()
+				if !contains(out, tt.wantOutContains) {
+					t.Errorf("output = %q, want to contain %q", out, tt.wantOutContains)
+				}
+			}
 
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	out := buf.String()
-	if !contains(out, "action #2 done") {
-		t.Errorf("output = %q, want to contain 'action #2 done'", out)
-	}
-
-	// action 2 should be done
-	a2, _ := d.GetAction(2)
-	if a2.Status != db.ActionStatusDone {
-		t.Errorf("action 2 status = %q, want done", a2.Status)
-	}
-
-	// action 1 should still be pending
-	a1, _ := d.GetAction(1)
-	if a1.Status != db.ActionStatusPending {
-		t.Errorf("action 1 status = %q, want pending", a1.Status)
-	}
-}
-
-func TestDispatch_WithInvalidActionID(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-	cmd.SetConfigDir(t.TempDir())
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"action", "dispatch", "999"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected error for non-existent action ID")
-	}
-	if !contains(err.Error(), "not found") {
-		t.Errorf("error = %q, want to contain 'not found'", err)
-	}
-}
-
-func TestDispatch_WorkerError(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	cmd.SetConfigDir(t.TempDir())
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("test", taskID, `{"instruction":"Do something.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
-
-	cmd.SetWorkerFactory(func() dispatch.Worker {
-		return &mockWorker{err: context.DeadlineExceeded}
-	})
-	t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"action", "dispatch", "1"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	out := buf.String()
-	if !contains(out, "failed") {
-		t.Errorf("output = %q, want to contain 'failed'", out)
-	}
-
-	a, err := d.GetAction(1)
-	if err != nil {
-		t.Fatalf("get action: %v", err)
-	}
-	if a.Status != db.ActionStatusFailed {
-		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusFailed)
+			for _, wa := range tt.wantActions {
+				a, err := d.GetAction(wa.id)
+				if err != nil {
+					t.Fatalf("get action %d: %v", wa.id, err)
+				}
+				if a.Status != wa.status {
+					t.Errorf("action %d status = %q, want %q", wa.id, a.Status, wa.status)
+				}
+				if wa.result != "" {
+					if !a.Result.Valid || a.Result.String != wa.result {
+						t.Errorf("action %d result = %v, want %q", wa.id, a.Result, wa.result)
+					}
+				}
+			}
+		})
 	}
 }
