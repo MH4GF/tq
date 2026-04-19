@@ -695,6 +695,116 @@ func TestTaskList_WithActions(t *testing.T) {
 	}
 }
 
+func TestTaskList_ActionsLimit(t *testing.T) {
+	tests := []struct {
+		name         string
+		endpoint     string
+		totalActions int
+		wantLen      int
+		wantFirst    string
+		wantLast     string
+	}{
+		{name: "task list under limit", endpoint: "list", totalActions: 3, wantLen: 3, wantFirst: "action-1", wantLast: "action-3"},
+		{name: "task list at limit", endpoint: "list", totalActions: 10, wantLen: 10, wantFirst: "action-1", wantLast: "action-10"},
+		{name: "task list over limit trims oldest", endpoint: "list", totalActions: 15, wantLen: 10, wantFirst: "action-6", wantLast: "action-15"},
+		{name: "task get under limit", endpoint: "get", totalActions: 3, wantLen: 3, wantFirst: "action-1", wantLast: "action-3"},
+		{name: "task get at limit", endpoint: "get", totalActions: 10, wantLen: 10, wantFirst: "action-1", wantLast: "action-10"},
+		{name: "task get over limit trims oldest", endpoint: "get", totalActions: 15, wantLen: 10, wantFirst: "action-6", wantLast: "action-15"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+
+			taskID, _ := d.InsertTask(1, "task", "{}", "")
+			for i := 1; i <= tc.totalActions; i++ {
+				d.InsertAction(fmt.Sprintf("action-%d", i), taskID, "{}", db.ActionStatusPending, nil)
+			}
+
+			var args []string
+			switch tc.endpoint {
+			case "list":
+				args = []string{"task", "list"}
+			case "get":
+				args = []string{"task", "get", fmt.Sprintf("%d", taskID)}
+			}
+
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs(args)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			var actions []any
+			switch tc.endpoint {
+			case "list":
+				var rows []map[string]any
+				if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+					t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
+				}
+				if len(rows) != 1 {
+					t.Fatalf("expected 1 row, got %d", len(rows))
+				}
+				actions = rows[0]["actions"].([]any)
+			case "get":
+				var row map[string]any
+				if err := json.Unmarshal(buf.Bytes(), &row); err != nil {
+					t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
+				}
+				actions = row["actions"].([]any)
+			}
+
+			if len(actions) != tc.wantLen {
+				t.Fatalf("actions len = %d, want %d", len(actions), tc.wantLen)
+			}
+			first := actions[0].(map[string]any)["title"].(string)
+			last := actions[len(actions)-1].(map[string]any)["title"].(string)
+			if first != tc.wantFirst {
+				t.Errorf("first action title = %q, want %q", first, tc.wantFirst)
+			}
+			if last != tc.wantLast {
+				t.Errorf("last action title = %q, want %q", last, tc.wantLast)
+			}
+		})
+	}
+}
+
+func TestActionList_NoLimit_ReturnsAll(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+	const total = 15
+	for i := 1; i <= total; i++ {
+		d.InsertAction(fmt.Sprintf("action-%d", i), taskID, "{}", db.ActionStatusPending, nil)
+	}
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"action", "list", "--task", fmt.Sprintf("%d", taskID)})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
+	}
+	if len(rows) != total {
+		t.Errorf("action list len = %d, want %d (should not be capped)", len(rows), total)
+	}
+}
+
 func TestTaskCreateHelp(t *testing.T) {
 	tests := []struct {
 		name            string
