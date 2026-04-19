@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.21.14](https://github.com/MH4GF/tq/compare/v0.21.13...v0.21.14) - 2026-04-19
+- test(list): collapse list_test.go cases into table-driven test by @MH4GF in https://github.com/MH4GF/tq/pull/128
+- test(fail): collapse TestFail variants into table-driven subtests by @MH4GF in https://github.com/MH4GF/tq/pull/127
+- Decouple action state transitions from tmux process termination by @MH4GF in https://github.com/MH4GF/tq/pull/130
+- test(task): collapse TestTaskCreate variants into table-driven subtests by @MH4GF in https://github.com/MH4GF/tq/pull/133
+- test(project): collapse TestProjectCreate variants into table-driven by @MH4GF in https://github.com/MH4GF/tq/pull/131
+- test(task): collapse TestTaskUpdate variants into table-driven subtests by @MH4GF in https://github.com/MH4GF/tq/pull/134
+- docs(cli-reference): sync with current --help output by @MH4GF in https://github.com/MH4GF/tq/pull/138
+- test(dispatch): collapse TestCheckSchedules variants into table-driven subtests by @MH4GF in https://github.com/MH4GF/tq/pull/139
+- Enforce quality-review before gh pr create via hook by @MH4GF in https://github.com/MH4GF/tq/pull/136
+- test(dispatch): collapse TestReapStaleActions_* into table-driven subtests by @MH4GF in https://github.com/MH4GF/tq/pull/140
+
 ## [v0.21.13](https://github.com/MH4GF/tq/compare/v0.21.12...v0.21.13) - 2026-04-19
 - Add gc-golden-rules periodic GC command (Phase 3) by @MH4GF in https://github.com/MH4GF/tq/pull/109
 - quality-review: fix code-simplifier agent type not found error by @MH4GF in https://github.com/MH4GF/tq/pull/111
