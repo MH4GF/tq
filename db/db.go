@@ -236,7 +236,113 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	// Migrate legacy permission_mode/worktree metadata keys → claude_args (idempotent)
+	if err := db.migrateLegacyClaudeFlags("actions"); err != nil {
+		return fmt.Errorf("migrate legacy claude flags in actions: %w", err)
+	}
+	if err := db.migrateLegacyClaudeFlags("schedules"); err != nil {
+		return fmt.Errorf("migrate legacy claude flags in schedules: %w", err)
+	}
+
 	return nil
+}
+
+// migrateLegacyClaudeFlags rewrites permission_mode/worktree metadata keys into
+// claude_args entries on the given table. Idempotent: rows without legacy keys
+// are skipped.
+func (db *DB) migrateLegacyClaudeFlags(table string) error {
+	rows, err := db.Query(fmt.Sprintf(
+		"SELECT id, metadata FROM %s WHERE metadata LIKE '%%permission_mode%%' OR metadata LIKE '%%worktree%%'",
+		table,
+	))
+	if err != nil {
+		return fmt.Errorf("query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	type row struct {
+		id       int64
+		metadata string
+	}
+	var toUpdate []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.metadata); err != nil {
+			return fmt.Errorf("scan: %w", err)
+		}
+		toUpdate = append(toUpdate, r)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate: %w", err)
+	}
+	_ = rows.Close()
+
+	for _, r := range toUpdate {
+		newMeta, changed, err := convertLegacyClaudeFlags(r.metadata)
+		if err != nil {
+			return fmt.Errorf("convert id=%d: %w", r.id, err)
+		}
+		if !changed {
+			continue
+		}
+		if _, err := db.Exec(fmt.Sprintf("UPDATE %s SET metadata = ? WHERE id = ?", table), newMeta, r.id); err != nil {
+			return fmt.Errorf("update id=%d: %w", r.id, err)
+		}
+	}
+	return nil
+}
+
+// convertLegacyClaudeFlags translates a metadata JSON string by appending
+// permission_mode/worktree values to claude_args and removing the legacy keys.
+// Returns the new JSON, whether any change was made, and any error.
+func convertLegacyClaudeFlags(metaJSON string) (string, bool, error) {
+	if metaJSON == "" || metaJSON == "{}" {
+		return metaJSON, false, nil
+	}
+	m := make(map[string]any)
+	if err := json.Unmarshal([]byte(metaJSON), &m); err != nil {
+		return "", false, fmt.Errorf("parse metadata: %w", err)
+	}
+
+	permRaw, hasPerm := m["permission_mode"]
+	wtRaw, hasWt := m["worktree"]
+	if !hasPerm && !hasWt {
+		return metaJSON, false, nil
+	}
+
+	var args []string
+	if existing, ok := m["claude_args"].([]any); ok {
+		for _, v := range existing {
+			if s, ok := v.(string); ok {
+				args = append(args, s)
+			}
+		}
+	}
+	if hasPerm {
+		if s, ok := permRaw.(string); ok && s != "" {
+			args = append(args, "--permission-mode", s)
+		}
+		delete(m, "permission_mode")
+	}
+	if hasWt {
+		if b, ok := wtRaw.(bool); ok && b {
+			args = append(args, "--worktree")
+		}
+		delete(m, "worktree")
+	}
+	if len(args) > 0 {
+		anyArgs := make([]any, len(args))
+		for i, s := range args {
+			anyArgs[i] = s
+		}
+		m["claude_args"] = anyArgs
+	}
+
+	out, err := json.Marshal(m)
+	if err != nil {
+		return "", false, fmt.Errorf("marshal metadata: %w", err)
+	}
+	return string(out), true, nil
 }
 
 func (db *DB) Close() error {
