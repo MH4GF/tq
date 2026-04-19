@@ -188,137 +188,6 @@ func TestRunWorker_FailureCreatesInvestigateAction(t *testing.T) {
 	}
 }
 
-type mockTmuxChecker struct {
-	windows       []string
-	err           error
-	calledSession string
-}
-
-func (m *mockTmuxChecker) ListWindows(ctx context.Context, session string) ([]string, error) {
-	m.calledSession = session
-	return m.windows, m.err
-}
-
-func TestReapStaleActions_DetectsStale(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, ptr("main"), ptr("tq-action-1"), ptr(time.Now().Add(-5*time.Minute)))
-
-	checker := &mockTmuxChecker{windows: []string{"zsh", "other-window"}}
-
-	cfg := WorkerConfig{
-		DispatchConfig:   DispatchConfig{DB: d},
-		TmuxChecker:      checker,
-		StaleGracePeriod: 30 * time.Second,
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusFailed {
-		t.Errorf("action status = %q, want %q", action.Status, db.ActionStatusFailed)
-	}
-	if !action.Result.Valid || !strings.Contains(action.Result.String, "stale") {
-		t.Errorf("expected result containing 'stale', got %v", action.Result)
-	}
-}
-
-func TestReapStaleActions_SkipsLiveWindows(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, ptr("main"), ptr("tq-action-1"), ptr(time.Now().Add(-5*time.Minute)))
-
-	checker := &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}}
-
-	cfg := WorkerConfig{
-		DispatchConfig:   DispatchConfig{DB: d},
-		TmuxChecker:      checker,
-		StaleGracePeriod: 30 * time.Second,
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusRunning {
-		t.Errorf("action status = %q, want %q", action.Status, db.ActionStatusRunning)
-	}
-}
-
-func TestReapStaleActions_GracePeriod(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, ptr("main"), ptr("tq-action-1"), ptr(time.Now()))
-
-	checker := &mockTmuxChecker{windows: []string{"zsh"}}
-
-	cfg := WorkerConfig{
-		DispatchConfig:   DispatchConfig{DB: d},
-		TmuxChecker:      checker,
-		StaleGracePeriod: 30 * time.Second,
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusRunning {
-		t.Errorf("action status = %q, want %q (within grace period)", action.Status, db.ActionStatusRunning)
-	}
-}
-
-func TestReapStaleActions_TmuxError(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, ptr("main"), ptr("tq-action-1"), ptr(time.Now().Add(-5*time.Minute)))
-
-	checker := &mockTmuxChecker{err: fmt.Errorf("tmux not available")}
-
-	cfg := WorkerConfig{
-		DispatchConfig:   DispatchConfig{DB: d},
-		TmuxChecker:      checker,
-		StaleGracePeriod: 30 * time.Second,
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusRunning {
-		t.Errorf("action status = %q, want %q (tmux error should skip)", action.Status, db.ActionStatusRunning)
-	}
-}
-
-func TestReapStaleActions_NilChecker(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, ptr("main"), ptr("tq-action-1"), nil)
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{DB: d},
-		TmuxChecker:    nil,
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusRunning {
-		t.Errorf("action status = %q, want %q (nil checker should no-op)", action.Status, db.ActionStatusRunning)
-	}
-}
-
 func TestRunWorker_RemoteDispatch(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -404,97 +273,15 @@ func TestRunWorker_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
 	}
 }
 
-func TestReapStaleActions_CustomSession(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, ptr("work"), ptr("tq-action-1"), ptr(time.Now().Add(-5*time.Minute)))
-
-	checker := &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}}
-
-	cfg := WorkerConfig{
-		DispatchConfig:   DispatchConfig{DB: d, TmuxSession: "work"},
-		TmuxChecker:      checker,
-		StaleGracePeriod: 30 * time.Second,
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	if checker.calledSession != "work" {
-		t.Errorf("ListWindows called with session %q, want %q", checker.calledSession, "work")
-	}
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusRunning {
-		t.Errorf("action status = %q, want %q", action.Status, db.ActionStatusRunning)
-	}
+type mockTmuxChecker struct {
+	windows       []string
+	err           error
+	calledSession string
 }
 
-func TestReapStaleActions_NonInteractiveStale(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, nil, nil, ptr(time.Now().Add(-25*time.Minute)))
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{DB: d},
-		TmuxChecker:    nil,
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusFailed {
-		t.Errorf("action status = %q, want %q", action.Status, db.ActionStatusFailed)
-	}
-	if !action.Result.Valid || !strings.Contains(action.Result.String, "noninteractive") {
-		t.Errorf("expected result containing 'noninteractive', got %v", action.Result)
-	}
-}
-
-func TestReapStaleActions_NonInteractiveNotYetStale(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, nil, nil, ptr(time.Now().Add(-5*time.Minute)))
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{DB: d},
-		TmuxChecker:    nil,
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusRunning {
-		t.Errorf("action status = %q, want %q (within threshold)", action.Status, db.ActionStatusRunning)
-	}
-}
-
-func TestReapStaleActions_NonInteractiveNoStartedAt(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{DB: d},
-		TmuxChecker:    nil,
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusRunning {
-		t.Errorf("action status = %q, want %q (no started_at)", action.Status, db.ActionStatusRunning)
-	}
+func (m *mockTmuxChecker) ListWindows(ctx context.Context, session string) ([]string, error) {
+	m.calledSession = session
+	return m.windows, m.err
 }
 
 type mockSessionLogChecker struct {
@@ -507,182 +294,220 @@ func (m *mockSessionLogChecker) IsSessionActive(workDir string, freshnessThresho
 	return m.active, m.sessionID, m.err
 }
 
-func TestReapStaleActions_InteractiveLogFresh(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix"}`, db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, ptr("main"), ptr("tq-action-1"), ptr(time.Now().Add(-5*time.Minute)))
-
-	// tmux window is gone, but session log is fresh
-	checker := &mockTmuxChecker{windows: []string{"zsh"}}
-	sessionChecker := &mockSessionLogChecker{active: true, sessionID: "sess-123"}
-
-	cfg := WorkerConfig{
-		DispatchConfig:     DispatchConfig{DB: d, SessionLogChecker: sessionChecker},
-		TmuxChecker:        checker,
-		StaleGracePeriod:   30 * time.Second,
-		HeartbeatFreshness: 120 * time.Second,
+func TestReapStaleActions_Interactive(t *testing.T) {
+	tests := []struct {
+		name               string
+		startedOffset      time.Duration
+		omitStartedAt      bool
+		tmux               *mockTmuxChecker
+		log                *mockSessionLogChecker
+		tmuxSession        string
+		wantStatus         string
+		wantResultContains string
+	}{
+		{
+			name:               "reaps when tmux window missing",
+			startedOffset:      -5 * time.Minute,
+			tmux:               &mockTmuxChecker{windows: []string{"zsh", "other-window"}},
+			wantStatus:         db.ActionStatusFailed,
+			wantResultContains: "stale",
+		},
+		{
+			name:          "skips when tmux window live",
+			startedOffset: -5 * time.Minute,
+			tmux:          &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}},
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:          "skips within grace period",
+			startedOffset: 0,
+			tmux:          &mockTmuxChecker{windows: []string{"zsh"}},
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:          "skips on tmux error",
+			startedOffset: -5 * time.Minute,
+			tmux:          &mockTmuxChecker{err: fmt.Errorf("tmux not available")},
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:          "no-op when no checker",
+			omitStartedAt: true,
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:          "forwards custom tmux session",
+			startedOffset: -5 * time.Minute,
+			tmux:          &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}},
+			tmuxSession:   "work",
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:          "skips when session log fresh",
+			startedOffset: -5 * time.Minute,
+			tmux:          &mockTmuxChecker{windows: []string{"zsh"}},
+			log:           &mockSessionLogChecker{active: true, sessionID: "sess-123"},
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:          "reaps when session log stale and window gone",
+			startedOffset: -5 * time.Minute,
+			tmux:          &mockTmuxChecker{windows: []string{"zsh"}},
+			log:           &mockSessionLogChecker{active: false},
+			wantStatus:    db.ActionStatusFailed,
+		},
+		{
+			name:          "reaps via tmux fallback when no log checker",
+			startedOffset: -5 * time.Minute,
+			tmux:          &mockTmuxChecker{windows: []string{"zsh"}},
+			wantStatus:    db.ActionStatusFailed,
+		},
 	}
 
-	reapStaleActions(context.Background(), cfg)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
 
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusRunning {
-		t.Errorf("action status = %q, want %q (session log fresh)", action.Status, db.ActionStatusRunning)
-	}
-}
+			taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+			d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil)
 
-func TestReapStaleActions_InteractiveLogStale(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
+			windowName := "tq-action-1"
+			var startedAt *time.Time
+			if !tt.omitStartedAt {
+				s := time.Now().Add(tt.startedOffset)
+				startedAt = &s
+			}
+			d.SetActionSessionInfoForTest(1, ptr("main"), &windowName, startedAt)
 
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix"}`, db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, ptr("main"), ptr("tq-action-1"), ptr(time.Now().Add(-5*time.Minute)))
+			cfg := WorkerConfig{
+				DispatchConfig:     DispatchConfig{DB: d},
+				StaleGracePeriod:   30 * time.Second,
+				HeartbeatFreshness: 120 * time.Second,
+			}
+			if tt.tmux != nil {
+				cfg.TmuxChecker = tt.tmux
+			}
+			if tt.log != nil {
+				cfg.SessionLogChecker = tt.log
+			}
+			if tt.tmuxSession != "" {
+				cfg.TmuxSession = tt.tmuxSession
+			}
 
-	// tmux window gone AND session log stale
-	checker := &mockTmuxChecker{windows: []string{"zsh"}}
-	sessionChecker := &mockSessionLogChecker{active: false}
+			reapStaleActions(context.Background(), cfg)
 
-	cfg := WorkerConfig{
-		DispatchConfig:     DispatchConfig{DB: d, SessionLogChecker: sessionChecker},
-		TmuxChecker:        checker,
-		StaleGracePeriod:   30 * time.Second,
-		HeartbeatFreshness: 120 * time.Second,
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusFailed {
-		t.Errorf("action status = %q, want %q", action.Status, db.ActionStatusFailed)
-	}
-}
-
-func TestReapStaleActions_InteractiveNilChecker(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix"}`, db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, ptr("main"), ptr("tq-action-1"), ptr(time.Now().Add(-5*time.Minute)))
-
-	// No session log checker, tmux window gone → fallback to tmux check → reaped
-	checker := &mockTmuxChecker{windows: []string{"zsh"}}
-
-	cfg := WorkerConfig{
-		DispatchConfig:   DispatchConfig{DB: d},
-		TmuxChecker:      checker,
-		StaleGracePeriod: 30 * time.Second,
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusFailed {
-		t.Errorf("action status = %q, want %q (nil checker, window gone)", action.Status, db.ActionStatusFailed)
-	}
-}
-
-func TestReapStaleActions_NonInteractiveSkippedByHeartbeat(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, nil, nil, ptr(time.Now().Add(-25*time.Minute)))
-
-	sessionChecker := &mockSessionLogChecker{active: true, sessionID: "sess-456"}
-
-	cfg := WorkerConfig{
-		DispatchConfig:     DispatchConfig{DB: d, SessionLogChecker: sessionChecker},
-		HeartbeatFreshness: 120 * time.Second,
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusRunning {
-		t.Errorf("action status = %q, want %q (heartbeat active)", action.Status, db.ActionStatusRunning)
-	}
-}
-
-func TestReapStaleActions_NonInteractiveReapedByStaleHeartbeat(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, nil, nil, ptr(time.Now().Add(-25*time.Minute)))
-
-	sessionChecker := &mockSessionLogChecker{active: false}
-
-	cfg := WorkerConfig{
-		DispatchConfig:     DispatchConfig{DB: d, SessionLogChecker: sessionChecker},
-		HeartbeatFreshness: 120 * time.Second,
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusFailed {
-		t.Errorf("action status = %q, want %q", action.Status, db.ActionStatusFailed)
+			action, _ := d.GetAction(1)
+			if action.Status != tt.wantStatus {
+				t.Errorf("status = %q, want %q", action.Status, tt.wantStatus)
+			}
+			if tt.wantResultContains != "" {
+				if !action.Result.Valid || !strings.Contains(action.Result.String, tt.wantResultContains) {
+					t.Errorf("result = %v, want containing %q", action.Result, tt.wantResultContains)
+				}
+			}
+			if tt.tmuxSession != "" && tt.tmux != nil && tt.tmux.calledSession != tt.tmuxSession {
+				t.Errorf("calledSession = %q, want %q", tt.tmux.calledSession, tt.tmuxSession)
+			}
+		})
 	}
 }
 
-func TestReapStaleActions_NonInteractiveCheckerError(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, nil, nil, ptr(time.Now().Add(-25*time.Minute)))
-
-	sessionChecker := &mockSessionLogChecker{err: fmt.Errorf("permission denied")}
-
-	cfg := WorkerConfig{
-		DispatchConfig:     DispatchConfig{DB: d, SessionLogChecker: sessionChecker},
-		HeartbeatFreshness: 120 * time.Second,
+func TestReapStaleActions_NonInteractive(t *testing.T) {
+	tests := []struct {
+		name               string
+		startedOffset      time.Duration
+		omitStartedAt      bool
+		log                *mockSessionLogChecker
+		wantStatus         string
+		wantResultContains string
+		wantMetaSessionID  string
+	}{
+		{
+			name:               "reaps when timeout exceeded",
+			startedOffset:      -25 * time.Minute,
+			wantStatus:         db.ActionStatusFailed,
+			wantResultContains: "noninteractive",
+		},
+		{
+			name:          "skips within threshold",
+			startedOffset: -5 * time.Minute,
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:          "skips when started_at unset",
+			omitStartedAt: true,
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:          "skipped by fresh heartbeat",
+			startedOffset: -25 * time.Minute,
+			log:           &mockSessionLogChecker{active: true, sessionID: "sess-456"},
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:          "reaped by stale heartbeat",
+			startedOffset: -25 * time.Minute,
+			log:           &mockSessionLogChecker{active: false},
+			wantStatus:    db.ActionStatusFailed,
+		},
+		{
+			name:          "reaped when checker errors",
+			startedOffset: -25 * time.Minute,
+			log:           &mockSessionLogChecker{err: fmt.Errorf("permission denied")},
+			wantStatus:    db.ActionStatusFailed,
+		},
+		{
+			name:              "saves session id to metadata",
+			startedOffset:     -25 * time.Minute,
+			log:               &mockSessionLogChecker{active: true, sessionID: "sess-789"},
+			wantStatus:        db.ActionStatusRunning,
+			wantMetaSessionID: "sess-789",
+		},
 	}
 
-	reapStaleActions(context.Background(), cfg)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
 
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusFailed {
-		t.Errorf("action status = %q, want %q (checker error → fallthrough)", action.Status, db.ActionStatusFailed)
-	}
-}
+			taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+			d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
 
-func TestReapStaleActions_SavesSessionIdToMetadata(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
+			if !tt.omitStartedAt {
+				started := time.Now().Add(tt.startedOffset)
+				d.SetActionSessionInfoForTest(1, nil, nil, &started)
+			}
 
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(1, nil, nil, ptr(time.Now().Add(-25*time.Minute)))
+			cfg := WorkerConfig{
+				DispatchConfig:     DispatchConfig{DB: d},
+				HeartbeatFreshness: 120 * time.Second,
+			}
+			if tt.log != nil {
+				cfg.SessionLogChecker = tt.log
+			}
 
-	sessionChecker := &mockSessionLogChecker{active: true, sessionID: "sess-789"}
+			reapStaleActions(context.Background(), cfg)
 
-	cfg := WorkerConfig{
-		DispatchConfig:     DispatchConfig{DB: d, SessionLogChecker: sessionChecker},
-		HeartbeatFreshness: 120 * time.Second,
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusRunning {
-		t.Fatalf("action status = %q, want %q", action.Status, db.ActionStatusRunning)
-	}
-
-	var meta map[string]any
-	if err := json.Unmarshal([]byte(action.Metadata), &meta); err != nil {
-		t.Fatalf("parse metadata: %v", err)
-	}
-	if meta["claude_session_id"] != "sess-789" {
-		t.Errorf("claude_session_id = %v, want %q", meta["claude_session_id"], "sess-789")
+			action, _ := d.GetAction(1)
+			if action.Status != tt.wantStatus {
+				t.Errorf("status = %q, want %q", action.Status, tt.wantStatus)
+			}
+			if tt.wantResultContains != "" {
+				if !action.Result.Valid || !strings.Contains(action.Result.String, tt.wantResultContains) {
+					t.Errorf("result = %v, want containing %q", action.Result, tt.wantResultContains)
+				}
+			}
+			if tt.wantMetaSessionID != "" {
+				var meta map[string]any
+				if err := json.Unmarshal([]byte(action.Metadata), &meta); err != nil {
+					t.Fatalf("parse metadata: %v", err)
+				}
+				if meta["claude_session_id"] != tt.wantMetaSessionID {
+					t.Errorf("claude_session_id = %v, want %q", meta["claude_session_id"], tt.wantMetaSessionID)
+				}
+			}
+		})
 	}
 }
 
