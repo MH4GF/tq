@@ -118,9 +118,7 @@ tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--st
 - `--title` — Action title (**required**, max 100 chars)
 - `--meta` — JSON metadata for dispatch control:
   - `mode` — `"interactive"` (default), `"noninteractive"`, `"remote"`
-  - `permission_mode` — Claude permission mode (e.g. `"plan"`, `"auto"`)
-  - `worktree` — Run in git worktree (`true`/`false`)
-  - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--max-turns","5"]`)
+  - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--permission-mode","plan","--worktree","--max-turns","5"]`)
 - `--status` — Initial status (default: `pending`)
 
 ### `tq action list`
