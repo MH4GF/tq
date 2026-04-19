@@ -13,106 +13,90 @@ import (
 )
 
 func TestTaskCreate(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"task", "create", "test task", "--project", "1", "--meta", `{"url":"https://example.com"}`})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	tests := []struct {
+		name            string
+		args            []string
+		wantOutContains []string
+		wantErrContains string
+		wantErr         bool
+		check           func(t *testing.T, d db.Store)
+	}{
+		{
+			name:            "success",
+			args:            []string{"task", "create", "test task", "--project", "1", "--meta", `{"url":"https://example.com"}`},
+			wantOutContains: []string{"task #1 created", "project: immedio"},
+			check: func(t *testing.T, d db.Store) {
+				t.Helper()
+				task, err := d.GetTask(1)
+				if err != nil {
+					t.Fatalf("get task: %v", err)
+				}
+				if task.Title != "test task" {
+					t.Errorf("title = %q, want %q", task.Title, "test task")
+				}
+				if !contains(task.Metadata, "https://example.com") {
+					t.Errorf("metadata = %q, want to contain URL", task.Metadata)
+				}
+			},
+		},
+		{
+			name:            "invalid meta JSON",
+			args:            []string{"task", "create", "test task", "--project", "1", "--meta", "{invalid}"},
+			wantErr:         true,
+			wantErrContains: "invalid JSON for --meta (must be a JSON object)",
+		},
+		{
+			name:    "missing --project flag",
+			args:    []string{"task", "create", "test"},
+			wantErr: true,
+		},
+		{
+			name:    "unknown project ID",
+			args:    []string{"task", "create", "test", "--project", "999"},
+			wantErr: true,
+		},
+		{
+			name:    "missing title argument",
+			args:    []string{"task", "create", "--project", "1"},
+			wantErr: true,
+		},
 	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
 
-	out := buf.String()
-	if !contains(out, "task #1 created") {
-		t.Errorf("output = %q, want to contain 'task #1 created'", out)
-	}
-	if !contains(out, "project: immedio") {
-		t.Errorf("output = %q, want to contain 'project: immedio'", out)
-	}
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs(tc.args)
 
-	task, err := d.GetTask(1)
-	if err != nil {
-		t.Fatalf("get task: %v", err)
-	}
-	if task.Title != "test task" {
-		t.Errorf("title = %q, want %q", task.Title, "test task")
-	}
-	if !contains(task.Metadata, "https://example.com") {
-		t.Errorf("metadata = %q, want to contain URL", task.Metadata)
-	}
-}
-
-func TestTaskCreate_InvalidMeta(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "create", "test task", "--project", "1", "--meta", "{invalid}"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected error for invalid JSON meta")
-	}
-	if !contains(err.Error(), "invalid JSON for --meta (must be a JSON object)") {
-		t.Errorf("error = %q, want to contain 'invalid JSON for --meta (must be a JSON object)'", err.Error())
-	}
-}
-
-func TestTaskCreate_MissingProject(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "create", "test"})
-
-	if err := root.Execute(); err == nil {
-		t.Fatal("expected error for missing --project flag")
-	}
-}
-
-func TestTaskCreate_UnknownProject(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "create", "test", "--project", "999"})
-
-	if err := root.Execute(); err == nil {
-		t.Fatal("expected error for unknown project")
-	}
-}
-
-func TestTaskCreate_MissingTitle(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "create", "--project", "1"})
-
-	if err := root.Execute(); err == nil {
-		t.Fatal("expected error for missing title argument")
+			err := root.Execute()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				if tc.wantErrContains != "" && !contains(err.Error(), tc.wantErrContains) {
+					t.Errorf("error = %q, want to contain %q", err.Error(), tc.wantErrContains)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			out := buf.String()
+			for _, want := range tc.wantOutContains {
+				if !contains(out, want) {
+					t.Errorf("output = %q, want to contain %q", out, want)
+				}
+			}
+			if tc.check != nil {
+				tc.check(t, d)
+			}
+		})
 	}
 }
 
