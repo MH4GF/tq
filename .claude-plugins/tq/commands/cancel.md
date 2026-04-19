@@ -33,7 +33,7 @@ Before cancelling, determine if follow-up work is needed:
    - Additional work needed → `/tq:create-action` to create it
    - External blocker (waiting for review, approval, etc.) → do nothing
    - An active action (pending/running) with the same purpose already exists → do not create
-4. **Task completion check**: Only if no action was created above, determine whether the task's goal has been achieved → if complete, run `tq task update <task_id> --status done`
+4. **Task completion check**: Only if no action was created above, determine whether the task's goal has been achieved → if complete, run `tq task update <task_id> --status done --note "<why this task is done>"` (`--note` is required with `--status`; summarize what was delivered or why the task wrapped up)
 
 Constraints:
 - Dedup: Do not create an action if an active action (pending/running) with the same purpose already exists

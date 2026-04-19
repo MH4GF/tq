@@ -45,7 +45,7 @@ tq project list [--jq <EXPR>] [--limit <N>]
 |---------|-------------|
 | `tq task create <TITLE> --project <ID>` | Create a task |
 | `tq task list` | List tasks with nested actions (JSON) |
-| `tq task get <ID>` | Get a task by ID (JSON) |
+| `tq task get <ID>` | Get a task by ID with nested actions and status_history (JSON) |
 | `tq task update <ID>` | Update a task |
 
 ### `tq task create`
@@ -69,18 +69,29 @@ tq task list [--project <ID>] [--status <STATUS>] [--jq <EXPR>] [--limit <N>]
 - `--jq` — Filter JSON output (fields: `id`, `project_id`, `title`, `metadata`, `status`, `work_dir`, `created_at`, `updated_at`, `actions`)
 - `--limit` — Limit number of results
 
+### `tq task get`
+
+```
+tq task get <ID> [--jq <EXPR>]
+```
+
+- `--jq` — Filter JSON output (fields: `id`, `project_id`, `title`, `metadata`, `status`, `work_dir`, `created_at`, `updated_at`, `actions`, `status_history`)
+
+`status_history` is an array of status transitions derived from `task.status_changed` events. Each entry has `{from, to, at}` plus optional `reason` (set when `tq task update --note` was used).
+
 ### `tq task update`
 
 ```
-tq task update <ID> [--status <STATUS>] [--project <ID>] [--work-dir <PATH>] [--meta <JSON>]
+tq task update <ID> [--status <STATUS>] [--project <ID>] [--work-dir <PATH>] [--meta <JSON>] [--note <TEXT>]
 ```
 
-At least one flag is required.
+At least one flag is required. `--status` and `--note` must be specified together.
 
 - `--status` — New status (`open`, `review`, `done`, `blocked`, `archived`)
 - `--project` — Project ID
 - `--work-dir` — Working directory
 - `--meta` — JSON metadata to merge
+- `--note` — Reason for the status change (**required when `--status` is given**; recorded in the event log)
 
 ## action
 
