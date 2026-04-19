@@ -24,3 +24,4 @@ Run `tq --help` for data model, commands, and usage examples.
 ## Quality Gates
 
 - MUST: Run `/quality-review` before marking work complete
+- Enforced: a PreToolUse hook (`.claude/hooks/check-quality-review.sh`) blocks `gh pr create` until `/quality-review` has recorded the current HEAD SHA
