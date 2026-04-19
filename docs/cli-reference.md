@@ -44,8 +44,8 @@ tq project list [--jq <EXPR>] [--limit <N>]
 | Command | Description |
 |---------|-------------|
 | `tq task create <TITLE> --project <ID>` | Create a task |
-| `tq task list` | List tasks with nested actions (JSON) |
-| `tq task get <ID>` | Get a task by ID with nested actions and status_history (JSON) |
+| `tq task list` | List tasks with latest 10 nested actions (JSON) |
+| `tq task get <ID>` | Get a task by ID with latest 10 nested actions and status_history (JSON) |
 | `tq task update <ID>` | Update a task |
 
 ### `tq task create`
@@ -69,6 +69,8 @@ tq task list [--project <ID>] [--status <STATUS>] [--jq <EXPR>] [--limit <N>]
 - `--jq` — Filter JSON output (fields: `id`, `project_id`, `title`, `metadata`, `status`, `work_dir`, `created_at`, `updated_at`, `actions`)
 - `--limit` — Limit number of results
 
+`actions` contains at most the **latest 10** actions per task (ascending by id, so `actions[-1]` is the most recent). Use `tq action list --task <ID>` for the full history.
+
 ### `tq task get`
 
 ```
@@ -76,6 +78,8 @@ tq task get <ID> [--jq <EXPR>]
 ```
 
 - `--jq` — Filter JSON output (fields: `id`, `project_id`, `title`, `metadata`, `status`, `work_dir`, `created_at`, `updated_at`, `actions`, `status_history`)
+
+`actions` contains at most the **latest 10** actions (ascending by id, so `actions[-1]` is the most recent). Use `tq action list --task <ID>` for the full history.
 
 `status_history` is an array of status transitions derived from `task.status_changed` events. Each entry has `{from, to, at}` plus optional `reason` (set when `tq task update --note` was used).
 

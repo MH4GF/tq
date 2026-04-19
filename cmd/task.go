@@ -175,6 +175,8 @@ At least one of --status, --project, --work-dir, or --meta is required.
 	},
 }
 
+const maxActionsInTaskView = 10
+
 func taskToMap(t db.Task, actions []db.Action) map[string]any {
 	row := map[string]any{
 		"id":         t.ID,
@@ -189,6 +191,9 @@ func taskToMap(t db.Task, actions []db.Action) map[string]any {
 		row["updated_at"] = db.FormatLocal(t.UpdatedAt.String)
 	} else {
 		row["updated_at"] = nil
+	}
+	if len(actions) > maxActionsInTaskView {
+		actions = actions[len(actions)-maxActionsInTaskView:]
 	}
 	actionRows := make([]map[string]any, len(actions))
 	for i, a := range actions {
@@ -215,10 +220,11 @@ var taskGetCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("get task: %w", err)
 		}
-		actions, err := database.ListActions("", &id, 0)
+		actionsByTask, err := database.ListActionsByTaskIDs([]int64{id})
 		if err != nil {
 			return fmt.Errorf("list actions: %w", err)
 		}
+		actions := actionsByTask[id]
 		history, err := database.TaskStatusHistory(id)
 		if err != nil {
 			return fmt.Errorf("status history: %w", err)
