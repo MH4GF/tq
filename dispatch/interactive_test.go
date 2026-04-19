@@ -29,7 +29,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 				"TQ_ACTION_ID=42", "TQ_TASK_ID=10",
 			},
 			wantNotContain: []string{
-				"--worktree", "TQ_DIR", "--tmux", "--permission-mode",
+				"TQ_DIR", "--tmux",
 			},
 			wantNewWindow: []string{"new-window", "-t", "main", "-n", "tq-action-42", "-c", "/work/dir"},
 		},
@@ -45,37 +45,6 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 			wantNewWindow: []string{"new-window", "-t", "work", "-n", "tq-action-7", "-c", "/work/dir"},
 		},
 		{
-			name:     "permission mode",
-			cfg:      ActionConfig{PermissionMode: "plan"},
-			prompt:   "Plan the feature",
-			actionID: 50,
-			taskID:   10,
-			wantContains: []string{
-				"--permission-mode 'plan'",
-			},
-		},
-		{
-			name:     "worktree",
-			cfg:      ActionConfig{Worktree: true},
-			prompt:   "Fix the bug",
-			actionID: 42,
-			taskID:   10,
-			wantContains: []string{
-				"'Fix the bug' --worktree",
-			},
-		},
-		{
-			name:     "worktree with permission mode",
-			cfg:      ActionConfig{Worktree: true, PermissionMode: "plan"},
-			prompt:   "Fix the bug",
-			actionID: 42,
-			taskID:   10,
-			wantContains: []string{
-				"--permission-mode 'plan'",
-				"'Fix the bug' --worktree",
-			},
-		},
-		{
 			name:     "claude_args",
 			cfg:      ActionConfig{ClaudeArgs: []string{"--max-turns", "5"}},
 			prompt:   "Fix the bug",
@@ -83,6 +52,26 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 			taskID:   10,
 			wantContains: []string{
 				"'--max-turns' '5'",
+			},
+		},
+		{
+			name:     "claude_args permission-mode passthrough",
+			cfg:      ActionConfig{ClaudeArgs: []string{"--permission-mode", "plan"}},
+			prompt:   "Plan the feature",
+			actionID: 50,
+			taskID:   10,
+			wantContains: []string{
+				"'--permission-mode' 'plan'",
+			},
+		},
+		{
+			name:     "claude_args worktree passthrough",
+			cfg:      ActionConfig{ClaudeArgs: []string{"--worktree"}},
+			prompt:   "Fix the bug",
+			actionID: 42,
+			taskID:   10,
+			wantContains: []string{
+				"'Fix the bug' '--worktree'",
 			},
 		},
 		{
