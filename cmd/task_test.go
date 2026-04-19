@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
@@ -319,175 +318,125 @@ func TestTaskList_Empty(t *testing.T) {
 	}
 }
 
-func TestTaskUpdate_ProjectOnly(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	d.InsertTask(1, "task to move", "{}", "")
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"task", "update", "1", "--project", "2"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestTaskUpdate(t *testing.T) {
+	tests := []struct {
+		name            string
+		insertMetadata  string
+		args            []string
+		wantErr         bool
+		wantErrContains string
+		wantOutContains []string
+		wantProjectID   int64
+		wantStatus      string
+		wantMetadata    string
+	}{
+		{
+			name:            "project only",
+			args:            []string{"task", "update", "1", "--project", "2"},
+			wantOutContains: []string{"project: hearable"},
+			wantProjectID:   2,
+		},
+		{
+			name:            "status and project",
+			args:            []string{"task", "update", "1", "--status", "done", "--note", "test transition", "--project", "2"},
+			wantOutContains: []string{"project: hearable", "status: done"},
+			wantProjectID:   2,
+			wantStatus:      db.TaskStatusDone,
+		},
+		{
+			name:    "unknown project",
+			args:    []string{"task", "update", "1", "--project", "999"},
+			wantErr: true,
+		},
+		{
+			name:    "neither status nor project",
+			args:    []string{"task", "update", "1"},
+			wantErr: true,
+		},
+		{
+			name:            "meta only",
+			insertMetadata:  `{"old":"data"}`,
+			args:            []string{"task", "update", "1", "--meta", `{"url":"https://example.com"}`},
+			wantOutContains: []string{"metadata: updated"},
+			wantMetadata:    `{"old":"data","url":"https://example.com"}`,
+		},
+		{
+			name:    "invalid meta",
+			args:    []string{"task", "update", "1", "--meta", "not-json"},
+			wantErr: true,
+		},
+		{
+			name:    "invalid status",
+			args:    []string{"task", "update", "1", "--status", "closed", "--note", "irrelevant"},
+			wantErr: true,
+		},
+		{
+			name:            "status requires note",
+			args:            []string{"task", "update", "1", "--status", "done"},
+			wantErr:         true,
+			wantErrContains: "--note is required when --status is given",
+		},
+		{
+			name:            "note requires status",
+			args:            []string{"task", "update", "1", "--note", "stray note", "--project", "2"},
+			wantErr:         true,
+			wantErrContains: "--note requires --status",
+		},
 	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
 
-	out := buf.String()
-	if !contains(out, "project: hearable") {
-		t.Errorf("output = %q, want to contain 'project: hearable'", out)
-	}
+			meta := tc.insertMetadata
+			if meta == "" {
+				meta = "{}"
+			}
+			d.InsertTask(1, "task", meta, "")
 
-	task, err := d.GetTask(1)
-	if err != nil {
-		t.Fatalf("get task: %v", err)
-	}
-	if task.ProjectID != 2 {
-		t.Errorf("project_id = %d, want 2", task.ProjectID)
-	}
-}
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs(tc.args)
 
-func TestTaskUpdate_StatusAndProject(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
+			err := root.Execute()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				if tc.wantErrContains != "" && !contains(err.Error(), tc.wantErrContains) {
+					t.Errorf("error = %q, want to contain %q", err.Error(), tc.wantErrContains)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
-	d.InsertTask(1, "task to update", "{}", "")
+			out := buf.String()
+			for _, want := range tc.wantOutContains {
+				if !contains(out, want) {
+					t.Errorf("output = %q, want to contain %q", out, want)
+				}
+			}
 
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"task", "update", "1", "--status", "done", "--note", "test transition", "--project", "2"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	out := buf.String()
-	if !contains(out, "project: hearable") {
-		t.Errorf("output = %q, want to contain 'project: hearable'", out)
-	}
-	if !contains(out, "status: done") {
-		t.Errorf("output = %q, want to contain 'status: done'", out)
-	}
-
-	task, err := d.GetTask(1)
-	if err != nil {
-		t.Fatalf("get task: %v", err)
-	}
-	if task.ProjectID != 2 {
-		t.Errorf("project_id = %d, want 2", task.ProjectID)
-	}
-	if task.Status != db.TaskStatusDone {
-		t.Errorf("status = %q, want %q", task.Status, db.TaskStatusDone)
-	}
-}
-
-func TestTaskUpdate_UnknownProject(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	d.InsertTask(1, "task", "{}", "")
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "update", "1", "--project", "999"})
-
-	if err := root.Execute(); err == nil {
-		t.Fatal("expected error for unknown project")
-	}
-}
-
-func TestTaskUpdate_NeitherStatusNorProject(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	d.InsertTask(1, "task", "{}", "")
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "update", "1"})
-
-	if err := root.Execute(); err == nil {
-		t.Fatal("expected error when neither --status nor --project is given")
-	}
-}
-
-func TestTaskUpdate_MetaOnly(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	id, _ := d.InsertTask(1, "task", `{"old":"data"}`, "")
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "update", fmt.Sprintf("%d", id), "--meta", `{"url":"https://example.com"}`})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	task, err := d.GetTask(id)
-	if err != nil {
-		t.Fatalf("failed to get task: %v", err)
-	}
-	if task.Metadata != `{"old":"data","url":"https://example.com"}` {
-		t.Errorf("expected merged metadata, got %s", task.Metadata)
-	}
-	if !strings.Contains(buf.String(), "metadata: updated") {
-		t.Errorf("expected output to mention metadata update, got %s", buf.String())
-	}
-}
-
-func TestTaskUpdate_InvalidMeta(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	d.InsertTask(1, "task", "{}", "")
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "update", "1", "--meta", "not-json"})
-
-	if err := root.Execute(); err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func TestTaskUpdate_InvalidStatus(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	d.InsertTask(1, "task", "{}", "")
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "update", "1", "--status", "closed", "--note", "irrelevant"})
-
-	if err := root.Execute(); err == nil {
-		t.Fatal("expected error for invalid status")
+			task, err := d.GetTask(1)
+			if err != nil {
+				t.Fatalf("get task: %v", err)
+			}
+			if tc.wantProjectID != 0 && task.ProjectID != tc.wantProjectID {
+				t.Errorf("project_id = %d, want %d", task.ProjectID, tc.wantProjectID)
+			}
+			if tc.wantStatus != "" && task.Status != tc.wantStatus {
+				t.Errorf("status = %q, want %q", task.Status, tc.wantStatus)
+			}
+			if tc.wantMetadata != "" && task.Metadata != tc.wantMetadata {
+				t.Errorf("metadata = %q, want %q", task.Metadata, tc.wantMetadata)
+			}
+		})
 	}
 }
 
@@ -532,50 +481,6 @@ func TestTaskUpdate_WithNote(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected task.status_changed event")
-	}
-}
-
-func TestTaskUpdate_StatusRequiresNote(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	d.InsertTask(1, "task", "{}", "")
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "update", "1", "--status", "done"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected error when --status is given without --note")
-	}
-	if !contains(err.Error(), "--note is required when --status is given") {
-		t.Errorf("error = %q, want to contain '--note is required when --status is given'", err.Error())
-	}
-}
-
-func TestTaskUpdate_NoteRequiresStatus(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	d.InsertTask(1, "task", "{}", "")
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"task", "update", "1", "--note", "stray note", "--project", "2"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected error when --note is given without --status")
-	}
-	if !contains(err.Error(), "--note requires --status") {
-		t.Errorf("error = %q, want to contain '--note requires --status'", err.Error())
 	}
 }
 
