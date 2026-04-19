@@ -43,6 +43,31 @@ func TestCheckSchedules_ActionCreated(t *testing.T) {
 	}
 }
 
+func TestCheckSchedules_ClaudeArgsPropagated(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", `{"claude_args":["--max-turns","5"]}`)
+
+	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:58:00")
+	d.SetScheduleTimestampsForTest(1, &createdAt, nil)
+
+	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := d.ListActions(db.ActionStatusPending, nil, 0)
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	want := `{"claude_args":["--max-turns","5"],"instruction":"my-prompt","schedule_id":"1"}`
+	if actions[0].Metadata != want {
+		t.Errorf("metadata = %q, want %q", actions[0].Metadata, want)
+	}
+}
+
 func TestCheckSchedules_NotDueYet(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
