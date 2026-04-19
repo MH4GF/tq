@@ -30,6 +30,14 @@ tq project update <ID> [--work-dir <PATH>] [--dispatch-enabled <true/false>]
 - `--work-dir` — Set the working directory
 - `--dispatch-enabled` — Enable or disable dispatch
 
+### `tq project delete`
+
+```
+tq project delete <ID> [--cascade]
+```
+
+- `--cascade` — Delete all tasks, actions, and schedules belonging to this project
+
 ### `tq project list`
 
 ```
@@ -65,7 +73,7 @@ tq task list [--project <ID>] [--status <STATUS>] [--jq <EXPR>] [--limit <N>]
 ```
 
 - `--project` — Filter by project ID
-- `--status` — Filter by status (`open`, `review`, `done`, `blocked`, `archived`)
+- `--status` — Filter by status (`open`, `done`, `archived`)
 - `--jq` — Filter JSON output (fields: `id`, `project_id`, `title`, `metadata`, `status`, `work_dir`, `created_at`, `updated_at`, `actions`)
 - `--limit` — Limit number of results
 
@@ -87,7 +95,7 @@ tq task update <ID> [--status <STATUS>] [--project <ID>] [--work-dir <PATH>] [--
 
 At least one flag is required. `--status` and `--note` must be specified together.
 
-- `--status` — New status (`open`, `review`, `done`, `blocked`, `archived`)
+- `--status` — New status (`open`, `done`, `archived`)
 - `--project` — Project ID
 - `--work-dir` — Working directory
 - `--meta` — JSON metadata to merge
@@ -111,15 +119,18 @@ At least one flag is required. `--status` and `--note` must be specified togethe
 ### `tq action create`
 
 ```
-tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--status <STATUS>]
+tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--status <STATUS>] [--after <TIME>]
 ```
 
 - `--task` — Task ID (**required**)
 - `--title` — Action title (**required**, max 100 chars)
 - `--meta` — JSON metadata for dispatch control:
   - `mode` — `"interactive"` (default), `"noninteractive"`, `"remote"`
+  - `permission_mode` — Claude permission mode (e.g. `"plan"`, `"auto"`)
+  - `worktree` — Run in git worktree: `true`/`false`
   - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--permission-mode","plan","--worktree","--max-turns","5"]`)
 - `--status` — Initial status (default: `pending`)
+- `--after` — Dispatch after this time (`YYYY-MM-DD HH:MM`, local timezone)
 
 ### `tq action list`
 
@@ -129,7 +140,7 @@ tq action list [--task <ID>] [--status <STATUS>] [--jq <EXPR>] [--limit <N>]
 
 - `--task` — Filter by task ID
 - `--status` — Filter by status (`pending`, `running`, `done`, `failed`, `cancelled`)
-- `--jq` — Filter JSON output (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `session_id`, `started_at`, `completed_at`, `created_at`)
+- `--jq` — Filter JSON output (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `session_id`, `dispatch_after`, `started_at`, `completed_at`, `created_at`)
 - `--limit` — Limit number of results
 
 ### `tq action done`
@@ -230,20 +241,23 @@ tq schedule update <ID> [--cron <EXPR>] [--title <TITLE>] [--task <ID>] [--instr
 ### `tq event list`
 
 ```
-tq event list [--entity <TYPE>] [--id <ID>] [--limit <N>]
+tq event list [--entity <TYPE>] [--id <ID>] [--jq <EXPR>] [--limit <N>]
 ```
 
 - `--entity` — Filter by entity type (`action`, `task`, `project`, `schedule`)
 - `--id` — Filter by entity ID (requires `--entity`)
+- `--jq` — Filter JSON output (fields: `id`, `entity_type`, `entity_id`, `event_type`, `payload`, `created_at`)
 - `--limit` — Number of recent events to show (default: 50)
 
 ## search
 
 ```
-tq search <KEYWORD>
+tq search <KEYWORD> [--jq <EXPR>]
 ```
 
 Full-text search across task titles, task metadata, task status change reasons, action titles, action results, and action metadata. Output is JSON.
+
+- `--jq` — Filter JSON output (fields: `entity_type`, `entity_id`, `task_id`, `field`, `snippet`, `status`, `created_at`)
 
 ## ui
 
