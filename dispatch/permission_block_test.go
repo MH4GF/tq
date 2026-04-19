@@ -11,158 +11,148 @@ import (
 )
 
 func TestCreatePermissionBlockAction(t *testing.T) {
-	t.Run("creates pending interactive follow-up", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
+	twoDenials := []PermissionDenial{
+		{ToolName: "Bash", Input: map[string]any{"command": "gh api notifications"}},
+		{ToolName: "Bash", Input: map[string]any{"command": "gh api -X PATCH /notifications/threads/123"}},
+	}
+	oneDenial := []PermissionDenial{{ToolName: "Bash", Input: map[string]any{"command": "x"}}}
 
-		taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-		actionID, _ := d.InsertAction("watch", taskID, `{"instruction":"x","mode":"noninteractive"}`, db.ActionStatusDone, nil)
-		action, _ := d.GetAction(actionID)
+	type sourceSpec struct {
+		metadata string
+		status   string
+	}
+	defaultSource := sourceSpec{metadata: `{}`, status: db.ActionStatusDone}
 
-		denials := []PermissionDenial{
-			{ToolName: "Bash", Input: map[string]any{"command": "gh api notifications"}},
-			{ToolName: "Bash", Input: map[string]any{"command": "gh api -X PATCH /notifications/threads/123"}},
-		}
-		CreatePermissionBlockAction(d, action, denials)
+	tests := []struct {
+		name           string
+		sources        []sourceSpec
+		invocations    []int
+		denials        []PermissionDenial
+		wantBlockCount int
+		check          func(t *testing.T, sources []*db.Action, actions []db.Action, taskID int64)
+	}{
+		{
+			name:           "creates pending interactive follow-up",
+			sources:        []sourceSpec{defaultSource},
+			invocations:    []int{0},
+			denials:        twoDenials,
+			wantBlockCount: 1,
+			check:          checkInteractiveFollowup,
+		},
+		{
+			name:           "dedupes for same blocked action",
+			sources:        []sourceSpec{defaultSource},
+			invocations:    []int{0, 0},
+			denials:        oneDenial,
+			wantBlockCount: 1,
+		},
+		{
+			name:           "creates separate follow-ups for different blocked actions",
+			sources:        []sourceSpec{defaultSource, defaultSource},
+			invocations:    []int{0, 1},
+			denials:        oneDenial,
+			wantBlockCount: 2,
+		},
+		{
+			name:           "skips when source action is itself a permission-block follow-up",
+			sources:        []sourceSpec{{metadata: `{"is_permission_block":true}`, status: db.ActionStatusRunning}},
+			invocations:    []int{0},
+			denials:        oneDenial,
+			wantBlockCount: 0,
+		},
+		{
+			name:           "noop on empty denials",
+			sources:        []sourceSpec{defaultSource},
+			invocations:    []int{0},
+			denials:        nil,
+			wantBlockCount: 0,
+		},
+	}
 
-		actions, _ := d.ListActions("", nil, 0)
-		if len(actions) != 2 {
-			t.Fatalf("expected 2 actions, got %d", len(actions))
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
 
-		var followup *db.Action
-		for i := range actions {
-			if actions[i].ID != actionID {
-				a := actions[i]
-				followup = &a
+			sources := make([]*db.Action, len(tt.sources))
+			for i, spec := range tt.sources {
+				id, _ := d.InsertAction(fmt.Sprintf("src%d", i), taskID, spec.metadata, spec.status, nil)
+				sources[i], _ = d.GetAction(id)
 			}
-		}
-		if followup == nil {
-			t.Fatal("follow-up action not found")
-		}
 
-		if followup.Status != db.ActionStatusPending {
-			t.Errorf("status = %q, want pending", followup.Status)
-		}
-		if followup.TaskID != taskID {
-			t.Errorf("task_id = %d, want %d", followup.TaskID, taskID)
-		}
-		expectedTitle := fmt.Sprintf("Investigate permission block in action #%d", actionID)
-		if followup.Title != expectedTitle {
-			t.Errorf("title = %q, want %q", followup.Title, expectedTitle)
-		}
-
-		var meta map[string]any
-		if err := json.Unmarshal([]byte(followup.Metadata), &meta); err != nil {
-			t.Fatalf("parse metadata: %v", err)
-		}
-		if meta[MetaKeyBlockedActionID] != fmt.Sprintf("%d", actionID) {
-			t.Errorf("blocked_action_id = %v, want %d", meta[MetaKeyBlockedActionID], actionID)
-		}
-		if meta[MetaKeyIsPermissionBlock] != true {
-			t.Errorf("is_permission_block = %v, want true", meta[MetaKeyIsPermissionBlock])
-		}
-		if meta[MetaKeyMode] != ModeInteractive {
-			t.Errorf("mode = %v, want %q", meta[MetaKeyMode], ModeInteractive)
-		}
-		instr, _ := meta[MetaKeyInstruction].(string)
-		if !strings.Contains(instr, "Bash: gh api notifications") {
-			t.Errorf("instruction missing first denial: %s", instr)
-		}
-		if !strings.Contains(instr, "Bash: gh api -X PATCH /notifications/threads/123") {
-			t.Errorf("instruction missing second denial: %s", instr)
-		}
-		if !strings.Contains(instr, fmt.Sprintf("action #%d", actionID)) {
-			t.Errorf("instruction missing action ref: %s", instr)
-		}
-	})
-
-	t.Run("dedupes for same blocked action", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
-
-		taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-		actionID, _ := d.InsertAction("watch", taskID, `{}`, db.ActionStatusDone, nil)
-		action, _ := d.GetAction(actionID)
-
-		denials := []PermissionDenial{{ToolName: "Bash", Input: map[string]any{"command": "x"}}}
-		CreatePermissionBlockAction(d, action, denials)
-		CreatePermissionBlockAction(d, action, denials)
-
-		actions, _ := d.ListActions("", nil, 0)
-		count := 0
-		for _, a := range actions {
-			if hasMetaKey(a.Metadata, MetaKeyIsPermissionBlock) {
-				count++
+			for _, idx := range tt.invocations {
+				CreatePermissionBlockAction(d, sources[idx], tt.denials)
 			}
-		}
-		if count != 1 {
-			t.Errorf("expected 1 permission-block action, got %d", count)
-		}
-	})
 
-	t.Run("creates separate follow-ups for different blocked actions", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
-
-		taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-		id1, _ := d.InsertAction("a", taskID, `{}`, db.ActionStatusDone, nil)
-		id2, _ := d.InsertAction("b", taskID, `{}`, db.ActionStatusDone, nil)
-		a1, _ := d.GetAction(id1)
-		a2, _ := d.GetAction(id2)
-
-		denials := []PermissionDenial{{ToolName: "Bash", Input: map[string]any{"command": "x"}}}
-		CreatePermissionBlockAction(d, a1, denials)
-		CreatePermissionBlockAction(d, a2, denials)
-
-		actions, _ := d.ListActions("", nil, 0)
-		count := 0
-		for _, a := range actions {
-			if hasMetaKey(a.Metadata, MetaKeyIsPermissionBlock) {
-				count++
+			actions, _ := d.ListActions("", nil, 0)
+			wantTotal := len(tt.sources) + tt.wantBlockCount
+			if len(actions) != wantTotal {
+				t.Errorf("total actions = %d, want %d", len(actions), wantTotal)
 			}
-		}
-		if count != 2 {
-			t.Errorf("expected 2 permission-block actions, got %d", count)
-		}
-	})
-
-	t.Run("skips when source action is itself a permission-block follow-up", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
-
-		taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-		actionID, _ := d.InsertAction("self", taskID, `{"is_permission_block":true}`, db.ActionStatusRunning, nil)
-		action, _ := d.GetAction(actionID)
-
-		denials := []PermissionDenial{{ToolName: "Bash", Input: map[string]any{"command": "x"}}}
-		CreatePermissionBlockAction(d, action, denials)
-
-		actions, _ := d.ListActions("", nil, 0)
-		pendingCount := 0
-		for _, a := range actions {
-			if a.Status == db.ActionStatusPending && hasMetaKey(a.Metadata, MetaKeyIsPermissionBlock) {
-				pendingCount++
+			blockCount := 0
+			for _, a := range actions {
+				if a.Status == db.ActionStatusPending && hasMetaKey(a.Metadata, MetaKeyIsPermissionBlock) {
+					blockCount++
+				}
 			}
+			if blockCount != tt.wantBlockCount {
+				t.Errorf("permission-block actions = %d, want %d", blockCount, tt.wantBlockCount)
+			}
+
+			if tt.check != nil {
+				tt.check(t, sources, actions, taskID)
+			}
+		})
+	}
+}
+
+func checkInteractiveFollowup(t *testing.T, sources []*db.Action, actions []db.Action, taskID int64) {
+	t.Helper()
+	sourceID := sources[0].ID
+	var followup *db.Action
+	for i := range actions {
+		if actions[i].ID != sourceID {
+			a := actions[i]
+			followup = &a
+			break
 		}
-		if pendingCount != 0 {
-			t.Errorf("expected 0 pending permission-block actions, got %d", pendingCount)
-		}
-	})
+	}
+	if followup == nil {
+		t.Fatal("follow-up action not found")
+	}
+	if followup.Status != db.ActionStatusPending {
+		t.Errorf("status = %q, want pending", followup.Status)
+	}
+	if followup.TaskID != taskID {
+		t.Errorf("task_id = %d, want %d", followup.TaskID, taskID)
+	}
+	expectedTitle := fmt.Sprintf("Investigate permission block in action #%d", sourceID)
+	if followup.Title != expectedTitle {
+		t.Errorf("title = %q, want %q", followup.Title, expectedTitle)
+	}
 
-	t.Run("noop on empty denials", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
-
-		taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-		actionID, _ := d.InsertAction("a", taskID, `{}`, db.ActionStatusDone, nil)
-		action, _ := d.GetAction(actionID)
-
-		CreatePermissionBlockAction(d, action, nil)
-
-		actions, _ := d.ListActions("", nil, 0)
-		if len(actions) != 1 {
-			t.Errorf("expected 1 action (no follow-up), got %d", len(actions))
-		}
-	})
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(followup.Metadata), &meta); err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+	if meta[MetaKeyBlockedActionID] != fmt.Sprintf("%d", sourceID) {
+		t.Errorf("blocked_action_id = %v, want %d", meta[MetaKeyBlockedActionID], sourceID)
+	}
+	if meta[MetaKeyIsPermissionBlock] != true {
+		t.Errorf("is_permission_block = %v, want true", meta[MetaKeyIsPermissionBlock])
+	}
+	if meta[MetaKeyMode] != ModeInteractive {
+		t.Errorf("mode = %v, want %q", meta[MetaKeyMode], ModeInteractive)
+	}
+	instr, _ := meta[MetaKeyInstruction].(string)
+	if !strings.Contains(instr, "Bash: gh api notifications") {
+		t.Errorf("instruction missing first denial: %s", instr)
+	}
+	if !strings.Contains(instr, "Bash: gh api -X PATCH /notifications/threads/123") {
+		t.Errorf("instruction missing second denial: %s", instr)
+	}
+	if !strings.Contains(instr, fmt.Sprintf("action #%d", sourceID)) {
+		t.Errorf("instruction missing action ref: %s", instr)
+	}
 }
