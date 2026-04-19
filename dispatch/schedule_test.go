@@ -9,37 +9,160 @@ import (
 	"github.com/MH4GF/tq/testutil"
 )
 
-func TestCheckSchedules_ActionCreated(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", `{"key":"val"}`)
-
-	// Set created_at to 2 minutes ago so cron is due
-	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:58:00")
-	d.SetScheduleTimestampsForTest(1, &createdAt, nil)
-
-	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
-	if err := dispatch.CheckSchedules(d, now); err != nil {
-		t.Fatal(err)
+func TestCheckSchedules(t *testing.T) {
+	mustParse := func(s string) time.Time {
+		ts, err := time.Parse("2006-01-02 15:04:05", s)
+		if err != nil {
+			t.Fatalf("parse %q: %v", s, err)
+		}
+		return ts
 	}
 
-	actions, _ := d.ListActions(db.ActionStatusPending, nil, 0)
-	if len(actions) != 1 {
-		t.Fatalf("expected 1 action, got %d", len(actions))
-	}
-	if actions[0].Title != "My Prompt" {
-		t.Errorf("title = %q, want %q", actions[0].Title, "My Prompt")
-	}
-	if actions[0].Metadata != `{"instruction":"my-prompt","key":"val","schedule_id":"1"}` {
-		t.Errorf("metadata = %q, want %q", actions[0].Metadata, `{"instruction":"my-prompt","key":"val","schedule_id":"1"}`)
+	createdDue := mustParse("2026-03-12 09:58:00")
+	nowDue := mustParse("2026-03-12 10:00:00")
+	createdRecent := mustParse("2026-03-12 09:00:00")
+	nowEarly := mustParse("2026-03-12 09:30:00")
+	createdOld := mustParse("2026-03-01 00:00:00")
+	lastRunRecent := mustParse("2026-03-12 09:00:00")
+	jst := time.FixedZone("JST", 9*3600)
+
+	tests := []struct {
+		name                  string
+		prompt                string
+		title                 string
+		cron                  string
+		metadata              string
+		createdAt             time.Time
+		lastRunAt             *time.Time
+		now                   time.Time
+		insertDuplicateAction bool
+		disableSchedule       bool
+		wantActions           int
+		wantTitle             string
+		wantMetadata          string
+		wantLastRunAtUTC      string
+	}{
+		{
+			name:             "action created when cron is due",
+			prompt:           "my-prompt",
+			title:            "My Prompt",
+			cron:             "* * * * *",
+			metadata:         `{"key":"val"}`,
+			createdAt:        createdDue,
+			now:              nowDue,
+			wantActions:      1,
+			wantTitle:        "My Prompt",
+			wantMetadata:     `{"instruction":"my-prompt","key":"val","schedule_id":"1"}`,
+			wantLastRunAtUTC: "2026-03-12 10:00:00",
+		},
+		{
+			name:        "not due yet",
+			prompt:      "my-prompt",
+			title:       "My Prompt",
+			cron:        "0 */3 * * *",
+			metadata:    "{}",
+			createdAt:   createdRecent,
+			now:         nowEarly,
+			wantActions: 0,
+		},
+		{
+			name:                  "duplicate active action skipped",
+			prompt:                "my-prompt",
+			title:                 "My Prompt",
+			cron:                  "* * * * *",
+			metadata:              "{}",
+			createdAt:             createdDue,
+			now:                   nowDue,
+			insertDuplicateAction: true,
+			wantActions:           1,
+		},
+		{
+			name:            "disabled schedule skipped",
+			prompt:          "my-prompt",
+			title:           "My Prompt",
+			cron:            "* * * * *",
+			metadata:        "{}",
+			createdAt:       createdDue,
+			now:             nowDue,
+			disableSchedule: true,
+			wantActions:     0,
+		},
+		{
+			name:        "instruction-based action created",
+			prompt:      "/gh-ops:watch",
+			title:       "Watch notifications",
+			cron:        "* * * * *",
+			metadata:    "{}",
+			createdAt:   createdDue,
+			now:         nowDue,
+			wantActions: 1,
+		},
+		{
+			name:             "last_run_at stored as UTC",
+			prompt:           "my-prompt",
+			title:            "My Prompt",
+			cron:             "* * * * *",
+			metadata:         "{}",
+			createdAt:        createdDue,
+			now:              time.Date(2026, 3, 12, 19, 0, 0, 0, jst),
+			wantActions:      1,
+			wantLastRunAtUTC: "2026-03-12 10:00:00",
+		},
+		{
+			name:        "uses last_run_at over created_at",
+			prompt:      "my-prompt",
+			title:       "My Prompt",
+			cron:        "0 */3 * * *",
+			metadata:    "{}",
+			createdAt:   createdOld,
+			lastRunAt:   &lastRunRecent,
+			now:         nowEarly,
+			wantActions: 0,
+		},
 	}
 
-	// Verify last_run_at was updated
-	s, _ := d.GetSchedule(1)
-	if !s.LastRunAt.Valid {
-		t.Error("expected last_run_at to be set")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+
+			taskID, _ := d.InsertTask(1, "test", "{}", "")
+			scheduleID, _ := d.InsertSchedule(taskID, tt.prompt, tt.title, tt.cron, tt.metadata)
+			createdAt := tt.createdAt
+			d.SetScheduleTimestampsForTest(scheduleID, &createdAt, tt.lastRunAt)
+			if tt.insertDuplicateAction {
+				d.InsertAction("existing", taskID, `{"schedule_id":"1"}`, db.ActionStatusPending, nil)
+			}
+			if tt.disableSchedule {
+				d.UpdateScheduleEnabled(scheduleID, false)
+			}
+
+			if err := dispatch.CheckSchedules(d, tt.now); err != nil {
+				t.Fatal(err)
+			}
+
+			actions, _ := d.ListActions("", nil, 0)
+			if len(actions) != tt.wantActions {
+				t.Fatalf("len(actions) = %d, want %d", len(actions), tt.wantActions)
+			}
+
+			if tt.wantTitle != "" && actions[0].Title != tt.wantTitle {
+				t.Errorf("title = %q, want %q", actions[0].Title, tt.wantTitle)
+			}
+			if tt.wantMetadata != "" && actions[0].Metadata != tt.wantMetadata {
+				t.Errorf("metadata = %q, want %q", actions[0].Metadata, tt.wantMetadata)
+			}
+
+			if tt.wantLastRunAtUTC != "" {
+				s, _ := d.GetSchedule(scheduleID)
+				if !s.LastRunAt.Valid {
+					t.Fatal("expected last_run_at to be set")
+				}
+				if s.LastRunAt.String != tt.wantLastRunAtUTC {
+					t.Errorf("last_run_at = %q, want %q", s.LastRunAt.String, tt.wantLastRunAtUTC)
+				}
+			}
+		})
 	}
 }
 
@@ -65,142 +188,5 @@ func TestCheckSchedules_ClaudeArgsPropagated(t *testing.T) {
 	want := `{"claude_args":["--max-turns","5"],"instruction":"my-prompt","schedule_id":"1"}`
 	if actions[0].Metadata != want {
 		t.Errorf("metadata = %q, want %q", actions[0].Metadata, want)
-	}
-}
-
-func TestCheckSchedules_NotDueYet(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "0 */3 * * *", "{}")
-
-	// created_at is now, next run is 3 hours later
-	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:00:00")
-	d.SetScheduleTimestampsForTest(1, &createdAt, nil)
-
-	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:30:00")
-	if err := dispatch.CheckSchedules(d, now); err != nil {
-		t.Fatal(err)
-	}
-
-	actions, _ := d.ListActions("", nil, 0)
-	if len(actions) != 0 {
-		t.Errorf("expected 0 actions, got %d", len(actions))
-	}
-}
-
-func TestCheckSchedules_DuplicateSkipped(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
-	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:58:00")
-	d.SetScheduleTimestampsForTest(1, &createdAt, nil)
-
-	// Insert an active action for the same task/prompt
-	d.InsertAction("existing", taskID, `{"schedule_id":"1"}`, db.ActionStatusPending, nil)
-
-	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
-	if err := dispatch.CheckSchedules(d, now); err != nil {
-		t.Fatal(err)
-	}
-
-	actions, _ := d.ListActions(db.ActionStatusPending, nil, 0)
-	if len(actions) != 1 {
-		t.Errorf("expected 1 action (existing only), got %d", len(actions))
-	}
-}
-
-func TestCheckSchedules_DisabledSkipped(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
-	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:58:00")
-	d.SetScheduleTimestampsForTest(id, &createdAt, nil)
-	d.UpdateScheduleEnabled(id, false)
-
-	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
-	if err := dispatch.CheckSchedules(d, now); err != nil {
-		t.Fatal(err)
-	}
-
-	actions, _ := d.ListActions("", nil, 0)
-	if len(actions) != 0 {
-		t.Errorf("expected 0 actions, got %d", len(actions))
-	}
-}
-
-func TestCheckSchedules_InstructionBasedAction(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertSchedule(taskID, "/gh-ops:watch", "Watch notifications", "* * * * *", `{}`)
-	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:58:00")
-	d.SetScheduleTimestampsForTest(1, &createdAt, nil)
-
-	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 10:00:00")
-	if err := dispatch.CheckSchedules(d, now); err != nil {
-		t.Fatal(err)
-	}
-
-	actions, _ := d.ListActions(db.ActionStatusPending, nil, 0)
-	if len(actions) != 1 {
-		t.Fatalf("expected 1 action, got %d", len(actions))
-	}
-}
-
-func TestCheckSchedules_LastRunAtStoredAsUTC(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
-	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:58:00")
-	d.SetScheduleTimestampsForTest(1, &createdAt, nil)
-
-	// Simulate calling CheckSchedules with a JST time (UTC+9)
-	jst := time.FixedZone("JST", 9*3600)
-	now := time.Date(2026, 3, 12, 19, 0, 0, 0, jst) // 19:00 JST = 10:00 UTC
-
-	if err := dispatch.CheckSchedules(d, now); err != nil {
-		t.Fatal(err)
-	}
-
-	s, _ := d.GetSchedule(1)
-	if !s.LastRunAt.Valid {
-		t.Fatal("expected last_run_at to be set")
-	}
-	// last_run_at should be stored as UTC (10:00), not JST (19:00)
-	if s.LastRunAt.String != "2026-03-12 10:00:00" {
-		t.Errorf("last_run_at = %q, want UTC %q", s.LastRunAt.String, "2026-03-12 10:00:00")
-	}
-}
-
-func TestCheckSchedules_UsesLastRunAt(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "0 */3 * * *", "{}")
-
-	// Set created_at far in the past, last_run_at to recent
-	createdAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-01 00:00:00")
-	lastRunAt, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:00:00")
-	d.SetScheduleTimestampsForTest(id, &createdAt, &lastRunAt)
-
-	// now is 09:30, next run from 09:00 is 12:00 → should NOT trigger
-	now, _ := time.Parse("2006-01-02 15:04:05", "2026-03-12 09:30:00")
-	if err := dispatch.CheckSchedules(d, now); err != nil {
-		t.Fatal(err)
-	}
-
-	actions, _ := d.ListActions("", nil, 0)
-	if len(actions) != 0 {
-		t.Errorf("expected 0 actions (not due yet from last_run_at), got %d", len(actions))
 	}
 }
