@@ -18,7 +18,7 @@ func TestReset(t *testing.T) {
 	}{
 		{"failed to pending", db.ActionStatusFailed, "action #1 reset to pending", false},
 		{"done is rejected", db.ActionStatusDone, "", true},
-		{"running to pending", db.ActionStatusRunning, "action #1 reset to pending", false},
+		{"running is rejected", db.ActionStatusRunning, "", true},
 		{"pending is rejected", db.ActionStatusPending, "", true},
 		{"cancelled to pending", db.ActionStatusCancelled, "action #1 reset to pending", false},
 	}
@@ -94,6 +94,37 @@ func TestReset_UnknownStatus(t *testing.T) {
 	}
 	if a.Status != db.ActionStatusPending {
 		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusPending)
+	}
+}
+
+func TestReset_RunningGuidesToCancelOrFail(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	d.InsertAction("test", taskID, "{}", db.ActionStatusRunning, nil)
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"action", "reset", "1"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error when resetting running action")
+	}
+	if !contains(err.Error(), "duplicate worker") {
+		t.Errorf("error = %q, want to mention duplicate worker", err.Error())
+	}
+	if !contains(err.Error(), "tq action cancel") || !contains(err.Error(), "tq action fail") {
+		t.Errorf("error = %q, want to suggest cancel or fail", err.Error())
+	}
+
+	a, _ := d.GetAction(1)
+	if a.Status != db.ActionStatusRunning {
+		t.Errorf("status = %q, want unchanged %q", a.Status, db.ActionStatusRunning)
 	}
 }
 

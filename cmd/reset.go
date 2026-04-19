@@ -2,13 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"os/exec"
 	"strconv"
 
 	"github.com/spf13/cobra"
 
 	"github.com/MH4GF/tq/db"
-	"github.com/MH4GF/tq/dispatch"
 )
 
 var resetCmd = &cobra.Command{
@@ -26,10 +24,10 @@ var resetCmd = &cobra.Command{
 			return fmt.Errorf("get action: %w", err)
 		}
 		if action.Status == db.ActionStatusPending || action.Status == db.ActionStatusDone {
-			return fmt.Errorf("action #%d is %q, cannot reset (only running, failed, or cancelled actions can be reset to pending)", id, action.Status)
+			return fmt.Errorf("action #%d is %q, cannot reset (only failed or cancelled actions can be reset to pending)", id, action.Status)
 		}
-		if action.Status == db.ActionStatusRunning && action.TmuxPane.Valid {
-			_ = exec.Command("tmux", "kill-window", "-t", "main:"+dispatch.WindowName(id)).Run()
+		if action.Status == db.ActionStatusRunning {
+			return fmt.Errorf("action #%d is running; reset would spawn a duplicate worker. Run 'tq action cancel %d' or 'tq action fail %d' first, then reset", id, id, id)
 		}
 		if err := database.ResetToPending(id); err != nil {
 			return fmt.Errorf("reset to pending: %w", err)

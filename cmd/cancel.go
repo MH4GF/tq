@@ -2,14 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/MH4GF/tq/db"
-	"github.com/MH4GF/tq/dispatch"
 )
 
 func init() {
@@ -42,10 +40,6 @@ classification could be improved to avoid similar unnecessary actions.`,
 
 		if action.Status == db.ActionStatusDone || action.Status == db.ActionStatusCancelled {
 			return fmt.Errorf("action #%d is already %q, cannot cancel (only pending, running, or failed actions can be cancelled)", id, action.Status)
-		}
-
-		if action.Status == db.ActionStatusRunning && action.TmuxPane.Valid {
-			_ = exec.Command("tmux", "kill-window", "-t", "main:"+dispatch.WindowName(id)).Run()
 		}
 
 		reason := ""
