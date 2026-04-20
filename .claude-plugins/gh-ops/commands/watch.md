@@ -1,6 +1,6 @@
 ---
 description: Watch GitHub notifications, classify them, and create tq actions
-allowed-tools: Bash(**/scripts/gh-fetch-notifications), Bash(**/scripts/gh-mark-notification-read *), Bash(gh pr view *), Bash(gh issue view *), Bash(tq *), Skill(tq:done)
+allowed-tools: Bash(**/scripts/gh-fetch-notifications), Bash(**/scripts/gh-mark-notification-read *), Bash(gh pr view *), Bash(gh issue view *), Bash(gh release view *), Bash(tq *), Skill(tq:done)
 ---
 
 GitHub notifications watcher. Fetch, classify, and create tq actions for each notification.
@@ -27,7 +27,8 @@ Extract repo name and number from subject_url, then fetch by subject_type:
 
 - **PullRequest**: `gh pr view <number> --repo <owner/repo> --json url,state,author,headRefName,reviewDecision,mergeStateStatus,statusCheckRollup,isDraft,reviews,reviewRequests,comments`
 - **Issue**: `gh issue view <number> --repo <owner/repo> --json url,state,author`
-- **Discussion/Release**: fetch via `gh api`
+- **Release**: `gh release view <tag> --repo <owner/repo>` (tag は notification title から取得)
+- **Discussion**: fetch via `gh api`
 
 #### 2b. Skip conditions
 
