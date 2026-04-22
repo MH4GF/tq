@@ -1,5 +1,5 @@
 ---
-description: Mark a tq action as done and report results
+description: Mark a tq action as done, then judge task-level completion and propose follow-up actions when work remains
 argument-hint: "<action_id> [summary]"
 allowed-tools: Bash(tq *)
 ---
@@ -13,22 +13,6 @@ allowed-tools: Bash(tq *)
 3. Search running actions: `tq action list --status running`
 4. If none works, ask the user
 
-## Next Action
-
-Before marking done, determine if follow-up work is needed:
-
-1. Run `tq action list --task <task_id>` to review action history
-2. **Improvement extraction**: If result contains improvement suggestions, TODOs, or "handle in separate task" items with independent work scope, use `/tq:create-action` to create a follow-up action
-3. **Next action decision**: Determine the next action needed to achieve the task's goal:
-   - Additional work needed → `/tq:create-action` to create it
-   - External blocker (waiting for review, approval, etc.) → do nothing
-   - An active action (pending/running) with the same purpose already exists → do not create
-4. **Task completion check**: Only if no action was created above, determine whether the task's goal has been achieved → if complete, run `tq task update <task_id> --status done --note "<why this task is done>"` (`--note` is required with `--status`; summarize what was delivered or why the task wrapped up)
-
-Constraints:
-- Dedup: Do not create an action if an active action (pending/running) with the same purpose already exists
-- If predecessor_result contains incomplete signals, do NOT mark the task as done
-
 ## Execute
 
 IMPORTANT: Run !`tq action done --help` for the full result format guidance.
@@ -37,3 +21,19 @@ IMPORTANT: Run !`tq action done --help` for the full result format guidance.
 
 Result must use structured sections: outcome, decisions, artifacts, remaining.
 Do NOT describe process steps — session logs capture that.
+
+## After marking done: task-level follow-up
+
+Always run this flow — do not wait for the user to ask "what's next?".
+
+1. `tq action list --task <task_id>` + re-read the `remaining` you just wrote.
+2. Classify the task:
+   - **Done** — no remaining work, no external dependency.
+   - **Follow-up needed** — local work still required (address review comments, extract improvement TODOs, etc.). Propose 1–2 next-action candidates (title + one-line purpose) and ask the user to create via `/tq:create-action`. Do not auto-create.
+   - **External blocker only** — the residue is a PR merge, review reply, upstream release, or another task. State explicitly: "Task #<id> stays open, waiting on <dep>." Optionally propose a tracking action (e.g. PR-merge follow-up) if none is already queued.
+3. Close the task only when classification is **Done**:
+   `tq task update <task_id> --status done --note "<why>"` (`--note` required with `--status`).
+
+Constraints:
+- If the result's `remaining` section has incomplete signals, classification cannot be **Done**.
+- Dedup: skip the proposal if an active (pending/running) action with the same purpose already exists for this task.

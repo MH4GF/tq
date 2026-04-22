@@ -20,7 +20,7 @@ claude plugin install tq@tq-marketplace
 
 ### `/tq:done <action_id> [summary]`
 
-tq アクションを完了にし、作業結果を報告する。
+tq アクションを完了にし、タスク全体の完了判定と follow-up アクションの提案まで行う。
 
 tq の interactive worker 経由で起動された Claude Code セッションで使用する。
 
