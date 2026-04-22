@@ -6,7 +6,12 @@ allowed-tools: Bash(tq *)
 
 # tq action create
 
-**CRITICAL: DO NOT execute the user's instruction yourself. Your ONLY job is to create a pending action that delegates the work to a queue worker.**
+**CRITICAL:**
+
+- **This command delegates work to a separate worker session.** Creating the pending action IS the deliverable — the user already chose delegation by invoking this command.
+- **DO NOT execute the instruction yourself, and DO NOT ask whether to run it now** — always just create the action.
+- **DO NOT dispatch the action** (e.g. `tq action dispatch`) unless explicitly asked. Pending is the correct final state; `tq ui` picks it up.
+- **After creating the action, report the ID and stop.** No follow-up execution or offers.
 
 IMPORTANT: Run !`tq action create --help` first to understand meta format and best practices.
 
