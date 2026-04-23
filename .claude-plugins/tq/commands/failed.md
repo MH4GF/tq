@@ -1,5 +1,5 @@
 ---
-description: Mark a tq action as failed when the goal could not be achieved
+description: Mark a tq action as failed, then judge task-level completion and propose follow-up actions when retry or alternative approach is needed
 argument-hint: "<action_id>"
 allowed-tools: Bash(tq *)
 ---
@@ -34,20 +34,25 @@ Read each action's result to trace the chain of decisions that led to this actio
 - Is the blocker truly external (vs. a misunderstanding that more effort could resolve)?
 - Would `/tq:done` with a partial-completion summary be more honest?
 
-## Next Action
-
-Before marking failed, determine if follow-up work is needed:
-
-1. Run `tq action list --task <task_id>` to review action history
-2. **Retry decision**: Determine the right follow-up based on failure type:
-   - **External blocker that may resolve in time** (API down, CI flake, waiting on review) → use `/tq:create-action` to schedule a retry with `dispatch_after` set to a reasonable delay
-   - **Environment needs repair** (missing tool, broken config, permission gap) → use `/tq:create-action` to create a repair action; the repair action's completion can trigger the original retry
-   - **Truly unrecoverable** → consider whether the parent task should be marked blocked or done; do not silently leave it open
-3. **Dedup**: Do not create a follow-up if an active action (pending/running) with the same purpose already exists
-
 ## Execute
 
 `tq action fail <action_id> '<structured reason>'`
 
 Reason MUST use structured sections: outcome, decisions, artifacts, remaining.
 Do NOT describe process steps — session logs capture that.
+
+## After failing: task-level follow-up
+
+Always run this flow — do not wait for the user to ask "what's next?".
+
+1. `tq action list --task <task_id>` + re-read the `remaining` you just wrote.
+2. Classify the task:
+   - **Done** — failure revealed the task goal is no longer achievable or relevant (e.g. the feature was removed upstream, the problem no longer exists).
+   - **Follow-up needed** — retry is possible after fixing the blocker, or a different approach should be tried. Propose 1–2 next-action candidates (title + one-line purpose) and ask the user to create via `/tq:create-action`. Do not auto-create. Include `dispatch_after` suggestion for time-based blockers (API down, CI flake).
+   - **External blocker only** — waiting for external resolution (upstream fix, permission grant, review, etc.). State explicitly: "Task #<id> stays open, waiting on <dep>." Optionally propose a tracking action if none is already queued.
+3. Close the task only when classification is **Done**:
+   `tq task update <task_id> --status done --note "<why>"` (`--note` required with `--status`).
+
+Constraints:
+- If the failure reason or action history suggests retry may succeed, classification cannot be **Done**.
+- Dedup: skip the proposal if an active (pending/running) action with the same purpose already exists for this task.
