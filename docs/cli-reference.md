@@ -265,11 +265,14 @@ Full-text search across task titles, task metadata, task status change reasons, 
 
 ## completion
 
-```
-tq completion <bash|zsh|fish|powershell>
-```
+| Command | Description |
+|---------|-------------|
+| `tq completion bash` | Generate the autocompletion script for bash |
+| `tq completion zsh` | Generate the autocompletion script for zsh |
+| `tq completion fish` | Generate the autocompletion script for fish |
+| `tq completion powershell` | Generate the autocompletion script for powershell |
 
-Generate shell autocompletion scripts. See `tq completion <shell> --help` for installation instructions.
+Each subcommand accepts `--no-descriptions` to disable completion descriptions. See `tq completion <shell> --help` for installation instructions.
 
 ## ui
 
