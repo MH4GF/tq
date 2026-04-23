@@ -49,7 +49,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		if meta["failed_action_id"] != fmt.Sprintf("%d", actionID) {
 			t.Errorf("failed_action_id = %v, want %d", meta["failed_action_id"], actionID)
 		}
-		if _, ok := meta["is_investigate_failure"]; !ok {
+		if _, ok := meta[MetaKeyIsInvestigation]; !ok {
 			t.Error("metadata missing is_investigate_failure key")
 		}
 		if meta["failure_result"] != "worker error: timeout" {
@@ -73,7 +73,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		actions, _ := d.ListActions("", nil, 0)
 		investigateCount := 0
 		for _, a := range actions {
-			if hasMetaKey(a.Metadata, "is_investigate_failure") {
+			if hasMetaKey(a.Metadata, MetaKeyIsInvestigation) {
 				investigateCount++
 			}
 		}
@@ -98,7 +98,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 		actions, _ := d.ListActions("", nil, 0)
 		investigateCount := 0
 		for _, a := range actions {
-			if hasMetaKey(a.Metadata, "is_investigate_failure") {
+			if hasMetaKey(a.Metadata, MetaKeyIsInvestigation) {
 				investigateCount++
 			}
 		}
@@ -140,7 +140,7 @@ func TestCreateInvestigateFailureAction_SkipsInvestigationItself(t *testing.T) {
 	// Should NOT create a new investigation action to prevent infinite loops
 	pendingCount := 0
 	for _, a := range actions {
-		if hasMetaKey(a.Metadata, "is_investigate_failure") && a.Status == db.ActionStatusPending {
+		if hasMetaKey(a.Metadata, MetaKeyIsInvestigation) && a.Status == db.ActionStatusPending {
 			pendingCount++
 		}
 	}
@@ -163,7 +163,7 @@ func TestCreateInvestigateFailureAction_SkipsAlreadyTerminal(t *testing.T) {
 
 	actions, _ := d.ListActions("", nil, 0)
 	for _, a := range actions {
-		if hasMetaKey(a.Metadata, "is_investigate_failure") {
+		if hasMetaKey(a.Metadata, MetaKeyIsInvestigation) {
 			t.Error("should not create investigate action for already-terminal action")
 		}
 	}
@@ -175,63 +175,32 @@ func TestCreateInvestigateFailureAction_SkipsTimeout(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 
-	t.Run("skips for signal killed (scheduled)", func(t *testing.T) {
-		meta := `{"schedule_id":"4","instruction":"test"}`
-		actionID, _ := d.InsertAction("watch", taskID, meta, "failed", nil)
-		action, _ := d.GetAction(actionID)
+	tests := []struct {
+		name          string
+		meta          string
+		failureResult string
+	}{
+		{"signal killed (scheduled)", `{"schedule_id":"4","instruction":"test"}`, "signal: killed"},
+		{"signal killed (non-scheduled)", `{"instruction":"test"}`, "signal: killed"},
+		{"context deadline exceeded", `{}`, "context deadline exceeded"},
+		{"stale noninteractive timeout", `{}`, "stale: noninteractive action exceeded timeout (20m0s)"},
+	}
 
-		CreateInvestigateFailureAction(d, action, "signal: killed")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actionID, _ := d.InsertAction("test", taskID, tt.meta, "failed", nil)
+			action, _ := d.GetAction(actionID)
 
-		actions, _ := d.ListActions("", nil, 0)
-		for _, a := range actions {
-			if hasMetaKey(a.Metadata, "is_investigate_failure") {
-				t.Error("should not create investigate action for scheduled timeout")
+			CreateInvestigateFailureAction(d, action, tt.failureResult)
+
+			actions, _ := d.ListActions("", nil, 0)
+			for _, a := range actions {
+				if hasMetaKey(a.Metadata, MetaKeyIsInvestigation) {
+					t.Errorf("should not create investigate action for %s", tt.name)
+				}
 			}
-		}
-	})
-
-	t.Run("skips for signal killed (non-scheduled)", func(t *testing.T) {
-		meta := `{"instruction":"test"}`
-		actionID, _ := d.InsertAction("deploy", taskID, meta, "failed", nil)
-		action, _ := d.GetAction(actionID)
-
-		CreateInvestigateFailureAction(d, action, "signal: killed")
-
-		actions, _ := d.ListActions("", nil, 0)
-		for _, a := range actions {
-			if hasMetaKey(a.Metadata, "is_investigate_failure") {
-				t.Error("should not create investigate action for non-scheduled timeout")
-			}
-		}
-	})
-
-	t.Run("skips for context deadline exceeded", func(t *testing.T) {
-		actionID, _ := d.InsertAction("build", taskID, "{}", "failed", nil)
-		action, _ := d.GetAction(actionID)
-
-		CreateInvestigateFailureAction(d, action, "context deadline exceeded")
-
-		actions, _ := d.ListActions("", nil, 0)
-		for _, a := range actions {
-			if hasMetaKey(a.Metadata, "is_investigate_failure") {
-				t.Error("should not create investigate action for deadline exceeded")
-			}
-		}
-	})
-
-	t.Run("skips for stale noninteractive timeout", func(t *testing.T) {
-		actionID, _ := d.InsertAction("sync", taskID, "{}", "failed", nil)
-		action, _ := d.GetAction(actionID)
-
-		CreateInvestigateFailureAction(d, action, "stale: noninteractive action exceeded timeout (20m0s)")
-
-		actions, _ := d.ListActions("", nil, 0)
-		for _, a := range actions {
-			if hasMetaKey(a.Metadata, "is_investigate_failure") {
-				t.Error("should not create investigate action for stale noninteractive timeout")
-			}
-		}
-	})
+		})
+	}
 }
 
 func TestCreateInvestigateFailureAction_DoesNotSkipNonTimeout(t *testing.T) {
@@ -247,7 +216,7 @@ func TestCreateInvestigateFailureAction_DoesNotSkipNonTimeout(t *testing.T) {
 	actions, _ := d.ListActions("", nil, 0)
 	investigateCount := 0
 	for _, a := range actions {
-		if hasMetaKey(a.Metadata, "is_investigate_failure") {
+		if hasMetaKey(a.Metadata, MetaKeyIsInvestigation) {
 			investigateCount++
 		}
 	}
