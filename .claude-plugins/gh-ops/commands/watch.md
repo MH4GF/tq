@@ -1,6 +1,6 @@
 ---
 description: Watch GitHub notifications, classify them, and create tq actions
-allowed-tools: Bash(**/scripts/gh-fetch-notifications), Bash(**/scripts/gh-mark-notification-read *), Bash(gh pr view *), Bash(gh issue view *), Bash(gh release view *), Bash(tq *), Skill(tq:done)
+allowed-tools: Bash(**/scripts/gh-fetch-notifications), Bash(**/scripts/gh-mark-notification-read *), Bash(gh pr view *), Bash(gh issue view *), Bash(gh release view *), Bash(gh auth status *), Bash(gh api /repos/*/discussions/*), Bash(tq *), Skill(tq:done)
 ---
 
 GitHub notifications watcher. Fetch, classify, and create tq actions for each notification.
@@ -28,13 +28,13 @@ Extract repo name and number from subject_url, then fetch by subject_type:
 - **PullRequest**: `gh pr view <number> --repo <owner/repo> --json url,state,author,headRefName,reviewDecision,mergeStateStatus,statusCheckRollup,isDraft,reviews,reviewRequests,comments`
 - **Issue**: `gh issue view <number> --repo <owner/repo> --json url,state,author`
 - **Release**: `gh release view <tag> --repo <owner/repo>` (tag は notification title から取得)
-- **Discussion**: fetch via `gh api`
+- **Discussion**: `gh api /repos/<owner/repo>/discussions/<number>`
 
 #### 2b. Skip conditions
 
 Mark as read and skip if:
 - `reason=review_requested` and already reviewed (reviews contain own APPROVED/CHANGES_REQUESTED)
-- `reason=review_requested` but own login (`gh api /user --jq .login`) is NOT in reviewRequests (neither as user nor as member of a requested team) — team review request where someone else was randomly assigned
+- `reason=review_requested` but own login (`gh auth status --active --json hosts --jq '.hosts."github.com"[0].login'`) is NOT in reviewRequests (neither as user nor as member of a requested team) — team review request where someone else was randomly assigned
 
 #### 2c. Remote action PR detection
 
@@ -105,4 +105,4 @@ Execute `/tq:done`.
 
 1. One action per notification. Do not batch.
 2. Use only `gh` CLI (GitHub API tokens are managed by `gh`).
-3. **Never use `gh api /repos`** for PR or issue data. Use `gh pr view --json` / `gh issue view --json` instead.
+3. **Never use `gh api /repos`** for PR or issue data — use `gh pr view --json` / `gh issue view --json` instead. Exception: Discussion has no dedicated subcommand, so `gh api /repos/*/discussions/*` is permitted.
