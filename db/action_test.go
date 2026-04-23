@@ -288,52 +288,33 @@ func TestListActions(t *testing.T) {
 	d.InsertAction("b", taskID2, "{}", db.ActionStatusRunning, nil)
 	d.InsertAction("c", taskID1, "{}", db.ActionStatusPending, nil)
 
-	// No filter
-	all, err := d.ListActions("", nil, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(all) != 3 {
-		t.Errorf("expected 3 actions, got %d", len(all))
-	}
-
-	// Status filter
-	pending, err := d.ListActions(db.ActionStatusPending, nil, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(pending) != 2 {
-		t.Errorf("expected 2 pending actions, got %d", len(pending))
+	tests := []struct {
+		name    string
+		status  string
+		taskID  *int64
+		limit   int
+		wantLen int
+	}{
+		{"no filter", "", nil, 0, 3},
+		{"status filter", db.ActionStatusPending, nil, 0, 2},
+		{"task filter", "", &taskID1, 0, 2},
+		{"both filters", db.ActionStatusPending, &taskID1, 0, 2},
+		{"limit", "", nil, 2, 2},
 	}
 
-	// Task filter
-	task1Actions, err := d.ListActions("", &taskID1, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(task1Actions) != 2 {
-		t.Errorf("expected 2 actions for task1, got %d", len(task1Actions))
-	}
-
-	// Both filters
-	both, err := d.ListActions(db.ActionStatusPending, &taskID1, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(both) != 2 {
-		t.Errorf("expected 2 pending actions for task1, got %d", len(both))
-	}
-
-	// Limit
-	limited, err := d.ListActions("", nil, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(limited) != 2 {
-		t.Errorf("expected 2 actions with limit=2, got %d", len(limited))
-	}
-	if limited[0].ID < limited[1].ID {
-		t.Errorf("expected DESC order: first ID %d should be > second ID %d", limited[0].ID, limited[1].ID)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := d.ListActions(tt.status, tt.taskID, tt.limit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != tt.wantLen {
+				t.Errorf("len = %d, want %d", len(got), tt.wantLen)
+			}
+			if tt.limit > 0 && got[0].ID < got[1].ID {
+				t.Errorf("expected DESC order: first ID %d should be > second ID %d", got[0].ID, got[1].ID)
+			}
+		})
 	}
 }
 
@@ -903,70 +884,91 @@ func TestUpdateAction(t *testing.T) {
 
 	taskID1, _ := d.InsertTask(1, "task 1", "{}", "")
 	taskID2, _ := d.InsertTask(1, "task 2", "{}", "")
+	strPtr := func(s string) *string { return &s }
 
-	t.Run("update title", func(t *testing.T) {
-		id, _ := d.InsertAction("original", taskID1, `{"k":"v"}`, db.ActionStatusPending, nil)
-		title := "updated title"
-		if err := d.UpdateAction(id, &title, nil, nil); err != nil {
-			t.Fatal(err)
-		}
-		a, _ := d.GetAction(id)
-		if a.Title != "updated title" {
-			t.Errorf("title = %q, want %q", a.Title, "updated title")
-		}
-	})
+	tests := []struct {
+		name         string
+		initialTitle string
+		initialMeta  string
+		markFailed   bool
+		title        *string
+		taskID       *int64
+		metadata     *string
+		wantTitle    string
+		wantTaskID   int64
+		metaContains []string
+	}{
+		{
+			name:         "update title",
+			initialTitle: "original",
+			initialMeta:  `{"k":"v"}`,
+			title:        strPtr("updated title"),
+			wantTitle:    "updated title",
+			wantTaskID:   taskID1,
+		},
+		{
+			name:       "update task_id",
+			taskID:     &taskID2,
+			wantTitle:  "test",
+			wantTaskID: taskID2,
+		},
+		{
+			name:         "merge metadata",
+			initialMeta:  `{"existing":"value"}`,
+			metadata:     strPtr(`{"new":"data"}`),
+			wantTitle:    "test",
+			wantTaskID:   taskID1,
+			metaContains: []string{`"existing":"value"`, `"new":"data"`},
+		},
+		{
+			name:       "update failed action",
+			markFailed: true,
+			title:      strPtr("fixed"),
+			wantTitle:  "fixed",
+			wantTaskID: taskID1,
+		},
+		{
+			name:       "multiple fields",
+			initialMeta: `{"a":"1"}`,
+			title:      strPtr("new"),
+			taskID:     &taskID2,
+			metadata:   strPtr(`{"b":"2"}`),
+			wantTitle:  "new",
+			wantTaskID: taskID2,
+		},
+	}
 
-	t.Run("update task_id", func(t *testing.T) {
-		id, _ := d.InsertAction("test", taskID1, "{}", db.ActionStatusPending, nil)
-		if err := d.UpdateAction(id, nil, &taskID2, nil); err != nil {
-			t.Fatal(err)
-		}
-		a, _ := d.GetAction(id)
-		if a.TaskID != taskID2 {
-			t.Errorf("task_id = %d, want %d", a.TaskID, taskID2)
-		}
-	})
-
-	t.Run("merge metadata", func(t *testing.T) {
-		id, _ := d.InsertAction("test", taskID1, `{"existing":"value"}`, db.ActionStatusPending, nil)
-		meta := `{"new":"data"}`
-		if err := d.UpdateAction(id, nil, nil, &meta); err != nil {
-			t.Fatal(err)
-		}
-		a, _ := d.GetAction(id)
-		if !strings.Contains(a.Metadata, `"existing":"value"`) || !strings.Contains(a.Metadata, `"new":"data"`) {
-			t.Errorf("metadata = %s, want merged result", a.Metadata)
-		}
-	})
-
-	t.Run("update failed action", func(t *testing.T) {
-		id, _ := d.InsertAction("test", taskID1, "{}", db.ActionStatusPending, nil)
-		d.MarkFailed(id, "err")
-		title := "fixed"
-		if err := d.UpdateAction(id, &title, nil, nil); err != nil {
-			t.Fatal(err)
-		}
-		a, _ := d.GetAction(id)
-		if a.Title != "fixed" {
-			t.Errorf("title = %q, want %q", a.Title, "fixed")
-		}
-	})
-
-	t.Run("multiple fields", func(t *testing.T) {
-		id, _ := d.InsertAction("test", taskID1, `{"a":"1"}`, db.ActionStatusPending, nil)
-		title := "new"
-		meta := `{"b":"2"}`
-		if err := d.UpdateAction(id, &title, &taskID2, &meta); err != nil {
-			t.Fatal(err)
-		}
-		a, _ := d.GetAction(id)
-		if a.Title != "new" {
-			t.Errorf("title = %q, want %q", a.Title, "new")
-		}
-		if a.TaskID != taskID2 {
-			t.Errorf("task_id = %d, want %d", a.TaskID, taskID2)
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initialTitle := tt.initialTitle
+			if initialTitle == "" {
+				initialTitle = "test"
+			}
+			initialMeta := tt.initialMeta
+			if initialMeta == "" {
+				initialMeta = "{}"
+			}
+			id, _ := d.InsertAction(initialTitle, taskID1, initialMeta, db.ActionStatusPending, nil)
+			if tt.markFailed {
+				d.MarkFailed(id, "err")
+			}
+			if err := d.UpdateAction(id, tt.title, tt.taskID, tt.metadata); err != nil {
+				t.Fatal(err)
+			}
+			a, _ := d.GetAction(id)
+			if a.Title != tt.wantTitle {
+				t.Errorf("title = %q, want %q", a.Title, tt.wantTitle)
+			}
+			if a.TaskID != tt.wantTaskID {
+				t.Errorf("task_id = %d, want %d", a.TaskID, tt.wantTaskID)
+			}
+			for _, want := range tt.metaContains {
+				if !strings.Contains(a.Metadata, want) {
+					t.Errorf("metadata %s should contain %s", a.Metadata, want)
+				}
+			}
+		})
+	}
 }
 
 func TestUpdateAction_StatusRestriction(t *testing.T) {
