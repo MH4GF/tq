@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/MH4GF/tq/db"
 )
@@ -37,7 +38,7 @@ func CreatePermissionBlockAction(database db.Store, action *db.Action, denials [
 	var list strings.Builder
 	for _, d := range denials {
 		list.WriteString("- ")
-		list.WriteString(d.Summary())
+		list.WriteString(truncateDenialSummary(d.Summary(), blockedActionID))
 		list.WriteString("\n")
 	}
 
@@ -66,4 +67,18 @@ func CreatePermissionBlockAction(database db.Store, action *db.Action, denials [
 	}
 
 	slog.Info("permission-block action created", "action_id", id, "blocked_action_id", action.ID)
+}
+
+const maxDenialSummaryLen = 500
+
+// Keeps the follow-up instruction under tmux send-keys limits.
+func truncateDenialSummary(s, blockedID string) string {
+	if len(s) <= maxDenialSummaryLen {
+		return s
+	}
+	i := maxDenialSummaryLen
+	for i > 0 && !utf8.RuneStart(s[i]) {
+		i--
+	}
+	return s[:i] + fmt.Sprintf(" ... (truncated; see tq action get #%s)", blockedID)
 }
