@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.21.15](https://github.com/MH4GF/tq/compare/v0.21.14...v0.21.15) - 2026-04-19
+- refactor(task)!: cap nested actions in task list/get to latest 10 by @MH4GF in https://github.com/MH4GF/tq/pull/143
+
 ## [v0.21.14](https://github.com/MH4GF/tq/compare/v0.21.13...v0.21.14) - 2026-04-19
 - test(list): collapse list_test.go cases into table-driven test by @MH4GF in https://github.com/MH4GF/tq/pull/128
 - test(fail): collapse TestFail variants into table-driven subtests by @MH4GF in https://github.com/MH4GF/tq/pull/127
