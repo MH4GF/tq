@@ -1,5 +1,5 @@
 ---
-description: Cancel a tq action and record improvement suggestions
+description: Cancel a tq action with improvement suggestions, then judge task-level completion and propose follow-up actions when work remains
 argument-hint: "<action_id>"
 allowed-tools: Bash(tq *)
 ---
@@ -23,22 +23,22 @@ Review the task's action history to understand why this action was created:
 
 Read each action's result to trace the chain of decisions that led to this action.
 
-## Next Action
-
-Before cancelling, determine if follow-up work is needed:
-
-1. Run `tq action list --task <task_id>` to review action history
-2. **Improvement extraction**: If result contains improvement suggestions, TODOs, or "handle in separate task" items with independent work scope, use `/tq:create-action` to create a follow-up action
-3. **Next action decision**: Determine the next action needed to achieve the task's goal:
-   - Additional work needed → `/tq:create-action` to create it
-   - External blocker (waiting for review, approval, etc.) → do nothing
-   - An active action (pending/running) with the same purpose already exists → do not create
-4. **Task completion check**: Only if no action was created above, determine whether the task's goal has been achieved → if complete, run `tq task update <task_id> --status done --note "<why this task is done>"` (`--note` is required with `--status`; summarize what was delivered or why the task wrapped up)
-
-Constraints:
-- Dedup: Do not create an action if an active action (pending/running) with the same purpose already exists
-- If predecessor_result contains incomplete signals, do NOT mark the task as done
-
 ## Execute
 
 `tq action cancel <action_id> '<reason>'`
+
+## After cancelling: task-level follow-up
+
+Always run this flow — do not wait for the user to ask "what's next?".
+
+1. `tq action list --task <task_id>` + review the cancellation reason you just recorded.
+2. Classify the task:
+   - **Done** — task goal already achieved by other actions, or the task is no longer relevant.
+   - **Follow-up needed** — a different approach is required, or improvement suggestions from the cancellation should be acted on. Propose 1–2 next-action candidates (title + one-line purpose) and ask the user to create via `/tq:create-action`. Do not auto-create.
+   - **External blocker only** — the cancellation was due to an external dependency (waiting for upstream fix, review, etc.). State explicitly: "Task #<id> stays open, waiting on <dep>." Optionally propose a tracking action if none is already queued.
+3. Close the task only when classification is **Done**:
+   `tq task update <task_id> --status done --note "<why>"` (`--note` required with `--status`).
+
+Constraints:
+- If the cancellation reason or action history contains incomplete signals, classification cannot be **Done**.
+- Dedup: skip the proposal if an active (pending/running) action with the same purpose already exists for this task.
