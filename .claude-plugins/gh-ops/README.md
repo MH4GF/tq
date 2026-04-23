@@ -8,7 +8,7 @@ GitHub notification watcher and classifier for tq.
 
 Fetches GitHub notifications, classifies them by type and priority, and creates tq actions for each actionable notification.
 
-- Automatically skips merged/closed PRs, Discussions, and Releases
+- Automatically skips merged/closed PRs, Discussions, Releases, and already-reviewed review requests
 - Detects remote action PRs (branches matching `tq-<id>-*`) and marks them done
 - Selects appropriate instruction based on PR state and creates tq actions with slash commands
 - Matches notifications to existing tq tasks by URL or title keywords; creates new tasks when no match is found
