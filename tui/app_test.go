@@ -28,31 +28,22 @@ func TestTabSwitch(t *testing.T) {
 
 	m := New(d, nil, 3)
 
-	// Tab key switches Tasks → Schedules
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	m = updated.(Model)
-	if m.ActiveTab() != tabSchedules {
-		t.Errorf("after tab, active = %d, want tabSchedules(1)", m.ActiveTab())
+	steps := []struct {
+		name    string
+		key     tea.KeyMsg
+		wantTab tab
+	}{
+		{"Tab: Tasks→Schedules", tea.KeyMsg{Type: tea.KeyTab}, tabSchedules},
+		{"Tab: Schedules→Tasks", tea.KeyMsg{Type: tea.KeyTab}, tabTasks},
+		{"Key '2': →Schedules", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}}, tabSchedules},
+		{"Key '1': →Tasks", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}}, tabTasks},
 	}
-
-	// Schedules → Tasks
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	m = updated.(Model)
-	if m.ActiveTab() != tabTasks {
-		t.Errorf("after 2nd tab, active = %d, want tabTasks(0)", m.ActiveTab())
-	}
-
-	// Number keys
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
-	m = updated.(Model)
-	if m.ActiveTab() != tabSchedules {
-		t.Errorf("after '2', active = %d, want tabSchedules(1)", m.ActiveTab())
-	}
-
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
-	m = updated.(Model)
-	if m.ActiveTab() != tabTasks {
-		t.Errorf("after '1', active = %d, want tabTasks(0)", m.ActiveTab())
+	for _, s := range steps {
+		updated, _ := m.Update(s.key)
+		m = updated.(Model)
+		if m.ActiveTab() != s.wantTab {
+			t.Errorf("%s: ActiveTab() = %d, want %d", s.name, m.ActiveTab(), s.wantTab)
+		}
 	}
 }
 
