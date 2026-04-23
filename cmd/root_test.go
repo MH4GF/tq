@@ -8,56 +8,55 @@ import (
 )
 
 func TestResolveDBPath(t *testing.T) {
-	t.Run("flag takes precedence over env and default", func(t *testing.T) {
-		t.Setenv("TQ_DB_PATH", "/env/path/tq.db")
-		prev := dbPathFlag
-		dbPathFlag = "/flag/path/tq.db"
-		t.Cleanup(func() { dbPathFlag = prev })
+	configDir := t.TempDir()
 
-		got, err := resolveDBPath()
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got != "/flag/path/tq.db" {
-			t.Errorf("path = %q, want %q", got, "/flag/path/tq.db")
-		}
-	})
+	tests := []struct {
+		name      string
+		env       string
+		flag      string
+		configDir string
+		want      string
+	}{
+		{
+			name: "flag takes precedence over env and default",
+			env:  "/env/path/tq.db",
+			flag: "/flag/path/tq.db",
+			want: "/flag/path/tq.db",
+		},
+		{
+			name: "env used when flag empty",
+			env:  "/env/path/tq.db",
+			want: "/env/path/tq.db",
+		},
+		{
+			name:      "default uses configDir",
+			configDir: configDir,
+			want:      filepath.Join(configDir, "tq.db"),
+		},
+	}
 
-	t.Run("env used when flag empty", func(t *testing.T) {
-		t.Setenv("TQ_DB_PATH", "/env/path/tq.db")
-		prev := dbPathFlag
-		dbPathFlag = ""
-		t.Cleanup(func() { dbPathFlag = prev })
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("TQ_DB_PATH", tt.env)
+			prev := dbPathFlag
+			dbPathFlag = tt.flag
+			t.Cleanup(func() { dbPathFlag = prev })
 
-		got, err := resolveDBPath()
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got != "/env/path/tq.db" {
-			t.Errorf("path = %q, want %q", got, "/env/path/tq.db")
-		}
-	})
+			if tt.configDir != "" {
+				prevDir := configDirOverride
+				configDirOverride = tt.configDir
+				t.Cleanup(func() { configDirOverride = prevDir })
+			}
 
-	t.Run("default uses configDir", func(t *testing.T) {
-		t.Setenv("TQ_DB_PATH", "")
-		prev := dbPathFlag
-		dbPathFlag = ""
-		t.Cleanup(func() { dbPathFlag = prev })
-
-		dir := t.TempDir()
-		prevDir := configDirOverride
-		configDirOverride = dir
-		t.Cleanup(func() { configDirOverride = prevDir })
-
-		got, err := resolveDBPath()
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		want := filepath.Join(dir, "tq.db")
-		if got != want {
-			t.Errorf("path = %q, want %q", got, want)
-		}
-	})
+			got, err := resolveDBPath()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("path = %q, want %q", got, tt.want)
+			}
+		})
+	}
 }
 
 func TestDBFlag_EndToEnd(t *testing.T) {
