@@ -6,7 +6,7 @@ GitHub notification watcher and classifier for tq.
 
 ### `/gh-ops:watch`
 
-Fetches GitHub notifications, classifies them by type and priority, and creates tq actions for each actionable notification.
+Watch GitHub notifications, classify them, and create tq actions.
 
 - Automatically skips merged/closed PRs, Discussions, and Releases
 - Detects remote action PRs (branches matching `tq-<id>-*`) and marks them done
@@ -20,11 +20,11 @@ The following commands are created as tq action instructions by `watch`, and can
 | Command | Description |
 |---|---|
 | `/gh-ops:review-pr <PR_URL>` | Review another person's PR |
-| `/gh-ops:fix-conflict <PR_URL>` | Resolve merge conflicts |
-| `/gh-ops:fix-ci <PR_URL>` | Fix CI failures |
-| `/gh-ops:respond-review <PR_URL>` | Respond to review comments |
+| `/gh-ops:fix-conflict <PR_URL>` | Resolve merge conflicts on a PR |
+| `/gh-ops:fix-ci <PR_URL>` | Fix CI failures on a PR |
+| `/gh-ops:respond-review <PR_URL>` | Respond to review comments on a PR |
 | `/gh-ops:merge-pr <PR_URL>` | Judge and execute PR merge |
-| `/gh-ops:self-review <PR_URL>` | Self-review before requesting review |
+| `/gh-ops:self-review <PR_URL>` | Self-review a PR before requesting review |
 
 ## Usage
 
