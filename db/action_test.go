@@ -311,7 +311,7 @@ func TestListActions(t *testing.T) {
 			if len(got) != tt.wantLen {
 				t.Errorf("len = %d, want %d", len(got), tt.wantLen)
 			}
-			if tt.limit > 0 && got[0].ID < got[1].ID {
+			if tt.limit > 0 && len(got) >= 2 && got[0].ID < got[1].ID {
 				t.Errorf("expected DESC order: first ID %d should be > second ID %d", got[0].ID, got[1].ID)
 			}
 		})
@@ -907,13 +907,16 @@ func TestUpdateAction(t *testing.T) {
 			wantTaskID:   taskID1,
 		},
 		{
-			name:       "update task_id",
-			taskID:     &taskID2,
-			wantTitle:  "test",
-			wantTaskID: taskID2,
+			name:         "update task_id",
+			initialTitle: "test",
+			initialMeta:  "{}",
+			taskID:       &taskID2,
+			wantTitle:    "test",
+			wantTaskID:   taskID2,
 		},
 		{
 			name:         "merge metadata",
+			initialTitle: "test",
 			initialMeta:  `{"existing":"value"}`,
 			metadata:     strPtr(`{"new":"data"}`),
 			wantTitle:    "test",
@@ -921,15 +924,18 @@ func TestUpdateAction(t *testing.T) {
 			metaContains: []string{`"existing":"value"`, `"new":"data"`},
 		},
 		{
-			name:       "update failed action",
-			markFailed: true,
-			title:      strPtr("fixed"),
-			wantTitle:  "fixed",
-			wantTaskID: taskID1,
+			name:         "update failed action",
+			initialTitle: "test",
+			initialMeta:  "{}",
+			markFailed:   true,
+			title:        strPtr("fixed"),
+			wantTitle:    "fixed",
+			wantTaskID:   taskID1,
 		},
 		{
-			name:       "multiple fields",
-			initialMeta: `{"a":"1"}`,
+			name:         "multiple fields",
+			initialTitle: "test",
+			initialMeta:  `{"a":"1"}`,
 			title:      strPtr("new"),
 			taskID:     &taskID2,
 			metadata:   strPtr(`{"b":"2"}`),
@@ -940,15 +946,7 @@ func TestUpdateAction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			initialTitle := tt.initialTitle
-			if initialTitle == "" {
-				initialTitle = "test"
-			}
-			initialMeta := tt.initialMeta
-			if initialMeta == "" {
-				initialMeta = "{}"
-			}
-			id, _ := d.InsertAction(initialTitle, taskID1, initialMeta, db.ActionStatusPending, nil)
+			id, _ := d.InsertAction(tt.initialTitle, taskID1, tt.initialMeta, db.ActionStatusPending, nil)
 			if tt.markFailed {
 				d.MarkFailed(id, "err")
 			}
