@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -85,101 +86,119 @@ func TestInsertProject(t *testing.T) {
 }
 
 func TestDeleteProject(t *testing.T) {
-	d := testutil.NewTestDB(t)
-
-	id, err := d.InsertProject("todelete", "/tmp/del", "{}")
-	if err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name            string
+		setup           func(t *testing.T, d *db.DB) (projectID, taskID int64)
+		cascade         bool
+		wantErr         bool
+		wantErrContains string
+		wantProjectKept bool
+	}{
+		{
+			name: "deletes project without tasks",
+			setup: func(t *testing.T, d *db.DB) (int64, int64) {
+				t.Helper()
+				id, err := d.InsertProject("todelete", "/tmp/del", "{}")
+				if err != nil {
+					t.Fatal(err)
+				}
+				return id, 0
+			},
+		},
+		{
+			name: "not found returns error",
+			setup: func(t *testing.T, _ *db.DB) (int64, int64) {
+				t.Helper()
+				return 999, 0
+			},
+			wantErr: true,
+		},
+		{
+			name: "with tasks and cascade=false fails",
+			setup: func(t *testing.T, d *db.DB) (int64, int64) {
+				t.Helper()
+				pid, err := d.InsertProject("haswork", "/tmp/hw", "{}")
+				if err != nil {
+					t.Fatal(err)
+				}
+				tid, err := d.InsertTask(pid, "some task", "{}", "")
+				if err != nil {
+					t.Fatal(err)
+				}
+				return pid, tid
+			},
+			wantErr:         true,
+			wantErrContains: "cannot delete without cascade",
+			wantProjectKept: true,
+		},
+		{
+			name: "cascade deletes project and tasks",
+			setup: func(t *testing.T, d *db.DB) (int64, int64) {
+				t.Helper()
+				pid, err := d.InsertProject("cascademe", "/tmp/cm", "{}")
+				if err != nil {
+					t.Fatal(err)
+				}
+				tid, err := d.InsertTask(pid, "task1", "{}", "")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := d.InsertAction("act1", tid, "{}", "pending", nil); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := d.InsertSchedule(tid, "do stuff", "sched1", "0 * * * *", "{}"); err != nil {
+					t.Fatal(err)
+				}
+				return pid, tid
+			},
+			cascade: true,
+		},
+		{
+			name: "cascade with no tasks",
+			setup: func(t *testing.T, d *db.DB) (int64, int64) {
+				t.Helper()
+				pid, err := d.InsertProject("empty", "/tmp/e", "{}")
+				if err != nil {
+					t.Fatal(err)
+				}
+				return pid, 0
+			},
+			cascade: true,
+		},
 	}
 
-	if err := d.DeleteProject(id, false); err != nil {
-		t.Fatal(err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			projectID, taskID := tt.setup(t, d)
 
-	_, err = d.GetProjectByID(id)
-	if err == nil {
-		t.Error("expected error after deletion")
-	}
-}
-
-func TestDeleteProject_NotFound(t *testing.T) {
-	d := testutil.NewTestDB(t)
-
-	err := d.DeleteProject(999, false)
-	if err == nil {
-		t.Error("expected error for non-existent project")
-	}
-}
-
-func TestDeleteProject_WithTasks_NoCascade(t *testing.T) {
-	d := testutil.NewTestDB(t)
-
-	pid, err := d.InsertProject("haswork", "/tmp/hw", "{}")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.InsertTask(pid, "some task", "{}", ""); err != nil {
-		t.Fatal(err)
-	}
-
-	err = d.DeleteProject(pid, false)
-	if err == nil {
-		t.Fatal("expected error when tasks exist and cascade=false")
-	}
-	if !strings.Contains(err.Error(), "cannot delete without cascade") {
-		t.Errorf("error should mention cascade requirement, got: %s", err)
-	}
-
-	// project should still exist
-	if _, err := d.GetProjectByID(pid); err != nil {
-		t.Errorf("project should still exist: %v", err)
-	}
-}
-
-func TestDeleteProject_Cascade(t *testing.T) {
-	d := testutil.NewTestDB(t)
-
-	pid, err := d.InsertProject("cascademe", "/tmp/cm", "{}")
-	if err != nil {
-		t.Fatal(err)
-	}
-	tid, err := d.InsertTask(pid, "task1", "{}", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.InsertAction("act1", tid, "{}", "pending", nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.InsertSchedule(tid, "do stuff", "sched1", "0 * * * *", "{}"); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := d.DeleteProject(pid, true); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := d.GetProjectByID(pid); err == nil {
-		t.Error("project should be deleted")
-	}
-	if _, err := d.GetTask(tid); err == nil {
-		t.Error("task should be deleted")
-	}
-}
-
-func TestDeleteProject_Cascade_NoTasks(t *testing.T) {
-	d := testutil.NewTestDB(t)
-
-	pid, err := d.InsertProject("empty", "/tmp/e", "{}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := d.DeleteProject(pid, true); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := d.GetProjectByID(pid); err == nil {
-		t.Error("project should be deleted")
+			err := d.DeleteProject(projectID, tt.cascade)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if tt.wantErrContains != "" && !strings.Contains(err.Error(), tt.wantErrContains) {
+					t.Errorf("error should contain %q, got: %s", tt.wantErrContains, err)
+				}
+				if tt.wantProjectKept {
+					if _, err := d.GetProjectByID(projectID); err != nil {
+						t.Errorf("project should still exist: %v", err)
+					}
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if _, err := d.GetProjectByID(projectID); err == nil {
+				t.Error("project should be deleted")
+			}
+			if taskID != 0 {
+				if _, err := d.GetTask(taskID); err == nil {
+					t.Error("task should be deleted")
+				}
+			}
+		})
 	}
 }
 
