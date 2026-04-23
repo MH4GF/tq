@@ -1,6 +1,6 @@
 ---
 description: Run docs-reviewer and code simplifier in parallel as a quality gate
-allowed-tools: Agent, Skill, Bash(git rev-parse:*), Bash(mkdir:*), Bash(jq:*), Bash(date:*), Bash(mv:*), Bash(test:*), Write
+allowed-tools: Agent, Skill, Bash(.claude/scripts/record-quality-review.sh)
 ---
 
 Launch both reviews in parallel:
@@ -17,12 +17,7 @@ After both complete, present a unified summary of findings.
 After both reviews finish AND the user has acknowledged or resolved findings, record the current HEAD SHA so the `gh pr create` PreToolUse hook permits PR creation:
 
 ```bash
-mkdir -p .claude/tmp
-sha=$(git rev-parse HEAD)
-ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-state_file=".claude/tmp/quality-review-state.json"
-[ -f "$state_file" ] || echo '{"reviewed":[]}' > "$state_file"
-jq --arg sha "$sha" --arg ts "$ts" '.reviewed = ((.reviewed + [{"sha":$sha,"timestamp":$ts}]) | .[-50:])' "$state_file" > "$state_file.tmp" && mv "$state_file.tmp" "$state_file"
+.claude/scripts/record-quality-review.sh
 ```
 
 If the user makes additional commits after this, the SHA will no longer match and `/quality-review` must be re-run before `gh pr create`.
