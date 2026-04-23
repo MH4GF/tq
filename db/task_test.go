@@ -102,58 +102,34 @@ func TestListTasks(t *testing.T) {
 	d.InsertTask(2, "task C", "{}", "")
 	d.UpdateTask(id2, db.TaskStatusDone, "")
 
-	t.Run("no filter", func(t *testing.T) {
-		tasks, err := d.ListTasks(0, "", 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(tasks) != 3 {
-			t.Errorf("expected 3 tasks, got %d", len(tasks))
-		}
-	})
+	tests := []struct {
+		name      string
+		projectID int64
+		status    string
+		limit     int
+		wantLen   int
+	}{
+		{"no filter", 0, "", 0, 3},
+		{"filter by project", 1, "", 0, 2},
+		{"filter by status", 0, db.TaskStatusOpen, 0, 2},
+		{"filter by project and status", 1, db.TaskStatusDone, 0, 1},
+		{"limit", 0, "", 2, 2},
+	}
 
-	t.Run("filter by project", func(t *testing.T) {
-		tasks, err := d.ListTasks(1, "", 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(tasks) != 2 {
-			t.Errorf("expected 2 tasks for project 1, got %d", len(tasks))
-		}
-	})
-
-	t.Run("filter by status", func(t *testing.T) {
-		tasks, err := d.ListTasks(0, db.TaskStatusOpen, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(tasks) != 2 {
-			t.Errorf("expected 2 open tasks, got %d", len(tasks))
-		}
-	})
-
-	t.Run("filter by project and status", func(t *testing.T) {
-		tasks, err := d.ListTasks(1, db.TaskStatusDone, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(tasks) != 1 {
-			t.Errorf("expected 1 done task for project 1, got %d", len(tasks))
-		}
-	})
-
-	t.Run("limit", func(t *testing.T) {
-		tasks, err := d.ListTasks(0, "", 2)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(tasks) != 2 {
-			t.Errorf("expected 2 tasks with limit=2, got %d", len(tasks))
-		}
-		if tasks[0].ID < tasks[1].ID {
-			t.Errorf("expected DESC order: first ID %d should be > second ID %d", tasks[0].ID, tasks[1].ID)
-		}
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tasks, err := d.ListTasks(tc.projectID, tc.status, tc.limit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(tasks) != tc.wantLen {
+				t.Errorf("expected %d tasks, got %d", tc.wantLen, len(tasks))
+			}
+			if tc.limit > 0 && len(tasks) > 1 && tasks[0].ID < tasks[1].ID {
+				t.Errorf("expected DESC order: first ID %d should be > second ID %d", tasks[0].ID, tasks[1].ID)
+			}
+		})
+	}
 }
 
 func TestListTasksByProject(t *testing.T) {
@@ -238,56 +214,35 @@ func TestMergeTaskMetadata(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	t.Run("merge new key", func(t *testing.T) {
-		id, err := d.InsertTask(1, "task", `{"existing":"value"}`, "")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := d.MergeTaskMetadata(id, map[string]any{"url": "https://example.com"}); err != nil {
-			t.Fatal(err)
-		}
-		task, err := d.GetTask(id)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if task.Metadata != `{"existing":"value","url":"https://example.com"}` {
-			t.Errorf("expected merged metadata, got %s", task.Metadata)
-		}
-	})
+	tests := []struct {
+		name        string
+		initialMeta string
+		merge       map[string]any
+		wantMeta    string
+	}{
+		{"merge new key", `{"existing":"value"}`, map[string]any{"url": "https://example.com"}, `{"existing":"value","url":"https://example.com"}`},
+		{"overwrite existing key", `{"existing":"value","url":"https://example.com"}`, map[string]any{"existing": "new"}, `{"existing":"new","url":"https://example.com"}`},
+		{"merge into empty metadata", "{}", map[string]any{"key": "val"}, `{"key":"val"}`},
+	}
 
-	t.Run("overwrite existing key", func(t *testing.T) {
-		id, err := d.InsertTask(1, "task", `{"existing":"value","url":"https://example.com"}`, "")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := d.MergeTaskMetadata(id, map[string]any{"existing": "new"}); err != nil {
-			t.Fatal(err)
-		}
-		task, err := d.GetTask(id)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if task.Metadata != `{"existing":"new","url":"https://example.com"}` {
-			t.Errorf("expected overwritten key, got %s", task.Metadata)
-		}
-	})
-
-	t.Run("merge into empty metadata", func(t *testing.T) {
-		id, err := d.InsertTask(1, "task2", "{}", "")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := d.MergeTaskMetadata(id, map[string]any{"key": "val"}); err != nil {
-			t.Fatal(err)
-		}
-		task, err := d.GetTask(id)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if task.Metadata != `{"key":"val"}` {
-			t.Errorf("expected metadata on empty, got %s", task.Metadata)
-		}
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			id, err := d.InsertTask(1, "task", tc.initialMeta, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := d.MergeTaskMetadata(id, tc.merge); err != nil {
+				t.Fatal(err)
+			}
+			task, err := d.GetTask(id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if task.Metadata != tc.wantMeta {
+				t.Errorf("expected metadata %s, got %s", tc.wantMeta, task.Metadata)
+			}
+		})
+	}
 }
 
 func TestEnsureTask(t *testing.T) {
