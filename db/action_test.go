@@ -936,11 +936,11 @@ func TestUpdateAction(t *testing.T) {
 			name:         "multiple fields",
 			initialTitle: "test",
 			initialMeta:  `{"a":"1"}`,
-			title:      strPtr("new"),
-			taskID:     &taskID2,
-			metadata:   strPtr(`{"b":"2"}`),
-			wantTitle:  "new",
-			wantTaskID: taskID2,
+			title:        strPtr("new"),
+			taskID:       &taskID2,
+			metadata:     strPtr(`{"b":"2"}`),
+			wantTitle:    "new",
+			wantTaskID:   taskID2,
 		},
 	}
 
