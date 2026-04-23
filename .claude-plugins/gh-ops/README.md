@@ -11,7 +11,8 @@ Fetches GitHub notifications, classifies them by type and priority, and creates 
 - Automatically skips merged/closed PRs, Discussions, and Releases
 - Detects remote action PRs (branches matching `tq-<id>-*`) and marks them done
 - Selects appropriate instruction based on PR state and creates tq actions with slash commands
-- Matches notifications to existing tq tasks by URL or title keywords
+- Matches notifications to existing tq tasks by URL or title keywords; creates new tasks when no match is found
+- Marks each processed notification as read
 
 ### PR Processing Commands
 
@@ -28,7 +29,7 @@ The following commands are created as tq action instructions by `watch`, and can
 
 ## Usage
 
-Triggered automatically via `tq schedule` or invoke manually:
+Invoke manually:
 
 ```text
 /gh-ops:watch
