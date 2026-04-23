@@ -263,6 +263,17 @@ Full-text search across task titles, task metadata, task status change reasons, 
 
 - `--jq` — Filter JSON output (fields: `entity_type`, `entity_id`, `task_id`, `field`, `snippet`, `status`, `created_at`)
 
+## completion
+
+| Command | Description |
+|---------|-------------|
+| `tq completion bash` | Generate the autocompletion script for bash |
+| `tq completion zsh` | Generate the autocompletion script for zsh |
+| `tq completion fish` | Generate the autocompletion script for fish |
+| `tq completion powershell` | Generate the autocompletion script for powershell |
+
+Each subcommand accepts `--no-descriptions` to disable completion descriptions. See `tq completion <shell> --help` for installation instructions.
+
 ## ui
 
 ```
