@@ -14,7 +14,14 @@ type InteractiveWorker struct {
 	Session string
 }
 
+// Guards tmux send-keys; its internal buffer rejects larger inputs with "command too long".
+const maxInstructionBytes = 16 * 1024
+
 func (w *InteractiveWorker) Execute(ctx context.Context, instruction string, cfg ActionConfig, workDir string, actionID, taskID int64) (string, error) {
+	if len(instruction) > maxInstructionBytes {
+		return "", fmt.Errorf("instruction too long (%d bytes, limit %d); shorten via generator or split action", len(instruction), maxInstructionBytes)
+	}
+
 	session := w.Session
 	if session == "" {
 		session = "main"

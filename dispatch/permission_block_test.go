@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
@@ -147,6 +148,84 @@ func TestCreatePermissionBlockAction(t *testing.T) {
 		}
 		if pendingCount != 0 {
 			t.Errorf("expected 0 pending permission-block actions, got %d", pendingCount)
+		}
+	})
+
+	t.Run("truncates long denial commands", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+
+		taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+		actionID, _ := d.InsertAction("watch", taskID, `{}`, db.ActionStatusDone, nil)
+		action, _ := d.GetAction(actionID)
+
+		longCmd := strings.Repeat("x", 23000)
+		denials := []PermissionDenial{
+			{ToolName: "Bash", Input: map[string]any{"command": longCmd}},
+		}
+		CreatePermissionBlockAction(d, action, denials)
+
+		var followup *db.Action
+		actions, _ := d.ListActions("", nil, 0)
+		for i := range actions {
+			if actions[i].ID != actionID {
+				a := actions[i]
+				followup = &a
+			}
+		}
+		if followup == nil {
+			t.Fatal("follow-up action not found")
+		}
+
+		var meta map[string]any
+		_ = json.Unmarshal([]byte(followup.Metadata), &meta)
+		instr, _ := meta[MetaKeyInstruction].(string)
+
+		if len(instr) >= 4096 {
+			t.Errorf("instruction length = %d, want < 4096", len(instr))
+		}
+		marker := fmt.Sprintf("(truncated; see tq action get #%d)", actionID)
+		if !strings.Contains(instr, marker) {
+			t.Errorf("instruction missing truncation marker %q", marker)
+		}
+		if !strings.Contains(instr, "Bash: xxx") {
+			t.Errorf("instruction missing original denial prefix: %s", instr[:200])
+		}
+		if !utf8.ValidString(instr) {
+			t.Errorf("instruction is not valid UTF-8")
+		}
+	})
+
+	t.Run("truncates at rune boundary for multibyte input", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+
+		taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+		actionID, _ := d.InsertAction("watch", taskID, `{}`, db.ActionStatusDone, nil)
+		action, _ := d.GetAction(actionID)
+
+		longCmd := strings.Repeat("あ", 300)
+		denials := []PermissionDenial{
+			{ToolName: "Bash", Input: map[string]any{"command": longCmd}},
+		}
+		CreatePermissionBlockAction(d, action, denials)
+
+		var followup *db.Action
+		actions, _ := d.ListActions("", nil, 0)
+		for i := range actions {
+			if actions[i].ID != actionID {
+				a := actions[i]
+				followup = &a
+			}
+		}
+		if followup == nil {
+			t.Fatal("follow-up action not found")
+		}
+		var meta map[string]any
+		_ = json.Unmarshal([]byte(followup.Metadata), &meta)
+		instr, _ := meta[MetaKeyInstruction].(string)
+		if !utf8.ValidString(instr) {
+			t.Errorf("instruction is not valid UTF-8 after truncation: %q", instr)
 		}
 	})
 

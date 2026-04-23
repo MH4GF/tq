@@ -143,6 +143,23 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 	}
 }
 
+func TestInteractiveWorker_TooLong(t *testing.T) {
+	runner := &mockRunner{output: []byte("ok"), failAt: -1}
+	w := &InteractiveWorker{Runner: runner}
+
+	longInstruction := strings.Repeat("a", 17*1024)
+	_, err := w.Execute(context.Background(), longInstruction, ActionConfig{}, "/work", 1, 0)
+	if err == nil {
+		t.Fatal("expected error for too-long instruction")
+	}
+	if !strings.Contains(err.Error(), "instruction too long") {
+		t.Errorf("error = %q, want to contain 'instruction too long'", err.Error())
+	}
+	if len(runner.calls) != 0 {
+		t.Errorf("tmux should not be invoked; got %d calls", len(runner.calls))
+	}
+}
+
 func TestInteractiveWorker_Error(t *testing.T) {
 	tests := []struct {
 		name        string
