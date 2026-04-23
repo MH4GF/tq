@@ -19,6 +19,7 @@ You manage tasks and actions on behalf of the user via tq CLI.
 - **Dispatch immediately?** Only when user says "割り込み" or "すぐ実行". Otherwise create as pending.
 - **Looking for past context?** Use `tq search "<keyword>"` to find tasks/actions by keyword.
 - **Schedule mode?** Use `--meta` to control dispatch behavior. Run `tq schedule create --help` for available metadata keys.
+- **Worktree?** Optional. Add `"--worktree"` to `claude_args` for file-modifying actions that may run in parallel; skip for read-only or serialized work. When added, always pair with a scope-derived name (`"--worktree","<scope-name>"` — file, feature, or skill) so sessions are identifiable in the TUI and `git worktree list`.
 
 ## Filtering output
 

@@ -46,7 +46,7 @@ For each violation, run `/tq:create-action`.
 <constraints>
 - One action per violation (group tightly related violations in the same file)
 - Include file:line and what to fix in the instruction
-- Set `--meta '{"claude_args":["--permission-mode","auto","--worktree"]}'`
+- Set `--meta '{"claude_args":["--permission-mode","auto","--worktree","<scope-name>"]}'` where `<scope-name>` is derived from the violation's scope (e.g., `rule7-cmd-foo-test`, `docs-cli-reference`)
 - Use the same task as this GC action (check session context)
 </constraints>
 

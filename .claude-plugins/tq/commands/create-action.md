@@ -32,3 +32,14 @@ Use only information from the current session — do not investigate files (that
 ```bash
 tq action create '<instruction>' --title '<title>' --task <task_id>
 ```
+
+### Worktree (optional)
+
+Omit `--worktree` for read-only or serialized actions. Use it when the action modifies files and may run in parallel.
+
+When set, always pair with a scope-derived name (target file, feature, bug ID, or skill) so sessions are identifiable in the TUI and `git worktree list`:
+
+```bash
+tq action create '<instruction>' --title '<title>' --task <task_id> \
+  --meta '{"claude_args":["--worktree","fix-login-csrf"]}'
+```
