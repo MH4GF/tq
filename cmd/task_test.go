@@ -869,6 +869,234 @@ func TestTaskCreateHelp(t *testing.T) {
 	}
 }
 
+func TestTaskNote(t *testing.T) {
+	tests := []struct {
+		name            string
+		args            []string
+		wantErr         bool
+		wantErrContains string
+	}{
+		{
+			name: "success",
+			args: []string{"task", "note", "1", "--kind", "triage_keep", "--reason", "PR review pending"},
+		},
+		{
+			name: "with metadata",
+			args: []string{"task", "note", "1", "--kind", "triage_keep", "--reason", "snoozed", "--metadata", `{"snooze_until":"2026-05-02"}`},
+		},
+		{
+			name:            "missing kind",
+			args:            []string{"task", "note", "1", "--reason", "x"},
+			wantErr:         true,
+			wantErrContains: "--kind is required",
+		},
+		{
+			name:            "missing reason",
+			args:            []string{"task", "note", "1", "--kind", "triage_keep"},
+			wantErr:         true,
+			wantErrContains: "--reason is required",
+		},
+		{
+			name:            "invalid metadata JSON",
+			args:            []string{"task", "note", "1", "--kind", "triage_keep", "--reason", "x", "--metadata", "{notjson"},
+			wantErr:         true,
+			wantErrContains: "invalid JSON for --metadata",
+		},
+		{
+			name:    "task not found",
+			args:    []string{"task", "note", "999", "--kind", "triage_keep", "--reason", "x"},
+			wantErr: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+			d.InsertTask(1, "task", "{}", "")
+
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs(tc.args)
+
+			err := root.Execute()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				if tc.wantErrContains != "" && !contains(err.Error(), tc.wantErrContains) {
+					t.Errorf("error = %q, want to contain %q", err.Error(), tc.wantErrContains)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestTaskGet_Notes(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	id, _ := d.InsertTask(1, "task with notes", "{}", "")
+	if err := d.RecordTaskNote(id, "triage_keep", "PR review pending", map[string]any{"snooze_until": "2026-05-02"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.UpdateTask(id, db.TaskStatusDone, "merged"); err != nil {
+		t.Fatal(err)
+	}
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "get", fmt.Sprintf("%d", id)})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var row map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &row); err != nil {
+		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
+	}
+
+	notes, ok := row["notes"].([]any)
+	if !ok {
+		t.Fatalf("notes missing or wrong type: %v", row["notes"])
+	}
+	if len(notes) != 1 {
+		t.Fatalf("expected 1 note, got %d", len(notes))
+	}
+	note := notes[0].(map[string]any)
+	if note["kind"] != "triage_keep" {
+		t.Errorf("kind = %v, want triage_keep", note["kind"])
+	}
+	if note["reason"] != "PR review pending" {
+		t.Errorf("reason = %v", note["reason"])
+	}
+
+	// status_history is unaffected by note
+	history, ok := row["status_history"].([]any)
+	if !ok {
+		t.Fatalf("status_history missing: %v", row["status_history"])
+	}
+	if len(history) != 1 {
+		t.Errorf("expected 1 history entry, got %d", len(history))
+	}
+}
+
+func TestTaskGet_NotesEmpty(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	id, _ := d.InsertTask(1, "fresh task", "{}", "")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "get", fmt.Sprintf("%d", id)})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var row map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &row); err != nil {
+		t.Fatalf("JSON parse error: %v", err)
+	}
+	notes, ok := row["notes"].([]any)
+	if !ok {
+		t.Fatalf("notes should be empty array, got %v", row["notes"])
+	}
+	if len(notes) != 0 {
+		t.Errorf("expected 0 notes, got %d", len(notes))
+	}
+}
+
+func TestTaskList_LatestTriageNote(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	id1, _ := d.InsertTask(1, "with note", "{}", "")
+	d.InsertTask(1, "without note", "{}", "")
+	if err := d.RecordTaskNote(id1, "triage_keep", "design review pending", map[string]any{"snooze_until": "2026-05-02"}); err != nil {
+		t.Fatal(err)
+	}
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "list"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("JSON parse error: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+
+	// ordered DESC: most recent (without note, id2) first
+	if rows[0]["latest_triage_note"] != nil {
+		t.Errorf("row 0 latest_triage_note should be null, got %v", rows[0]["latest_triage_note"])
+	}
+	note, ok := rows[1]["latest_triage_note"].(map[string]any)
+	if !ok {
+		t.Fatalf("row 1 latest_triage_note missing/wrong type: %v", rows[1]["latest_triage_note"])
+	}
+	if note["reason"] != "design review pending" {
+		t.Errorf("reason = %v", note["reason"])
+	}
+	if note["snooze_until"] != "2026-05-02" {
+		t.Errorf("snooze_until = %v", note["snooze_until"])
+	}
+}
+
+func TestTaskUpdate_NoteIndependence(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	id, _ := d.InsertTask(1, "task", "{}", "")
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "update", fmt.Sprintf("%d", id), "--status", "done", "--note", "merged"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	notes, err := d.TaskNotes(id, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notes) != 0 {
+		t.Errorf("task update --note should not create task.note events, got %d", len(notes))
+	}
+}
+
 func contains(s, substr string) bool {
 	return bytes.Contains([]byte(s), []byte(substr))
 }
