@@ -82,7 +82,7 @@ func actionToMap(a db.Action) map[string]any {
 }
 
 func init() {
-	listCmd.Flags().StringVar(&listStatus, "status", "", "Filter by status (pending, running, done, failed, cancelled)")
+	listCmd.Flags().StringVar(&listStatus, "status", "", "Filter by status (pending, running, dispatched, done, failed, cancelled)")
 	listCmd.Flags().Int64Var(&listTask, "task", 0, "Filter by task ID (see: tq task list)")
 	listCmd.Flags().IntVar(&listLimit, "limit", 0, "Limit number of results (0 = no limit)")
 	listCmd.Flags().StringVar(&listJQ, "jq", "", jqFlagUsage(listFields))

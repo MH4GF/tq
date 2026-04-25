@@ -20,7 +20,7 @@ IMPORTANT: Run !`tq action fail --help` first to understand the expected reason 
 
 1. `$ARGUMENTS` if numeric
 2. The action/task IDs stated in the dispatch postamble (e.g. "You are executing action #123 (task #45)")
-3. Search running actions: `tq action list --status running`
+3. Search non-terminal actions: `tq action list --status running` or `tq action list --status dispatched`
 4. If none works, ask the user
 
 ## Investigate before failing

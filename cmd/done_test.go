@@ -30,6 +30,12 @@ func TestDone(t *testing.T) {
 			wantOutContains: "action #1 done",
 		},
 		{
+			name:            "dispatched to done",
+			startStatus:     db.ActionStatusDispatched,
+			args:            []string{"action", "done", "1"},
+			wantOutContains: "action #1 done",
+		},
+		{
 			name:            "with result",
 			startStatus:     db.ActionStatusRunning,
 			args:            []string{"action", "done", "1", `{"status":"ok"}`},
