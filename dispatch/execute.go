@@ -136,7 +136,11 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 
 	instruction = wrapInstruction(instruction, action.ID, action.TaskID, cfg.Mode)
 
-	workDir := resolveWorkDir(params.DB, action)
+	workDir, recovery, err := resolveWorkDir(params.DB, action)
+	if err != nil {
+		slog.Warn("resolve work_dir failed", "action_id", action.ID, "error", err)
+	}
+	applyWorkDirRecovery(params.DB, recovery)
 
 	if cfg.IsRemote() {
 		return executeRemote(ctx, params, action, instruction, cfg, workDir)
@@ -277,29 +281,34 @@ func parseMetadata(raw string) (map[string]any, error) {
 	return m, nil
 }
 
+// workDirRecovery describes a fallback that resolveWorkDir applied when the
+// task's recorded work_dir was missing on disk. Pass to applyWorkDirRecovery
+// to commit the corresponding DB correction.
+type workDirRecovery struct {
+	TaskID      int64
+	MissingPath string
+	Fallback    string
+}
+
 // resolveWorkDir returns the effective working directory for action execution.
-// When the task's work_dir does not exist on disk, it falls back to the
-// project's work_dir and auto-corrects the task record in the database.
-func resolveWorkDir(database db.Store, action *db.Action) string {
+// It is read-only: when the task's work_dir does not exist on disk, it returns
+// a non-nil recovery descriptor rather than writing to the DB. Callers that
+// want the auto-correction must invoke applyWorkDirRecovery explicitly.
+func resolveWorkDir(database db.Store, action *db.Action) (string, *workDirRecovery, error) {
 	task, err := database.GetTask(action.TaskID)
 	if err != nil {
-		return "."
+		return ".", nil, fmt.Errorf("get task: %w", err)
 	}
 
 	if task.WorkDir != "" {
 		expanded := expandHome(task.WorkDir)
 		if dirExists(expanded) {
-			return expanded
+			return expanded, nil, nil
 		}
 
 		project, err := database.GetProjectByID(task.ProjectID)
 		if err != nil {
-			slog.Warn("work_dir recovery: task work_dir missing and project lookup failed",
-				"task_id", task.ID,
-				"missing_path", expanded,
-				"error", err,
-			)
-			return "."
+			return ".", nil, fmt.Errorf("get project for fallback: %w", err)
 		}
 
 		fallback := "."
@@ -310,30 +319,40 @@ func resolveWorkDir(database db.Store, action *db.Action) string {
 			}
 		}
 
-		slog.Warn("work_dir auto-recovery: task work_dir does not exist, falling back",
-			"task_id", task.ID,
-			"missing_path", expanded,
-			"fallback_path", fallback,
-		)
-
-		if err := database.UpdateTaskWorkDir(task.ID, ""); err != nil {
-			slog.Warn("work_dir auto-recovery: failed to clear task work_dir",
-				"task_id", task.ID,
-				"error", err,
-			)
-		}
-
-		return fallback
+		return fallback, &workDirRecovery{
+			TaskID:      task.ID,
+			MissingPath: expanded,
+			Fallback:    fallback,
+		}, nil
 	}
 
 	project, err := database.GetProjectByID(task.ProjectID)
 	if err != nil {
-		return "."
+		return ".", nil, fmt.Errorf("get project: %w", err)
 	}
 	if project.WorkDir != "" {
-		return expandHome(project.WorkDir)
+		return expandHome(project.WorkDir), nil, nil
 	}
-	return "."
+	return ".", nil, nil
+}
+
+// applyWorkDirRecovery clears the task's stale work_dir so future dispatches
+// resolve via the project's work_dir naturally. Safe to call with nil.
+func applyWorkDirRecovery(database db.Store, recovery *workDirRecovery) {
+	if recovery == nil {
+		return
+	}
+	slog.Warn("work_dir auto-recovery: task work_dir does not exist, falling back",
+		"task_id", recovery.TaskID,
+		"missing_path", recovery.MissingPath,
+		"fallback_path", recovery.Fallback,
+	)
+	if err := database.UpdateTaskWorkDir(recovery.TaskID, ""); err != nil {
+		slog.Warn("work_dir auto-recovery: failed to clear task work_dir",
+			"task_id", recovery.TaskID,
+			"error", err,
+		)
+	}
 }
 
 func expandHome(path string) string {

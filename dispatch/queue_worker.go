@@ -208,7 +208,10 @@ func reapCheckSessionLog(cfg WorkerConfig, a *db.Action) bool {
 		return false
 	}
 
-	workDir := resolveWorkDir(cfg.DB, a)
+	workDir, _, err := resolveWorkDir(cfg.DB, a)
+	if err != nil {
+		slog.Warn("session log check: resolve work_dir failed", "action_id", a.ID, "error", err)
+	}
 	active, sessionID, err := cfg.SessionLogChecker.IsSessionActive(workDir, cfg.HeartbeatFreshness)
 	if err != nil {
 		slog.Warn("session log check failed", "action_id", a.ID, "error", err)
