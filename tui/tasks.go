@@ -46,16 +46,17 @@ const (
 )
 
 type TasksModel struct {
-	trees      []projectTree
-	cursor     int
-	expanded   map[string]bool
-	lines      []treeLine
-	width      int
-	height     int
-	database   db.Store
-	message    string
-	messageGen int
-	dateFilter string
+	trees          []projectTree
+	cursor         int
+	expanded       map[string]bool
+	lines          []treeLine
+	width          int
+	height         int
+	database       db.Store
+	message        string
+	messageGen     int
+	messageIsError bool
+	dateFilter     string
 
 	// Cached stats
 	runningInteractive int
@@ -85,6 +86,11 @@ type actionAttachedMsg struct {
 type tasksLoadedMsg struct {
 	trees              []projectTree
 	runningInteractive int
+	err                error
+}
+
+type dispatchToggledMsg struct {
+	err error
 }
 
 // actionStats holds aggregate counts for the status strip and gauge.
@@ -107,9 +113,16 @@ func NewTasksModel(database db.Store, dateFilter string) TasksModel {
 
 func (m TasksModel) loadTasks() tea.Cmd {
 	return func() tea.Msg {
+		var firstErr error
+		recordErr := func(err error) {
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+
 		projects, err := m.database.ListProjects(0)
 		if err != nil {
-			return tasksLoadedMsg{}
+			return tasksLoadedMsg{err: fmt.Errorf("list projects: %w", err)}
 		}
 		sort.Slice(projects, func(i, j int) bool { return projects[i].ID < projects[j].ID })
 
@@ -118,6 +131,7 @@ func (m TasksModel) loadTasks() tea.Cmd {
 		for _, p := range projects {
 			tasks, err := m.database.ListTasksByProject(p.ID)
 			if err != nil {
+				recordErr(fmt.Errorf("list tasks for project %d: %w", p.ID, err))
 				continue
 			}
 			tasksByProject[p.ID] = tasks
@@ -128,6 +142,7 @@ func (m TasksModel) loadTasks() tea.Cmd {
 
 		actionsByTask, err := m.database.ListActionsByTaskIDs(allTaskIDs)
 		if err != nil {
+			recordErr(fmt.Errorf("list actions: %w", err))
 			actionsByTask = map[int64][]db.Action{}
 		}
 
@@ -166,10 +181,19 @@ func (m TasksModel) loadTasks() tea.Cmd {
 			trees = append(trees, projectTree{project: p, tasks: nodes})
 		}
 		var ri int
-		if n, err := m.database.CountRunningInteractive(); err == nil {
+		n, err := m.database.CountRunningInteractive()
+		if err != nil {
+			recordErr(fmt.Errorf("count running interactive: %w", err))
+		} else {
 			ri = n
 		}
-		return tasksLoadedMsg{trees: trees, runningInteractive: ri}
+		return tasksLoadedMsg{trees: trees, runningInteractive: ri, err: firstErr}
+	}
+}
+
+func (m TasksModel) toggleDispatch(projectID int64, enabled bool) tea.Cmd {
+	return func() tea.Msg {
+		return dispatchToggledMsg{err: m.database.SetDispatchEnabled(projectID, enabled)}
 	}
 }
 
@@ -182,6 +206,7 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 	case actionAttachedMsg:
 		if msg.message != "" {
 			m.message = msg.message
+			m.messageIsError = false
 			m.messageGen++
 			return m, clearAfterTTL(clearTasksMessageMsg{gen: m.messageGen})
 		}
@@ -189,9 +214,26 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 	case clearTasksMessageMsg:
 		if msg.gen == m.messageGen {
 			m.message = ""
+			m.messageIsError = false
 		}
 		return m, nil
+	case dispatchToggledMsg:
+		reload := m.loadTasks()
+		if msg.err != nil {
+			m.message = fmt.Sprintf("toggle focus failed: %v", msg.err)
+			m.messageIsError = true
+			m.messageGen++
+			return m, tea.Batch(reload, clearAfterTTL(clearTasksMessageMsg{gen: m.messageGen}))
+		}
+		return m, reload
 	case tasksLoadedMsg:
+		var clearCmd tea.Cmd
+		if msg.err != nil {
+			m.message = fmt.Sprintf("load tasks failed: %v", msg.err)
+			m.messageIsError = true
+			m.messageGen++
+			clearCmd = clearAfterTTL(clearTasksMessageMsg{gen: m.messageGen})
+		}
 		m.trees = msg.trees
 		m.runningInteractive = msg.runningInteractive
 		for _, pt := range m.trees {
@@ -212,7 +254,7 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 		}
 		// Ensure cursor is on a selectable line
 		m.skipDecorativeLines(1)
-		return m, nil
+		return m, clearCmd
 
 	case tea.KeyMsg:
 		switch m.mode {
@@ -264,8 +306,7 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 			if pid := m.lines[m.cursor].projectID; pid > 0 && m.lines[m.cursor].taskID == 0 {
 				for _, pt := range m.trees {
 					if pt.project.ID == pid {
-						_ = m.database.SetDispatchEnabled(pid, !pt.project.DispatchEnabled)
-						return m, m.loadTasks()
+						return m, m.toggleDispatch(pid, !pt.project.DispatchEnabled)
 					}
 				}
 			}
@@ -514,7 +555,11 @@ func (m TasksModel) View() string {
 	}
 
 	if m.message != "" {
-		b.WriteString("\n  " + styleDone.Render(m.message) + "\n")
+		style := styleDone
+		if m.messageIsError {
+			style = styleWarning
+		}
+		b.WriteString("\n  " + style.Render(m.message) + "\n")
 	}
 
 	return b.String()
