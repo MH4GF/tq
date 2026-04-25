@@ -134,10 +134,10 @@ Notes with `kind=triage_keep` are surfaced on `tq task list` as `latest_triage_n
 | `tq action update <ID>` | Update an action |
 | `tq action done <ID> [RESULT]` | Mark action as done |
 | `tq action fail <ID> [REASON]` | Mark action as failed when the goal could not be achieved |
-| `tq action cancel <ID> [REASON]` | Cancel an action |
+| `tq action cancel <ID> [REASON]` | Cancel a pending, running, dispatched, or failed action |
 | `tq action attach <ID>` | Attach to a running action's tmux window |
 | `tq action reset <ID>` | Reset a failed or cancelled action to pending |
-| `tq action dispatch <ID>` | Dispatch immediately (skip queue) |
+| `tq action dispatch <ID>` | Dispatch a pending action immediately by its ID |
 
 ### `tq action create`
 
@@ -260,6 +260,10 @@ tq schedule update <ID> [--cron <EXPR>] [--title <TITLE>] [--task <ID>] [--instr
 ```
 
 ## event
+
+| Command | Description |
+|---------|-------------|
+| `tq event list` | List events from the event log (JSON) |
 
 ### `tq event list`
 
