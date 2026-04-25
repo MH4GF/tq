@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -112,6 +113,59 @@ func TestApp_DateFilterDefault(t *testing.T) {
 
 	if m.tasks.dateFilter == "" {
 		t.Error("initial tasks dateFilter should be today's date, got empty")
+	}
+}
+
+func TestBackgroundStatusError_TTLClear(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := New(d, nil, 3)
+
+	updated, cmd := m.Update(backgroundStatusMsg{err: errors.New("boom")})
+	m = updated.(Model)
+
+	if !strings.Contains(m.statusLine, "boom") {
+		t.Errorf("statusLine = %q, want it to contain error message", m.statusLine)
+	}
+	if cmd == nil {
+		t.Fatal("expected a clear-timer cmd after background error")
+	}
+
+	updated, _ = m.Update(clearStatusLineMsg{gen: m.statusLineGen})
+	m = updated.(Model)
+	if m.statusLine != "" {
+		t.Errorf("statusLine should be cleared after clearStatusLineMsg, got %q", m.statusLine)
+	}
+}
+
+// A stale clear timer (from an earlier error) must not wipe a newer error.
+func TestBackgroundStatusError_StaleTimerIgnored(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := New(d, nil, 3)
+
+	updated, _ := m.Update(backgroundStatusMsg{err: errors.New("first")})
+	m = updated.(Model)
+	staleGen := m.statusLineGen
+
+	updated, _ = m.Update(backgroundStatusMsg{err: errors.New("second")})
+	m = updated.(Model)
+	if !strings.Contains(m.statusLine, "second") {
+		t.Fatalf("statusLine = %q, want second error", m.statusLine)
+	}
+
+	updated, _ = m.Update(clearStatusLineMsg{gen: staleGen})
+	m = updated.(Model)
+	if !strings.Contains(m.statusLine, "second") {
+		t.Errorf("stale clear should not wipe newer message, got %q", m.statusLine)
+	}
+
+	updated, _ = m.Update(clearStatusLineMsg{gen: m.statusLineGen})
+	m = updated.(Model)
+	if m.statusLine != "" {
+		t.Errorf("current-gen clear should wipe message, got %q", m.statusLine)
 	}
 }
 

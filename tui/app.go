@@ -36,6 +36,7 @@ type Model struct {
 	bgCtx          context.Context
 	backgrounds    []BackgroundFunc
 	statusLine     string
+	statusLineGen  int
 	logCh          <-chan LogEntry
 	logs           []LogEntry
 	maxInteractive int
@@ -49,8 +50,22 @@ func doTick() tea.Cmd {
 	})
 }
 
+const transientMessageTTL = 10 * time.Second
+
+// clearAfterTTL fires msg after transientMessageTTL. Pair with a per-field
+// generation counter so an earlier timer cannot clear a newer message.
+func clearAfterTTL(msg tea.Msg) tea.Cmd {
+	return tea.Tick(transientMessageTTL, func(time.Time) tea.Msg {
+		return msg
+	})
+}
+
 type backgroundStatusMsg struct {
 	err error
+}
+
+type clearStatusLineMsg struct {
+	gen int
 }
 
 func New(database db.Store, logCh <-chan LogEntry, maxInteractive int, backgrounds ...BackgroundFunc) Model {
@@ -119,6 +134,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case backgroundStatusMsg:
 		if msg.err != nil && !errors.Is(msg.err, context.Canceled) {
 			m.statusLine = fmt.Sprintf("background error: %v", msg.err)
+			m.statusLineGen++
+			return m, clearAfterTTL(clearStatusLineMsg{gen: m.statusLineGen})
+		}
+		return m, nil
+
+	case clearStatusLineMsg:
+		if msg.gen == m.statusLineGen {
+			m.statusLine = ""
 		}
 		return m, nil
 
@@ -161,7 +184,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Data messages go to their owning model regardless of active tab
 	switch msg.(type) {
-	case tasksLoadedMsg, actionAttachedMsg:
+	case tasksLoadedMsg, actionAttachedMsg, clearTasksMessageMsg:
 		var cmd tea.Cmd
 		m.tasks, cmd = m.tasks.Update(msg)
 		return m, cmd

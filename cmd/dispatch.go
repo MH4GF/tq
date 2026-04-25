@@ -49,10 +49,6 @@ func getInteractiveWorkerFactory() func() dispatch.Worker {
 	return defaultInteractiveWorkerFactory
 }
 
-func SetInteractiveWorkerFactory(f func() dispatch.Worker) {
-	activeInteractiveWorkerFactory = f
-}
-
 var defaultRemoteWorkerFactory = func() dispatch.Worker {
 	return &dispatch.RemoteWorker{
 		Runner: &dispatch.ExecRunner{},
@@ -66,10 +62,6 @@ func getRemoteWorkerFactory() func() dispatch.Worker {
 		return activeRemoteWorkerFactory
 	}
 	return defaultRemoteWorkerFactory
-}
-
-func SetRemoteWorkerFactory(f func() dispatch.Worker) {
-	activeRemoteWorkerFactory = f
 }
 
 var actionDispatchCmd = &cobra.Command{

@@ -1,0 +1,6 @@
+# Identifiers reported by golang.org/x/tools/cmd/deadcode -test that are
+# intentionally retained. See docs/golden-rules.md Rule 13.
+#
+# Format: one fully-qualified identifier per line, sorted (the check script
+# sorts both sides before diffing, so order does not matter).
+# Comments (# ...) and blank lines are ignored.

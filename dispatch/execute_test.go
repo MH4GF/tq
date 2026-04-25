@@ -1,9 +1,12 @@
 package dispatch
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -463,36 +466,36 @@ func TestResolveWorkDir_Recovery(t *testing.T) {
 		name          string
 		taskWorkDir   string
 		existingPaths map[string]bool // path -> exists
-		wantSuffix    string          // expected suffix of returned path, or exact "."
-		wantDBCleared bool            // whether task.WorkDir should be cleared to ""
+		wantWorkDir   string
+		wantRecovery  bool
 	}{
 		{
 			name:          "task work_dir exists on disk",
 			taskWorkDir:   "/valid/path",
 			existingPaths: map[string]bool{"/valid/path": true},
-			wantSuffix:    "/valid/path",
-			wantDBCleared: false,
+			wantWorkDir:   "/valid/path",
+			wantRecovery:  false,
 		},
 		{
 			name:          "task work_dir missing, project work_dir exists",
 			taskWorkDir:   "/gone/worktree",
 			existingPaths: map[string]bool{"/gone/worktree": false, "/project/dir": true},
-			wantSuffix:    "/project/dir",
-			wantDBCleared: true,
+			wantWorkDir:   "/project/dir",
+			wantRecovery:  true,
 		},
 		{
 			name:          "task work_dir missing, project work_dir also missing",
 			taskWorkDir:   "/gone/worktree",
 			existingPaths: map[string]bool{"/gone/worktree": false, "/project/dir": false},
-			wantSuffix:    ".",
-			wantDBCleared: true,
+			wantWorkDir:   ".",
+			wantRecovery:  true,
 		},
 		{
 			name:          "task work_dir not set, falls through to project",
 			taskWorkDir:   "",
 			existingPaths: map[string]bool{"/project/dir": true},
-			wantSuffix:    "/project/dir",
-			wantDBCleared: false,
+			wantWorkDir:   "/project/dir",
+			wantRecovery:  false,
 		},
 	}
 
@@ -526,19 +529,83 @@ func TestResolveWorkDir_Recovery(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			got := resolveWorkDir(d, action)
-			if got != tc.wantSuffix {
-				t.Errorf("resolveWorkDir() = %q, want %q", got, tc.wantSuffix)
+			got, recovery, err := resolveWorkDir(d, action)
+			if err != nil {
+				t.Fatalf("resolveWorkDir() unexpected error: %v", err)
+			}
+			if got != tc.wantWorkDir {
+				t.Errorf("resolveWorkDir() = %q, want %q", got, tc.wantWorkDir)
+			}
+			if (recovery != nil) != tc.wantRecovery {
+				t.Errorf("recovery presence = %v, want %v", recovery != nil, tc.wantRecovery)
 			}
 
-			task, _ := d.GetTask(taskID)
-			if tc.wantDBCleared && task.WorkDir != "" {
-				t.Errorf("task.WorkDir = %q, want cleared to empty", task.WorkDir)
+			// resolveWorkDir is read-only.
+			taskBefore, _ := d.GetTask(taskID)
+			if taskBefore.WorkDir != tc.taskWorkDir {
+				t.Errorf("after resolveWorkDir: task.WorkDir = %q, want unchanged %q",
+					taskBefore.WorkDir, tc.taskWorkDir)
 			}
-			if !tc.wantDBCleared && task.WorkDir != tc.taskWorkDir {
-				t.Errorf("task.WorkDir = %q, want unchanged %q", task.WorkDir, tc.taskWorkDir)
+
+			applyWorkDirRecovery(d, recovery)
+			taskAfter, _ := d.GetTask(taskID)
+			if tc.wantRecovery {
+				if taskAfter.WorkDir != "" {
+					t.Errorf("after applyWorkDirRecovery: task.WorkDir = %q, want cleared",
+						taskAfter.WorkDir)
+				}
+				if recovery.TaskID != taskID {
+					t.Errorf("recovery.TaskID = %d, want %d", recovery.TaskID, taskID)
+				}
+				if recovery.Fallback != tc.wantWorkDir {
+					t.Errorf("recovery.Fallback = %q, want %q", recovery.Fallback, tc.wantWorkDir)
+				}
+			} else {
+				if taskAfter.WorkDir != tc.taskWorkDir {
+					t.Errorf("no recovery expected, but task.WorkDir = %q, want %q",
+						taskAfter.WorkDir, tc.taskWorkDir)
+				}
 			}
 		})
+	}
+}
+
+// TestResolveWorkDir_NoWriteFromReaperPath asserts that resolveWorkDir is
+// pure: callers that ignore the recovery descriptor (e.g. the reaper) never
+// trigger a DB write, even on the fallback path.
+func TestResolveWorkDir_NoWriteFromReaperPath(t *testing.T) {
+	restore := SetDirExists(func(path string) bool {
+		return path == "/project/dir"
+	})
+	defer restore()
+
+	d := testutil.NewTestDB(t)
+	projID, err := d.InsertProject("test-proj", "/project/dir", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID, err := d.InsertTask(projID, "test-task", "{}", "/gone/worktree")
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, _ := json.Marshal(map[string]any{MetaKeyInstruction: "do something"})
+	actionID, err := d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	action, err := d.GetAction(actionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := resolveWorkDir(d, action); err != nil {
+		t.Fatalf("resolveWorkDir error: %v", err)
+	}
+
+	task, _ := d.GetTask(taskID)
+	if task.WorkDir != "/gone/worktree" {
+		t.Errorf("task.WorkDir = %q, want unchanged %q",
+			task.WorkDir, "/gone/worktree")
 	}
 }
 
@@ -694,6 +761,85 @@ func TestExecuteAction_NonInteractiveFailureSavesSessionID(t *testing.T) {
 	json.Unmarshal([]byte(a.Metadata), &m)
 	if m["claude_session_id"] != "sess-failed" {
 		t.Errorf("claude_session_id = %v, want %q", m["claude_session_id"], "sess-failed")
+	}
+}
+
+// markFailedErrStore wraps a db.Store and forces MarkFailed to return an error,
+// simulating a transient write error or FK violation.
+type markFailedErrStore struct {
+	db.Store
+	err            error
+	markFailedHits int
+}
+
+func (s *markFailedErrStore) MarkFailed(id int64, result string) error {
+	s.markFailedHits++
+	_ = s.Store.MarkFailed(id, result) // best-effort underlying call so investigation lookup works as it would in prod
+	return s.err
+}
+
+func TestExecuteAction_MarkFailedErrorIsLogged(t *testing.T) {
+	tests := []struct {
+		name       string
+		promptMode string
+	}{
+		{name: "noninteractive worker failure", promptMode: ModeNonInteractive},
+		{name: "interactive worker failure", promptMode: ModeInteractive},
+		{name: "remote worker failure", promptMode: ModeRemote},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var logBuf bytes.Buffer
+			origLogger := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+			t.Cleanup(func() { slog.SetDefault(origLogger) })
+
+			base := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, base)
+
+			markFailedErr := errors.New("simulated FK violation")
+			store := &markFailedErrStore{Store: base, err: markFailedErr}
+
+			meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": tc.promptMode})
+			taskID, _ := base.InsertTask(1, "Test task", `{}`, "")
+			actionID, _ := base.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil)
+
+			action, _ := base.NextPending(context.Background())
+
+			worker := &countingWorker{err: fmt.Errorf("boom")}
+			workerFunc := func() Worker { return worker }
+
+			_, err := ExecuteAction(context.Background(), ExecuteParams{
+				DispatchConfig: DispatchConfig{
+					DB:                 store,
+					NonInteractiveFunc: workerFunc,
+					InteractiveFunc:    workerFunc,
+					RemoteFunc:         workerFunc,
+				},
+			}, action)
+
+			var af *ActionFailedError
+			if !errors.As(err, &af) {
+				t.Fatalf("expected ActionFailedError, got %v", err)
+			}
+			if af.ActionID != actionID {
+				t.Errorf("ActionID = %d, want %d", af.ActionID, actionID)
+			}
+			if store.markFailedHits == 0 {
+				t.Fatalf("expected MarkFailed to be called on wrapper store")
+			}
+
+			logs := logBuf.String()
+			if !strings.Contains(logs, "mark action failed") {
+				t.Errorf("expected log line for mark action failed, got:\n%s", logs)
+			}
+			if !strings.Contains(logs, fmt.Sprintf("action_id=%d", actionID)) {
+				t.Errorf("expected log to contain action_id=%d, got:\n%s", actionID, logs)
+			}
+			if !strings.Contains(logs, "simulated FK violation") {
+				t.Errorf("expected log to contain underlying error, got:\n%s", logs)
+			}
+		})
 	}
 }
 

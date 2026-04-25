@@ -1,20 +1,27 @@
 ---
-description: Run docs-reviewer and code simplifier in parallel as a quality gate
+description: Run docs-reviewer, code simplifier, and diff-scoped E2E in parallel as a quality gate
 allowed-tools: Agent, Skill, Bash(.claude/scripts/record-quality-review.sh)
 ---
 
-Launch both reviews in parallel:
+Launch all three reviews in parallel:
 
 1. **docs-reviewer**: Run Agent with `subagent_type: "docs-reviewer"` to detect documentation drift
 2. **simplify**: Run Skill tool with `skill: "simplify"` to review recently changed code for reuse, quality, and efficiency
+3. **e2e-execute**: Run Agent with `subagent_type: "e2e-execute"` to run diff-scoped E2E against the built tq binary
 
-Execute both in a single message (Agent + Skill tool calls) for parallel execution.
+Execute all three in a single message (Agent + Skill + Agent tool calls) for parallel execution.
 
-After both complete, present a unified summary of findings.
+After all complete, present a unified summary of findings.
 
 ## Record completion
 
-After both reviews finish AND the user has acknowledged or resolved findings, record the current HEAD SHA so the `gh pr create` PreToolUse hook permits PR creation:
+Record the current HEAD SHA **only when all three pass** the gate:
+
+- docs-reviewer: drift acknowledged or none found
+- simplify: findings acknowledged or none found
+- e2e-execute: result is `PASS` or legitimate `SKIPPED` (NOT `FAIL`)
+
+If e2e-execute returned `FAIL`, do NOT record. Fix the regression first and re-run `/quality-review`.
 
 ```bash
 .claude/scripts/record-quality-review.sh

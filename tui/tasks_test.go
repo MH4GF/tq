@@ -568,11 +568,13 @@ func TestTasksModel_ToggleFocus(t *testing.T) {
 		t.Fatalf("cursor should be on project line, lineType=%d", m.lines[m.cursor].lineType)
 	}
 
-	// Press f to toggle focus (disable)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	if cmd != nil {
-		reloadMsg := cmd()
-		m, _ = m.Update(reloadMsg)
+	m, toggleCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	if toggleCmd == nil {
+		t.Fatal("expected toggleDispatch cmd from f key")
+	}
+	m, reloadCmd := m.Update(toggleCmd())
+	if reloadCmd != nil {
+		m, _ = m.Update(reloadCmd())
 	}
 
 	// Verify project is now disabled
@@ -761,6 +763,68 @@ func TestTasksModel_TaskDetailView_NoNotes(t *testing.T) {
 	}
 }
 
+func TestTasksModel_MessageTTLClear(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "{}", "")
+	d.InsertAction("a", taskID, "{}", db.ActionStatusPending, nil)
+
+	m := NewTasksModel(d, "")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	updated, cmd := m.Update(actionAttachedMsg{id: 1, message: "attach failed: boom"})
+	m = updated
+	if m.message == "" {
+		t.Fatal("message should be set after actionAttachedMsg with non-empty message")
+	}
+	if cmd == nil {
+		t.Fatal("expected a clear-timer cmd after actionAttachedMsg")
+	}
+
+	// Keystrokes must not clear the message — only the TTL does.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.message == "" {
+		t.Error("keystroke should not clear message; TTL should")
+	}
+
+	m, _ = m.Update(clearTasksMessageMsg{gen: m.messageGen})
+	if m.message != "" {
+		t.Errorf("message should be cleared after clearTasksMessageMsg, got %q", m.message)
+	}
+}
+
+func TestTasksModel_MessageStaleTimerIgnored(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "{}", "")
+	d.InsertAction("a", taskID, "{}", db.ActionStatusPending, nil)
+
+	m := NewTasksModel(d, "")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	m, _ = m.Update(actionAttachedMsg{id: 1, message: "first"})
+	staleGen := m.messageGen
+
+	m, _ = m.Update(actionAttachedMsg{id: 2, message: "second"})
+	if m.message != "second" {
+		t.Fatalf("message = %q, want %q", m.message, "second")
+	}
+
+	m, _ = m.Update(clearTasksMessageMsg{gen: staleGen})
+	if m.message != "second" {
+		t.Errorf("stale clear should not wipe newer message, got %q", m.message)
+	}
+
+	m, _ = m.Update(clearTasksMessageMsg{gen: m.messageGen})
+	if m.message != "" {
+		t.Errorf("current-gen clear should wipe message, got %q", m.message)
+	}
+}
+
 func TestTasksModel_SetSize(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -827,6 +891,148 @@ func TestTasksModel_ActionStatsUnfocused(t *testing.T) {
 	}
 	if !strings.Contains(stats.pendingLabel, "unfocused") {
 		t.Errorf("pendingLabel should contain 'unfocused', got %q", stats.pendingLabel)
+	}
+}
+
+func TestTasksModel_LoadTasks_BulkActions(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// 2 projects × 3 tasks × 3 actions of differing status.
+	type seedAction struct {
+		title  string
+		status string
+	}
+	seedActions := []seedAction{
+		{"a-pending", db.ActionStatusPending},
+		{"a-running", db.ActionStatusRunning},
+		{"a-done", db.ActionStatusDone},
+	}
+
+	wantTasksByProject := map[int64]int{1: 3, 2: 3}
+	for _, projectID := range []int64{1, 2} {
+		for ti := range 3 {
+			taskID, err := d.InsertTask(projectID, fmt.Sprintf("p%d-task%d", projectID, ti), "{}", "")
+			if err != nil {
+				t.Fatalf("InsertTask: %v", err)
+			}
+			for _, sa := range seedActions {
+				id, err := d.InsertAction(sa.title, taskID, "{}", db.ActionStatusPending, nil)
+				if err != nil {
+					t.Fatalf("InsertAction: %v", err)
+				}
+				switch sa.status {
+				case db.ActionStatusRunning:
+					if err := d.SetActionStatusForTest(id, db.ActionStatusRunning); err != nil {
+						t.Fatalf("SetActionStatusForTest: %v", err)
+					}
+				case db.ActionStatusDone:
+					if err := d.MarkDone(id, ""); err != nil {
+						t.Fatalf("MarkDone: %v", err)
+					}
+				}
+			}
+		}
+	}
+
+	m := NewTasksModel(d, "")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	if len(m.trees) != 3 {
+		t.Fatalf("trees = %d, want 3", len(m.trees))
+	}
+
+	for _, pt := range m.trees {
+		want, expected := wantTasksByProject[pt.project.ID]
+		if !expected {
+			if len(pt.tasks) != 0 {
+				t.Errorf("project %d unexpected tasks = %d", pt.project.ID, len(pt.tasks))
+			}
+			continue
+		}
+		if len(pt.tasks) != want {
+			t.Errorf("project %d tasks = %d, want %d", pt.project.ID, len(pt.tasks), want)
+		}
+		for _, tn := range pt.tasks {
+			if len(tn.actions) != len(seedActions) {
+				t.Errorf("task %d actions = %d, want %d", tn.task.ID, len(tn.actions), len(seedActions))
+				continue
+			}
+			// actionStatusOrder: done(1) < running(3) < pending(5)
+			for i := 1; i < len(tn.actions); i++ {
+				prev := actionStatusOrder(tn.actions[i-1].Status)
+				cur := actionStatusOrder(tn.actions[i].Status)
+				if prev > cur {
+					t.Errorf("task %d actions out of order: %v then %v",
+						tn.task.ID, tn.actions[i-1].Status, tn.actions[i].Status)
+				}
+			}
+		}
+	}
+}
+
+func TestTasksModel_LoadTasks_SurfacesError(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := NewTasksModel(d, "")
+	if err := d.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	msg := m.loadTasks()()
+	loaded, ok := msg.(tasksLoadedMsg)
+	if !ok {
+		t.Fatalf("msg type = %T, want tasksLoadedMsg", msg)
+	}
+	if loaded.err == nil {
+		t.Fatal("expected loadTasks to surface error after DB close")
+	}
+
+	m, _ = m.Update(loaded)
+	if !m.messageIsError {
+		t.Errorf("messageIsError = false, want true")
+	}
+	if !strings.Contains(m.message, "load tasks failed") {
+		t.Errorf("m.message = %q, want prefix 'load tasks failed'", m.message)
+	}
+}
+
+func TestTasksModel_ToggleFocus_SurfacesError(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := NewTasksModel(d, "")
+	loadMsg := m.Init()()
+	m, _ = m.Update(loadMsg)
+
+	if m.lines[m.cursor].lineType != lineProject {
+		t.Fatalf("cursor should start on project line, got lineType=%d", m.lines[m.cursor].lineType)
+	}
+
+	if err := d.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	if cmd == nil {
+		t.Fatal("expected toggleDispatch cmd from f key")
+	}
+	toggled, ok := cmd().(dispatchToggledMsg)
+	if !ok {
+		t.Fatalf("cmd msg type = %T, want dispatchToggledMsg", cmd())
+	}
+	if toggled.err == nil {
+		t.Fatal("expected SetDispatchEnabled to error after DB close")
+	}
+
+	m, _ = m.Update(toggled)
+	if !m.messageIsError {
+		t.Errorf("messageIsError = false, want true")
+	}
+	if !strings.Contains(m.message, "toggle focus failed") {
+		t.Errorf("m.message = %q, want prefix 'toggle focus failed'", m.message)
 	}
 }
 

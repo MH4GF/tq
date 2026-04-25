@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
+
+	"github.com/MH4GF/tq/db"
 )
 
 func init() {
@@ -45,6 +47,10 @@ Session logs already capture that.`,
 		action, err := database.GetAction(id)
 		if err != nil {
 			return fmt.Errorf("action #%d not found (see: tq action list): %w", id, err)
+		}
+
+		if action.Status == db.ActionStatusDone || action.Status == db.ActionStatusFailed || action.Status == db.ActionStatusCancelled {
+			return fmt.Errorf("action #%d is already %q, cannot mark as done (only pending or running actions can be marked done)", id, action.Status)
 		}
 
 		result := ""

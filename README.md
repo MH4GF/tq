@@ -105,9 +105,17 @@ project → task → action
                 └───────────────────────┘          │
                 └──────────────────────────────────┘
 
+                            cancel
+              (from pending, running, or failed)
+                              │
+                              ▼
+                        ┌───────────┐
+                        │ cancelled │
+                        └───────────┘
+
   * cancel/fail/reset only update the DB; tmux panes are not terminated
   * to restart a running action, run `tq action cancel` or `fail` first, then `reset`
-  * done is terminal, but on_done can spawn a new action
+  * done and cancelled are terminal; on_done spawns a new action from done only
 ```
 
 ### Worker Types
