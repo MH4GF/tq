@@ -86,7 +86,7 @@ func (db *DB) UpdateTask(id int64, status, reason string) error {
 		}
 	}
 
-	if status == TaskStatusArchived {
+	if status == TaskStatusDone || status == TaskStatusArchived {
 		var activeCount int
 		err := db.QueryRow(
 			"SELECT COUNT(*) FROM actions WHERE task_id = ? AND status IN (?, ?)",
@@ -96,7 +96,7 @@ func (db *DB) UpdateTask(id int64, status, reason string) error {
 			return fmt.Errorf("check active actions: %w", err)
 		}
 		if activeCount > 0 {
-			return fmt.Errorf("task #%d has %d pending/running action(s). Cancel or complete them before archiving", id, activeCount)
+			return fmt.Errorf("task #%d has %d pending/running action(s). Cancel or complete them before closing", id, activeCount)
 		}
 	}
 

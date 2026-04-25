@@ -312,39 +312,76 @@ func TestUpdateTask_BlockedByActiveSchedule(t *testing.T) {
 func TestUpdateTask_BlockedByActiveActions(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
 
-	// Insert a pending action
-	actionID, _ := d.InsertAction("pending action", taskID, "{}", db.ActionStatusPending, nil)
+	t.Run("pending action blocks done", func(t *testing.T) {
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		d.InsertAction("pending", taskID, "{}", db.ActionStatusPending, nil)
 
-	// Archiving should be blocked
-	err := d.UpdateTask(taskID, db.TaskStatusArchived, "")
-	if err == nil {
-		t.Fatal("expected error when archiving task with pending action")
-	}
-	if !strings.Contains(err.Error(), "pending/running action(s)") {
-		t.Errorf("unexpected error message: %v", err)
-	}
+		err := d.UpdateTask(taskID, db.TaskStatusDone, "")
+		if err == nil {
+			t.Fatal("expected error when completing task with pending action")
+		}
+		if !strings.Contains(err.Error(), "pending/running action(s)") {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
 
-	// done should still be allowed (only archived is blocked)
-	err = d.UpdateTask(taskID, db.TaskStatusDone, "")
-	if err != nil {
-		t.Errorf("UpdateTask(done) should succeed with active actions, got: %v", err)
-	}
+	t.Run("pending action blocks archived", func(t *testing.T) {
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		d.InsertAction("pending", taskID, "{}", db.ActionStatusPending, nil)
 
-	// Reset to open for next test
-	if err := d.UpdateTask(taskID, db.TaskStatusOpen, ""); err != nil {
-		t.Fatalf("reset to open: %v", err)
-	}
+		err := d.UpdateTask(taskID, db.TaskStatusArchived, "")
+		if err == nil {
+			t.Fatal("expected error when archiving task with pending action")
+		}
+	})
 
-	// Cancel the action, archiving should now succeed
-	if err := d.MarkCancelled(actionID, ""); err != nil {
-		t.Fatalf("cancel action: %v", err)
-	}
-	err = d.UpdateTask(taskID, db.TaskStatusArchived, "")
-	if err != nil {
-		t.Errorf("UpdateTask(archived) should succeed after cancelling actions, got: %v", err)
-	}
+	t.Run("running action blocks done", func(t *testing.T) {
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		d.InsertAction("running", taskID, "{}", db.ActionStatusRunning, nil)
+
+		err := d.UpdateTask(taskID, db.TaskStatusDone, "")
+		if err == nil {
+			t.Fatal("expected error when completing task with running action")
+		}
+	})
+
+	t.Run("failed action does not block done", func(t *testing.T) {
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		actionID, _ := d.InsertAction("to-fail", taskID, "{}", db.ActionStatusRunning, nil)
+		d.MarkFailed(actionID, "failed")
+
+		err := d.UpdateTask(taskID, db.TaskStatusDone, "")
+		if err != nil {
+			t.Errorf("done should succeed with only failed actions, got: %v", err)
+		}
+	})
+
+	t.Run("done/cancelled actions do not block", func(t *testing.T) {
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		doneID, _ := d.InsertAction("to-done", taskID, "{}", db.ActionStatusRunning, nil)
+		d.MarkDone(doneID, "ok")
+		cancelID, _ := d.InsertAction("to-cancel", taskID, "{}", db.ActionStatusPending, nil)
+		d.MarkCancelled(cancelID, "")
+
+		err := d.UpdateTask(taskID, db.TaskStatusDone, "")
+		if err != nil {
+			t.Errorf("done should succeed with only done/cancelled actions, got: %v", err)
+		}
+	})
+
+	t.Run("after cancelling all active actions", func(t *testing.T) {
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		actionID, _ := d.InsertAction("pending", taskID, "{}", db.ActionStatusPending, nil)
+
+		if err := d.MarkCancelled(actionID, ""); err != nil {
+			t.Fatalf("cancel action: %v", err)
+		}
+		err := d.UpdateTask(taskID, db.TaskStatusArchived, "")
+		if err != nil {
+			t.Errorf("archived should succeed after cancelling actions, got: %v", err)
+		}
+	})
 }
 
 func TestListTasksByStatus(t *testing.T) {
