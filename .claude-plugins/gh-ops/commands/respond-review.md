@@ -20,7 +20,15 @@ If stdout is empty (stderr says `No unresolved threads`) → report and finish.
 
 ## Phase 2: Classify and draft in tmp file
 
-Read the file path printed by Phase 1 and fill in each thread:
+Read the file path printed by Phase 1 and fill in each thread.
+
+### Editing rules (the draft is the user's source of truth)
+
+- Edit ONLY the `Classification` line and the `Reply draft` block. Leave every other byte — heading, Thread ID, quoted comment — exactly as the script wrote it.
+- NEVER modify, summarize, paraphrase, reorder, or delete the quoted comment lines (lines starting with `>`). The user reviews the draft against that quote; rewriting it forces them to cross-check GitHub for every reply and breaks the workflow.
+- NEVER reference threads by position or by any other ad-hoc label inside `Reply draft` (e.g. `same as the first thread`, `see thread above`, `as in Thread 2`). The GitHub review UI shows no such ordering, so reviewers cannot resolve the reference. If you need to point at another thread, cite its `file:line` directly.
+
+### Fields to fill in
 
 - **Classification**: one of
   - `No action` — code explanation, FYI, already-addressed findings. Do NOT resolve.
@@ -32,6 +40,40 @@ Read the file path printed by Phase 1 and fill in each thread:
   - `No action`: usually empty. Fill in only if you want to post a comment without resolving.
 
 For judgment calls (naming, value selection, design decisions), include precedent research and rationale in the draft.
+
+### Example: what to edit vs what to preserve
+
+Before (script output):
+
+```markdown
+## src/foo.ts:42 by @coderabbitai[bot]
+
+- **Thread ID**: `PRRT_xxx`
+
+> Consider extracting this into a helper — it's duplicated in `bar.ts:88`.
+
+**Classification**: _(No action / Resolve without code change / Action required)_
+
+**Reply draft**:
+
+_(empty)_
+```
+
+After (your edit — heading / Thread ID / quote untouched):
+
+```markdown
+## src/foo.ts:42 by @coderabbitai[bot]
+
+- **Thread ID**: `PRRT_xxx`
+
+> Consider extracting this into a helper — it's duplicated in `bar.ts:88`.
+
+**Classification**: Action required
+
+**Reply draft**:
+
+Extracted into `extractFoo()` in `src/util/foo.ts`. Both call sites updated.
+```
 
 After editing, present the file to the user and reach agreement. The user may edit the file directly. Do NOT start Phase 3 without agreement.
 
