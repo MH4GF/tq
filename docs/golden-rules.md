@@ -172,3 +172,13 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 14 No `*ForTest` in prod | — | OK | OK | OK |
 
 Totals: **0** current violations.
+
+---
+
+## Exploratory review (rule discovery)
+
+`/gc-exploratory` is the upstream feeder for this rule list. Where the rules above encode invariants we already know we want, the exploratory pass roams the codebase with deliberately vague intent ("find anything that concerns you") and surfaces concerns that no lint, no golden-rule, and no docs-reviewer can catch.
+
+It runs as Phase 3 of `/gc-golden-rules` and turns each verified concern into a child tq action on the same task.
+
+**When a class of concern shows up repeatedly, that is the signal to lift it into a verifiable rule here.** This is the feedback loop that grows the rule list over time.
