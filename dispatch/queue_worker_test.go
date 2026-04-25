@@ -16,15 +16,18 @@ import (
 func ptr[T any](v T) *T { return &v }
 
 type countingWorker struct {
-	count  int
-	result string
-	err    error
+	count   int
+	result  string
+	err     error
+	denials []PermissionDenial
 }
 
 func (w *countingWorker) Execute(ctx context.Context, instruction string, cfg ActionConfig, workDir string, actionID, taskID int64) (string, error) {
 	w.count++
 	return w.result, w.err
 }
+
+func (w *countingWorker) LastDenials() []PermissionDenial { return w.denials }
 
 func TestRunWorker_ProcessesAndStops(t *testing.T) {
 	d := testutil.NewTestDB(t)
