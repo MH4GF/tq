@@ -17,14 +17,21 @@ import (
 func TestExecuteAction(t *testing.T) {
 	tests := []struct {
 		name              string
+		instruction       string // empty → "do the task"
 		promptMode        string
+		claudeArgs        []string
 		workerResult      string
 		workerErr         error
+		workerDenials     []PermissionDenial
+		sessionID         string // non-empty → install mockSessionLogChecker
 		beforeInteractive func(*db.Action) error
 		wantMode          string
 		wantStatus        string
-		wantErrType       string // "failed", "deferred", or ""
+		wantErrType       string // "" | "failed" | "deferred"
+		wantErrSubstr     string
 		wantWorkerCount   int
+		wantFollowUps     int
+		wantSessionID     string
 	}{
 		{
 			name:            "noninteractive success",
@@ -45,7 +52,7 @@ func TestExecuteAction(t *testing.T) {
 		{
 			name:       "interactive deferred by BeforeInteractive",
 			promptMode: "interactive",
-			beforeInteractive: func(a *db.Action) error {
+			beforeInteractive: func(_ *db.Action) error {
 				return ErrInteractiveDeferred
 			},
 			wantStatus:      db.ActionStatusPending,
@@ -60,6 +67,82 @@ func TestExecuteAction(t *testing.T) {
 			wantStatus:      db.ActionStatusDispatched,
 			wantWorkerCount: 1,
 		},
+		{
+			name:            "instruction only defaults to interactive",
+			instruction:     "/github-pr review this",
+			workerResult:    "interactive:done",
+			wantMode:        ModeInteractive,
+			wantStatus:      db.ActionStatusRunning,
+			wantWorkerCount: 1,
+		},
+		{
+			name:            "instruction with mode override",
+			instruction:     "do something",
+			promptMode:      "noninteractive",
+			workerResult:    `{"ok":true}`,
+			wantMode:        ModeNonInteractive,
+			wantStatus:      db.ActionStatusDone,
+			wantWorkerCount: 1,
+		},
+		{
+			name:         "noninteractive denials create follow-up",
+			promptMode:   "noninteractive",
+			workerResult: "ok",
+			workerDenials: []PermissionDenial{
+				{ToolName: "Bash", Input: map[string]any{"command": "gh api notifications"}},
+			},
+			wantMode:        ModeNonInteractive,
+			wantStatus:      db.ActionStatusDone,
+			wantWorkerCount: 1,
+			wantFollowUps:   1,
+		},
+		{
+			name:            "noninteractive no denials no follow-up",
+			promptMode:      "noninteractive",
+			workerResult:    "ok",
+			workerDenials:   []PermissionDenial{},
+			wantMode:        ModeNonInteractive,
+			wantStatus:      db.ActionStatusDone,
+			wantWorkerCount: 1,
+			wantFollowUps:   0,
+		},
+		{
+			name:            "valid claude_args",
+			promptMode:      "noninteractive",
+			claudeArgs:      []string{"--max-turns", "5", "--model", "opus"},
+			workerResult:    `{"ok":true}`,
+			wantMode:        ModeNonInteractive,
+			wantStatus:      db.ActionStatusDone,
+			wantWorkerCount: 1,
+		},
+		{
+			name:            "blocked claude_args fail before invoking worker",
+			promptMode:      "noninteractive",
+			claudeArgs:      []string{"--output-format", "text"},
+			wantStatus:      db.ActionStatusFailed,
+			wantErrSubstr:   "claude_args cannot include",
+			wantWorkerCount: 0,
+		},
+		{
+			name:            "noninteractive saves claude_session_id on success",
+			promptMode:      "noninteractive",
+			workerResult:    `{"ok":true}`,
+			sessionID:       "sess-noninteractive",
+			wantMode:        ModeNonInteractive,
+			wantStatus:      db.ActionStatusDone,
+			wantWorkerCount: 1,
+			wantSessionID:   "sess-noninteractive",
+		},
+		{
+			name:            "noninteractive saves claude_session_id on failure",
+			promptMode:      "noninteractive",
+			workerErr:       context.DeadlineExceeded,
+			sessionID:       "sess-failed",
+			wantStatus:      db.ActionStatusFailed,
+			wantErrType:     "failed",
+			wantWorkerCount: 1,
+			wantSessionID:   "sess-failed",
+		},
 	}
 
 	for _, tc := range tests {
@@ -67,22 +150,43 @@ func TestExecuteAction(t *testing.T) {
 			d := testutil.NewTestDB(t)
 			testutil.SeedTestProjects(t, d)
 
-			meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": tc.promptMode})
-			taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-			d.InsertAction("test-"+tc.promptMode, taskID, string(meta), db.ActionStatusPending, nil)
+			instruction := tc.instruction
+			if instruction == "" {
+				instruction = "do the task"
+			}
+			metaMap := map[string]any{"instruction": instruction}
+			if tc.promptMode != "" {
+				metaMap["mode"] = tc.promptMode
+			}
+			if len(tc.claudeArgs) > 0 {
+				metaMap["claude_args"] = tc.claudeArgs
+			}
+			meta, _ := json.Marshal(metaMap)
+
+			taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+			d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil)
 
 			action, _ := d.NextPending(context.Background())
 
-			worker := &countingWorker{result: tc.workerResult, err: tc.workerErr}
+			worker := &countingWorker{
+				result:  tc.workerResult,
+				err:     tc.workerErr,
+				denials: tc.workerDenials,
+			}
 			workerFunc := func() Worker { return worker }
 
+			cfg := DispatchConfig{
+				DB:                 d,
+				NonInteractiveFunc: workerFunc,
+				InteractiveFunc:    workerFunc,
+				RemoteFunc:         workerFunc,
+			}
+			if tc.sessionID != "" {
+				cfg.SessionLogChecker = &mockSessionLogChecker{active: true, sessionID: tc.sessionID}
+			}
+
 			result, err := ExecuteAction(context.Background(), ExecuteParams{
-				DispatchConfig: DispatchConfig{
-					DB:                 d,
-					NonInteractiveFunc: workerFunc,
-					InteractiveFunc:    workerFunc,
-					RemoteFunc:         workerFunc,
-				},
+				DispatchConfig:    cfg,
 				BeforeInteractive: tc.beforeInteractive,
 			}, action)
 
@@ -97,12 +201,18 @@ func TestExecuteAction(t *testing.T) {
 					t.Fatalf("expected ErrInteractiveDeferred, got %v", err)
 				}
 			default:
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
+				if tc.wantErrSubstr == "" {
+					if err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+					if result.Mode != tc.wantMode {
+						t.Errorf("mode = %q, want %q", result.Mode, tc.wantMode)
+					}
 				}
-				if result.Mode != tc.wantMode {
-					t.Errorf("mode = %q, want %q", result.Mode, tc.wantMode)
-				}
+			}
+
+			if tc.wantErrSubstr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErrSubstr)) {
+				t.Errorf("error = %v, want substring %q", err, tc.wantErrSubstr)
 			}
 
 			if worker.count != tc.wantWorkerCount {
@@ -113,68 +223,26 @@ func TestExecuteAction(t *testing.T) {
 			if a.Status != tc.wantStatus {
 				t.Errorf("status = %q, want %q", a.Status, tc.wantStatus)
 			}
+
+			actions, _ := d.ListActions("", nil, 0)
+			var followups int
+			for _, x := range actions {
+				if hasMetaKey(x.Metadata, MetaKeyIsPermissionBlock) && x.Status == db.ActionStatusPending {
+					followups++
+				}
+			}
+			if followups != tc.wantFollowUps {
+				t.Errorf("permission-block follow-ups = %d, want %d", followups, tc.wantFollowUps)
+			}
+
+			if tc.wantSessionID != "" {
+				var m map[string]any
+				_ = json.Unmarshal([]byte(a.Metadata), &m)
+				if m["claude_session_id"] != tc.wantSessionID {
+					t.Errorf("claude_session_id = %v, want %q", m["claude_session_id"], tc.wantSessionID)
+				}
+			}
 		})
-	}
-}
-
-func TestExecuteAction_InstructionOnly(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	meta, _ := json.Marshal(map[string]any{"instruction": "/github-pr review this"})
-	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("review", taskID, string(meta), db.ActionStatusPending, nil)
-
-	action, _ := d.NextPending(context.Background())
-
-	worker := &countingWorker{result: "interactive:done"}
-	workerFunc := func() Worker { return worker }
-
-	result, err := ExecuteAction(context.Background(), ExecuteParams{
-		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: workerFunc,
-			InteractiveFunc:    workerFunc,
-			RemoteFunc:         workerFunc,
-		},
-	}, action)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Mode != ModeInteractive {
-		t.Errorf("mode = %q, want %q", result.Mode, ModeInteractive)
-	}
-	if worker.count != 1 {
-		t.Errorf("worker.count = %d, want 1", worker.count)
-	}
-}
-
-func TestExecuteAction_InstructionWithModeOverride(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	meta, _ := json.Marshal(map[string]any{"instruction": "do something", "mode": "noninteractive"})
-	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("task", taskID, string(meta), db.ActionStatusPending, nil)
-
-	action, _ := d.NextPending(context.Background())
-
-	worker := &countingWorker{result: `{"ok":true}`}
-	workerFunc := func() Worker { return worker }
-
-	result, err := ExecuteAction(context.Background(), ExecuteParams{
-		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: workerFunc,
-			InteractiveFunc:    workerFunc,
-			RemoteFunc:         workerFunc,
-		},
-	}, action)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Mode != ModeNonInteractive {
-		t.Errorf("mode = %q, want %q", result.Mode, ModeNonInteractive)
 	}
 }
 
@@ -290,174 +358,6 @@ func TestValidateActionMetadata(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 		})
-	}
-}
-
-type denialsWorker struct {
-	result  string
-	denials []PermissionDenial
-}
-
-func (w *denialsWorker) Execute(_ context.Context, _ string, _ ActionConfig, _ string, _, _ int64) (string, error) {
-	return w.result, nil
-}
-
-func (w *denialsWorker) LastDenials() []PermissionDenial {
-	return w.denials
-}
-
-func TestExecuteAction_NonInteractiveDenialsCreatesFollowUp(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
-	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("watch", taskID, string(meta), db.ActionStatusPending, nil)
-
-	action, _ := d.NextPending(context.Background())
-
-	worker := &denialsWorker{
-		result: "ok",
-		denials: []PermissionDenial{
-			{ToolName: "Bash", Input: map[string]any{"command": "gh api notifications"}},
-		},
-	}
-	workerFunc := func() Worker { return worker }
-
-	result, err := ExecuteAction(context.Background(), ExecuteParams{
-		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: workerFunc,
-			InteractiveFunc:    workerFunc,
-			RemoteFunc:         workerFunc,
-		},
-	}, action)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Mode != ModeNonInteractive {
-		t.Errorf("mode = %q, want %q", result.Mode, ModeNonInteractive)
-	}
-
-	// Original action is done
-	a, _ := d.GetAction(action.ID)
-	if a.Status != db.ActionStatusDone {
-		t.Errorf("original action status = %q, want done", a.Status)
-	}
-
-	// Follow-up permission_block action exists in pending
-	actions, _ := d.ListActions("", nil, 0)
-	var followupCount int
-	for _, x := range actions {
-		if hasMetaKey(x.Metadata, MetaKeyIsPermissionBlock) && x.Status == db.ActionStatusPending {
-			followupCount++
-		}
-	}
-	if followupCount != 1 {
-		t.Errorf("expected 1 pending permission-block follow-up, got %d", followupCount)
-	}
-}
-
-func TestExecuteAction_NonInteractiveNoDenials(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
-	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("watch", taskID, string(meta), db.ActionStatusPending, nil)
-
-	action, _ := d.NextPending(context.Background())
-
-	worker := &denialsWorker{result: "ok", denials: nil}
-	workerFunc := func() Worker { return worker }
-
-	if _, err := ExecuteAction(context.Background(), ExecuteParams{
-		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: workerFunc,
-			InteractiveFunc:    workerFunc,
-			RemoteFunc:         workerFunc,
-		},
-	}, action); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	actions, _ := d.ListActions("", nil, 0)
-	for _, x := range actions {
-		if hasMetaKey(x.Metadata, MetaKeyIsPermissionBlock) {
-			t.Errorf("did not expect permission-block follow-up, found one")
-		}
-	}
-}
-
-func TestExecuteAction_ClaudeArgs(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	meta, _ := json.Marshal(map[string]any{
-		"instruction": "do the task",
-		"mode":        "noninteractive",
-		"claude_args": []string{"--max-turns", "5", "--model", "opus"},
-	})
-	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("with-args", taskID, string(meta), db.ActionStatusPending, nil)
-
-	action, _ := d.NextPending(context.Background())
-
-	worker := &countingWorker{result: `{"ok":true}`}
-	workerFunc := func() Worker { return worker }
-
-	result, err := ExecuteAction(context.Background(), ExecuteParams{
-		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: workerFunc,
-			InteractiveFunc:    workerFunc,
-			RemoteFunc:         workerFunc,
-		},
-	}, action)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Mode != ModeNonInteractive {
-		t.Errorf("mode = %q, want %q", result.Mode, ModeNonInteractive)
-	}
-}
-
-func TestExecuteAction_ClaudeArgsBlocked(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	meta, _ := json.Marshal(map[string]any{
-		"instruction": "do the task",
-		"mode":        "noninteractive",
-		"claude_args": []string{"--output-format", "text"},
-	})
-	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("blocked-args", taskID, string(meta), db.ActionStatusPending, nil)
-
-	action, _ := d.NextPending(context.Background())
-
-	worker := &countingWorker{}
-	workerFunc := func() Worker { return worker }
-
-	_, err := ExecuteAction(context.Background(), ExecuteParams{
-		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: workerFunc,
-			InteractiveFunc:    workerFunc,
-			RemoteFunc:         workerFunc,
-		},
-	}, action)
-	if err == nil {
-		t.Fatal("expected error for blocked claude_args")
-	}
-	if !strings.Contains(err.Error(), "claude_args cannot include") {
-		t.Errorf("error = %q, want to contain 'claude_args cannot include'", err.Error())
-	}
-
-	a, _ := d.GetAction(action.ID)
-	if a.Status != db.ActionStatusFailed {
-		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusFailed)
 	}
 }
 
@@ -691,76 +591,6 @@ func TestExecuteAction_NoInstruction(t *testing.T) {
 	a, _ := d.GetAction(action.ID)
 	if a.Status != db.ActionStatusFailed {
 		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusFailed)
-	}
-}
-
-func TestExecuteAction_NonInteractiveSavesSessionID(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
-	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("check", taskID, string(meta), db.ActionStatusPending, nil)
-
-	action, _ := d.NextPending(context.Background())
-
-	worker := &countingWorker{result: `{"ok":true}`}
-	checker := &mockSessionLogChecker{active: true, sessionID: "sess-noninteractive"}
-
-	_, err := ExecuteAction(context.Background(), ExecuteParams{
-		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: func() Worker { return worker },
-			InteractiveFunc:    func() Worker { return worker },
-			RemoteFunc:         func() Worker { return worker },
-			SessionLogChecker:  checker,
-		},
-	}, action)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	a, _ := d.GetAction(action.ID)
-	var m map[string]any
-	json.Unmarshal([]byte(a.Metadata), &m)
-	if m["claude_session_id"] != "sess-noninteractive" {
-		t.Errorf("claude_session_id = %v, want %q", m["claude_session_id"], "sess-noninteractive")
-	}
-}
-
-func TestExecuteAction_NonInteractiveFailureSavesSessionID(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
-	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("check", taskID, string(meta), db.ActionStatusPending, nil)
-
-	action, _ := d.NextPending(context.Background())
-
-	worker := &countingWorker{err: context.DeadlineExceeded}
-	checker := &mockSessionLogChecker{active: true, sessionID: "sess-failed"}
-
-	_, err := ExecuteAction(context.Background(), ExecuteParams{
-		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: func() Worker { return worker },
-			InteractiveFunc:    func() Worker { return worker },
-			RemoteFunc:         func() Worker { return worker },
-			SessionLogChecker:  checker,
-		},
-	}, action)
-
-	var af *ActionFailedError
-	if !errors.As(err, &af) {
-		t.Fatalf("expected ActionFailedError, got %v", err)
-	}
-
-	a, _ := d.GetAction(action.ID)
-	var m map[string]any
-	json.Unmarshal([]byte(a.Metadata), &m)
-	if m["claude_session_id"] != "sess-failed" {
-		t.Errorf("claude_session_id = %v, want %q", m["claude_session_id"], "sess-failed")
 	}
 }
 
