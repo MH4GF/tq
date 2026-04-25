@@ -463,36 +463,36 @@ func TestResolveWorkDir_Recovery(t *testing.T) {
 		name          string
 		taskWorkDir   string
 		existingPaths map[string]bool // path -> exists
-		wantSuffix    string          // expected suffix of returned path, or exact "."
-		wantDBCleared bool            // whether task.WorkDir should be cleared to ""
+		wantWorkDir   string
+		wantRecovery  bool
 	}{
 		{
 			name:          "task work_dir exists on disk",
 			taskWorkDir:   "/valid/path",
 			existingPaths: map[string]bool{"/valid/path": true},
-			wantSuffix:    "/valid/path",
-			wantDBCleared: false,
+			wantWorkDir:   "/valid/path",
+			wantRecovery:  false,
 		},
 		{
 			name:          "task work_dir missing, project work_dir exists",
 			taskWorkDir:   "/gone/worktree",
 			existingPaths: map[string]bool{"/gone/worktree": false, "/project/dir": true},
-			wantSuffix:    "/project/dir",
-			wantDBCleared: true,
+			wantWorkDir:   "/project/dir",
+			wantRecovery:  true,
 		},
 		{
 			name:          "task work_dir missing, project work_dir also missing",
 			taskWorkDir:   "/gone/worktree",
 			existingPaths: map[string]bool{"/gone/worktree": false, "/project/dir": false},
-			wantSuffix:    ".",
-			wantDBCleared: true,
+			wantWorkDir:   ".",
+			wantRecovery:  true,
 		},
 		{
 			name:          "task work_dir not set, falls through to project",
 			taskWorkDir:   "",
 			existingPaths: map[string]bool{"/project/dir": true},
-			wantSuffix:    "/project/dir",
-			wantDBCleared: false,
+			wantWorkDir:   "/project/dir",
+			wantRecovery:  false,
 		},
 	}
 
@@ -526,19 +526,83 @@ func TestResolveWorkDir_Recovery(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			got := resolveWorkDir(d, action)
-			if got != tc.wantSuffix {
-				t.Errorf("resolveWorkDir() = %q, want %q", got, tc.wantSuffix)
+			got, recovery, err := resolveWorkDir(d, action)
+			if err != nil {
+				t.Fatalf("resolveWorkDir() unexpected error: %v", err)
+			}
+			if got != tc.wantWorkDir {
+				t.Errorf("resolveWorkDir() = %q, want %q", got, tc.wantWorkDir)
+			}
+			if (recovery != nil) != tc.wantRecovery {
+				t.Errorf("recovery presence = %v, want %v", recovery != nil, tc.wantRecovery)
 			}
 
-			task, _ := d.GetTask(taskID)
-			if tc.wantDBCleared && task.WorkDir != "" {
-				t.Errorf("task.WorkDir = %q, want cleared to empty", task.WorkDir)
+			// resolveWorkDir is read-only.
+			taskBefore, _ := d.GetTask(taskID)
+			if taskBefore.WorkDir != tc.taskWorkDir {
+				t.Errorf("after resolveWorkDir: task.WorkDir = %q, want unchanged %q",
+					taskBefore.WorkDir, tc.taskWorkDir)
 			}
-			if !tc.wantDBCleared && task.WorkDir != tc.taskWorkDir {
-				t.Errorf("task.WorkDir = %q, want unchanged %q", task.WorkDir, tc.taskWorkDir)
+
+			applyWorkDirRecovery(d, recovery)
+			taskAfter, _ := d.GetTask(taskID)
+			if tc.wantRecovery {
+				if taskAfter.WorkDir != "" {
+					t.Errorf("after applyWorkDirRecovery: task.WorkDir = %q, want cleared",
+						taskAfter.WorkDir)
+				}
+				if recovery.TaskID != taskID {
+					t.Errorf("recovery.TaskID = %d, want %d", recovery.TaskID, taskID)
+				}
+				if recovery.Fallback != tc.wantWorkDir {
+					t.Errorf("recovery.Fallback = %q, want %q", recovery.Fallback, tc.wantWorkDir)
+				}
+			} else {
+				if taskAfter.WorkDir != tc.taskWorkDir {
+					t.Errorf("no recovery expected, but task.WorkDir = %q, want %q",
+						taskAfter.WorkDir, tc.taskWorkDir)
+				}
 			}
 		})
+	}
+}
+
+// TestResolveWorkDir_NoWriteFromReaperPath asserts that resolveWorkDir is
+// pure: callers that ignore the recovery descriptor (e.g. the reaper) never
+// trigger a DB write, even on the fallback path.
+func TestResolveWorkDir_NoWriteFromReaperPath(t *testing.T) {
+	restore := SetDirExists(func(path string) bool {
+		return path == "/project/dir"
+	})
+	defer restore()
+
+	d := testutil.NewTestDB(t)
+	projID, err := d.InsertProject("test-proj", "/project/dir", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID, err := d.InsertTask(projID, "test-task", "{}", "/gone/worktree")
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, _ := json.Marshal(map[string]any{MetaKeyInstruction: "do something"})
+	actionID, err := d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	action, err := d.GetAction(actionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := resolveWorkDir(d, action); err != nil {
+		t.Fatalf("resolveWorkDir error: %v", err)
+	}
+
+	task, _ := d.GetTask(taskID)
+	if task.WorkDir != "/gone/worktree" {
+		t.Errorf("task.WorkDir = %q, want unchanged %q",
+			task.WorkDir, "/gone/worktree")
 	}
 }
 
