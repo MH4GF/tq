@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"strings"
 )
 
 const (
@@ -14,6 +15,8 @@ const (
 	TaskStatusDone     = "done"
 	TaskStatusArchived = "archived"
 )
+
+const NoteKindTriageKeep = "triage_keep"
 
 var ValidTaskStatuses = map[string]bool{
 	TaskStatusOpen:     true,
@@ -146,6 +149,109 @@ func (db *DB) TaskStatusHistory(taskID int64) ([]TaskStatusHistoryEntry, error) 
 		})
 	}
 	return history, nil
+}
+
+type TaskNoteEntry struct {
+	Kind     string         `json:"kind"`
+	Reason   string         `json:"reason"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+	At       string         `json:"at"`
+}
+
+func (db *DB) RecordTaskNote(taskID int64, kind, reason string, metadata map[string]any) error {
+	if kind == "" {
+		return fmt.Errorf("kind is required")
+	}
+	if reason == "" {
+		return fmt.Errorf("reason is required")
+	}
+	var exists int
+	if err := db.QueryRow("SELECT 1 FROM tasks WHERE id = ?", taskID).Scan(&exists); err != nil {
+		return fmt.Errorf("get task: %w", err)
+	}
+	payload := map[string]any{
+		"kind":   kind,
+		"reason": reason,
+	}
+	if len(metadata) > 0 {
+		payload["metadata"] = metadata
+	}
+	db.emitEvent("task", taskID, EventTaskNote, payload)
+	return nil
+}
+
+func (db *DB) TaskNotes(taskID int64, kindFilter string) ([]TaskNoteEntry, error) {
+	events, err := db.ListEvents("task", taskID)
+	if err != nil {
+		return nil, err
+	}
+	notes := make([]TaskNoteEntry, 0)
+	for _, e := range events {
+		if e.EventType != EventTaskNote {
+			continue
+		}
+		entry, ok := decodeTaskNote(e)
+		if !ok {
+			continue
+		}
+		if kindFilter != "" && entry.Kind != kindFilter {
+			continue
+		}
+		notes = append(notes, entry)
+	}
+	return notes, nil
+}
+
+func (db *DB) LatestTaskNotes(taskIDs []int64, kindFilter string) (map[int64]TaskNoteEntry, error) {
+	out := make(map[int64]TaskNoteEntry)
+	if len(taskIDs) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, len(taskIDs))
+	args := make([]any, 0, len(taskIDs)+1)
+	for i, id := range taskIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	args = append(args, EventTaskNote)
+	query := "SELECT " + eventColumns + " FROM events WHERE entity_type = 'task' AND entity_id IN (" + strings.Join(placeholders, ",") + ") AND event_type = ? ORDER BY id"
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	events, err := scanEvents(rows)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range events {
+		entry, ok := decodeTaskNote(e)
+		if !ok {
+			continue
+		}
+		if kindFilter != "" && entry.Kind != kindFilter {
+			continue
+		}
+		out[e.EntityID] = entry
+	}
+	return out, nil
+}
+
+func decodeTaskNote(e Event) (TaskNoteEntry, bool) {
+	var p struct {
+		Kind     string         `json:"kind"`
+		Reason   string         `json:"reason"`
+		Metadata map[string]any `json:"metadata"`
+	}
+	if err := json.Unmarshal([]byte(e.Payload), &p); err != nil {
+		slog.Warn("task_note: parse payload", "event_id", e.ID, "error", err)
+		return TaskNoteEntry{}, false
+	}
+	return TaskNoteEntry{
+		Kind:     p.Kind,
+		Reason:   p.Reason,
+		Metadata: p.Metadata,
+		At:       FormatLocal(e.CreatedAt),
+	}, true
 }
 
 func (db *DB) UpdateTaskProject(id, projectID int64) error {

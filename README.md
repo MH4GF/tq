@@ -75,7 +75,7 @@ project → task → action
 
 - **project**: groups tasks, sets default working directory
 - **task**: unit of work (status: open, done, archived)
-- **action**: dispatchable unit of work with an instruction (status: pending, running, done, failed, cancelled)
+- **action**: dispatchable unit of work with an instruction (status: pending, running, dispatched, done, failed, cancelled)
 
 ### Design Principles
 
@@ -87,34 +87,28 @@ project → task → action
 ### Action State Machine
 
 ```
-                          dispatch/claim
-                ┌─────────────────────────────┐
-                │                             ▼
-          ┌───────────┐                ┌───────────┐
-          │  pending   │                │  running   │
-          └───────────┘                └─────┬─────┘
-                ▲                        │         │
-                │                 success│         │fail
-                │                        ▼         ▼
-                │                  ┌────────┐  ┌────────┐
-                │                  │  done   │  │ failed │
-                │                  └────┬───┘  └───┬────┘
-                │                       │          │
-                │              on_done  │          │ reset
-                │         (new action)  │          │
-                └───────────────────────┘          │
-                └──────────────────────────────────┘
+         dispatch        worker claim       worker report
+ pending ────────► running ───────────► dispatched ─────────► done
+    ▲                                       │
+    │                                       │ fail
+    │                                       ▼
+    │              reset                ┌────────┐
+    └────────────────────────────────── │ failed │
+                                        └────────┘
 
                             cancel
-              (from pending, running, or failed)
+              (from pending, running, dispatched, or failed)
                               │
                               ▼
                         ┌───────────┐
                         │ cancelled │
                         └───────────┘
 
+  * cancel can be issued from pending, running, dispatched, or failed (terminal: cancelled)
+  * fail can be issued from any non-terminal state (pending, running, or dispatched)
+  * reset returns failed or cancelled actions to pending; running and dispatched
+    must be cancelled or failed first (reset is rejected to avoid spawning a duplicate worker)
   * cancel/fail/reset only update the DB; tmux panes are not terminated
-  * to restart a running action, run `tq action cancel` or `fail` first, then `reset`
   * done and cancelled are terminal; on_done spawns a new action from done only
   * `tq action resume <id>` spawns a new action that resumes the claude session of any terminal action whose metadata captured `claude_session_id` (see `docs/cli-reference.md`)
 ```

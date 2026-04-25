@@ -19,6 +19,7 @@ func TestReset(t *testing.T) {
 		{"failed to pending", db.ActionStatusFailed, "action #1 reset to pending", false},
 		{"done is rejected", db.ActionStatusDone, "", true},
 		{"running is rejected", db.ActionStatusRunning, "", true},
+		{"dispatched is rejected", db.ActionStatusDispatched, "", true},
 		{"pending is rejected", db.ActionStatusPending, "", true},
 		{"cancelled to pending", db.ActionStatusCancelled, "action #1 reset to pending", false},
 	}
@@ -97,34 +98,49 @@ func TestReset_UnknownStatus(t *testing.T) {
 	}
 }
 
-func TestReset_RunningGuidesToCancelOrFail(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("test", taskID, "{}", db.ActionStatusRunning, nil)
-
-	root := cmd.GetRootCmd()
-	root.SetOut(new(bytes.Buffer))
-	root.SetErr(new(bytes.Buffer))
-	root.SetArgs([]string{"action", "reset", "1"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected error when resetting running action")
-	}
-	if !contains(err.Error(), "duplicate worker") {
-		t.Errorf("error = %q, want to mention duplicate worker", err.Error())
-	}
-	if !contains(err.Error(), "tq action cancel") || !contains(err.Error(), "tq action fail") {
-		t.Errorf("error = %q, want to suggest cancel or fail", err.Error())
+func TestReset_ActiveStatusGuidesToCancelOrFail(t *testing.T) {
+	tests := []struct {
+		name   string
+		status string
+	}{
+		{"running", db.ActionStatusRunning},
+		{"dispatched", db.ActionStatusDispatched},
 	}
 
-	a, _ := d.GetAction(1)
-	if a.Status != db.ActionStatusRunning {
-		t.Errorf("status = %q, want unchanged %q", a.Status, db.ActionStatusRunning)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+
+			taskID, _ := d.InsertTask(1, "test", "{}", "")
+			d.InsertAction("test", taskID, "{}", tc.status, nil)
+
+			root := cmd.GetRootCmd()
+			root.SetOut(new(bytes.Buffer))
+			root.SetErr(new(bytes.Buffer))
+			root.SetArgs([]string{"action", "reset", "1"})
+
+			err := root.Execute()
+			if err == nil {
+				t.Fatalf("expected error when resetting %s action", tc.status)
+			}
+			if !contains(err.Error(), "duplicate worker") {
+				t.Errorf("error = %q, want to mention duplicate worker", err.Error())
+			}
+			if !contains(err.Error(), "tq action cancel") || !contains(err.Error(), "tq action fail") {
+				t.Errorf("error = %q, want to suggest cancel or fail", err.Error())
+			}
+			if !contains(err.Error(), tc.status) {
+				t.Errorf("error = %q, want to mention current status %q", err.Error(), tc.status)
+			}
+
+			a, _ := d.GetAction(1)
+			if a.Status != tc.status {
+				t.Errorf("status = %q, want unchanged %q", a.Status, tc.status)
+			}
+		})
 	}
 }
 

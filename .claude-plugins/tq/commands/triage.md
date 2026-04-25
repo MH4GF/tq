@@ -18,6 +18,7 @@ tq task list --status open --jq '
   .[] | {
     id, project_id, title, updated_at,
     metadata_url: (.metadata // "{}" | try fromjson.url // null),
+    latest_triage_note,
     latest: (
       .actions | sort_by(.created_at) | last
       | if . then {id, title, status, completed_at,
@@ -26,6 +27,8 @@ tq task list --status open --jq '
   }
 '
 ```
+
+`latest_triage_note` is the most recent `kind=triage_keep` note on the task, or `null`. When present it has `{reason, at, snooze_until?}`. It surfaces the previous "leave open" judgment so Step 3 can skip tasks whose situation has not changed.
 
 Filter by `--project <id>` if `$ARGUMENTS` is given.
 
@@ -59,6 +62,14 @@ Classify each task from the Step 1 output. Inspect `latest.status` and keywords 
 
 **Focus qualifier**: When `latest.status ∈ {running, pending}` AND the task's project is unfocus (`dispatch_enabled == false`), append `(unfocus: manual dispatch required)` to the phase label. This surfaces the fact that a `pending` action in an unfocus project will not progress on its own.
 
+**Triage skip rule** (after the phase is assigned): If `latest_triage_note != null`, evaluate whether the prior keep judgment still holds. The task is **skipped** from Step 6 (and shown in Step 5 as `triaged Nd ago: <reason>`) when **all** of the following are true:
+
+- (a) `now - latest_triage_note.at < 7 days` (cooldown window).
+- (b) No new action has completed (any `completed_at > latest_triage_note.at`) and no `task.status_changed` event since `latest_triage_note.at` for this task. Inspect the action list and `tq event list --entity task --id <id>` if needed.
+- (c) `latest_triage_note.snooze_until` is unset, OR `now < latest_triage_note.snooze_until`.
+
+If (c) is set and `now < snooze_until`, **skip even if (a) or (b) would re-evaluate** — explicit snooze wins. Otherwise, failing any of (a)/(b)/(c) means the task is re-evaluated normally in Step 6 and the prior reason is shown in option `description` for context.
+
 **Deep-dive condition**: If `latest.status == done` AND `len(result_head) == 300` (truncated) AND none of the keywords `push complete`, `review`, `merged`, `stale`, `blocked`, `failed`, `done` appear in `result_head` (case-insensitive), fetch the latest action's full result:
 
 ```bash
@@ -77,17 +88,19 @@ Finalize classification using the state: `state == MERGED` → **Likely complete
 
 Present tasks by project in a table. Mark each project's section header with its focus state (`focus` / `unfocus`) from the Step 2 map.
 
-| ID | Title | Age | Phase | Latest action |
-|---|---|---|---|---|
-| 157 | Implement feature A | 3d | Awaiting review | #815 implement done — implementation complete, pushed |
-| 302 | Refactor parser | 2d | In progress (unfocus: manual dispatch required) | #900 implement pending — queued, will not auto-dispatch |
-| 55 | Fix bug B | 5d | Not started | — |
+| ID | Title | Age | Phase | Latest action | Latest triage |
+|---|---|---|---|---|---|
+| 157 | Implement feature A | 3d | Awaiting review | #815 implement done — implementation complete, pushed | — |
+| 302 | Refactor parser | 2d | In progress (unfocus: manual dispatch required) | #900 implement pending — queued, will not auto-dispatch | — |
+| 55 | Fix bug B | 5d | Not started | — | 3d ago: PR待ち |
+
+The `Latest triage` column shows `Nd ago: <reason>` when `latest_triage_note` is present, otherwise `—`. Tasks skipped by the Step 3 triage skip rule still appear in this table but are excluded from Step 6.
 
 Use the post-move `project_id` (tasks moved in Step 2 appear under their new project).
 
 ### 6. Proposals — per-phase batching via AskUserQuestion
 
-**Batching rule**: Group tasks by phase. Within a phase, issue `AskUserQuestion` with at most 4 questions per call (one question per task). If the phase has more than 4 tasks, issue multiple rounds. Project moves are already resolved in Step 2 and are out of scope here. Tasks in **In progress** are shown in the Summary but skipped here (they are running — do not interrupt).
+**Batching rule**: Group tasks by phase. Within a phase, issue `AskUserQuestion` with at most 4 questions per call (one question per task). If the phase has more than 4 tasks, issue multiple rounds. Project moves are already resolved in Step 2 and are out of scope here. Tasks in **In progress** are shown in the Summary but skipped here (they are running — do not interrupt). Tasks excluded by the **Step 3 triage skip rule** are also skipped here.
 
 **Per-option `description` must contain** the material a user needs to decide without scrolling back:
 
@@ -105,6 +118,8 @@ Use the post-move `project_id` (tasks moved in Step 2 appear under their new pro
 | Blocked | `Create unblock action` / `Archive` / `Leave open` |
 | Likely complete | `Mark done` / `Create merge action` / `Leave open` (see PR-state rule below) |
 | Not started | `Create first action` / `Archive` / `Leave open` |
+
+**Universal "leave open" options** (available to every phase in addition to the table above): `Leave open with note (keep)` and `Snooze N days`. Offer these whenever the user might pick `Leave open` so the next triage run can skip the task. The original no-op `Leave open` remains available for "no reason worth recording".
 
 **Likely complete — PR-state rule** (uses cache from Step 4):
 
@@ -138,6 +153,8 @@ Execute each approved option immediately:
 - `Create ... action` → invoke `/tq:create-action` (task_id + instruction). Do not call `tq action create` directly.
 - `Manually dispatch pending action` → `tq action dispatch <action_id>` for the pending action identified in Step 3.
 - `Enable dispatch and batch-run` → `tq project update <project_id> --dispatch-enabled true`. Report the project name to the user so they know which project now auto-dispatches.
+- `Leave open with note (keep)` → ask the user for a one-line reason, then `tq task note <ID> --kind triage_keep --reason '<reason>'`.
+- `Snooze N days` → ask the user for the snooze duration (number of days, or an explicit `--until YYYY-MM-DD` date). Compute `snooze_until` and run `tq task note <ID> --kind triage_keep --reason '<reason>' --metadata '{"snooze_until":"YYYY-MM-DD"}'`.
 - `Leave open` → no-op.
 
 If an execute fails, record the error, report it to the user, and continue with the remaining batch. After all rounds of all phases complete, triage ends.

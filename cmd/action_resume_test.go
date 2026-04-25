@@ -259,13 +259,7 @@ func TestActionResumeCmd(t *testing.T) {
 
 			worker := &mockWorker{result: tt.workerResult, err: tt.workerErr}
 			cmd.SetWorkerFactory(func() dispatch.Worker { return worker })
-			cmd.SetInteractiveWorkerFactory(func() dispatch.Worker { return worker })
-			cmd.SetRemoteWorkerFactory(func() dispatch.Worker { return worker })
-			t.Cleanup(func() {
-				cmd.SetWorkerFactory(nil)
-				cmd.SetInteractiveWorkerFactory(nil)
-				cmd.SetRemoteWorkerFactory(nil)
-			})
+			t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
 
 			root := cmd.GetRootCmd()
 			buf := new(bytes.Buffer)

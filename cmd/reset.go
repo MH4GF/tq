@@ -11,7 +11,7 @@ import (
 
 var resetCmd = &cobra.Command{
 	Use:     "reset <action_id>",
-	Short:   "Reset a failed or running action to pending",
+	Short:   "Reset a failed or cancelled action to pending",
 	Example: `  tq action reset 7`,
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -26,8 +26,8 @@ var resetCmd = &cobra.Command{
 		if action.Status == db.ActionStatusPending || action.Status == db.ActionStatusDone {
 			return fmt.Errorf("action #%d is %q, cannot reset (only failed or cancelled actions can be reset to pending)", id, action.Status)
 		}
-		if action.Status == db.ActionStatusRunning {
-			return fmt.Errorf("action #%d is running; reset would spawn a duplicate worker. Run 'tq action cancel %d' or 'tq action fail %d' first, then reset", id, id, id)
+		if action.Status == db.ActionStatusRunning || action.Status == db.ActionStatusDispatched {
+			return fmt.Errorf("action #%d is %q; reset would spawn a duplicate worker. Run 'tq action cancel %d' or 'tq action fail %d' first, then reset", id, action.Status, id, id)
 		}
 		if err := database.ResetToPending(id); err != nil {
 			return fmt.Errorf("reset to pending: %w", err)

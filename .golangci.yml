@@ -39,6 +39,8 @@ linters:
           msg: "use testutil.NewTestDB(t) instead of db.Open in tests (golden-rule-5)"
         - pattern: '^fmt\.Println$'
           msg: "use WriteJSON for structured CLI output (golden-rule-12)"
+        - pattern: '\.Set[A-Z][A-Za-z]*ForTest\b'
+          msg: "*ForTest methods are test seams and must not be called from production code (golden-rule-14)"
     depguard:
       rules:
         deny-upward-from-db:
@@ -106,3 +108,8 @@ linters:
         linters:
           - forbidigo
         text: golden-rule-12
+      # golden-rule-14: *ForTest method calls forbidden only in non-test files; suppress in tests
+      - path: _test\.go
+        linters:
+          - forbidigo
+        text: golden-rule-14

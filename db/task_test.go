@@ -384,6 +384,176 @@ func TestUpdateTask_BlockedByActiveActions(t *testing.T) {
 	})
 }
 
+func TestRecordTaskNote(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task with notes", "{}", "")
+
+	tests := []struct {
+		name    string
+		kind    string
+		reason  string
+		meta    map[string]any
+		wantErr bool
+	}{
+		{"basic note", "triage_keep", "PR review pending", nil, false},
+		{"note with metadata", "triage_keep", "snooze", map[string]any{"snooze_until": "2026-05-02"}, false},
+		{"missing kind", "", "reason", nil, true},
+		{"missing reason", "triage_keep", "", nil, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := d.RecordTaskNote(taskID, tc.kind, tc.reason, tc.meta)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("RecordTaskNote err=%v wantErr=%v", err, tc.wantErr)
+			}
+		})
+	}
+
+	t.Run("nonexistent task errors", func(t *testing.T) {
+		if err := d.RecordTaskNote(9999, "triage_keep", "x", nil); err == nil {
+			t.Error("expected error for missing task")
+		}
+	})
+}
+
+func TestTaskNotes(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+	if err := d.RecordTaskNote(taskID, "triage_keep", "first reason", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.RecordTaskNote(taskID, "observation", "second reason", map[string]any{"k": "v"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.RecordTaskNote(taskID, "triage_keep", "third reason", map[string]any{"snooze_until": "2026-05-02"}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("all notes in order", func(t *testing.T) {
+		notes, err := d.TaskNotes(taskID, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(notes) != 3 {
+			t.Fatalf("expected 3 notes, got %d", len(notes))
+		}
+		if notes[0].Reason != "first reason" || notes[2].Reason != "third reason" {
+			t.Errorf("unexpected order: %+v", notes)
+		}
+		if notes[2].Metadata["snooze_until"] != "2026-05-02" {
+			t.Errorf("metadata not preserved: %+v", notes[2].Metadata)
+		}
+	})
+
+	t.Run("kind filter", func(t *testing.T) {
+		notes, err := d.TaskNotes(taskID, "triage_keep")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(notes) != 2 {
+			t.Fatalf("expected 2 triage_keep notes, got %d", len(notes))
+		}
+		for _, n := range notes {
+			if n.Kind != "triage_keep" {
+				t.Errorf("got kind %q, want triage_keep", n.Kind)
+			}
+		}
+	})
+
+	t.Run("empty for unknown kind", func(t *testing.T) {
+		notes, err := d.TaskNotes(taskID, "nonexistent")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(notes) != 0 {
+			t.Errorf("expected 0 notes, got %d", len(notes))
+		}
+	})
+
+	t.Run("nil metadata round trip", func(t *testing.T) {
+		notes, err := d.TaskNotes(taskID, "triage_keep")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if notes[0].Metadata != nil {
+			t.Errorf("expected nil metadata for first note, got %+v", notes[0].Metadata)
+		}
+	})
+}
+
+func TestLatestTaskNotes(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	t1, _ := d.InsertTask(1, "task 1", "{}", "")
+	t2, _ := d.InsertTask(1, "task 2", "{}", "")
+	t3, _ := d.InsertTask(1, "task 3", "{}", "")
+
+	if err := d.RecordTaskNote(t1, "triage_keep", "old", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.RecordTaskNote(t1, "triage_keep", "newest", map[string]any{"snooze_until": "2026-05-02"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.RecordTaskNote(t2, "observation", "obs", nil); err != nil {
+		t.Fatal(err)
+	}
+	// t3 has no notes
+
+	t.Run("filter by kind picks latest matching", func(t *testing.T) {
+		got, err := d.LatestTaskNotes([]int64{t1, t2, t3}, "triage_keep")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("expected 1 entry, got %d: %+v", len(got), got)
+		}
+		entry, ok := got[t1]
+		if !ok {
+			t.Fatalf("expected entry for t1, got %+v", got)
+		}
+		if entry.Reason != "newest" {
+			t.Errorf("got reason %q, want newest", entry.Reason)
+		}
+		if entry.Metadata["snooze_until"] != "2026-05-02" {
+			t.Errorf("metadata = %+v", entry.Metadata)
+		}
+	})
+
+	t.Run("no filter picks latest of any kind", func(t *testing.T) {
+		got, err := d.LatestTaskNotes([]int64{t1, t2, t3}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 2 {
+			t.Fatalf("expected 2 entries, got %d: %+v", len(got), got)
+		}
+		if got[t1].Reason != "newest" {
+			t.Errorf("t1 latest = %q, want newest", got[t1].Reason)
+		}
+		if got[t2].Reason != "obs" {
+			t.Errorf("t2 latest = %q, want obs", got[t2].Reason)
+		}
+		if _, ok := got[t3]; ok {
+			t.Errorf("t3 should not appear (no notes)")
+		}
+	})
+
+	t.Run("empty input returns empty map", func(t *testing.T) {
+		got, err := d.LatestTaskNotes(nil, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 0 {
+			t.Errorf("expected empty map, got %+v", got)
+		}
+	})
+}
+
 func TestListTasksByStatus(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

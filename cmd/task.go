@@ -62,7 +62,9 @@ var (
 	taskListJQ        string
 )
 
-var taskListFields = []string{"id", "project_id", "title", "metadata", "status", "work_dir", "created_at", "updated_at", "actions"}
+var taskBaseFields = []string{"id", "project_id", "title", "metadata", "status", "work_dir", "created_at", "updated_at", "actions"}
+
+var taskListFields = append(slices.Clone(taskBaseFields), "latest_triage_note")
 
 var taskListCmd = &cobra.Command{
 	Use:   "list",
@@ -84,10 +86,20 @@ var taskListCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("list actions: %w", err)
 		}
+		latestNotes, err := database.LatestTaskNotes(taskIDs, db.NoteKindTriageKeep)
+		if err != nil {
+			return fmt.Errorf("latest task notes: %w", err)
+		}
 
 		rows := make([]map[string]any, len(tasks))
 		for i, t := range tasks {
-			rows[i] = taskToMap(t, actionsByTask[t.ID])
+			row := taskToMap(t, actionsByTask[t.ID])
+			if note, ok := latestNotes[t.ID]; ok {
+				row["latest_triage_note"] = triageNoteSummary(note)
+			} else {
+				row["latest_triage_note"] = nil
+			}
+			rows[i] = row
 		}
 		return WriteJSON(cmd.OutOrStdout(), rows, taskListJQ, taskListFields)
 	},
@@ -205,7 +217,18 @@ func taskToMap(t db.Task, actions []db.Action) map[string]any {
 
 var taskGetJQ string
 
-var taskGetFields = append(slices.Clone(taskListFields), "status_history")
+var taskGetFields = append(slices.Clone(taskBaseFields), "status_history", "notes")
+
+func triageNoteSummary(note db.TaskNoteEntry) map[string]any {
+	out := map[string]any{
+		"reason": note.Reason,
+		"at":     note.At,
+	}
+	if v, ok := note.Metadata["snooze_until"]; ok {
+		out["snooze_until"] = v
+	}
+	return out
+}
 
 var taskGetCmd = &cobra.Command{
 	Use:   "get <ID>",
@@ -229,9 +252,54 @@ var taskGetCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("status history: %w", err)
 		}
+		notes, err := database.TaskNotes(id, "")
+		if err != nil {
+			return fmt.Errorf("task notes: %w", err)
+		}
 		row := taskToMap(*task, actions)
 		row["status_history"] = history
+		row["notes"] = notes
 		return WriteJSON(cmd.OutOrStdout(), row, taskGetJQ, taskGetFields)
+	},
+}
+
+var (
+	taskNoteKind     string
+	taskNoteReason   string
+	taskNoteMetadata string
+)
+
+var taskNoteCmd = &cobra.Command{
+	Use:   "note <ID>",
+	Short: "Record a free-form note on a task without changing its status",
+	Long: `Record a status-independent note on a task. Notes appear in 'tq task get' under 'notes'.
+Use --kind to label the note (e.g. triage_keep, observation, blocker).
+--reason is a one-line explanation; --metadata accepts a JSON object for kind-specific extras.`,
+	Example: `  tq task note 537 --kind triage_keep --reason "design review pending"
+  tq task note 537 --kind triage_keep --reason "snoozed until next sprint" --metadata '{"snooze_until":"2026-05-02"}'`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := parseID(args[0])
+		if err != nil {
+			return err
+		}
+		if taskNoteKind == "" {
+			return fmt.Errorf("--kind is required")
+		}
+		if taskNoteReason == "" {
+			return fmt.Errorf("--reason is required")
+		}
+		var meta map[string]any
+		if taskNoteMetadata != "" {
+			if err := json.Unmarshal([]byte(taskNoteMetadata), &meta); err != nil {
+				return fmt.Errorf("invalid JSON for --metadata (must be a JSON object): %s", taskNoteMetadata)
+			}
+		}
+		if err := database.RecordTaskNote(id, taskNoteKind, taskNoteReason, meta); err != nil {
+			return fmt.Errorf("record task note: %w", err)
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "task #%d note recorded (kind: %s)\n", id, taskNoteKind)
+		return nil
 	},
 }
 
@@ -262,9 +330,14 @@ func init() {
 	taskListCmd.Flags().IntVar(&taskListLimit, "limit", 0, "Limit number of results (0 = no limit)")
 	taskListCmd.Flags().StringVar(&taskListJQ, "jq", "", jqFlagUsage(taskListFields))
 
+	taskNoteCmd.Flags().StringVar(&taskNoteKind, "kind", "", "Note kind (e.g. triage_keep, observation, blocker) — required")
+	taskNoteCmd.Flags().StringVar(&taskNoteReason, "reason", "", "One-line explanation — required")
+	taskNoteCmd.Flags().StringVar(&taskNoteMetadata, "metadata", "", `JSON object with kind-specific extras (e.g. {"snooze_until":"2026-05-02"})`)
+
 	taskCmd.AddCommand(taskListCmd)
 	taskCmd.AddCommand(taskCreateCmd)
 	taskCmd.AddCommand(taskUpdateCmd)
+	taskCmd.AddCommand(taskNoteCmd)
 	taskGetCmd.Flags().StringVar(&taskGetJQ, "jq", "", jqFlagUsage(taskGetFields))
 	taskCmd.AddCommand(taskGetCmd)
 }

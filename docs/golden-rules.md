@@ -76,7 +76,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 **Rule 9 [enforced] — Custom error types (any `type *Error struct`) MUST implement `Unwrap() error`.**
 
-- Why: Rule 8 relies on unwrapping. A custom error type without `Unwrap` silently breaks `errors.As`/`errors.Is` at the outermost frame (see `dispatch.ActionFailedError` as the canonical example at `dispatch/execute.go:48`).
+- Why: Rule 8 relies on unwrapping. A custom error type without `Unwrap` silently breaks `errors.As`/`errors.Is` at the outermost frame (see `dispatch.ActionFailedError` in `dispatch/execute.go` as the canonical example).
 - Verify: Go test harness `internal/goldenrules/` finds all `type *Error struct` and checks for `Unwrap() error` in the same package. Run `go test ./internal/goldenrules/`.
 - Current violations: 0 (1 type: `dispatch.ActionFailedError`, verified to implement `Unwrap`).
 
@@ -111,7 +111,15 @@ Current status totals are captured after each rule as `current violations: N`. A
 - Why: `staticcheck`'s `unused` only sees within a single package. Cross-package dead code (exported functions no caller imports, methods of types that are never instantiated) slips through. tq is a closed single-binary CLI, so reachability from main + tests equals liveness.
 - Verify: `scripts/deadcode-check.sh` runs `deadcode -test` and diffs the result against `.deadcode-allowlist`. Fails on **new findings** (must be fixed or allowlisted) AND on **stale allowlist entries** (must be removed). The CI `lint` job runs the script. Run `./scripts/deadcode-check.sh`.
 - Allowlist policy: only intentional retentions belong in `.deadcode-allowlist` — interface satisfactions called via reflection, planned test seams not yet wired up, etc. Genuine dead code MUST be deleted, not allowlisted.
-- Current violations: 3 (allowlisted; deletion tracked as a follow-up action — `cmd.SetInteractiveWorkerFactory`, `cmd.SetRemoteWorkerFactory`, `tui.LogWriter.Write`).
+- Current violations: 0.
+
+### Test seam isolation
+
+**Rule 14 [enforced] — Test seam methods (`*ForTest`) MUST NOT be called from production code.**
+
+- Why: `db.Store` embeds `TestHelper` (`db/interfaces.go:84-101`) so that upper-layer tests can mutate timestamps/status without writing raw SQL outside `db/` (Rule 11). The trade-off is that the test seam appears on the production `Store` API. A static lint guards the production-side boundary so the embedding does not silently expand into a production capability.
+- Verify: `forbidigo` in `.golangci.yml` blocks `\.Set[A-Z][A-Za-z]*ForTest\b` outside `_test.go` files. Run `golangci-lint run ./...`.
+- Current violations: 0.
 
 ---
 
@@ -125,7 +133,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 **During periodic GC (`/gc-golden-rules`, weekly via tq schedule):**
 
-- Mechanical rules (1-6, 8-13) are enforced by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
+- Mechanical rules (1-6, 8-14) are enforced by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
 - For each violation found, the GC command creates a tq action via `/tq:create-action` with `claude_args: ["--worktree"]` for isolated execution.
 - The created actions handle the actual fixes — each targeted to a single violation.
 
@@ -160,6 +168,17 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 10 Metadata via constants | — | OK | OK | OK |
 | 11 SQL in db/ only | — | OK | OK | OK |
 | 12 CLI WriteJSON | — | — | — | OK |
-| 13 No dead code | OK | OK | 1 | 2 |
+| 13 No dead code | OK | OK | OK | OK |
+| 14 No `*ForTest` in prod | — | OK | OK | OK |
 
-Totals: **3** current violations (all allowlisted under Rule 13; deletion tracked separately).
+Totals: **0** current violations.
+
+---
+
+## Exploratory review (rule discovery)
+
+`/gc-exploratory` is the upstream feeder for this rule list. Where the rules above encode invariants we already know we want, the exploratory pass roams the codebase with deliberately vague intent ("find anything that concerns you") and surfaces concerns that no lint, no golden-rule, and no docs-reviewer can catch.
+
+It runs as Phase 3 of `/gc-golden-rules` and turns each verified concern into a child tq action on the same task.
+
+**When a class of concern shows up repeatedly, that is the signal to lift it into a verifiable rule here.** This is the feedback loop that grows the rule list over time.
