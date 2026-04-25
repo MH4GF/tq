@@ -14,7 +14,7 @@ Respond to reviewer comments. Process in batches by phase, not one-by-one sequen
 ${CLAUDE_PLUGIN_ROOT}/scripts/gh-prepare-review-replies $ARGUMENTS
 ```
 
-The script writes a Markdown draft to `.claude/tmp/pr${NUMBER}-review-replies-${TIMESTAMP}.md` containing every unresolved thread (Thread ID, file:line, author, original quoted comment, empty Classification/Reply draft fields). It prints the generated path on stdout.
+The script writes a Markdown draft to `.claude/tmp/pr${NUMBER}-review-replies-${TIMESTAMP}.md` containing every unresolved thread (Thread ID, file:line, author, every quoted comment in the thread joined by `---`, empty Classification/Reply draft fields). It prints the generated path on stdout.
 
 If stdout is empty (stderr says `No unresolved threads`) → report and finish.
 
@@ -26,7 +26,7 @@ Read the file path printed by Phase 1 and fill in each thread.
 
 - Edit ONLY the `Classification` line and the `Reply draft` block. Leave every other byte — heading, Thread ID, quoted comment — exactly as the script wrote it.
 - NEVER modify, summarize, paraphrase, reorder, or delete the quoted comment lines (lines starting with `>`). The user reviews the draft against that quote; rewriting it forces them to cross-check GitHub for every reply and breaks the workflow.
-- NEVER reference threads by position or by any other ad-hoc label inside `Reply draft` (e.g. `same as the first thread`, `see thread above`, `as in Thread 2`). The GitHub review UI shows no such ordering, so reviewers cannot resolve the reference. If you need to point at another thread, cite its `file:line` directly.
+- NEVER reference threads by position or by any other ad-hoc label inside `Reply draft` (e.g. `same as the first thread`, `see thread above`). The GitHub review UI shows no such ordering, so reviewers cannot resolve the reference. If you need to point at another thread, cite its `file:line` directly.
 
 ### Fields to fill in
 

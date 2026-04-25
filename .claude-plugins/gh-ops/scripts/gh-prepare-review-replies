@@ -33,12 +33,11 @@ OUTFILE=".claude/tmp/pr${NUMBER}-review-replies-${TIMESTAMP}.md"
   printf '%s' "$JSON" | jq -r '
     .[] |
     . as $thread |
-    ($thread.comments.nodes[0].author.login // "unknown") as $author |
-    ($thread.comments.nodes[0].path // null) as $path |
-    ($thread.comments.nodes[0].line // null) as $line |
-    (if $path == null then "(general)"
-     elif $line then "\($path):\($line)"
-     else $path end) as $loc |
+    $thread.comments.nodes[0] as $first |
+    ($first.author.login // "unknown") as $author |
+    (if $first.path == null then "(general)"
+     elif $first.line then "\($first.path):\($first.line)"
+     else $first.path end) as $loc |
     "## \($loc) by @\($author)\n\n" +
     "- **Thread ID**: `\($thread.id)`\n\n" +
     ($thread.comments.nodes | map("> " + (.body | gsub("\n"; "\n> "))) | join("\n\n---\n\n")) +
