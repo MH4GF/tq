@@ -108,20 +108,38 @@ func (m TasksModel) loadTasks() tea.Cmd {
 		}
 		sort.Slice(projects, func(i, j int) bool { return projects[i].ID < projects[j].ID })
 
-		var trees []projectTree
+		tasksByProject := make(map[int64][]db.Task, len(projects))
+		var allTaskIDs []int64
 		for _, p := range projects {
 			tasks, err := m.database.ListTasksByProject(p.ID)
 			if err != nil {
 				continue
 			}
+			tasksByProject[p.ID] = tasks
+			for _, t := range tasks {
+				allTaskIDs = append(allTaskIDs, t.ID)
+			}
+		}
+
+		actionsByTask, err := m.database.ListActionsByTaskIDs(allTaskIDs)
+		if err != nil {
+			actionsByTask = map[int64][]db.Action{}
+		}
+
+		var trees []projectTree
+		for _, p := range projects {
+			tasks, ok := tasksByProject[p.ID]
+			if !ok {
+				continue
+			}
 
 			var nodes []taskNode
 			for _, t := range tasks {
-				taskID := t.ID
-				actions, err := m.database.ListActions("", &taskID, 0)
-				if err != nil {
-					continue
-				}
+				actions := actionsByTask[t.ID]
+				// ListActionsByTaskIDs returns id ASC; legacy ListActions
+				// used id DESC. Match the old order so the stable status
+				// sort below leaves equal-status actions newest-first.
+				sort.Slice(actions, func(i, j int) bool { return actions[i].ID > actions[j].ID })
 				if m.dateFilter != "" {
 					if t.Status == db.TaskStatusDone || t.Status == db.TaskStatusArchived {
 						actions = db.FilterByDate(actions, m.dateFilter)
