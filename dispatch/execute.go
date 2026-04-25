@@ -88,18 +88,33 @@ func (c ActionConfig) IsInteractive() bool    { return c.Mode == ModeInteractive
 func (c ActionConfig) IsNonInteractive() bool { return c.Mode == ModeNonInteractive }
 func (c ActionConfig) IsRemote() bool         { return c.Mode == ModeRemote }
 
+// markActionFailed marks the action as failed and creates a follow-up
+// investigate-failure action. Returns the MarkFailed error wrapped, if any;
+// CreateInvestigateFailureAction logs its own errors and never returns one.
+func markActionFailed(store db.Store, action *db.Action, failMsg string) error {
+	mfErr := store.MarkFailed(action.ID, failMsg)
+	CreateInvestigateFailureAction(store, action, failMsg)
+	if mfErr != nil {
+		return fmt.Errorf("mark failed: %w", mfErr)
+	}
+	return nil
+}
+
 // ExecuteAction reads instruction from metadata and dispatches via the appropriate worker.
 func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action) (*ExecuteResult, error) {
 	actionMeta, err := parseMetadata(action.Metadata)
 	if err != nil {
 		failMsg := fmt.Sprintf("parse action metadata: %v", err)
-		_ = params.DB.MarkFailed(action.ID, failMsg)
-		CreateInvestigateFailureAction(params.DB, action, failMsg)
+		if mfErr := markActionFailed(params.DB, action, failMsg); mfErr != nil {
+			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
+		}
 		return nil, fmt.Errorf("parse action metadata: %w", err)
 	}
 
 	if err := ValidateActionMetadata(actionMeta); err != nil {
-		_ = params.DB.MarkFailed(action.ID, err.Error())
+		if mfErr := params.DB.MarkFailed(action.ID, err.Error()); mfErr != nil {
+			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
+		}
 		return nil, fmt.Errorf("validate action metadata: %w", err)
 	}
 	instruction := actionMeta[MetaKeyInstruction].(string)
@@ -113,7 +128,9 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 	}
 	if err := ValidateClaudeArgs(cfg.ClaudeArgs); err != nil {
 		failMsg := fmt.Sprintf("validate claude_args: %v", err)
-		_ = params.DB.MarkFailed(action.ID, failMsg)
+		if mfErr := params.DB.MarkFailed(action.ID, failMsg); mfErr != nil {
+			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
+		}
 		return nil, fmt.Errorf("validate claude_args: %w", err)
 	}
 
@@ -134,8 +151,9 @@ func executeRemote(ctx context.Context, params ExecuteParams, action *db.Action,
 	worker := params.RemoteFunc()
 	result, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
 	if err != nil {
-		_ = params.DB.MarkFailed(action.ID, err.Error())
-		CreateInvestigateFailureAction(params.DB, action, err.Error())
+		if mfErr := markActionFailed(params.DB, action, err.Error()); mfErr != nil {
+			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
+		}
 		return nil, &ActionFailedError{ActionID: action.ID, Err: err}
 	}
 
@@ -156,7 +174,9 @@ func executeInteractive(ctx context.Context, params ExecuteParams, action *db.Ac
 	if params.BeforeInteractive != nil {
 		if err := params.BeforeInteractive(action); err != nil {
 			if errors.Is(err, ErrInteractiveDeferred) {
-				_ = params.DB.ResetToPending(action.ID)
+				if rpErr := params.DB.ResetToPending(action.ID); rpErr != nil {
+					slog.Error("reset to pending", "action_id", action.ID, "error", rpErr)
+				}
 				return nil, ErrInteractiveDeferred
 			}
 			return nil, err
@@ -166,8 +186,9 @@ func executeInteractive(ctx context.Context, params ExecuteParams, action *db.Ac
 	worker := params.InteractiveFunc()
 	result, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
 	if err != nil {
-		_ = params.DB.MarkFailed(action.ID, err.Error())
-		CreateInvestigateFailureAction(params.DB, action, err.Error())
+		if mfErr := markActionFailed(params.DB, action, err.Error()); mfErr != nil {
+			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
+		}
 		return nil, &ActionFailedError{ActionID: action.ID, Err: err}
 	}
 
@@ -189,8 +210,9 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 	saveSessionID(params.DB, params.SessionLogChecker, action.ID, workDir)
 
 	if err != nil {
-		_ = params.DB.MarkFailed(action.ID, err.Error())
-		CreateInvestigateFailureAction(params.DB, action, err.Error())
+		if mfErr := markActionFailed(params.DB, action, err.Error()); mfErr != nil {
+			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
+		}
 		return nil, &ActionFailedError{ActionID: action.ID, Err: err}
 	}
 

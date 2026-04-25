@@ -1,9 +1,12 @@
 package dispatch
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -694,6 +697,85 @@ func TestExecuteAction_NonInteractiveFailureSavesSessionID(t *testing.T) {
 	json.Unmarshal([]byte(a.Metadata), &m)
 	if m["claude_session_id"] != "sess-failed" {
 		t.Errorf("claude_session_id = %v, want %q", m["claude_session_id"], "sess-failed")
+	}
+}
+
+// markFailedErrStore wraps a db.Store and forces MarkFailed to return an error,
+// simulating a transient write error or FK violation.
+type markFailedErrStore struct {
+	db.Store
+	err            error
+	markFailedHits int
+}
+
+func (s *markFailedErrStore) MarkFailed(id int64, result string) error {
+	s.markFailedHits++
+	_ = s.Store.MarkFailed(id, result) // best-effort underlying call so investigation lookup works as it would in prod
+	return s.err
+}
+
+func TestExecuteAction_MarkFailedErrorIsLogged(t *testing.T) {
+	tests := []struct {
+		name       string
+		promptMode string
+	}{
+		{name: "noninteractive worker failure", promptMode: ModeNonInteractive},
+		{name: "interactive worker failure", promptMode: ModeInteractive},
+		{name: "remote worker failure", promptMode: ModeRemote},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var logBuf bytes.Buffer
+			origLogger := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+			t.Cleanup(func() { slog.SetDefault(origLogger) })
+
+			base := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, base)
+
+			markFailedErr := errors.New("simulated FK violation")
+			store := &markFailedErrStore{Store: base, err: markFailedErr}
+
+			meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": tc.promptMode})
+			taskID, _ := base.InsertTask(1, "Test task", `{}`, "")
+			actionID, _ := base.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil)
+
+			action, _ := base.NextPending(context.Background())
+
+			worker := &countingWorker{err: fmt.Errorf("boom")}
+			workerFunc := func() Worker { return worker }
+
+			_, err := ExecuteAction(context.Background(), ExecuteParams{
+				DispatchConfig: DispatchConfig{
+					DB:                 store,
+					NonInteractiveFunc: workerFunc,
+					InteractiveFunc:    workerFunc,
+					RemoteFunc:         workerFunc,
+				},
+			}, action)
+
+			var af *ActionFailedError
+			if !errors.As(err, &af) {
+				t.Fatalf("expected ActionFailedError, got %v", err)
+			}
+			if af.ActionID != actionID {
+				t.Errorf("ActionID = %d, want %d", af.ActionID, actionID)
+			}
+			if store.markFailedHits == 0 {
+				t.Fatalf("expected MarkFailed to be called on wrapper store")
+			}
+
+			logs := logBuf.String()
+			if !strings.Contains(logs, "mark action failed") {
+				t.Errorf("expected log line for mark action failed, got:\n%s", logs)
+			}
+			if !strings.Contains(logs, fmt.Sprintf("action_id=%d", actionID)) {
+				t.Errorf("expected log to contain action_id=%d, got:\n%s", actionID, logs)
+			}
+			if !strings.Contains(logs, "simulated FK violation") {
+				t.Errorf("expected log to contain underlying error, got:\n%s", logs)
+			}
+		})
 	}
 }
 
