@@ -1,7 +1,9 @@
 package db
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -21,6 +23,9 @@ type ResumeOptions struct {
 func (db *DB) ResumeAction(parentID int64, opts ResumeOptions) (int64, error) {
 	parent, err := db.GetAction(parentID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, fmt.Errorf("parent action #%d not found", parentID)
+		}
 		return 0, fmt.Errorf("get parent action #%d: %w", parentID, err)
 	}
 
