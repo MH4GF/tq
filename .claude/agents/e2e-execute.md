@@ -18,19 +18,20 @@ Execute phases 1–4 sequentially. Stop early at phase 2 if scope is SKIPPED.
 
 ## Phase 2: Scope classification
 
-Classify the changed files using the table below. The first matching row wins. If multiple categories apply, pick the **most invasive** (EXECUTE wins over SKIPPED).
+Walk these checks in order. The first one that matches decides the action.
 
-| Changed paths | Decision | Reason printed in output |
-|---|---|---|
-| Only `docs/`, `*.md`, `.golangci.yml`, `.github/`, `.claude/`, `.claude-plugins/` | SKIPPED | `docs/config only` |
-| Only `*_test.go` | SKIPPED | `tests only` |
-| Only `db/*.go` (and test/doc files) | SKIPPED | `db/ covered by go test ./db/ with in-memory SQLite` |
-| Only `dispatch/*.go` (and test/doc files) | SKIPPED | `dispatch/ covered by go test ./dispatch/, loop integration not feasible here` |
-| Only `internal/goldenrules/*.go` (and test/doc files) | SKIPPED | `go test ./internal/goldenrules/ is the e2e` |
-| Any `tui/*.go` | SKIPPED + manual checklist | `tui/ requires manual verification` |
-| Any `cmd/*.go` (non `_test.go`) | EXECUTE | (proceed to Phase 3) |
+1. **EXECUTE** — any `cmd/*.go` (excluding `*_test.go`) is in the diff. Proceed to Phase 3.
+2. **SKIPPED** — the diff consists *only* of paths matching one of the categories below. Emit the listed reason.
+   - `docs/`, `*.md`, `.golangci.yml`, `.github/`, `.claude/`, `.claude-plugins/` → `docs/config only`
+   - `*_test.go` → `tests only`
+   - `db/*.go` (siblings: `*_test.go`, `docs/`, `*.md` ok) → `db/ covered by go test ./db/ with in-memory SQLite`
+   - `dispatch/*.go` (same siblings) → `dispatch/ covered by go test ./dispatch/, loop integration not feasible in this agent`
+   - `internal/goldenrules/*.go` (same siblings) → `go test ./internal/goldenrules/ is the e2e`
+3. **SKIPPED** — fallback for any diff that does not match rules 1 or 2. Emit reason `no binary-affecting cmd/ change`.
 
-If SKIPPED, jump to Phase 4 and emit the reason. For TUI changes, also emit a short manual checklist (e.g., "launch `tq ui`, verify list renders / arrow keys / status filter").
+**TUI side-channel (independent of the rules above):** if any `tui/*.go` is in the diff, append a manual checklist to the report (e.g., "launch `tq ui`, verify list renders / arrow keys / status filter"). Do this whether the decision was EXECUTE or SKIPPED.
+
+If the decision is SKIPPED, jump to Phase 4 and emit the reason.
 
 ## Phase 3: Execute (cmd/ changes only)
 
