@@ -26,6 +26,7 @@ type CommandWriter interface {
 	UpdateTaskWorkDir(id int64, workDir string) error
 	MergeTaskMetadata(id int64, updates map[string]any) error
 	EnsureTask(projectID int64, title string) (int64, error)
+	RecordTaskNote(taskID int64, kind, reason string, metadata map[string]any) error
 	// Project commands
 	InsertProject(name, workDir, metadata string) (int64, error)
 	DeleteProject(id int64, cascade bool) error
@@ -62,6 +63,8 @@ type QueryReader interface {
 	ListTasksByStatus(status string) ([]Task, error)
 	GetOrCreateTriageTask(projectID int64) (int64, error)
 	TaskStatusHistory(taskID int64) ([]TaskStatusHistoryEntry, error)
+	TaskNotes(taskID int64, kindFilter string) ([]TaskNoteEntry, error)
+	LatestTaskNotes(taskIDs []int64, kindFilter string) (map[int64]TaskNoteEntry, error)
 	// Project queries
 	GetProjectByID(id int64) (*Project, error)
 	GetProjectByName(name string) (*Project, error)

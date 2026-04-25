@@ -6,7 +6,10 @@ import (
 	"log/slog"
 )
 
-const EventTaskStatusChanged = "task.status_changed"
+const (
+	EventTaskStatusChanged = "task.status_changed"
+	EventTaskNote          = "task.note"
+)
 
 type Event struct {
 	ID         int64  `json:"id"`
