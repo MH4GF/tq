@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"sort"
@@ -85,6 +86,12 @@ type treeLine struct {
 type actionAttachedMsg struct {
 	id      int64
 	message string
+}
+
+type actionResumedMsg struct {
+	parentID int64
+	newID    int64
+	err      error
 }
 
 type tasksLoadedMsg struct {
@@ -215,6 +222,17 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 			return m, clearAfterTTL(clearTasksMessageMsg{gen: m.messageGen})
 		}
 		return m, nil
+	case actionResumedMsg:
+		reload := m.loadTasks()
+		if msg.err != nil {
+			m.message = fmt.Sprintf("resume failed: %v", msg.err)
+			m.messageIsError = true
+		} else {
+			m.message = fmt.Sprintf("resume action #%d created from #%d", msg.newID, msg.parentID)
+			m.messageIsError = false
+		}
+		m.messageGen++
+		return m, tea.Batch(reload, clearAfterTTL(clearTasksMessageMsg{gen: m.messageGen}))
 	case clearTasksMessageMsg:
 		if msg.gen == m.messageGen {
 			m.message = ""
@@ -306,6 +324,12 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 		if m.cursor >= 0 && m.cursor < len(m.lines) {
 			if a := m.lines[m.cursor].action; a != nil && a.SessionID.Valid {
 				return m, m.attachAction(a)
+			}
+		}
+	case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
+		if m.cursor >= 0 && m.cursor < len(m.lines) {
+			if a := m.lines[m.cursor].action; a != nil && actionResumable(a) {
+				return m, m.resumeAction(a)
 			}
 		}
 	case key.Matches(msg, key.NewBinding(key.WithKeys("f"))):
@@ -598,6 +622,34 @@ func (m TasksModel) View() string {
 	return b.String()
 }
 
+func actionResumable(a *db.Action) bool {
+	if a == nil || !db.IsTerminalActionStatus(a.Status) {
+		return false
+	}
+	return actionSessionID(a) != ""
+}
+
+func actionSessionID(a *db.Action) string {
+	if a == nil || a.Metadata == "" || a.Metadata == "{}" {
+		return ""
+	}
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(a.Metadata), &meta); err != nil {
+		return ""
+	}
+	s, _ := meta["claude_session_id"].(string)
+	return s
+}
+
+func (m TasksModel) resumeAction(a *db.Action) tea.Cmd {
+	parentID := a.ID
+	store := m.database
+	return func() tea.Msg {
+		newID, err := store.ResumeAction(parentID, db.ResumeOptions{})
+		return actionResumedMsg{parentID: parentID, newID: newID, err: err}
+	}
+}
+
 func (m TasksModel) attachAction(a *db.Action) tea.Cmd {
 	return func() tea.Msg {
 		target := fmt.Sprintf("%s:%s", a.SessionID.String, a.TmuxPane.String)
@@ -683,6 +735,9 @@ func (m TasksModel) HelpKeys() []HelpKey {
 			}
 			if line.action.Result.Valid && line.action.Result.String != "" {
 				keys = append(keys, HelpKey{"v", "view result"})
+			}
+			if actionResumable(line.action) {
+				keys = append(keys, HelpKey{"r", "resume"})
 			}
 		}
 		if line.lineType == lineTask && line.taskID > 0 {

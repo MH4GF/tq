@@ -250,6 +250,7 @@ func TestWrapInstruction(t *testing.T) {
 	tests := []struct {
 		name        string
 		mode        string
+		isResume    bool
 		wantDone    bool
 		wantHistory bool
 	}{
@@ -271,10 +272,24 @@ func TestWrapInstruction(t *testing.T) {
 			wantDone:    false,
 			wantHistory: true,
 		},
+		{
+			name:        "resume noninteractive skips history but keeps /tq:done",
+			mode:        ModeNonInteractive,
+			isResume:    true,
+			wantDone:    true,
+			wantHistory: false,
+		},
+		{
+			name:        "resume interactive skips history but keeps /tq:done",
+			mode:        ModeInteractive,
+			isResume:    true,
+			wantDone:    true,
+			wantHistory: false,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := wrapInstruction("Fix the bug", 99, 42, tc.mode)
+			got := wrapInstruction("Fix the bug", 99, 42, tc.mode, tc.isResume)
 			if !strings.Contains(got, "action #99") {
 				t.Error("should contain action ID")
 			}
@@ -283,6 +298,9 @@ func TestWrapInstruction(t *testing.T) {
 			}
 			if tc.wantHistory && !strings.Contains(got, "tq action list --task 42") {
 				t.Error("should contain postamble with tq action list and task ID")
+			}
+			if !tc.wantHistory && strings.Contains(got, "tq action list --task 42") {
+				t.Error("should NOT contain tq action list postamble (resume)")
 			}
 			if !strings.Contains(got, "Fix the bug") {
 				t.Error("should contain the original instruction")
@@ -304,7 +322,7 @@ func TestWrapInstruction(t *testing.T) {
 }
 
 func TestWrapInstruction_InstructionComesFirst(t *testing.T) {
-	got := wrapInstruction("/daily-report", 100, 50, ModeNonInteractive)
+	got := wrapInstruction("/daily-report", 100, 50, ModeNonInteractive, false)
 	if !strings.HasPrefix(got, "/daily-report") {
 		t.Errorf("instruction should be the first line, got: %q", got[:min(len(got), 80)])
 	}

@@ -19,6 +19,7 @@ type CommandWriter interface {
 	UpdateAction(id int64, title *string, taskID *int64, metadata *string) error
 	NextPending(ctx context.Context) (*Action, error)
 	ClaimPending(ctx context.Context, id int64) (*Action, error)
+	ResumeAction(parentID int64, opts ResumeOptions) (int64, error)
 	// Task commands
 	InsertTask(projectID int64, title, metadata, workDir string) (int64, error)
 	UpdateTask(id int64, status, reason string) error

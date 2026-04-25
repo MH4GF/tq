@@ -36,6 +36,8 @@ const (
 	MetaKeyIsPermissionBlock = "is_permission_block"
 	MetaKeyBlockedActionID   = "blocked_action_id"
 	MetaKeyClaudeSessionID   = "claude_session_id"
+	MetaKeyParentActionID    = "parent_action_id"
+	MetaKeyIsResume          = "is_resume"
 )
 
 // DispatchConfig holds shared dispatch settings used by both WorkerConfig and ExecuteParams.
@@ -134,7 +136,8 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 		return nil, fmt.Errorf("validate claude_args: %w", err)
 	}
 
-	instruction = wrapInstruction(instruction, action.ID, action.TaskID, cfg.Mode)
+	isResume, _ := actionMeta[MetaKeyIsResume].(bool)
+	instruction = wrapInstruction(instruction, action.ID, action.TaskID, cfg.Mode, isResume)
 
 	workDir, recovery, err := resolveWorkDir(params.DB, action)
 	if err != nil {
@@ -252,9 +255,11 @@ func saveSessionID(store db.Store, checker SessionLogChecker, actionID int64, wo
 	}
 }
 
-func wrapInstruction(instruction string, actionID, taskID int64, mode string) string {
-	postamble := fmt.Sprintf("\n\nYou are executing action #%d (task #%d).\n\n", actionID, taskID)
-	postamble += fmt.Sprintf("First, run `tq action list --task %d` to understand the task history (completed actions, their results, etc.).", taskID)
+func wrapInstruction(instruction string, actionID, taskID int64, mode string, isResume bool) string {
+	postamble := fmt.Sprintf("\n\nYou are executing action #%d (task #%d).", actionID, taskID)
+	if !isResume {
+		postamble += fmt.Sprintf("\n\nFirst, run `tq action list --task %d` to understand the task history (completed actions, their results, etc.).", taskID)
+	}
 	if mode != ModeRemote {
 		postamble += "\n\nWhen you finish, run `/tq:done` to mark this action as complete." +
 			"\nIf you cannot complete the action (missing permissions, broken environment, external blocker, etc.), run `/tq:failed` instead."

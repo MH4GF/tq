@@ -109,7 +109,8 @@ project → task → action
   * reset returns failed or cancelled actions to pending; running and dispatched
     must be cancelled or failed first (reset is rejected to avoid spawning a duplicate worker)
   * cancel/fail/reset only update the DB; tmux panes are not terminated
-  * done and cancelled are terminal; on_done spawns a new action from done only
+  * done, failed, and cancelled are terminal; on_done spawns a new action from done only
+  * `tq action resume <id>` spawns a new action that resumes the claude session of any terminal action whose metadata captured `claude_session_id` (see `docs/cli-reference.md`)
 ```
 
 ### Worker Types
