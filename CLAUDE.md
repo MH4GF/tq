@@ -7,7 +7,7 @@ Run `tq --help` for data model, commands, and usage examples.
 - Build: `go build ./...`
 - Test: `go test ./...`
 - Single test: `go test ./db/ -run TestTaskCreate`
-- Lint: `golangci-lint run`
+- Lint: `golangci-lint run` (CI also runs `./scripts/deadcode-check.sh` — Rule 13)
 - Install: `go install .`
 
 ## Style
