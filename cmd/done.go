@@ -19,7 +19,7 @@ var doneCmd = &cobra.Command{
 	Use:   "done ACTION_ID [RESULT]",
 	Short: "Mark action as done",
 	Long: `Mark an action as done, optionally recording a result summary.
-Can be called on any non-terminal action (pending or running).
+Can be called on any non-terminal action (pending, running, or dispatched).
 
 RESULT is free-form text read by future workers to understand past work.
 Structure it with these sections (omit any that don't apply):
@@ -50,7 +50,7 @@ Session logs already capture that.`,
 		}
 
 		if action.Status == db.ActionStatusDone || action.Status == db.ActionStatusFailed || action.Status == db.ActionStatusCancelled {
-			return fmt.Errorf("action #%d is already %q, cannot mark as done (only pending or running actions can be marked done)", id, action.Status)
+			return fmt.Errorf("action #%d is already %q, cannot mark as done (only pending, running, or dispatched actions can be marked done)", id, action.Status)
 		}
 
 		result := ""

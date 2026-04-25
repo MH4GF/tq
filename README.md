@@ -106,8 +106,8 @@ project → task → action
 
   * cancel can be issued from pending, running, dispatched, or failed (terminal: cancelled)
   * fail can be issued from any non-terminal state (pending, running, or dispatched)
-  * reset returns failed or cancelled actions to pending; running must be
-    cancelled or failed first (reset is rejected to avoid spawning a duplicate worker)
+  * reset returns failed or cancelled actions to pending; running and dispatched
+    must be cancelled or failed first (reset is rejected to avoid spawning a duplicate worker)
   * cancel/fail/reset only update the DB; tmux panes are not terminated
   * done and cancelled are terminal; on_done spawns a new action from done only
 ```
