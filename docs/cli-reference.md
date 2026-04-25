@@ -55,7 +55,6 @@ tq project list [--jq <EXPR>] [--limit <N>]
 | `tq task list` | List tasks with latest 10 nested actions (JSON) |
 | `tq task get <ID>` | Get a task by ID with latest 10 nested actions and status_history (JSON) |
 | `tq task update <ID>` | Update a task |
-| `tq task note <ID>` | Record a free-form note on a task without changing its status |
 
 ### `tq task create`
 
@@ -75,12 +74,10 @@ tq task list [--project <ID>] [--status <STATUS>] [--jq <EXPR>] [--limit <N>]
 
 - `--project` — Filter by project ID
 - `--status` — Filter by status (`open`, `done`, `archived`)
-- `--jq` — Filter JSON output (fields: `id`, `project_id`, `title`, `metadata`, `status`, `work_dir`, `created_at`, `updated_at`, `actions`, `latest_triage_note`)
+- `--jq` — Filter JSON output (fields: `id`, `project_id`, `title`, `metadata`, `status`, `work_dir`, `created_at`, `updated_at`, `actions`)
 - `--limit` — Limit number of results
 
 `actions` contains at most the **latest 10** actions per task (ascending by id, so `actions[-1]` is the most recent). Use `tq action list --task <ID>` for the full history.
-
-`latest_triage_note` is the most recent `kind=triage_keep` note on the task, or `null`. When present it has `{reason, at, snooze_until?}` (the `snooze_until` key is surfaced from the note's `metadata` when set). It is intended for the `/tq:triage` skill to skip tasks whose situation has not changed since the prior keep judgment.
 
 ### `tq task get`
 
@@ -88,13 +85,11 @@ tq task list [--project <ID>] [--status <STATUS>] [--jq <EXPR>] [--limit <N>]
 tq task get <ID> [--jq <EXPR>]
 ```
 
-- `--jq` — Filter JSON output (fields: `id`, `project_id`, `title`, `metadata`, `status`, `work_dir`, `created_at`, `updated_at`, `actions`, `status_history`, `notes`)
+- `--jq` — Filter JSON output (fields: `id`, `project_id`, `title`, `metadata`, `status`, `work_dir`, `created_at`, `updated_at`, `actions`, `status_history`)
 
 `actions` contains at most the **latest 10** actions (ascending by id, so `actions[-1]` is the most recent). Use `tq action list --task <ID>` for the full history.
 
 `status_history` is an array of status transitions derived from `task.status_changed` events. Each entry has `{from, to, at}` plus optional `reason` (set when `tq task update --note` was used).
-
-`notes` is an array of free-form notes derived from `task.note` events (recorded via `tq task note`). Each entry has `{kind, reason, at}` plus optional `metadata`. Notes are independent of `status_history`.
 
 ### `tq task update`
 
@@ -109,20 +104,6 @@ At least one flag is required. `--status` and `--note` must be specified togethe
 - `--work-dir` — Working directory
 - `--meta` — JSON metadata to merge
 - `--note` — Reason for the status change (**required when `--status` is given**; recorded in the event log)
-
-### `tq task note`
-
-```
-tq task note <ID> --kind <KIND> --reason <TEXT> [--metadata <JSON>]
-```
-
-Record a status-independent annotation on a task. Notes appear in `tq task get` under `notes` and do not modify `status` or `status_history`.
-
-- `--kind` — Note kind, free-form string (e.g. `triage_keep`, `observation`, `blocker`) (**required**)
-- `--reason` — One-line explanation (**required**)
-- `--metadata` — JSON object with kind-specific extras (e.g. `{"snooze_until":"2026-05-02"}`)
-
-Notes with `kind=triage_keep` are surfaced on `tq task list` as `latest_triage_note` and consumed by the `/tq:triage` skill to skip tasks whose situation has not changed.
 
 ## action
 
@@ -279,13 +260,12 @@ tq event list [--entity <TYPE>] [--id <ID>] [--jq <EXPR>] [--limit <N>]
 ## search
 
 ```
-tq search <KEYWORD> [--project <ID>] [--jq <EXPR>]
+tq search <KEYWORD> [--jq <EXPR>]
 ```
 
 Full-text search across task titles, task metadata, task status change reasons, action titles, action results, and action metadata. Output is JSON.
 
-- `--project` — Filter by project ID (default: 0 = all projects)
-- `--jq` — Filter JSON output (fields: `entity_type`, `entity_id`, `task_id`, `project_id`, `field`, `snippet`, `status`, `created_at`)
+- `--jq` — Filter JSON output (fields: `entity_type`, `entity_id`, `task_id`, `field`, `snippet`, `status`, `created_at`)
 
 ## completion
 
