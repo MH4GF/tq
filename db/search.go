@@ -9,6 +9,7 @@ type SearchResult struct {
 	EntityType string `json:"entity_type"`
 	EntityID   int64  `json:"entity_id"`
 	TaskID     int64  `json:"task_id"`
+	ProjectID  int64  `json:"project_id"`
 	Field      string `json:"field"`
 	Snippet    string `json:"snippet"`
 	Status     string `json:"status"`
@@ -73,42 +74,53 @@ func escapeLike(s string) string {
 	return s
 }
 
-func (db *DB) Search(keyword string) ([]SearchResult, error) {
+func (db *DB) Search(keyword string, projectID int64) ([]SearchResult, error) {
 	keyword = strings.TrimSpace(keyword)
 	if keyword == "" {
 		return []SearchResult{}, nil
 	}
 	escaped := escapeLike(keyword)
 
+	var projFilter string
+	branchArgs := []any{escaped}
+	if projectID != 0 {
+		projFilter = " AND t.project_id = ?"
+		branchArgs = append(branchArgs, projectID)
+	}
+
 	//nolint:dupword
 	query := fmt.Sprintf(`
-		SELECT 'task' AS entity_type, t.id AS entity_id, t.id AS task_id, 'title' AS field, t.title AS value, t.status, t.created_at
-		FROM tasks t WHERE t.title LIKE '%%' || ? || '%%' ESCAPE '\'
+		SELECT 'task' AS entity_type, t.id AS entity_id, t.id AS task_id, t.project_id, 'title' AS field, t.title AS value, t.status, t.created_at
+		FROM tasks t WHERE t.title LIKE '%%' || ? || '%%' ESCAPE '\'`+projFilter+`
 		UNION ALL
-		SELECT 'task', t.id, t.id, 'metadata', t.metadata, t.status, t.created_at
-		FROM tasks t WHERE t.metadata LIKE '%%' || ? || '%%' ESCAPE '\'
+		SELECT 'task', t.id, t.id, t.project_id, 'metadata', t.metadata, t.status, t.created_at
+		FROM tasks t WHERE t.metadata LIKE '%%' || ? || '%%' ESCAPE '\'`+projFilter+`
 		UNION ALL
-		SELECT 'action', a.id, a.task_id, 'title', a.title, a.status, a.created_at
-		FROM actions a WHERE a.title LIKE '%%' || ? || '%%' ESCAPE '\'
+		SELECT 'action', a.id, a.task_id, t.project_id, 'title', a.title, a.status, a.created_at
+		FROM actions a JOIN tasks t ON a.task_id = t.id WHERE a.title LIKE '%%' || ? || '%%' ESCAPE '\'`+projFilter+`
 		UNION ALL
-		SELECT 'action', a.id, a.task_id, 'result', COALESCE(a.result, ''), a.status, a.created_at
-		FROM actions a WHERE COALESCE(a.result, '') LIKE '%%' || ? || '%%' ESCAPE '\'
+		SELECT 'action', a.id, a.task_id, t.project_id, 'result', COALESCE(a.result, ''), a.status, a.created_at
+		FROM actions a JOIN tasks t ON a.task_id = t.id WHERE COALESCE(a.result, '') LIKE '%%' || ? || '%%' ESCAPE '\'`+projFilter+`
 		UNION ALL
-		SELECT 'action', a.id, a.task_id, 'metadata', a.metadata, a.status, a.created_at
-		FROM actions a WHERE a.metadata LIKE '%%' || ? || '%%' ESCAPE '\'
+		SELECT 'action', a.id, a.task_id, t.project_id, 'metadata', a.metadata, a.status, a.created_at
+		FROM actions a JOIN tasks t ON a.task_id = t.id WHERE a.metadata LIKE '%%' || ? || '%%' ESCAPE '\'`+projFilter+`
 		UNION ALL
-		SELECT 'task', e.entity_id, e.entity_id, 'status_history_reason',
+		SELECT 'task', e.entity_id, e.entity_id, t.project_id, 'status_history_reason',
 		       json_extract(e.payload, '$.reason') AS value,
 		       t.status, e.created_at
 		FROM events e JOIN tasks t ON t.id = e.entity_id
 		WHERE e.entity_type = 'task'
 		  AND e.event_type = %q
-		  AND json_extract(e.payload, '$.reason') LIKE '%%' || ? || '%%' ESCAPE '\'
+		  AND json_extract(e.payload, '$.reason') LIKE '%%' || ? || '%%' ESCAPE '\'`+projFilter+`
 		ORDER BY task_id DESC, entity_id DESC, created_at DESC
 		LIMIT 500
 	`, EventTaskStatusChanged)
+	var args []any
+	for range 6 {
+		args = append(args, branchArgs...)
+	}
 
-	rows, err := db.Query(query, escaped, escaped, escaped, escaped, escaped, escaped)
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("search: %w", err)
 	}
@@ -120,7 +132,7 @@ func (db *DB) Search(keyword string) ([]SearchResult, error) {
 	for rows.Next() {
 		var r SearchResult
 		var value string
-		if err := rows.Scan(&r.EntityType, &r.EntityID, &r.TaskID, &r.Field, &value, &r.Status, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.EntityType, &r.EntityID, &r.TaskID, &r.ProjectID, &r.Field, &value, &r.Status, &r.CreatedAt); err != nil {
 			return nil, fmt.Errorf("search scan: %w", err)
 		}
 		r.Snippet = extractSnippet(value, lowerKeyword, keywordLen, 40)
