@@ -170,6 +170,8 @@ tq action list [--task <ID>] [--status <STATUS>] [--jq <EXPR>] [--limit <N>]
 tq action done <ACTION_ID> [RESULT]
 ```
 
+Mark a non-terminal action (pending or running) as done. Calling `done` on an action that is already `done`, `failed`, or `cancelled` returns an error.
+
 RESULT is free-form text. Recommended structure:
 
 - **outcome** — What changed (concrete deliverables)
