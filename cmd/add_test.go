@@ -6,19 +6,18 @@ import (
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
-	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
 
 func TestAdd(t *testing.T) {
 	tests := []struct {
-		name       string
-		setup      func(t *testing.T, d *db.DB)
-		args       []string
-		wantErr    string
-		wantOut    []string
-		wantNotOut []string
-		wantMeta   map[string]any
+		name             string
+		dispatchDisabled bool
+		args             []string
+		wantErr          string
+		wantOut          []string
+		wantNotOut       []string
+		wantMeta         map[string]any
 	}{
 		{
 			name:     "positional arg",
@@ -42,16 +41,11 @@ func TestAdd(t *testing.T) {
 			wantErr: "task",
 		},
 		{
-			name: "unfocused project",
-			setup: func(t *testing.T, d *db.DB) {
-				t.Helper()
-				if err := d.SetDispatchEnabled(1, false); err != nil {
-					t.Fatal(err)
-				}
-			},
-			args:       []string{"action", "create", "do something", "--task", "1", "--title", "test"},
-			wantOut:    []string{"will not be auto-dispatched"},
-			wantNotOut: []string{"will be dispatched automatically"},
+			name:             "unfocused project",
+			dispatchDisabled: true,
+			args:             []string{"action", "create", "do something", "--task", "1", "--title", "test"},
+			wantOut:          []string{"will not be auto-dispatched"},
+			wantNotOut:       []string{"will be dispatched automatically"},
 		},
 	}
 
@@ -64,8 +58,10 @@ func TestAdd(t *testing.T) {
 			cmd.SetConfigDir(t.TempDir())
 			d.InsertTask(1, "test task", "{}", "")
 
-			if tc.setup != nil {
-				tc.setup(t, d)
+			if tc.dispatchDisabled {
+				if err := d.SetDispatchEnabled(1, false); err != nil {
+					t.Fatal(err)
+				}
 			}
 
 			root := cmd.GetRootCmd()
