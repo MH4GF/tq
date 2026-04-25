@@ -664,6 +664,105 @@ func TestTasksModel_DetailViewEscBack(t *testing.T) {
 	}
 }
 
+func TestTasksModel_TaskDetailView_WithNotes(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Note task", "{}", "")
+	if err := d.RecordTaskNote(taskID, db.NoteKindTriageKeep, "PR review pending", map[string]any{"snooze_until": "2026-05-02"}); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewTasksModel(d, "")
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Navigate to the task line
+	for m.cursor < len(m.lines) {
+		line := m.lines[m.cursor]
+		if line.lineType == lineTask && line.taskID == taskID {
+			break
+		}
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	}
+	if m.lines[m.cursor].taskID != taskID {
+		t.Fatalf("did not land on task line, cursor=%d", m.cursor)
+	}
+
+	// Enter task detail view
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if m.mode != modeViewTaskDetail {
+		t.Fatalf("mode = %d, want modeViewTaskDetail", m.mode)
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "Note task") {
+		t.Errorf("detail view should show task title, got %q", view)
+	}
+	if !strings.Contains(view, "status_history") {
+		t.Errorf("detail view should show status_history section, got %q", view)
+	}
+	if !strings.Contains(view, "notes") {
+		t.Errorf("detail view should show notes section, got %q", view)
+	}
+	if !strings.Contains(view, db.NoteKindTriageKeep) {
+		t.Errorf("detail view should show note kind, got %q", view)
+	}
+	if !strings.Contains(view, "PR review pending") {
+		t.Errorf("detail view should show note reason, got %q", view)
+	}
+	if !strings.Contains(view, "snooze_until") {
+		t.Errorf("detail view should show metadata, got %q", view)
+	}
+
+	// Press esc — should return to normal mode
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.mode != modeNormal {
+		t.Error("esc should return to normal mode from task detail view")
+	}
+	if m.detailTask != nil || m.detailNotes != nil || m.detailHistory != nil {
+		t.Error("detail state should be cleared after esc")
+	}
+}
+
+func TestTasksModel_TaskDetailView_NoNotes(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Empty task", "{}", "")
+
+	m := NewTasksModel(d, "")
+	m = m.SetSize(120, 40)
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	// Navigate to the task line
+	for m.cursor < len(m.lines) {
+		line := m.lines[m.cursor]
+		if line.lineType == lineTask && line.taskID == taskID {
+			break
+		}
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	}
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if m.mode != modeViewTaskDetail {
+		t.Fatalf("mode = %d, want modeViewTaskDetail", m.mode)
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "Empty task") {
+		t.Errorf("detail view should show task title, got %q", view)
+	}
+	if !strings.Contains(view, "notes") {
+		t.Errorf("detail view should show notes header even when empty, got %q", view)
+	}
+	if !strings.Contains(view, "(none)") {
+		t.Errorf("detail view should show empty placeholder, got %q", view)
+	}
+}
+
 func TestTasksModel_MessageTTLClear(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

@@ -32,6 +32,7 @@ type tasksMode int
 const (
 	modeNormal tasksMode = iota
 	modeViewDetail
+	modeViewTaskDetail
 )
 
 type lineType int
@@ -62,9 +63,12 @@ type TasksModel struct {
 	runningInteractive int
 
 	// Detail view state
-	mode         tasksMode
-	detailAction *db.Action
-	detailScroll int
+	mode          tasksMode
+	detailAction  *db.Action
+	detailTask    *db.Task
+	detailNotes   []db.TaskNoteEntry
+	detailHistory []db.TaskStatusHistoryEntry
+	detailScroll  int
 }
 
 type treeLine struct {
@@ -258,7 +262,7 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch m.mode {
-		case modeViewDetail:
+		case modeViewDetail, modeViewTaskDetail:
 			return m.updateViewDetail(msg)
 		default:
 			return m.updateNormal(msg)
@@ -289,10 +293,13 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 		}
 	case key.Matches(msg, key.NewBinding(key.WithKeys("v"))):
 		if m.cursor >= 0 && m.cursor < len(m.lines) {
-			if a := m.lines[m.cursor].action; a != nil && a.Result.Valid && a.Result.String != "" {
+			line := m.lines[m.cursor]
+			if a := line.action; a != nil && a.Result.Valid && a.Result.String != "" {
 				m.detailAction = a
 				m.detailScroll = 0
 				m.mode = modeViewDetail
+			} else if line.lineType == lineTask && line.taskID > 0 {
+				m.openTaskDetail(line.taskID)
 			}
 		}
 	case key.Matches(msg, key.NewBinding(key.WithKeys("o"))):
@@ -331,6 +338,9 @@ func (m TasksModel) updateViewDetail(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 	switch {
 	case key.Matches(msg, key.NewBinding(key.WithKeys("q", "esc"))):
 		m.detailAction = nil
+		m.detailTask = nil
+		m.detailNotes = nil
+		m.detailHistory = nil
 		m.detailScroll = 0
 		m.mode = modeNormal
 	case key.Matches(msg, key.NewBinding(key.WithKeys("j", "down"))):
@@ -341,6 +351,25 @@ func (m TasksModel) updateViewDetail(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m *TasksModel) openTaskDetail(taskID int64) {
+	m.detailTask = nil
+	m.detailHistory = nil
+	m.detailNotes = nil
+	task, err := m.database.GetTask(taskID)
+	if err != nil {
+		return
+	}
+	m.detailTask = task
+	if hist, err := m.database.TaskStatusHistory(taskID); err == nil {
+		m.detailHistory = hist
+	}
+	if notes, err := m.database.TaskNotes(taskID, ""); err == nil {
+		m.detailNotes = notes
+	}
+	m.detailScroll = 0
+	m.mode = modeViewTaskDetail
 }
 
 func cardBorder(left, right string, width int) string {
@@ -492,6 +521,10 @@ func (m TasksModel) View() string {
 		return RenderDetailView(m.detailAction, m.detailScroll, m.width, m.height)
 	}
 
+	if m.mode == modeViewTaskDetail && m.detailTask != nil {
+		return RenderTaskDetailView(m.detailTask, m.detailHistory, m.detailNotes, m.detailScroll, m.width, m.height)
+	}
+
 	if len(m.lines) == 0 {
 		return styleMuted.Render("  No tasks found")
 	}
@@ -635,7 +668,7 @@ func actionStatusOrder(status string) int {
 }
 
 func (m TasksModel) HelpKeys() []HelpKey {
-	if m.mode == modeViewDetail {
+	if m.mode == modeViewDetail || m.mode == modeViewTaskDetail {
 		return detailHelpKeys()
 	}
 	keys := commonHelpKeys()
@@ -651,6 +684,9 @@ func (m TasksModel) HelpKeys() []HelpKey {
 			if line.action.Result.Valid && line.action.Result.String != "" {
 				keys = append(keys, HelpKey{"v", "view result"})
 			}
+		}
+		if line.lineType == lineTask && line.taskID > 0 {
+			keys = append(keys, HelpKey{"v", "view task"})
 		}
 		if line.projectID > 0 && line.taskID == 0 {
 			keys = append(keys, HelpKey{"f", "toggle focus"})
