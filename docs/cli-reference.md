@@ -136,7 +136,7 @@ Notes with `kind=triage_keep` are surfaced on `tq task list` as `latest_triage_n
 | `tq action fail <ID> [REASON]` | Mark action as failed when the goal could not be achieved |
 | `tq action cancel <ID> [REASON]` | Cancel an action |
 | `tq action attach <ID>` | Attach to a running action's tmux window |
-| `tq action reset <ID>` | Reset action to pending |
+| `tq action reset <ID>` | Reset a failed or cancelled action to pending |
 | `tq action dispatch <ID>` | Dispatch immediately (skip queue) |
 
 ### `tq action create`
@@ -160,7 +160,7 @@ tq action list [--task <ID>] [--status <STATUS>] [--jq <EXPR>] [--limit <N>]
 ```
 
 - `--task` — Filter by task ID
-- `--status` — Filter by status (`pending`, `running`, `done`, `failed`, `cancelled`)
+- `--status` — Filter by status (`pending`, `running`, `dispatched`, `done`, `failed`, `cancelled`)
 - `--jq` — Filter JSON output (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `session_id`, `dispatch_after`, `started_at`, `completed_at`, `created_at`)
 - `--limit` — Limit number of results
 

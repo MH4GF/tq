@@ -11,7 +11,7 @@ import (
 
 var resetCmd = &cobra.Command{
 	Use:     "reset <action_id>",
-	Short:   "Reset a failed or running action to pending",
+	Short:   "Reset a failed or cancelled action to pending",
 	Example: `  tq action reset 7`,
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
