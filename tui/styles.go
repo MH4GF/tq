@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -197,6 +198,117 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 	}
 
 	// Scroll indicator
+	if len(lines) > bodyHeight {
+		page := scroll/bodyHeight + 1
+		totalPages := (len(lines)-1)/bodyHeight + 1
+		indicator := styleMuted.Render(fmt.Sprintf("[%d/%d]", page, totalPages))
+		b.WriteString(pad + indicator)
+	}
+
+	return b.String()
+}
+
+func RenderTaskDetailView(t *db.Task, history []db.TaskStatusHistoryEntry, notes []db.TaskNoteEntry, scroll, width, height int) string {
+	pad := "  "
+	bodyW := max(0, min(width, 80)-len(pad))
+
+	var lines []string
+
+	// Metadata grid
+	fields := []struct{ label, value string }{
+		{"     Task", fmt.Sprintf("#%d", t.ID)},
+		{"   Status", t.Status},
+		{"  Project", fmt.Sprintf("#%d", t.ProjectID)},
+	}
+	if t.WorkDir != "" {
+		fields = append(fields, struct{ label, value string }{" Work dir", t.WorkDir})
+	}
+	if t.UpdatedAt.Valid {
+		fields = append(fields, struct{ label, value string }{"  Updated", db.FormatLocal(t.UpdatedAt.String)})
+	} else {
+		fields = append(fields, struct{ label, value string }{"  Created", db.FormatLocal(t.CreatedAt)})
+	}
+	for _, f := range fields {
+		lines = append(lines, fmt.Sprintf("%s  %s",
+			styleFieldLabel.Render(f.label),
+			styleFieldValue.Render(f.value),
+		))
+	}
+
+	lines = append(lines, styleBorderChar.Render(strings.Repeat("─", bodyW)))
+	lines = append(lines, styleFieldLabel.Render("status_history"))
+	if len(history) == 0 {
+		lines = append(lines, styleMuted.Render("  (none)"))
+	} else {
+		for _, h := range history {
+			head := fmt.Sprintf("  %s  %s → %s",
+				styleActivityTS.Render(h.At),
+				StatusStyle(h.From).Render(h.From),
+				StatusStyle(h.To).Render(h.To),
+			)
+			if h.Reason != "" {
+				head += "  " + styleFieldValue.Render(h.Reason)
+			}
+			lines = append(lines, wrapLine(head, bodyW)...)
+		}
+	}
+
+	lines = append(lines, styleBorderChar.Render(strings.Repeat("─", bodyW)))
+	lines = append(lines, styleFieldLabel.Render("notes"))
+	if len(notes) == 0 {
+		lines = append(lines, styleMuted.Render("  (none)"))
+	} else {
+		for _, n := range notes {
+			head := fmt.Sprintf("  %s  %s",
+				styleActivityTS.Render(n.At),
+				styleFieldValue.Bold(true).Render(n.Kind),
+			)
+			if n.Reason != "" {
+				head += "  " + styleFieldValue.Render(n.Reason)
+			}
+			lines = append(lines, wrapLine(head, bodyW)...)
+			if len(n.Metadata) > 0 {
+				keys := make([]string, 0, len(n.Metadata))
+				for k := range n.Metadata {
+					keys = append(keys, k)
+				}
+				sort.Strings(keys)
+				var parts []string
+				for _, k := range keys {
+					parts = append(parts, fmt.Sprintf("%s: %v", k, n.Metadata[k]))
+				}
+				meta := "    " + styleMuted.Render(strings.Join(parts, ", "))
+				lines = append(lines, wrapLine(meta, bodyW)...)
+			}
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString("\n")
+	headerLine := fmt.Sprintf("%s%s  %s  %s %s",
+		pad,
+		styleDetailBack.Render("← esc"),
+		lipgloss.NewStyle().Bold(true).Render(t.Title),
+		StatusStyle(t.Status).Render(StatusIcon(t.Status)),
+		StatusStyle(t.Status).Render(t.Status),
+	)
+	b.WriteString(headerLine + "\n")
+	b.WriteString(pad + styleBorderChar.Render(strings.Repeat("─", bodyW)) + "\n")
+
+	bodyHeight := height - 4
+	if bodyHeight < 1 {
+		bodyHeight = 10
+	}
+
+	if scroll > len(lines)-bodyHeight {
+		scroll = max(0, len(lines)-bodyHeight)
+	}
+
+	end := min(scroll+bodyHeight, len(lines))
+	for _, line := range lines[scroll:end] {
+		b.WriteString(pad + line + "\n")
+	}
+
 	if len(lines) > bodyHeight {
 		page := scroll/bodyHeight + 1
 		totalPages := (len(lines)-1)/bodyHeight + 1
