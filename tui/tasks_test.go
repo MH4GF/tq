@@ -731,6 +731,84 @@ func TestTasksModel_ActionStatsUnfocused(t *testing.T) {
 	}
 }
 
+func TestTasksModel_LoadTasks_BulkActions(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	// 2 projects × 3 tasks × 3 actions of differing status.
+	type seedAction struct {
+		title  string
+		status string
+	}
+	seedActions := []seedAction{
+		{"a-pending", db.ActionStatusPending},
+		{"a-running", db.ActionStatusRunning},
+		{"a-done", db.ActionStatusDone},
+	}
+
+	wantTasksByProject := map[int64]int{1: 3, 2: 3}
+	for _, projectID := range []int64{1, 2} {
+		for ti := range 3 {
+			taskID, err := d.InsertTask(projectID, fmt.Sprintf("p%d-task%d", projectID, ti), "{}", "")
+			if err != nil {
+				t.Fatalf("InsertTask: %v", err)
+			}
+			for _, sa := range seedActions {
+				id, err := d.InsertAction(sa.title, taskID, "{}", db.ActionStatusPending, nil)
+				if err != nil {
+					t.Fatalf("InsertAction: %v", err)
+				}
+				switch sa.status {
+				case db.ActionStatusRunning:
+					if err := d.SetActionStatusForTest(id, db.ActionStatusRunning); err != nil {
+						t.Fatalf("SetActionStatusForTest: %v", err)
+					}
+				case db.ActionStatusDone:
+					if err := d.MarkDone(id, ""); err != nil {
+						t.Fatalf("MarkDone: %v", err)
+					}
+				}
+			}
+		}
+	}
+
+	m := NewTasksModel(d, "")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	if len(m.trees) != 3 {
+		t.Fatalf("trees = %d, want 3", len(m.trees))
+	}
+
+	for _, pt := range m.trees {
+		want, expected := wantTasksByProject[pt.project.ID]
+		if !expected {
+			if len(pt.tasks) != 0 {
+				t.Errorf("project %d unexpected tasks = %d", pt.project.ID, len(pt.tasks))
+			}
+			continue
+		}
+		if len(pt.tasks) != want {
+			t.Errorf("project %d tasks = %d, want %d", pt.project.ID, len(pt.tasks), want)
+		}
+		for _, tn := range pt.tasks {
+			if len(tn.actions) != len(seedActions) {
+				t.Errorf("task %d actions = %d, want %d", tn.task.ID, len(tn.actions), len(seedActions))
+				continue
+			}
+			// actionStatusOrder: done(1) < running(3) < pending(5)
+			for i := 1; i < len(tn.actions); i++ {
+				prev := actionStatusOrder(tn.actions[i-1].Status)
+				cur := actionStatusOrder(tn.actions[i].Status)
+				if prev > cur {
+					t.Errorf("task %d actions out of order: %v then %v",
+						tn.task.ID, tn.actions[i-1].Status, tn.actions[i].Status)
+				}
+			}
+		}
+	}
+}
+
 func TestTasksModel_ProjectWorkDir(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
