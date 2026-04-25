@@ -35,7 +35,7 @@ if ! go run "golang.org/x/tools/cmd/deadcode@${DEADCODE_VERSION}" \
   exit 1
 fi
 
-grep -vE '^\s*(#|$)' "$ALLOWLIST" | sort -u > "$expected"
+{ grep -vE '^\s*(#|$)' "$ALLOWLIST" || true; } | sort -u > "$expected"
 
 new_findings="$(comm -23 "$current" "$expected")"
 stale_entries="$(comm -13 "$current" "$expected")"
