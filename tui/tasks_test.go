@@ -662,6 +662,68 @@ func TestTasksModel_DetailViewEscBack(t *testing.T) {
 	}
 }
 
+func TestTasksModel_MessageTTLClear(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "{}", "")
+	d.InsertAction("a", taskID, "{}", db.ActionStatusPending, nil)
+
+	m := NewTasksModel(d, "")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	updated, cmd := m.Update(actionAttachedMsg{id: 1, message: "attach failed: boom"})
+	m = updated
+	if m.message == "" {
+		t.Fatal("message should be set after actionAttachedMsg with non-empty message")
+	}
+	if cmd == nil {
+		t.Fatal("expected a clear-timer cmd after actionAttachedMsg")
+	}
+
+	// Keystrokes must not clear the message — only the TTL does.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.message == "" {
+		t.Error("keystroke should not clear message; TTL should")
+	}
+
+	m, _ = m.Update(clearTasksMessageMsg{gen: m.messageGen})
+	if m.message != "" {
+		t.Errorf("message should be cleared after clearTasksMessageMsg, got %q", m.message)
+	}
+}
+
+func TestTasksModel_MessageStaleTimerIgnored(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", "{}", "")
+	d.InsertAction("a", taskID, "{}", db.ActionStatusPending, nil)
+
+	m := NewTasksModel(d, "")
+	msg := m.Init()()
+	m, _ = m.Update(msg)
+
+	m, _ = m.Update(actionAttachedMsg{id: 1, message: "first"})
+	staleGen := m.messageGen
+
+	m, _ = m.Update(actionAttachedMsg{id: 2, message: "second"})
+	if m.message != "second" {
+		t.Fatalf("message = %q, want %q", m.message, "second")
+	}
+
+	m, _ = m.Update(clearTasksMessageMsg{gen: staleGen})
+	if m.message != "second" {
+		t.Errorf("stale clear should not wipe newer message, got %q", m.message)
+	}
+
+	m, _ = m.Update(clearTasksMessageMsg{gen: m.messageGen})
+	if m.message != "" {
+		t.Errorf("current-gen clear should wipe message, got %q", m.message)
+	}
+}
+
 func TestTasksModel_SetSize(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
