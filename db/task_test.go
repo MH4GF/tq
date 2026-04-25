@@ -313,75 +313,38 @@ func TestUpdateTask_BlockedByActiveActions(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	t.Run("pending action blocks done", func(t *testing.T) {
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		d.InsertAction("pending", taskID, "{}", db.ActionStatusPending, nil)
+	tests := []struct {
+		name                string
+		initialActionStatus string
+		finalActionMark     bool
+		targetStatus        string
+		wantErr             bool
+	}{
+		{"pending action blocks done", db.ActionStatusPending, false, db.TaskStatusDone, true},
+		{"pending action blocks archived", db.ActionStatusPending, false, db.TaskStatusArchived, true},
+		{"running action blocks done", db.ActionStatusRunning, false, db.TaskStatusDone, true},
+		{"cancelled action does not block done", db.ActionStatusRunning, true, db.TaskStatusDone, false},
+		{"cancelled action does not block archived", db.ActionStatusPending, true, db.TaskStatusArchived, false},
+	}
 
-		err := d.UpdateTask(taskID, db.TaskStatusDone, "")
-		if err == nil {
-			t.Fatal("expected error when completing task with pending action")
-		}
-		if !strings.Contains(err.Error(), "pending/running action(s)") {
-			t.Errorf("unexpected error message: %v", err)
-		}
-	})
-
-	t.Run("pending action blocks archived", func(t *testing.T) {
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		d.InsertAction("pending", taskID, "{}", db.ActionStatusPending, nil)
-
-		err := d.UpdateTask(taskID, db.TaskStatusArchived, "")
-		if err == nil {
-			t.Fatal("expected error when archiving task with pending action")
-		}
-	})
-
-	t.Run("running action blocks done", func(t *testing.T) {
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		d.InsertAction("running", taskID, "{}", db.ActionStatusRunning, nil)
-
-		err := d.UpdateTask(taskID, db.TaskStatusDone, "")
-		if err == nil {
-			t.Fatal("expected error when completing task with running action")
-		}
-	})
-
-	t.Run("failed action does not block done", func(t *testing.T) {
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		actionID, _ := d.InsertAction("to-fail", taskID, "{}", db.ActionStatusRunning, nil)
-		d.MarkFailed(actionID, "failed")
-
-		err := d.UpdateTask(taskID, db.TaskStatusDone, "")
-		if err != nil {
-			t.Errorf("done should succeed with only failed actions, got: %v", err)
-		}
-	})
-
-	t.Run("done/cancelled actions do not block", func(t *testing.T) {
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		doneID, _ := d.InsertAction("to-done", taskID, "{}", db.ActionStatusRunning, nil)
-		d.MarkDone(doneID, "ok")
-		cancelID, _ := d.InsertAction("to-cancel", taskID, "{}", db.ActionStatusPending, nil)
-		d.MarkCancelled(cancelID, "")
-
-		err := d.UpdateTask(taskID, db.TaskStatusDone, "")
-		if err != nil {
-			t.Errorf("done should succeed with only done/cancelled actions, got: %v", err)
-		}
-	})
-
-	t.Run("after cancelling all active actions", func(t *testing.T) {
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		actionID, _ := d.InsertAction("pending", taskID, "{}", db.ActionStatusPending, nil)
-
-		if err := d.MarkCancelled(actionID, ""); err != nil {
-			t.Fatalf("cancel action: %v", err)
-		}
-		err := d.UpdateTask(taskID, db.TaskStatusArchived, "")
-		if err != nil {
-			t.Errorf("archived should succeed after cancelling actions, got: %v", err)
-		}
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			taskID, _ := d.InsertTask(1, "test", "{}", "")
+			actionID, _ := d.InsertAction(tc.name, taskID, "{}", tc.initialActionStatus, nil)
+			if tc.finalActionMark {
+				if err := d.MarkCancelled(actionID, ""); err != nil {
+					t.Fatalf("MarkCancelled: %v", err)
+				}
+			}
+			err := d.UpdateTask(taskID, tc.targetStatus, "")
+			if (err != nil) != tc.wantErr {
+				t.Errorf("UpdateTask(%q) error = %v, wantErr %v", tc.targetStatus, err, tc.wantErr)
+			}
+			if tc.wantErr && err != nil && !strings.Contains(err.Error(), "pending/running action(s)") {
+				t.Errorf("unexpected error message: %v", err)
+			}
+		})
+	}
 }
 
 func TestRecordTaskNote(t *testing.T) {
