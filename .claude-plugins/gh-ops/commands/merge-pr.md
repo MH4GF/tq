@@ -1,7 +1,7 @@
 ---
 description: Judge and execute PR merge
 argument-hint: "<PR_URL>"
-allowed-tools: Bash(gh pr view *), Skill(gh-ops:self-review)
+allowed-tools: Bash(gh pr view *), Bash(gh pr diff *), Skill(gh-ops:self-review)
 ---
 
 # Merge Decision
@@ -16,7 +16,22 @@ Run `/gh-ops:self-review $ARGUMENTS` and confirm no unresolved findings remain. 
 
 **Non-blocking threads**: Threads that are purely informational/knowledge-sharing (FYI, no action needed) do not block merge even if unresolved. All other unresolved threads must be resolved (see `/gh-ops:respond-review $ARGUMENTS`). When in doubt, treat as a blocker and confirm with the user.
 
-### 2. Merge gate
+### 2. Summarize and assess risk
+
+Give the user a merge-decision brief. Fetch metadata and diff:
+
+```bash
+gh pr view $ARGUMENTS --json title,body,additions,deletions,changedFiles,files
+gh pr diff $ARGUMENTS
+```
+
+Report three sections:
+
+- **Summary**: title, `+additions / -deletions` across `changedFiles` files, 1–3 bullets on the actual change (read the diff, don't just paraphrase the body).
+- **Impact**: which layer is touched (production code / tests / docs / config / CI), and whether user-visible behavior, data model, or public API changes.
+- **Risk**: **Low / Medium / High** with a one-line reason. Low = tests/docs/config-only or isolated change. Medium = production code with tests covering the change. High = data migration, security, broad refactor, or no test coverage for new behavior.
+
+### 3. Merge gate
 
 Approval is a necessary condition, not a sufficient one. Verify all of the following:
 
@@ -40,7 +55,7 @@ Use the already-fetched `mergeable`, `mergeStateStatus`, `updatedAt`:
 - All CI checks green? (If CI is running → evaluate other criteria first, final decision after CI completes)
 - Any dependent PRs? (merge order constraints)
 
-### 3. Execute merge
+### 4. Execute merge
 
 After user approval, merge:
 
