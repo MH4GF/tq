@@ -111,7 +111,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 - Why: `staticcheck`'s `unused` only sees within a single package. Cross-package dead code (exported functions no caller imports, methods of types that are never instantiated) slips through. tq is a closed single-binary CLI, so reachability from main + tests equals liveness.
 - Verify: `scripts/deadcode-check.sh` runs `deadcode -test` and diffs the result against `.deadcode-allowlist`. Fails on **new findings** (must be fixed or allowlisted) AND on **stale allowlist entries** (must be removed). The CI `lint` job runs the script. Run `./scripts/deadcode-check.sh`.
 - Allowlist policy: only intentional retentions belong in `.deadcode-allowlist` — interface satisfactions called via reflection, planned test seams not yet wired up, etc. Genuine dead code MUST be deleted, not allowlisted.
-- Current violations: 3 (allowlisted; deletion tracked as a follow-up action — `cmd.SetInteractiveWorkerFactory`, `cmd.SetRemoteWorkerFactory`, `tui.LogWriter.Write`).
+- Current violations: 0.
 
 ---
 
@@ -160,6 +160,6 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 10 Metadata via constants | — | OK | OK | OK |
 | 11 SQL in db/ only | — | OK | OK | OK |
 | 12 CLI WriteJSON | — | — | — | OK |
-| 13 No dead code | OK | OK | 1 | 2 |
+| 13 No dead code | OK | OK | OK | OK |
 
-Totals: **3** current violations (all allowlisted under Rule 13; deletion tracked separately).
+Totals: **0** current violations.
