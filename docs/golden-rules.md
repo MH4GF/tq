@@ -113,6 +113,14 @@ Current status totals are captured after each rule as `current violations: N`. A
 - Allowlist policy: only intentional retentions belong in `.deadcode-allowlist` — interface satisfactions called via reflection, planned test seams not yet wired up, etc. Genuine dead code MUST be deleted, not allowlisted.
 - Current violations: 0.
 
+### Test seam isolation
+
+**Rule 14 [enforced] — Test seam methods (`*ForTest`) MUST NOT be called from production code.**
+
+- Why: `db.Store` embeds `TestHelper` (`db/interfaces.go:84-101`) so that upper-layer tests can mutate timestamps/status without writing raw SQL outside `db/` (Rule 11). The trade-off is that the test seam appears on the production `Store` API. A static lint guards the production-side boundary so the embedding does not silently expand into a production capability.
+- Verify: `forbidigo` in `.golangci.yml` blocks `\.Set[A-Z][A-Za-z]*ForTest\b` outside `_test.go` files. Run `golangci-lint run ./...`.
+- Current violations: 0.
+
 ---
 
 ## How to use this file
@@ -125,7 +133,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 **During periodic GC (`/gc-golden-rules`, weekly via tq schedule):**
 
-- Mechanical rules (1-6, 8-13) are enforced by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
+- Mechanical rules (1-6, 8-14) are enforced by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
 - For each violation found, the GC command creates a tq action via `/tq:create-action` with `claude_args: ["--worktree"]` for isolated execution.
 - The created actions handle the actual fixes — each targeted to a single violation.
 
@@ -161,5 +169,6 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 11 SQL in db/ only | — | OK | OK | OK |
 | 12 CLI WriteJSON | — | — | — | OK |
 | 13 No dead code | OK | OK | OK | OK |
+| 14 No `*ForTest` in prod | — | OK | OK | OK |
 
 Totals: **0** current violations.
