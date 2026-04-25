@@ -104,6 +104,15 @@ Current status totals are captured after each rule as `current violations: N`. A
 - Verify: `forbidigo` in `.golangci.yml` blocks `fmt.Println` calls in `cmd/`. Run `golangci-lint run ./...`.
 - Current violations: 0.
 
+### Dead code (unreachable functions)
+
+**Rule 13 [enforced] — Functions and methods MUST be reachable from `main` or test binaries (analyzed by `golang.org/x/tools/cmd/deadcode -test`).**
+
+- Why: `staticcheck`'s `unused` only sees within a single package. Cross-package dead code (exported functions no caller imports, methods of types that are never instantiated) slips through. tq is a closed single-binary CLI, so reachability from main + tests equals liveness.
+- Verify: `scripts/deadcode-check.sh` runs `deadcode -test` and diffs the result against `.deadcode-allowlist`. Fails on **new findings** (must be fixed or allowlisted) AND on **stale allowlist entries** (must be removed). The CI `lint` job runs the script. Run `./scripts/deadcode-check.sh`.
+- Allowlist policy: only intentional retentions belong in `.deadcode-allowlist` — interface satisfactions called via reflection, planned test seams not yet wired up, etc. Genuine dead code MUST be deleted, not allowlisted.
+- Current violations: 3 (allowlisted; deletion tracked as a follow-up action — `cmd.SetInteractiveWorkerFactory`, `cmd.SetRemoteWorkerFactory`, `tui.LogWriter.Write`).
+
 ---
 
 ## How to use this file
@@ -116,7 +125,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 **During periodic GC (`/gc-golden-rules`, weekly via tq schedule):**
 
-- Mechanical rules (1-6, 8-12) are enforced by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
+- Mechanical rules (1-6, 8-13) are enforced by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
 - For each violation found, the GC command creates a tq action via `/tq:create-action` with `claude_args: ["--worktree"]` for isolated execution.
 - The created actions handle the actual fixes — each targeted to a single violation.
 
@@ -151,5 +160,6 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 10 Metadata via constants | — | OK | OK | OK |
 | 11 SQL in db/ only | — | OK | OK | OK |
 | 12 CLI WriteJSON | — | — | — | OK |
+| 13 No dead code | OK | OK | 1 | 2 |
 
-Totals: **0** current violations.
+Totals: **3** current violations (all allowlisted under Rule 13; deletion tracked separately).
