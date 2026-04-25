@@ -100,205 +100,166 @@ func TestTaskCreate(t *testing.T) {
 }
 
 func TestTaskList(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	d.InsertTask(1, "task A", `{"url":"https://example.com/a"}`, "")
-	d.InsertTask(1, "task B", "{}", "")
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"task", "list"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	tests := []struct {
+		name    string
+		seed    func(t *testing.T, d db.Store)
+		args    []string
+		wantOut string
+		check   func(t *testing.T, rows []map[string]any)
+	}{
+		{
+			name: "ordered DESC by id",
+			seed: func(t *testing.T, d db.Store) {
+				t.Helper()
+				d.InsertTask(1, "task A", `{"url":"https://example.com/a"}`, "")
+				d.InsertTask(1, "task B", "{}", "")
+			},
+			args: []string{"task", "list"},
+			check: func(t *testing.T, rows []map[string]any) {
+				t.Helper()
+				if len(rows) != 2 {
+					t.Fatalf("expected 2 rows, got %d", len(rows))
+				}
+				if rows[0]["title"] != "task B" {
+					t.Errorf("first row title = %v, want %q", rows[0]["title"], "task B")
+				}
+				if rows[1]["title"] != "task A" {
+					t.Errorf("second row title = %v, want %q", rows[1]["title"], "task A")
+				}
+			},
+		},
+		{
+			name: "JSON full fields",
+			seed: func(t *testing.T, d db.Store) {
+				t.Helper()
+				d.InsertTask(1, "test task", `{"key":"value","url":"https://example.com"}`, "")
+			},
+			args: []string{"task", "list"},
+			check: func(t *testing.T, rows []map[string]any) {
+				t.Helper()
+				if len(rows) != 1 {
+					t.Fatalf("expected 1 row, got %d", len(rows))
+				}
+				row := rows[0]
+				if row["id"] != float64(1) {
+					t.Errorf("id = %v, want 1", row["id"])
+				}
+				if row["project_id"] != float64(1) {
+					t.Errorf("project_id = %v, want 1", row["project_id"])
+				}
+				if row["title"] != "test task" {
+					t.Errorf("title = %v, want %q", row["title"], "test task")
+				}
+				if row["metadata"] != `{"key":"value","url":"https://example.com"}` {
+					t.Errorf("metadata = %v, want %q", row["metadata"], `{"key":"value","url":"https://example.com"}`)
+				}
+				if row["status"] != db.TaskStatusOpen {
+					t.Errorf("status = %v, want %q", row["status"], db.TaskStatusOpen)
+				}
+				if row["created_at"] == nil {
+					t.Error("created_at should not be null")
+				}
+			},
+		},
+		{
+			name: "null updated_at for new task",
+			seed: func(t *testing.T, d db.Store) {
+				t.Helper()
+				d.InsertTask(1, "new task", "{}", "")
+			},
+			args: []string{"task", "list"},
+			check: func(t *testing.T, rows []map[string]any) {
+				t.Helper()
+				if len(rows) != 1 {
+					t.Fatalf("expected 1 row, got %d", len(rows))
+				}
+				if rows[0]["updated_at"] != nil {
+					t.Errorf("updated_at should be null for new task, got %v", rows[0]["updated_at"])
+				}
+			},
+		},
+		{
+			name: "status filter",
+			seed: func(t *testing.T, d db.Store) {
+				t.Helper()
+				d.InsertTask(1, "open task", "{}", "")
+				id2, _ := d.InsertTask(1, "done task", "{}", "")
+				d.UpdateTask(id2, db.TaskStatusDone, "")
+			},
+			args: []string{"task", "list", "--status", "open"},
+			check: func(t *testing.T, rows []map[string]any) {
+				t.Helper()
+				if len(rows) != 1 {
+					t.Fatalf("expected 1 row, got %d", len(rows))
+				}
+				if rows[0]["title"] != "open task" {
+					t.Errorf("title = %v, want %q", rows[0]["title"], "open task")
+				}
+			},
+		},
+		{
+			name: "project filter",
+			seed: func(t *testing.T, d db.Store) {
+				t.Helper()
+				d.InsertTask(1, "immedio task", "{}", "")
+				d.InsertTask(2, "hearable task", "{}", "")
+			},
+			args: []string{"task", "list", "--project", "1"},
+			check: func(t *testing.T, rows []map[string]any) {
+				t.Helper()
+				if len(rows) != 1 {
+					t.Fatalf("expected 1 row, got %d", len(rows))
+				}
+				if rows[0]["title"] != "immedio task" {
+					t.Errorf("title = %v, want %q", rows[0]["title"], "immedio task")
+				}
+			},
+		},
+		{
+			name:    "empty",
+			args:    []string{"task", "list"},
+			wantOut: "[]",
+			check: func(t *testing.T, rows []map[string]any) {
+				t.Helper()
+				if len(rows) != 0 {
+					t.Errorf("expected 0 rows, got %d", len(rows))
+				}
+			},
+		},
 	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
 
-	var rows []map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
-		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
-	}
+			if tc.seed != nil {
+				tc.seed(t, d)
+			}
 
-	if len(rows) != 2 {
-		t.Fatalf("expected 2 rows, got %d", len(rows))
-	}
-	if rows[0]["title"] != "task B" {
-		t.Errorf("first row title = %v, want %q", rows[0]["title"], "task B")
-	}
-	if rows[1]["title"] != "task A" {
-		t.Errorf("second row title = %v, want %q", rows[1]["title"], "task A")
-	}
-}
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs(tc.args)
 
-func TestTaskList_JSON(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
+			if err := root.Execute(); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
-	d.InsertTask(1, "test task", `{"key":"value","url":"https://example.com"}`, "")
+			if tc.wantOut != "" && !contains(buf.String(), tc.wantOut) {
+				t.Errorf("output = %q, want to contain %q", buf.String(), tc.wantOut)
+			}
 
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"task", "list"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var rows []map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
-		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
-	}
-
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-
-	row := rows[0]
-	if row["id"] != float64(1) {
-		t.Errorf("id = %v, want 1", row["id"])
-	}
-	if row["project_id"] != float64(1) {
-		t.Errorf("project_id = %v, want 1", row["project_id"])
-	}
-	if row["title"] != "test task" {
-		t.Errorf("title = %v, want %q", row["title"], "test task")
-	}
-	if row["metadata"] != `{"key":"value","url":"https://example.com"}` {
-		t.Errorf("metadata = %v, want %q", row["metadata"], `{"key":"value","url":"https://example.com"}`)
-	}
-	if row["status"] != db.TaskStatusOpen {
-		t.Errorf("status = %v, want %q", row["status"], db.TaskStatusOpen)
-	}
-	if row["created_at"] == nil {
-		t.Error("created_at should not be null")
-	}
-}
-
-func TestTaskList_JSON_NullFields(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	d.InsertTask(1, "new task", "{}", "")
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"task", "list"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var rows []map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
-		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
-	}
-
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-
-	row := rows[0]
-	if row["updated_at"] != nil {
-		t.Errorf("updated_at should be null for new task, got %v", row["updated_at"])
-	}
-}
-
-func TestTaskList_StatusFilter(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	d.InsertTask(1, "open task", "{}", "")
-	id2, _ := d.InsertTask(1, "done task", "{}", "")
-	d.UpdateTask(id2, db.TaskStatusDone, "")
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"task", "list", "--status", "open"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var rows []map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
-		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
-	}
-
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0]["title"] != "open task" {
-		t.Errorf("title = %v, want %q", rows[0]["title"], "open task")
-	}
-}
-
-func TestTaskList_ProjectFilter(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	d.InsertTask(1, "immedio task", "{}", "")
-	d.InsertTask(2, "hearable task", "{}", "")
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"task", "list", "--project", "1"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var rows []map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
-		t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
-	}
-
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0]["title"] != "immedio task" {
-		t.Errorf("title = %v, want %q", rows[0]["title"], "immedio task")
-	}
-}
-
-func TestTaskList_Empty(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"task", "list"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	out := buf.String()
-	if !contains(out, "[]") {
-		t.Errorf("output = %q, want '[]'", out)
+			var rows []map[string]any
+			if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+				t.Fatalf("JSON parse error: %v\noutput: %s", err, buf.String())
+			}
+			if tc.check != nil {
+				tc.check(t, rows)
+			}
+		})
 	}
 }
 
