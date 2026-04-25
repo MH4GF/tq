@@ -63,3 +63,13 @@ Docs drift instruction:
 Fix docs/cli-reference.md: "task list" section is missing --status flag documented in tq task list --help. Add the flag description to match CLI output.
 ```
 </example>
+
+## Phase 3: Exploratory review
+
+After Phase 2 finishes, hand off to the exploratory pass — it surfaces concerns that lint, golden-rules, and docs-reviewer cannot detect.
+
+```
+Skill(skill: "gc-exploratory")
+```
+
+Run last so its findings join this session's task alongside the Phase 2 actions. If `/gc-exploratory` reports no concerns, that is a normal outcome — do nothing further.
