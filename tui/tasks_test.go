@@ -568,11 +568,13 @@ func TestTasksModel_ToggleFocus(t *testing.T) {
 		t.Fatalf("cursor should be on project line, lineType=%d", m.lines[m.cursor].lineType)
 	}
 
-	// Press f to toggle focus (disable)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	if cmd != nil {
-		reloadMsg := cmd()
-		m, _ = m.Update(reloadMsg)
+	m, toggleCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	if toggleCmd == nil {
+		t.Fatal("expected toggleDispatch cmd from f key")
+	}
+	m, reloadCmd := m.Update(toggleCmd())
+	if reloadCmd != nil {
+		m, _ = m.Update(reloadCmd())
 	}
 
 	// Verify project is now disabled
@@ -868,6 +870,70 @@ func TestTasksModel_LoadTasks_BulkActions(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestTasksModel_LoadTasks_SurfacesError(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := NewTasksModel(d, "")
+	if err := d.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	msg := m.loadTasks()()
+	loaded, ok := msg.(tasksLoadedMsg)
+	if !ok {
+		t.Fatalf("msg type = %T, want tasksLoadedMsg", msg)
+	}
+	if loaded.err == nil {
+		t.Fatal("expected loadTasks to surface error after DB close")
+	}
+
+	m, _ = m.Update(loaded)
+	if !m.messageIsError {
+		t.Errorf("messageIsError = false, want true")
+	}
+	if !strings.Contains(m.message, "load tasks failed") {
+		t.Errorf("m.message = %q, want prefix 'load tasks failed'", m.message)
+	}
+}
+
+func TestTasksModel_ToggleFocus_SurfacesError(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := NewTasksModel(d, "")
+	loadMsg := m.Init()()
+	m, _ = m.Update(loadMsg)
+
+	if m.lines[m.cursor].lineType != lineProject {
+		t.Fatalf("cursor should start on project line, got lineType=%d", m.lines[m.cursor].lineType)
+	}
+
+	if err := d.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	if cmd == nil {
+		t.Fatal("expected toggleDispatch cmd from f key")
+	}
+	toggled, ok := cmd().(dispatchToggledMsg)
+	if !ok {
+		t.Fatalf("cmd msg type = %T, want dispatchToggledMsg", cmd())
+	}
+	if toggled.err == nil {
+		t.Fatal("expected SetDispatchEnabled to error after DB close")
+	}
+
+	m, _ = m.Update(toggled)
+	if !m.messageIsError {
+		t.Errorf("messageIsError = false, want true")
+	}
+	if !strings.Contains(m.message, "toggle focus failed") {
+		t.Errorf("m.message = %q, want prefix 'toggle focus failed'", m.message)
 	}
 }
 
