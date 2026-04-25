@@ -305,6 +305,16 @@ func TestSearch(t *testing.T) {
 			},
 			wantLen: 0,
 		},
+		{
+			name:      "projectID 0 returns all projects",
+			keyword:   "shared",
+			projectID: 0,
+			setup: func(d *db.DB) {
+				d.InsertTask(1, "shared feature", "{}", "")
+				d.InsertTask(2, "shared feature", "{}", "")
+			},
+			wantLen: 2,
+		},
 	}
 
 	for _, tt := range tests {
