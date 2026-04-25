@@ -2,7 +2,6 @@ package cmd_test
 
 import (
 	"bytes"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -100,155 +99,85 @@ func TestWriteJSON(t *testing.T) {
 	}
 }
 
-func TestList_JQ(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	taskID, _ := d.InsertTask(1, "task1", "{}", "")
-	d.InsertAction("review-pr", taskID, "{}", db.ActionStatusPending, nil)
-	d.InsertAction("deploy", taskID, "{}", db.ActionStatusRunning, nil)
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"action", "list", "--jq", ".[].title"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestJQFlag(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		jqExpr  string
+		wantOut string
+		wantErr string
+	}{
+		{
+			name:    "action list",
+			args:    []string{"action", "list"},
+			jqExpr:  ".[].title",
+			wantOut: "deploy\nreview-pr",
+		},
+		{
+			name:    "action get",
+			args:    []string{"action", "get", "1"},
+			jqExpr:  ".title",
+			wantOut: "review-pr",
+		},
+		{
+			name:    "task get",
+			args:    []string{"task", "get", "1"},
+			jqExpr:  ".title",
+			wantOut: "login-bug",
+		},
+		{
+			name:    "search",
+			args:    []string{"search", "login"},
+			jqExpr:  ".[].entity_type",
+			wantOut: "task",
+		},
+		{
+			name:    "event list",
+			args:    []string{"event", "list"},
+			jqExpr:  "length > 0",
+			wantOut: "true",
+		},
+		{
+			name:    "invalid expression",
+			args:    []string{"action", "list"},
+			jqExpr:  ".[invalid",
+			wantErr: "jq parse error",
+		},
 	}
 
-	out := buf.String()
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("expected 2 lines, got %d: %q", len(lines), out)
-	}
-	if lines[0] != "deploy" {
-		t.Errorf("line 0 = %q, want %q", lines[0], "deploy")
-	}
-	if lines[1] != "review-pr" {
-		t.Errorf("line 1 = %q, want %q", lines[1], "review-pr")
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
 
-func TestActionGet_JQ(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
+			taskID, _ := d.InsertTask(1, "login-bug", "{}", "")
+			d.InsertAction("review-pr", taskID, "{}", db.ActionStatusPending, nil)
+			d.InsertAction("deploy", taskID, "{}", db.ActionStatusRunning, nil)
 
-	taskID, _ := d.InsertTask(1, "task1", "{}", "")
-	actionID, _ := d.InsertAction("review-pr", taskID, "{}", db.ActionStatusPending, nil)
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs(append(tt.args, "--jq", tt.jqExpr))
 
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"action", "get", fmt.Sprintf("%d", actionID), "--jq", ".title"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got := strings.TrimSpace(buf.String()); got != "review-pr" {
-		t.Errorf("got %q, want %q", got, "review-pr")
-	}
-}
-
-func TestTaskGet_JQ(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	taskID, _ := d.InsertTask(1, "my-task", "{}", "")
-	d.InsertAction("action1", taskID, "{}", db.ActionStatusPending, nil)
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"task", "get", fmt.Sprintf("%d", taskID), "--jq", ".title"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got := strings.TrimSpace(buf.String()); got != "my-task" {
-		t.Errorf("got %q, want %q", got, "my-task")
-	}
-}
-
-func TestSearch_JQ(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	taskID, _ := d.InsertTask(1, "login-bug", "{}", "")
-	d.InsertAction("fix-login", taskID, "{}", db.ActionStatusPending, nil)
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"search", "login", "--jq", ".[].entity_type"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	out := strings.TrimSpace(buf.String())
-	if out == "" {
-		t.Fatal("expected search results, got empty output")
-	}
-	for line := range strings.SplitSeq(out, "\n") {
-		if line != "task" && line != "action" {
-			t.Errorf("unexpected entity_type %q", line)
-		}
-	}
-}
-
-func TestEventList_JQ(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	taskID, _ := d.InsertTask(1, "task1", "{}", "")
-	d.InsertAction("action1", taskID, "{}", db.ActionStatusPending, nil)
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"event", "list", "--jq", ".[].event_type"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	out := strings.TrimSpace(buf.String())
-	if out == "" {
-		t.Fatal("expected events, got empty output")
-	}
-}
-
-func TestList_JQ_InvalidExpr(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	cmd.SetDB(d)
-	cmd.ResetForTest()
-
-	root := cmd.GetRootCmd()
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs([]string{"action", "list", "--jq", ".[invalid"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected error for invalid jq expression")
-	}
-	if !strings.Contains(err.Error(), "jq parse error") {
-		t.Errorf("error = %q, want containing 'jq parse error'", err.Error())
+			err := root.Execute()
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Errorf("error = %q, want containing %q", err.Error(), tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := strings.TrimSpace(buf.String()); got != tt.wantOut {
+				t.Errorf("output = %q, want %q", got, tt.wantOut)
+			}
+		})
 	}
 }
