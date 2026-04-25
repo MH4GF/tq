@@ -5,6 +5,4 @@
 # sorts both sides before diffing, so order does not matter).
 # Comments (# ...) and blank lines are ignored.
 
-github.com/MH4GF/tq/cmd.SetInteractiveWorkerFactory
-github.com/MH4GF/tq/cmd.SetRemoteWorkerFactory
 github.com/MH4GF/tq/tui.LogWriter.Write

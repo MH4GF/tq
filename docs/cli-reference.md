@@ -119,6 +119,7 @@ At least one flag is required. `--status` and `--note` must be specified togethe
 | `tq action attach <ID>` | Attach to a running action's tmux window |
 | `tq action reset <ID>` | Reset action to pending |
 | `tq action dispatch <ID>` | Dispatch immediately (skip queue) |
+| `tq action resume <ID>` | Resume the claude session of a closed action |
 
 ### `tq action create`
 
@@ -199,6 +200,20 @@ tq action dispatch <ACTION_ID> [--session <NAME>]
 ```
 
 - `--session` — Target tmux session name (default: `main`)
+
+### `tq action resume`
+
+```
+tq action resume <ACTION_ID> [--message <TEXT>] [--mode <MODE>] [--session <NAME>]
+```
+
+Create a new action that resumes the claude session of a previously failed, cancelled, or done action via `claude --resume <session_id>`. The new action is linked to the parent through `metadata.parent_action_id` and `metadata.is_resume = true`.
+
+The parent must be in `failed` / `cancelled` / `done` status and have a non-empty `claude_session_id` in metadata. Only the session id is inherited — other `claude_args` (`--worktree`, `--permission-mode`, etc.) are dropped because the resumed claude session restores its own context.
+
+- `--message` — Additional instruction passed as the new prompt (default: `"Continue the previous session."`)
+- `--mode` — Execution mode: `interactive` | `noninteractive` | `remote` (default: parent action's mode)
+- `--session` — Target tmux session name, interactive mode only (default: `main`)
 
 ## schedule
 

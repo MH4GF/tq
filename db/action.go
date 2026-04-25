@@ -28,6 +28,10 @@ var ValidActionStatuses = map[string]bool{
 	ActionStatusCancelled:  true,
 }
 
+func IsTerminalActionStatus(status string) bool {
+	return status == ActionStatusDone || status == ActionStatusFailed || status == ActionStatusCancelled
+}
+
 type Action struct {
 	ID            int64
 	Title         string

@@ -116,6 +116,7 @@ project → task → action
   * cancel/fail/reset only update the DB; tmux panes are not terminated
   * to restart a running action, run `tq action cancel` or `fail` first, then `reset`
   * done and cancelled are terminal; on_done spawns a new action from done only
+  * `tq action resume <id>` spawns a new action that resumes the claude session of any terminal action whose metadata captured `claude_session_id` (see `docs/cli-reference.md`)
 ```
 
 ### Worker Types
