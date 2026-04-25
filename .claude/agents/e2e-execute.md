@@ -35,20 +35,27 @@ If the decision is SKIPPED, jump to Phase 4 and emit the reason.
 
 ## Phase 3: Execute (cmd/ changes only)
 
-### Setup
+If `cmd/ui.go` is among the changed files, treat it like `tui/*.go`: route to the manual checklist (the TUI side-channel) and skip the binary sequences below — automated coverage is not feasible.
+
+### Setup + sequences (run as a SINGLE bash invocation)
+
+Run setup and every standard sequence inside one bash invocation so shell variables (`DB`, `BIN`) survive between commands. Do NOT split the setup into multiple Bash tool calls — `$$` resolves to a different PID each time and the variables vanish.
 
 ```bash
+set -e
+rm -f /tmp/tq-qr.db
 go build -o /tmp/tq-qr . || { echo "FAIL: go build failed"; exit 1; }
-DB="/tmp/qr-$$.db"
+DB=/tmp/tq-qr.db
 BIN="/tmp/tq-qr --db $DB"
 $BIN project create qr-test /tmp
+# … then append the matching standard sequence(s) below in the same bash block
 ```
 
 The `--db` flag isolates the user's real DB; `/tmp/tq-qr` keeps the binary out of `$GOPATH/bin`.
 
 ### Standard sequences
 
-For each changed `cmd/*.go` file (non-test), run the matching sequence below. Multiple changes → run all matching sequences (sharing the same DB is fine; each sequence creates the rows it needs).
+For each changed `cmd/*.go` file (non-test), append the matching sequence below to the bash block. Multiple changes → append all matching sequences (sharing the same DB is fine; each sequence creates the rows it needs).
 
 | Changed cmd | Standard sequence |
 |---|---|
@@ -61,7 +68,7 @@ For each changed `cmd/*.go` file (non-test), run the matching sequence below. Mu
 | `cmd/list.go`, `cmd/search.go` | seed data (task + action) → run the list/search command → verify with `jq` (count or fields) |
 | `cmd/schedule.go` | `schedule create` → `schedule list` → `schedule delete` |
 | `cmd/project.go` | `project create` → `project list` |
-| Anything else (e.g. `attach.go`, `event.go`, `jq.go`, `reset.go`, `validate.go`, `version.go`, `helputil.go`, `ui.go`, `root.go`) | Read the diff and `$BIN <subcommand> --help`, then design a minimal 1–3 command sequence that exercises the changed surface |
+| Anything else (e.g. `attach.go`, `event.go`, `jq.go`, `reset.go`, `validate.go`, `version.go`, `helputil.go`, `root.go`) | Read the diff and `$BIN <subcommand> --help`, then design a minimal 1–3 command sequence that exercises the changed surface |
 
 ### Execution rules
 
