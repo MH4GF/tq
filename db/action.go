@@ -222,8 +222,15 @@ func (db *DB) MarkCancelled(id int64, result string) error {
 }
 
 func (db *DB) markTerminal(id int64, status, result string) error {
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	var from string
-	if err := db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT status FROM actions WHERE id = ?", id).Scan(&from); err != nil {
 		return fmt.Errorf("get current status: %w", err)
 	}
 
@@ -231,16 +238,28 @@ func (db *DB) markTerminal(id int64, status, result string) error {
 		return nil
 	}
 
-	_, err := db.Exec(
-		"UPDATE actions SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ?",
-		status, result, id,
+	res, err := tx.ExecContext(ctx,
+		"UPDATE actions SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ? AND status = ?",
+		status, result, id, from,
 	)
-	if err == nil {
-		db.emitEvent("action", id, "action.status_changed", map[string]any{
-			"from": from, "to": status, "result": result,
-		})
+	if err != nil {
+		return err
 	}
-	return err
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	if n == 0 {
+		return nil
+	}
+	db.emitEvent("action", id, "action.status_changed", map[string]any{
+		"from": from, "to": status, "result": result,
+	})
+	return nil
 }
 
 func (db *DB) MarkDispatched(id int64) error {

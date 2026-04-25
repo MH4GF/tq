@@ -1108,6 +1108,57 @@ func TestMarkTerminalSkipsTerminalState(t *testing.T) {
 			if a.Result.String != "original result" {
 				t.Errorf("result = %s, want 'original result'", a.Result.String)
 			}
+
+			events, err := d.ListEvents("action", id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var statusChanges int
+			for _, e := range events {
+				if e.EventType == "action.status_changed" {
+					statusChanges++
+				}
+			}
+			if statusChanges != 1 {
+				t.Errorf("status_changed events = %d, want 1 (only the initial transition)", statusChanges)
+			}
 		})
+	}
+}
+
+func TestMarkTerminalNoEventWhenAlreadyTerminal(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	id, err := d.InsertAction("act", taskID, "{}", db.ActionStatusRunning, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.MarkDone(id, "first"); err != nil {
+		t.Fatal(err)
+	}
+
+	before, err := d.ListEvents("action", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.MarkFailed(id, "second"); err != nil {
+		t.Fatalf("MarkFailed on terminal action returned error: %v", err)
+	}
+	if err := d.MarkCancelled(id, "third"); err != nil {
+		t.Fatalf("MarkCancelled on terminal action returned error: %v", err)
+	}
+	if err := d.MarkDone(id, "fourth"); err != nil {
+		t.Fatalf("MarkDone on terminal action returned error: %v", err)
+	}
+
+	after, err := d.ListEvents("action", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Errorf("event count after no-op marks = %d, want %d (no new events)", len(after), len(before))
 	}
 }
