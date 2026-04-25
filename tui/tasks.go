@@ -13,6 +13,10 @@ import (
 	"github.com/MH4GF/tq/db"
 )
 
+type clearTasksMessageMsg struct {
+	gen int
+}
+
 type projectTree struct {
 	project db.Project
 	tasks   []taskNode
@@ -50,6 +54,7 @@ type TasksModel struct {
 	height     int
 	database   db.Store
 	message    string
+	messageGen int
 	dateFilter string
 
 	// Cached stats
@@ -177,6 +182,13 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 	case actionAttachedMsg:
 		if msg.message != "" {
 			m.message = msg.message
+			m.messageGen++
+			return m, clearAfterTTL(clearTasksMessageMsg{gen: m.messageGen})
+		}
+		return m, nil
+	case clearTasksMessageMsg:
+		if msg.gen == m.messageGen {
+			m.message = ""
 		}
 		return m, nil
 	case tasksLoadedMsg:
@@ -214,7 +226,6 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 }
 
 func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
-	m.message = ""
 	switch {
 	case key.Matches(msg, key.NewBinding(key.WithKeys("j", "down"))):
 		if m.cursor < len(m.lines)-1 {
