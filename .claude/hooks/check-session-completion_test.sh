@@ -184,6 +184,25 @@ export GH_PR_LIST_OUT='[{"number":49,"state":"CLOSED","isDraft":false,"mergeable
 run_case "T14 PR closed" '{}' 0 none
 teardown
 
+# ---------- T16: CheckRun in-progress (conclusion="" + status=IN_PROGRESS) ----------
+# Regresses against jq `//` treating empty string as truthy and missing pending state.
+setup_feature_branch_with_commit
+export GH_PR_LIST_OUT='[{"number":50,"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"conclusion":"","status":"IN_PROGRESS"},{"conclusion":"SUCCESS"}]}]'
+run_case "T16 CheckRun in-progress empty conclusion" '{}' 0 block "wait-pr-checks"
+teardown
+
+# ---------- T17: StatusContext (uses .state, not .conclusion/.status) ----------
+setup_feature_branch_with_commit
+export GH_PR_LIST_OUT='[{"number":51,"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"state":"PENDING"}]}]'
+run_case "T17 StatusContext pending" '{}' 0 block "wait-pr-checks"
+teardown
+
+# ---------- T18: StatusContext SUCCESS treated as success ----------
+setup_feature_branch_with_commit
+export GH_PR_LIST_OUT='[{"number":52,"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"conclusion":"SUCCESS"},{"state":"SUCCESS"}]}]'
+run_case "T18 StatusContext success → mergeable" '{}' 0 block "merge 可能"
+teardown
+
 # ---------- T15: gh fails (fail open) ----------
 setup_feature_branch_with_commit
 export GH_PR_LIST_FAIL=1
