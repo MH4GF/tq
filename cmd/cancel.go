@@ -16,7 +16,7 @@ func init() {
 
 var cancelCmd = &cobra.Command{
 	Use:   "cancel ACTION_ID [REASON]",
-	Short: "Cancel a pending, running, or failed action",
+	Short: "Cancel a pending, running, dispatched, or failed action",
 	Long: `Cancel an action. Cannot cancel actions already done or cancelled.
 
 REASON serves as feedback for improving classification logic. Before cancelling,
@@ -39,7 +39,7 @@ classification could be improved to avoid similar unnecessary actions.`,
 		}
 
 		if action.Status == db.ActionStatusDone || action.Status == db.ActionStatusCancelled {
-			return fmt.Errorf("action #%d is already %q, cannot cancel (only pending, running, or failed actions can be cancelled)", id, action.Status)
+			return fmt.Errorf("action #%d is already %q, cannot cancel (only pending, running, dispatched, or failed actions can be cancelled)", id, action.Status)
 		}
 
 		reason := ""
