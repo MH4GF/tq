@@ -5,7 +5,9 @@
       "Bash(gh api /notifications:*)",
       "Bash(gh api notifications:*)",
       "Bash(gh api /user:*)",
-      "Bash(.claude/scripts/record-quality-review.sh)"
+      "Bash(.claude/scripts/record-quality-review.sh)",
+      "Skill(quality-review)",
+      "Skill(simplify)"
     ]
   },
   "hooks": {
