@@ -72,6 +72,12 @@ Identify the target project from the notification's repo (check `tq project list
 tq search "<keyword>" --project <project_id>
 ```
 
+If no project's `repos` matches the notification, fall back to an unscoped search:
+
+```bash
+tq search "<keyword>"
+```
+
 Extract keywords from the notification title (PR number `#123`, ticket ID `PROJ-456`, repo name, feature name, etc.).
 
 Try in order, use the first match:
