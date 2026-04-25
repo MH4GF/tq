@@ -76,7 +76,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 **Rule 9 [enforced] — Custom error types (any `type *Error struct`) MUST implement `Unwrap() error`.**
 
-- Why: Rule 8 relies on unwrapping. A custom error type without `Unwrap` silently breaks `errors.As`/`errors.Is` at the outermost frame (see `dispatch.ActionFailedError` as the canonical example at `dispatch/execute.go:48`).
+- Why: Rule 8 relies on unwrapping. A custom error type without `Unwrap` silently breaks `errors.As`/`errors.Is` at the outermost frame (see `dispatch.ActionFailedError` in `dispatch/execute.go` as the canonical example).
 - Verify: Go test harness `internal/goldenrules/` finds all `type *Error struct` and checks for `Unwrap() error` in the same package. Run `go test ./internal/goldenrules/`.
 - Current violations: 0 (1 type: `dispatch.ActionFailedError`, verified to implement `Unwrap`).
 

@@ -159,12 +159,11 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 				}
 
 				result := fmt.Sprintf("stale: session log not fresh and tmux window %q no longer exists", WindowName(a.ID))
-				if err := cfg.DB.MarkFailed(a.ID, result); err != nil {
+				if err := markActionFailed(cfg.DB, &a, result); err != nil {
 					slog.Error("mark stale action failed", "action_id", a.ID, "error", err)
 					continue
 				}
 				slog.Warn("reaped stale action", "action_id", a.ID)
-				CreateInvestigateFailureAction(cfg.DB, &a, result)
 			}
 		}
 	}
@@ -193,12 +192,11 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 		}
 
 		result := fmt.Sprintf("stale: noninteractive action exceeded timeout (%v)", staleThreshold)
-		if err := cfg.DB.MarkFailed(a.ID, result); err != nil {
+		if err := markActionFailed(cfg.DB, &a, result); err != nil {
 			slog.Error("mark stale noninteractive action failed", "action_id", a.ID, "error", err)
 			continue
 		}
 		slog.Warn("reaped stale noninteractive action", "action_id", a.ID)
-		CreateInvestigateFailureAction(cfg.DB, &a, result)
 	}
 }
 
