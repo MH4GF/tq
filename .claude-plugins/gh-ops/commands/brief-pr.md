@@ -181,7 +181,7 @@ After writing, tell the user (in chat output, not in the file):
 
 > Digest written to `.claude/tmp/brief-pr-<pr_number>.md`. Preview with:
 >
-> ```
+> ```text
 > cc-human-review .claude/tmp/brief-pr-<pr_number>.md
 > ```
 
