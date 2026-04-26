@@ -26,3 +26,4 @@ Run `tq --help` for data model, commands, and usage examples.
 - MUST: Run `/quality-review` before marking work complete
 - Enforced: a PreToolUse hook (`.claude/hooks/check-quality-review.sh`) blocks `gh pr create` until `/quality-review` has recorded the current HEAD SHA
 - Enforced: a Stop hook (`.claude/hooks/check-session-completion.sh`) pushes the agent back if the session is about to end with uncommitted changes, commits ahead of origin/main without a PR, or an open PR (failing/pending CI, draft, conflict, or simply un-merged). Follow the slash command quoted in the push-back message, then retry.
+- Auto: a PostToolUse hook (`.claude/hooks/post-edit-go-quality.sh`) runs `golangci-lint fmt` on edited `.go` files and injects package-level lint diagnostics into the agent context (non-blocking).
