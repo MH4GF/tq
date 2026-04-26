@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.21.17](https://github.com/MH4GF/tq/compare/v0.21.16...v0.21.17) - 2026-04-26
+- Replace /gh-ops:review-pr with /gh-ops:brief-pr by @MH4GF in https://github.com/MH4GF/tq/pull/203
+
 ## [v0.21.16](https://github.com/MH4GF/tq/compare/v0.21.15...v0.21.16) - 2026-04-26
 - Convert IgnoresDispatchSession test to table-driven by @MH4GF in https://github.com/MH4GF/tq/pull/200
 - Add PostToolUse hook for auto golangci-lint fmt + lint diag injection by @MH4GF in https://github.com/MH4GF/tq/pull/202
