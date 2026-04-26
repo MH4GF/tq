@@ -59,14 +59,23 @@ if [ "$pr_count" = "0" ]; then
 fi
 
 # Single jq pass to extract every field we need. statusCheckRollup entries
-# carry either `conclusion` (completed) or `status` (in-progress); coalesce.
+# carry one of three result fields depending on shape:
+#   - CheckRun completed: .conclusion (SUCCESS/FAILURE/...)
+#   - CheckRun running:   .status (IN_PROGRESS/QUEUED/...) — .conclusion is ""
+#   - StatusContext:      .state (SUCCESS/FAILURE/...) — no .conclusion/.status
+# `//` treats "" as truthy, so explicitly skip empty strings.
 IFS=$'\t' read -r pr_number state is_draft mergeable ci_states < <(
   jq -r '.[0] | [
     .number,
     .state,
     (.isDraft | tostring),
     .mergeable,
-    ([.statusCheckRollup[]? | (.conclusion // .status // "")] | join(" "))
+    ([.statusCheckRollup[]? |
+      if (.conclusion // "") != "" then .conclusion
+      elif (.state // "") != ""      then .state
+      else                                (.status // "")
+      end
+    ] | join(" "))
   ] | @tsv' <<<"$pr_json"
 )
 
