@@ -53,7 +53,7 @@ For actionable notifications, select the **first matching** instruction by prior
 
 | Priority | Condition | Instruction |
 |---|---|---|
-| 1 | `reason=review_requested` + not yet reviewed | `/gh-ops:review-pr <PR_URL>` |
+| 1 | `reason=review_requested` + not yet reviewed | `/gh-ops:brief-pr <PR_URL>` |
 | 2 | `mergeStateStatus: "BEHIND"` or conflicting | `/gh-ops:fix-conflict <PR_URL>` |
 | 3 | statusCheckRollup has failure | `/gh-ops:fix-ci <PR_URL>` |
 | 4 | `reviewDecision: "CHANGES_REQUESTED"` / unaddressed review comments | `/gh-ops:respond-review <PR_URL>` |
