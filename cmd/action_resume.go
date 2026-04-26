@@ -56,7 +56,7 @@ claude session restores its own context.`,
 			DispatchConfig: dispatch.DispatchConfig{
 				DB:                 database,
 				NonInteractiveFunc: getWorkerFactory(),
-				InteractiveFunc:    getInteractiveWorkerFactory(),
+				InteractiveFunc:    interactiveWorkerForResume(resumeSession),
 				RemoteFunc:         getRemoteWorkerFactory(),
 				SessionLogChecker:  &dispatch.FileSessionLogChecker{},
 				TmuxSession:        resumeSession,
@@ -83,6 +83,18 @@ claude session restores its own context.`,
 		}
 		return nil
 	},
+}
+
+// interactiveWorkerForResume returns a factory that builds an InteractiveWorker
+// pinned to the given tmux session. The closure does not read package-level
+// dispatch state, so the resume path stays independent of `tq action dispatch`.
+func interactiveWorkerForResume(session string) func() dispatch.Worker {
+	return func() dispatch.Worker {
+		return &dispatch.InteractiveWorker{
+			Runner:  &dispatch.ExecRunner{},
+			Session: session,
+		}
+	}
 }
 
 func init() {
