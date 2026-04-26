@@ -32,6 +32,16 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/check-session-completion.sh"
+          }
+        ]
+      }
     ]
   }
 }

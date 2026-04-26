@@ -3,3 +3,4 @@ tq.db
 tq.db-wal
 tq.db-shm
 dist/
+.claude/tmp/
