@@ -177,13 +177,9 @@ Section omission rules:
 - Other reviewer comments → omit if Phase 2 found zero human comments.
 - New commits since your last review → omit if `<new_commits>` is empty.
 
-After writing, tell the user (in chat output, not in the file):
+After writing, tell the user (in chat output, not in the file) where the digest was saved:
 
-> Digest written to `.claude/tmp/brief-pr-<pr_number>.md`. Preview with:
->
-> ```text
-> cc-human-review .claude/tmp/brief-pr-<pr_number>.md
-> ```
+> Digest written to `.claude/tmp/brief-pr-<pr_number>.md`.
 
 ## Phase 4: Ask Devin (interactive)
 
