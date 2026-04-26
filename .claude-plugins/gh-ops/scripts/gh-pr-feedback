@@ -1,0 +1,73 @@
+#!/bin/bash
+# Fetch all PR review summaries and inline review comments (read-only, no filtering).
+# Usage: gh-pr-feedback <PR_URL or PR_NUMBER>
+#
+# Output: JSON {reviews:[...], inlineComments:[...]}
+#   - reviews: all review summaries (author.login, state, body, submittedAt, commit.oid)
+#   - inlineComments: all per-line review comments (author.login, body, path, line, originalLine, resolved)
+#
+# Filtering (e.g. AI bot only) is left to the caller.
+set -euo pipefail
+
+INPUT="${1:?Usage: gh-pr-feedback <PR_URL or PR_NUMBER>}"
+
+if [[ "$INPUT" =~ ^[0-9]+$ ]]; then
+  if ! NWOSTR="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)"; then
+    echo "Error: current directory is not a GitHub repository or gh auth is not configured" >&2
+    exit 1
+  fi
+  OWNER="${NWOSTR%/*}"
+  REPO="${NWOSTR#*/}"
+  NUMBER="$INPUT"
+elif [[ "$INPUT" =~ github\.com/([^/]+)/([^/]+)/pull/([0-9]+) ]]; then
+  OWNER="${BASH_REMATCH[1]}"
+  REPO="${BASH_REMATCH[2]}"
+  NUMBER="${BASH_REMATCH[3]}"
+else
+  echo "Error: provide a PR URL or PR number: $INPUT" >&2
+  exit 1
+fi
+
+gh api graphql \
+  -f owner="$OWNER" \
+  -f repo="$REPO" \
+  -F number="$NUMBER" \
+  -f query='
+    query($owner:String!,$repo:String!,$number:Int!){
+      repository(owner:$owner,name:$repo){
+        pullRequest(number:$number){
+          reviews(first:100){
+            nodes{
+              author{login}
+              state
+              body
+              submittedAt
+              commit{oid}
+            }
+          }
+          reviewThreads(first:100){
+            nodes{
+              isResolved
+              comments(first:100){
+                nodes{
+                  author{login}
+                  body
+                  path
+                  line
+                  originalLine
+                }
+              }
+            }
+          }
+        }
+      }
+    }' \
+  --jq '{
+    reviews: .data.repository.pullRequest.reviews.nodes,
+    inlineComments: [
+      .data.repository.pullRequest.reviewThreads.nodes[]
+      | .isResolved as $resolved
+      | .comments.nodes[]
+      | . + {resolved: $resolved}
+    ]
+  }'
