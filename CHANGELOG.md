@@ -1,5 +1,72 @@
 # Changelog
 
+## [v0.21.15](https://github.com/MH4GF/tq/compare/v0.21.14...v0.21.15) - 2026-04-26
+- refactor(task)!: cap nested actions in task list/get to latest 10 by @MH4GF in https://github.com/MH4GF/tq/pull/143
+- feat(gh-ops): use `gh release view` for Release notification fetch by @MH4GF in https://github.com/MH4GF/tq/pull/145
+- docs(tq): clarify create-action skill delegates to separate session by @MH4GF in https://github.com/MH4GF/tq/pull/146
+- Add task-level follow-up flow to /tq:done by @MH4GF in https://github.com/MH4GF/tq/pull/147
+- docs: add worktree naming guidance for claude_args by @MH4GF in https://github.com/MH4GF/tq/pull/148
+- docs(tq): add project focus/unfocus awareness to triage by @MH4GF in https://github.com/MH4GF/tq/pull/150
+- fix(dispatch): guard tmux send-keys against oversized instructions by @MH4GF in https://github.com/MH4GF/tq/pull/149
+- docs(gh-ops): align README descriptions with command frontmatter by @MH4GF in https://github.com/MH4GF/tq/pull/155
+- refactor(tui): convert TestTabSwitch to table-driven pattern by @MH4GF in https://github.com/MH4GF/tq/pull/157
+- docs: add completion subcommand to cli-reference by @MH4GF in https://github.com/MH4GF/tq/pull/156
+- docs(tq): align cancel skill follow-up with done skill pattern by @MH4GF in https://github.com/MH4GF/tq/pull/158
+- docs(gh-ops): fix README drift against watch.md by @MH4GF in https://github.com/MH4GF/tq/pull/159
+- test(schedule): collapse TestScheduleCreate cluster into table-driven form by @MH4GF in https://github.com/MH4GF/tq/pull/132
+- test(done): collapse done_test.go into table-driven test by @MH4GF in https://github.com/MH4GF/tq/pull/125
+- test(cmd): convert dispatch_test.go to table-driven by @MH4GF in https://github.com/MH4GF/tq/pull/126
+- test(dispatch): collapse TestFileSessionLogChecker variants into table-driven subtests by @MH4GF in https://github.com/MH4GF/tq/pull/142
+- test(project): collapse TestDeleteProject variants into table-driven subtests by @MH4GF in https://github.com/MH4GF/tq/pull/135
+- fix(gh-ops): resolve gh api drift in watch.md by @MH4GF in https://github.com/MH4GF/tq/pull/160
+- refactor(cmd): convert TestResolveDBPath to table-driven pattern by @MH4GF in https://github.com/MH4GF/tq/pull/151
+- refactor(dispatch): table-driven SkipsTimeout test + use constants by @MH4GF in https://github.com/MH4GF/tq/pull/152
+- refactor(db): table-driven tests for ListTasks and MergeTaskMetadata by @MH4GF in https://github.com/MH4GF/tq/pull/153
+- extract quality-review state recording into standalone script by @MH4GF in https://github.com/MH4GF/tq/pull/161
+- test(investigate_failure): collapse TestCreateInvestigateFailureAction into table-driven subtests by @MH4GF in https://github.com/MH4GF/tq/pull/137
+- refactor(db): convert TestListActions/TestUpdateAction to table-driven by @MH4GF in https://github.com/MH4GF/tq/pull/154
+- Align failed.md with done.md/cancel.md follow-up pattern by @MH4GF in https://github.com/MH4GF/tq/pull/163
+- Remove legacy meta keys from cli-reference by @MH4GF in https://github.com/MH4GF/tq/pull/162
+- test(permission_block): collapse TestCreatePermissionBlockAction subtests into table-driven form by @MH4GF in https://github.com/MH4GF/tq/pull/141
+- Block task completion when pending/running actions exist by @MH4GF in https://github.com/MH4GF/tq/pull/116
+- Add quality-review and simplify skill permissions to settings.json by @MH4GF in https://github.com/MH4GF/tq/pull/114
+- docs(tq-plugin): align /tq:failed and /tq:cancel docs with behavior by @MH4GF in https://github.com/MH4GF/tq/pull/164
+- Add project_id to search results and --project filter by @MH4GF in https://github.com/MH4GF/tq/pull/115
+- Add summarize-and-assess-risk step to gh-ops:merge-pr by @MH4GF in https://github.com/MH4GF/tq/pull/165
+- docs: add cancelled state to Action State Machine diagram by @MH4GF in https://github.com/MH4GF/tq/pull/166
+- Add deadcode CI gate (Rule 13) by @MH4GF in https://github.com/MH4GF/tq/pull/167
+- Delete 3 allowlisted dead identifiers (Rule 13) by @MH4GF in https://github.com/MH4GF/tq/pull/169
+- Add task notes mechanism for /tq:triage keep judgments by @MH4GF in https://github.com/MH4GF/tq/pull/170
+- cmd action done: validate status to avoid silent no-op by @MH4GF in https://github.com/MH4GF/tq/pull/173
+- Surface MarkFailed errors in dispatch error paths by @MH4GF in https://github.com/MH4GF/tq/pull/172
+- Add diff-scoped E2E execution as third quality-review parallel agent by @MH4GF in https://github.com/MH4GF/tq/pull/171
+- Split resolveWorkDir into pure resolver + apply step by @MH4GF in https://github.com/MH4GF/tq/pull/175
+- Add Rule 14: forbid *ForTest method calls in production code by @MH4GF in https://github.com/MH4GF/tq/pull/174
+- Replace per-task ListActions N+1 with bulk call in TUI loadTasks by @MH4GF in https://github.com/MH4GF/tq/pull/176
+- Wrap markTerminal SELECT+UPDATE in a transaction by @MH4GF in https://github.com/MH4GF/tq/pull/178
+- Auto-clear transient TUI messages with TTL by @MH4GF in https://github.com/MH4GF/tq/pull/179
+- TUI: surface DB errors in loadTasks and dispatch toggle by @MH4GF in https://github.com/MH4GF/tq/pull/177
+- Sync action lifecycle docs and help text with dispatched state by @MH4GF in https://github.com/MH4GF/tq/pull/168
+- Add task detail view to TUI with status_history and notes by @MH4GF in https://github.com/MH4GF/tq/pull/181
+- Sync action/event tables in cli-reference with help output by @MH4GF in https://github.com/MH4GF/tq/pull/182
+- fix(claude-review): add --comment to actually post review comments by @MH4GF in https://github.com/MH4GF/tq/pull/180
+- respond-review: preserve quoted comments and drop Thread N numbering by @MH4GF in https://github.com/MH4GF/tq/pull/183
+- Add /gc-exploratory skill chained from /gc-golden-rules by @MH4GF in https://github.com/MH4GF/tq/pull/184
+- Collapse cmd/add_test.go into table-driven TestAdd by @MH4GF in https://github.com/MH4GF/tq/pull/185
+- Collapse TestTaskList variants into one table-driven test by @MH4GF in https://github.com/MH4GF/tq/pull/187
+- Collapse cmd/jq_test.go into a single table-driven test by @MH4GF in https://github.com/MH4GF/tq/pull/188
+- Refactor TestFilterForOpenTask into table-driven form by @MH4GF in https://github.com/MH4GF/tq/pull/190
+- Consolidate dispatch ExecuteAction tests into table-driven form by @MH4GF in https://github.com/MH4GF/tq/pull/191
+- Collapse TestActionUpdate variants into table-driven test by @MH4GF in https://github.com/MH4GF/tq/pull/189
+- Fix CLI reference drift against actual tq --help output by @MH4GF in https://github.com/MH4GF/tq/pull/192
+- Add tq action resume to continue claude sessions by @MH4GF in https://github.com/MH4GF/tq/pull/186
+- Convert TestUpdateTask_BlockedByActiveActions to table-driven by @MH4GF in https://github.com/MH4GF/tq/pull/193
+- Restore tq task note and search --project docs (revert PR #192) by @MH4GF in https://github.com/MH4GF/tq/pull/194
+- Add Stop hook to push back on incomplete sessions by @MH4GF in https://github.com/MH4GF/tq/pull/195
+- Fix tagpr workflow auth failure on git fetch --unshallow by @MH4GF in https://github.com/MH4GF/tq/pull/197
+- Fix Stop hook CI status detection by @MH4GF in https://github.com/MH4GF/tq/pull/196
+- Honor --session flag in tq action resume interactive mode by @MH4GF in https://github.com/MH4GF/tq/pull/198
+
 ## [v0.21.15](https://github.com/MH4GF/tq/compare/v0.21.14...v0.21.15) - 2026-04-19
 - refactor(task)!: cap nested actions in task list/get to latest 10 by @MH4GF in https://github.com/MH4GF/tq/pull/143
 
