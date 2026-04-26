@@ -35,13 +35,26 @@ func TestInteractiveWorkerForResume_IgnoresDispatchSession(t *testing.T) {
 	prev := dispatchSession
 	t.Cleanup(func() { dispatchSession = prev })
 
-	dispatchSession = "should-not-leak"
-
-	w, ok := interactiveWorkerForResume("foo")().(*dispatch.InteractiveWorker)
-	if !ok {
-		t.Fatalf("factory did not return *dispatch.InteractiveWorker")
+	cases := []struct {
+		name             string
+		dispatchSentinel string
+		resumeSession    string
+	}{
+		{"sentinel does not leak", "should-not-leak", "foo"},
+		{"different sentinel", "another-sentinel", "bar"},
+		{"empty resume session keeps empty", "leak-me", ""},
 	}
-	if w.Session != "foo" {
-		t.Errorf("Session = %q, want %q (dispatchSession leaked into resume factory)", w.Session, "foo")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dispatchSession = tc.dispatchSentinel
+
+			w, ok := interactiveWorkerForResume(tc.resumeSession)().(*dispatch.InteractiveWorker)
+			if !ok {
+				t.Fatalf("factory did not return *dispatch.InteractiveWorker")
+			}
+			if w.Session != tc.resumeSession {
+				t.Errorf("Session = %q, want %q (dispatchSession leaked into resume factory)", w.Session, tc.resumeSession)
+			}
+		})
 	}
 }
