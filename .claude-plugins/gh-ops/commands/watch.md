@@ -25,16 +25,12 @@ For each notification, execute in order:
 
 Extract repo name and number from subject_url, then fetch by subject_type:
 
-- **PullRequest**: `gh pr view <number> --repo <owner/repo> --json url,state,author,headRefName,reviewDecision,mergeStateStatus,statusCheckRollup,isDraft,reviews,reviewRequests,comments,body,closingIssuesReferences`
+- **PullRequest**: `gh pr view <number> --repo <owner/repo> --json url,state,author,headRefName,reviewDecision,mergeStateStatus,statusCheckRollup,isDraft,reviews,reviewRequests,comments,body`
 - **Issue**: `gh issue view <number> --repo <owner/repo> --json url,state,author,body`
 - **Release**: `gh release view <tag> --repo <owner/repo>` (read tag from notification title)
 - **Discussion**: `gh api /repos/<owner/repo>/discussions/<number>`
 
-If the PR/Issue is **closed/merged**, or its body references other PR/Issue numbers (e.g. `#1429`, follow-up links), additionally collect:
-- closing comment / merge commit body excerpt (last entry of `gh pr view <number> --json comments`, or `gh api /repos/<owner/repo>/commits/<sha>` message)
-- state of each referenced PR/Issue via `gh pr view <ref>` / `gh issue view <ref>`
-
-These feed into the "Notification summary" section of the Co-review template (Step 2d, row 7).
+If the body references other PR/Issue numbers (e.g. `#1429`, follow-up links), additionally collect the state of each referenced PR/Issue via `gh pr view <ref>` / `gh issue view <ref>`. This feeds into the "Notification summary" section of the Co-review template (Step 2d, row 7).
 
 #### 2b. Skip conditions
 
@@ -66,7 +62,7 @@ For actionable notifications, select the **first matching** instruction by prior
 | 4 | `reviewDecision: "CHANGES_REQUESTED"` / unaddressed review comments | `/gh-ops:respond-review <PR_URL>` |
 | 5 | `reviewDecision: "APPROVED"` + CI pass + mergeable | `/gh-ops:merge-pr <PR_URL>` |
 | 6 | Own PR, not yet reviewed | `/gh-ops:self-review <PR_URL>` |
-| 7 | PR/Issue is closed/merged, or notification is informational only (e.g. follow-up announcement, closure comment) | **Co-review template** (see below) |
+| 7 | Notification is informational only (Discussion, Release, mention without action signal, body referencing follow-up PR/Issue) | **Co-review template** (see below) |
 
 If row 7 also doesn't fit and the situation truly needs free-text describing, write a detailed instruction including the PR/issue URL, context from the notification, and specific next steps. Do NOT use a slash command in that case.
 
@@ -80,8 +76,8 @@ This action is a co-review discussion with the user. Before taking any action, o
 ## Notification summary
 - Type: <PullRequest / Issue / Discussion / Release>
 - URL: <URL>
-- State: <state> (e.g. CLOSED, MERGED, OPEN)
-- What happened: <closing comment excerpt / merge commit message / branched into another PR / etc.>
+- State: <PR/Issue state, release tag, or discussion category>
+- What happened: <follow-up announcement / mention context / branched into another PR / discussion topic / etc.>
 - Related: <state of follow-up #N, related resources>
 
 ## Suggested next-step options
