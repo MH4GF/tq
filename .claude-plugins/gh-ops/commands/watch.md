@@ -30,7 +30,12 @@ Extract repo name and number from subject_url, then fetch by subject_type:
 - **Release**: `gh release view <tag> --repo <owner/repo>` (read tag from notification title)
 - **Discussion**: `gh api /repos/<owner/repo>/discussions/<number>`
 
-If the body references other PR/Issue numbers (e.g. `#1429`, follow-up links), additionally collect the state of each referenced PR/Issue via `gh pr view <ref>` / `gh issue view <ref>`. This feeds into the "Notification summary" section of the Co-review template (Step 2d, row 7).
+If the body references other PR/Issue numbers (e.g. `#1429`, follow-up links), resolve each reference safely:
+1. try `gh pr view <ref> --repo <owner/repo> --json url,state`
+2. if not found, try `gh issue view <ref> --repo <owner/repo> --json url,state`
+3. if both fail, record it as unresolved and continue
+
+This feeds into the "Notification summary" section of the Co-review template (Step 2d, row 7).
 
 #### 2b. Skip conditions
 
@@ -70,7 +75,7 @@ If row 7 also doesn't fit and the situation truly needs free-text describing, wr
 
 Co-review actions are discussion-oriented: the dispatched agent must surface context to the user and confirm the next step via AskUserQuestion before acting. Pre-fill the template using data collected in Step 2a.
 
-```
+```text
 This action is a co-review discussion with the user. Before taking any action, organize the context below, then use AskUserQuestion to confirm the next step with the user.
 
 ## Notification summary
@@ -81,16 +86,16 @@ This action is a co-review discussion with the user. Before taking any action, o
 - Related: <state of follow-up #N, related resources>
 
 ## Suggested next-step options
-- (a) Close this task (information acknowledged, no further tracking needed)
+- (a) Mark this task done (information acknowledged, no further tracking needed)
 - (b) Register follow-up <#N> as a new task to keep tracking
 - (c) <other context-specific proposal>
 
-Present these options via AskUserQuestion and execute the user's choice. If the user chooses to close, run `/tq:done`.
+Present these options via AskUserQuestion and execute the user's choice. If the user picks (a), run `/tq:done`.
 ```
 
 **Forbidden phrasing** in the Co-review template and any free-text instruction (these mislead the dispatched agent into short-circuiting):
 - "No action required"
-- "close this task" (as a directive to the agent rather than an option for the user)
+- "close this task" (imperative directive to the agent — the user-facing option uses "Mark this task done" instead)
 - "review ... if interested" (treats reading as optional when the user actually wants to discuss)
 
 **Excluded prompts** (never select these): `classify-gh-notification`, `classify-next-action`, `watch-gh-ops`
