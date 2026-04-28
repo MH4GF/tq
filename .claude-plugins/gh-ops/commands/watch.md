@@ -25,16 +25,23 @@ For each notification, execute in order:
 
 Extract repo name and number from subject_url, then fetch by subject_type:
 
-- **PullRequest**: `gh pr view <number> --repo <owner/repo> --json url,state,author,headRefName,reviewDecision,mergeStateStatus,statusCheckRollup,isDraft,reviews,reviewRequests,comments`
-- **Issue**: `gh issue view <number> --repo <owner/repo> --json url,state,author`
-- **Release**: `gh release view <tag> --repo <owner/repo>` (tag は notification title から取得)
+- **PullRequest**: `gh pr view <number> --repo <owner/repo> --json url,state,author,headRefName,reviewDecision,mergeStateStatus,statusCheckRollup,isDraft,reviews,reviewRequests,comments,body,closingIssuesReferences`
+- **Issue**: `gh issue view <number> --repo <owner/repo> --json url,state,author,body`
+- **Release**: `gh release view <tag> --repo <owner/repo>` (read tag from notification title)
 - **Discussion**: `gh api /repos/<owner/repo>/discussions/<number>`
+
+If the PR/Issue is **closed/merged**, or its body references other PR/Issue numbers (e.g. `#1429`, follow-up links), additionally collect:
+- closing comment / merge commit body excerpt (last entry of `gh pr view <number> --json comments`, or `gh api /repos/<owner/repo>/commits/<sha>` message)
+- state of each referenced PR/Issue via `gh pr view <ref>` / `gh issue view <ref>`
+
+These feed into the "Notification summary" section of the Co-review template (Step 2d, row 7).
 
 #### 2b. Skip conditions
 
 Mark as read and skip if:
 - `reason=review_requested` and already reviewed (reviews contain own APPROVED/CHANGES_REQUESTED)
 - `reason=review_requested` but own login (`gh auth status --active --json hosts --jq '.hosts."github.com"[0].login'`) is NOT in reviewRequests (neither as user nor as member of a requested team) — team review request where someone else was randomly assigned
+- PR `state` is `MERGED` or `CLOSED` — already terminated, no merge/CI/review action needed
 
 #### 2c. Remote action PR detection
 
@@ -59,8 +66,36 @@ For actionable notifications, select the **first matching** instruction by prior
 | 4 | `reviewDecision: "CHANGES_REQUESTED"` / unaddressed review comments | `/gh-ops:respond-review <PR_URL>` |
 | 5 | `reviewDecision: "APPROVED"` + CI pass + mergeable | `/gh-ops:merge-pr <PR_URL>` |
 | 6 | Own PR, not yet reviewed | `/gh-ops:self-review <PR_URL>` |
+| 7 | PR/Issue is closed/merged, or notification is informational only (e.g. follow-up announcement, closure comment) | **Co-review template** (see below) |
 
-If no condition matches, do NOT use a slash command. Instead, write a detailed free-text instruction describing what needs to be done — include the PR/issue URL, the context from the notification, and specific next steps.
+If row 7 also doesn't fit and the situation truly needs free-text describing, write a detailed instruction including the PR/issue URL, context from the notification, and specific next steps. Do NOT use a slash command in that case.
+
+##### Co-review template (row 7)
+
+Co-review actions are discussion-oriented: the dispatched agent must surface context to the user and confirm the next step via AskUserQuestion before acting. Pre-fill the template using data collected in Step 2a.
+
+```
+This action is a co-review discussion with the user. Before taking any action, organize the context below, then use AskUserQuestion to confirm the next step with the user.
+
+## Notification summary
+- Type: <PullRequest / Issue / Discussion / Release>
+- URL: <URL>
+- State: <state> (e.g. CLOSED, MERGED, OPEN)
+- What happened: <closing comment excerpt / merge commit message / branched into another PR / etc.>
+- Related: <state of follow-up #N, related resources>
+
+## Suggested next-step options
+- (a) Close this task (information acknowledged, no further tracking needed)
+- (b) Register follow-up <#N> as a new task to keep tracking
+- (c) <other context-specific proposal>
+
+Present these options via AskUserQuestion and execute the user's choice. If the user chooses to close, run `/tq:done`.
+```
+
+**Forbidden phrasing** in the Co-review template and any free-text instruction (these mislead the dispatched agent into short-circuiting):
+- "No action required"
+- "close this task" (as a directive to the agent rather than an option for the user)
+- "review ... if interested" (treats reading as optional when the user actually wants to discuss)
 
 **Excluded prompts** (never select these): `classify-gh-notification`, `classify-next-action`, `watch-gh-ops`
 
