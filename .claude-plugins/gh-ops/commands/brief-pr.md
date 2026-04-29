@@ -125,57 +125,119 @@ Do **not** triage human comments (their signal-to-noise is high; classifying the
 
 ## Phase 3: Digest generation
 
-Write the digest to `.claude/tmp/brief-pr-<pr_number>.md` with this structure:
+Write the digest to `.claude/tmp/brief-pr-<pr_number>.md`. **Optimize for scannability over completeness** — the reviewer must grasp the whole PR within the first screen, then drill in.
 
-```markdown
+### 3.1 Architecture sketch (mandatory)
+
+From the diff (Phase 1) and any files already opened while reading it, draw an ASCII box-and-arrow diagram showing only the parts this PR touches (or directly interacts with) — not the whole system. Keep it ≤12 lines.
+
+```
+[Frontend] ──► [API GW] ──► [Lambda] ──► [DynamoDB]
+                                │
+                                ▼
+                            [SNS Topic]
+```
+
+If the PR is purely textual (docs / config only) and a flow diagram does not apply, substitute a short "what changed where" block in the same code fence.
+
+### 3.2 Stack / dependency tree (conditional)
+
+From the Phase 0c JSON (`body`, `commits[].messageHeadline`, `baseRefName`), look for any of: `stack`, `Block A/B`, `closes #<n>`, `related to #<n>`, a base branch other than `main`/`master`. If at least one signal fires, add a small ASCII tree showing parent/child PRs or issues. Otherwise omit the section entirely (no header, no placeholder).
+
+```
+#<base-pr> (base) ──► #<this-pr> (this PR) ──► #<followup-pr> (followup)
+```
+
+### 3.3 Skeleton
+
+Fill this exact structure. Sections without an `<!-- omit ... -->` comment are mandatory; sections with one may be dropped per the stated condition.
+
+````markdown
 # PR #<pr_number>: <title>
 Author: <author> · +<additions> / -<deletions> · <changedFiles> files
 
+## Architecture
+
+```
+<ASCII diagram from 3.1>
+```
+
+## Stack
+
+```
+<ASCII tree from 3.2>
+```
+<!-- omit entire Stack section if 3.2 detected no signal -->
+
 ## TL;DR
-<one paragraph: what the PR is trying to accomplish>
+- **What**: <one line — the core change>
+- **Scope**: <one line — surface area / how far it reaches>
+- **Risk**: <one line — what could break / who is affected>
 
-## Reading map (logical units, dependency order)
-1. **<Group A>** (`path/to/file_a.ts:10-30`, `path/to/file_b.ts:1-20`)
-   - What is happening: ...
-   - Why it matters: ...
-2. **<Group B>** (...)
-   - ...
+## Reading order
 
-## Blast radius
-- Surface area: <touched layers, callsite count>
-- Backward compatibility: <breaking? migration needed?>
-- External dependencies: <new deps / external APIs>
+| Priority | Area | Path | Look for |
+|---|---|---|---|
+| ★3 | <logical unit> | `path:line` | <one line> |
+| ★2 | ... | ... | ... |
+| ★1 | ... | ... | ... |
 
-## Decision points (for the human reviewer)
-- <e.g. data migration is irreversible / competing design choices were made / new external dependency introduced>
-- For each: why a human call is required, and any rejected alternatives.
+## Impact
+
+```
+[Added]    <new files / new behaviors>
+[Changed]  <modified call sites, layers>
+[New deps] <new external libs / APIs / services>
+[Breaking] <breaking changes / migrations>
+```
+<!-- omit any line whose value would be empty; omit the whole block only if all four are empty -->
+
+## Decision points
+
+<!-- One card per judgment the human must make. Prepend ⚠ to the title only when the reviewer should pause; omit it for routine calls. -->
+
+```
+[⚠] <title of the decision>
+Decision  <what was chosen>
+Why       <rationale>
+Risk      <tradeoff / rejected alternative>
+Verify    <what the reviewer must check>
+```
+<!-- omit entire Decision points section if no judgment calls exist -->
 
 ## AI reviewer triage
-- 🎯 Take seriously (<N>):
-  - `path:line` — <summary>
-  - ...
-- 🔧 Author likely handled: <N> (details omitted)
-- 🔇 Noise: <N> (details omitted)
+
+🎯 Take seriously (<N>):
+- **`path:line`** *(<bot-login>)* — <one-sentence summary>
+- ...
+
+🔧 Author likely handled: <N> · 🔇 Noise: <N>
+<!-- omit entire AI reviewer triage section if Phase 2 found zero bot comments -->
 
 ## Other reviewer comments
-- <author> on `path:line` — <one-line gist>
+
+- **<author>** on `path:line` — <one-line gist>
 - ...
-```
+<!-- omit entire section if Phase 2 found zero human comments -->
 
-**Grouping rule for Reading map**: group hunks by logical unit (feature, layer, data flow), not by alphabetical file order. Order groups by dependency direction so the reader can follow top-down.
-
-**If new commits arrived after the user's prior review** (`<new_commits>` from Phase 0c is non-empty), append a final section:
-
-```markdown
 ## New commits since your last review
+
 - `<oid>` <messageHeadline>
 - ...
-```
+<!-- omit entire section if `<new_commits>` from Phase 0c is empty -->
+````
 
-Section omission rules:
-- AI reviewer triage → omit if Phase 2 found zero bot comments.
-- Other reviewer comments → omit if Phase 2 found zero human comments.
-- New commits since your last review → omit if `<new_commits>` is empty.
+### 3.4 Formatting discipline
+
+Hard rules:
+
+- **TL;DR is exactly three bullets.** If a fourth point seems essential, it belongs in Decision points or Impact, not TL;DR.
+- **Tables only when comparison is the point.** Reading order earns its table because priority + path + intent are columns. Do not table-format simple lists; use bullets or the ASCII Impact block instead.
+- **One line per AI triage entry.** No nested sub-bullets, no rationale paragraphs — the path lets the reviewer open the file if they want detail.
+- **At most four Decision cards.** If you have more, you are over-listing — keep the highest-stakes ones and let the reviewer ask follow-ups in Phase 4.
+- **Reading order rows: ★3 = blocking review, ★2 = warrants attention, ★1 = skim only.** Order rows by priority, not by path.
+- **Emphasis carries weight.** Bold = the keyword or conclusion. Italic = author/reviewer attribution. Block-quote `>` = verbatim quote (commit message, comment text). If everything is bold, nothing is.
+- **Whitespace is intentional.** Insert a blank line between sections. The first screen must not look like a wall of text.
 
 After writing, tell the user (in chat output, not in the file) where the digest was saved:
 
@@ -183,9 +245,9 @@ After writing, tell the user (in chat output, not in the file) where the digest 
 
 ## Phase 4: Ask Devin (interactive)
 
-End the turn with this exact line (or close paraphrase) so the user knows the skill is staying open:
+End the turn so the user knows the skill is staying open:
 
-> PR context loaded (diff, related files, all reviewer comments). Ask anything for follow-up. Run `/tq:done` when finished.
+> Digest ready (diff, related files, all reviewer comments are in context). Skim the architecture diagram and TL;DR first, then ask anything for follow-up. Run `/tq:done` when finished.
 
 For every subsequent user turn:
 - Answer using Read / Grep against the locally checked-out PR branch (Phase 1 already did the checkout — files at HEAD are the PR head).
