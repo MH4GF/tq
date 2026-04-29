@@ -328,6 +328,61 @@ func TestWrapInstruction_InstructionComesFirst(t *testing.T) {
 	}
 }
 
+func TestWrapInstruction_PromptStructure(t *testing.T) {
+	tests := []struct {
+		name               string
+		mode               string
+		isResume           bool
+		wantFirstStep      bool
+		wantTerminateBlock bool
+	}{
+		{
+			name:               "noninteractive non-resume has both blocks",
+			mode:               ModeNonInteractive,
+			wantFirstStep:      true,
+			wantTerminateBlock: true,
+		},
+		{
+			name:               "resume drops first-step block but keeps terminate block",
+			mode:               ModeInteractive,
+			isResume:           true,
+			wantFirstStep:      false,
+			wantTerminateBlock: true,
+		},
+		{
+			name:               "remote keeps first-step block but drops terminate block",
+			mode:               ModeRemote,
+			wantFirstStep:      true,
+			wantTerminateBlock: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := wrapInstruction("Fix the bug", 99, 42, tc.mode, tc.isResume)
+
+			if !strings.Contains(got, "## tq action context") {
+				t.Error("postamble should contain the markdown heading")
+			}
+			if !strings.Contains(got, "\n---\n") {
+				t.Error("postamble should be separated from the instruction by a markdown thematic break")
+			}
+			if strings.Contains(got, "\n\n\n") {
+				t.Errorf("postamble should not contain triple newlines (blank-line bloat); got:\n%s", got)
+			}
+
+			hasFirstStep := strings.Contains(got, "Required first step (do not skip)")
+			if hasFirstStep != tc.wantFirstStep {
+				t.Errorf("Required-first-step block presence = %v, want %v", hasFirstStep, tc.wantFirstStep)
+			}
+
+			hasTerminateBlock := strings.Contains(got, "When the action terminates, choose exactly one")
+			if hasTerminateBlock != tc.wantTerminateBlock {
+				t.Errorf("Terminate block presence = %v, want %v", hasTerminateBlock, tc.wantTerminateBlock)
+			}
+		})
+	}
+}
+
 func TestValidateActionMetadata(t *testing.T) {
 	tests := []struct {
 		name    string

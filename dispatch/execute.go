@@ -256,15 +256,25 @@ func saveSessionID(store db.Store, checker SessionLogChecker, actionID int64, wo
 }
 
 func wrapInstruction(instruction string, actionID, taskID int64, mode string, isResume bool) string {
-	postamble := fmt.Sprintf("\n\nYou are executing action #%d (task #%d).", actionID, taskID)
+	var b strings.Builder
+	b.WriteString(instruction)
+	b.WriteString("\n\n---\n\n## tq action context\n\n")
+	fmt.Fprintf(&b, "You are executing **action #%d** (task #%d).\n", actionID, taskID)
+
 	if !isResume {
-		postamble += fmt.Sprintf("\n\nFirst, run `tq action list --task %d` to understand the task history (completed actions, their results, etc.).", taskID)
+		fmt.Fprintf(&b,
+			"\n**Required first step (do not skip):** run `tq action list --task %d` to load the task history — completed actions, their outcomes, and the decisions that led here. Skipping this step leads to duplicated or contradictory work.\n",
+			taskID,
+		)
 	}
+
 	if mode != ModeRemote {
-		postamble += "\n\nWhen you finish, run `/tq:done` to mark this action as complete." +
-			"\nIf you cannot complete the action (missing permissions, broken environment, external blocker, etc.), run `/tq:failed` instead."
+		b.WriteString("\n**When the action terminates, choose exactly one:**\n\n")
+		b.WriteString("- **Completed** — run `/tq:done` to record the result.\n")
+		b.WriteString("- **Blocked** (missing permissions, broken environment, external blocker, etc.) — run `/tq:failed` instead.\n")
 	}
-	return instruction + postamble
+
+	return b.String()
 }
 
 func ValidateActionMetadata(meta map[string]any) error {
