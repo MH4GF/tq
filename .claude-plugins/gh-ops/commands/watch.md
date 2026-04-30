@@ -1,9 +1,21 @@
 ---
 description: Watch GitHub notifications, classify them, and create tq actions
-allowed-tools: Bash(**/scripts/gh-fetch-notifications), Bash(**/scripts/gh-mark-notification-read *), Bash(gh pr view *), Bash(gh issue view *), Bash(gh release view *), Bash(gh auth status *), Bash(gh api /repos/*/discussions/*), Bash(tq *), Skill(tq:done)
+allowed-tools: Bash(**/scripts/gh-fetch-notifications), Bash(**/scripts/gh-mark-notification-read *), Bash(gh pr view *), Bash(gh issue view *), Bash(gh release view *), Bash(gh auth status *), Bash(tq *), Skill(tq:done)
 ---
 
 GitHub notifications watcher. Fetch, classify, and create tq actions for each notification.
+
+## Auto-mode boundaries
+
+This skill runs under `--permission-mode auto`. State boundaries here so the classifier blocks writes.
+
+**GitHub: read-only.** Allowed: `gh pr view`, `gh issue view`, `gh release view`, `gh auth status`, `gh-fetch-notifications`, `gh-mark-notification-read`, and `gh api` for GET requests on any path. Forbidden: any `gh` write subcommand (e.g. `gh pr create`, `gh pr merge`, `gh pr review`, `gh issue create`, `gh issue comment`) and any `gh api` call that includes `-X POST/PUT/PATCH/DELETE`, `--method`, `-f`, or `-F`.
+
+**Repo: no mutations.** No `git push`, `git commit`, `git branch`, `git checkout`, `git merge`. No `Edit` / `Write` / `NotebookEdit`. Reads (`Read`, `Grep`, `Glob`) are fine.
+
+**Local writes only.** Allowed writes are limited to the local tq DB (`tq action create`, `tq task create`) and marking notifications read via `gh-mark-notification-read`.
+
+If a step requires a write not on this list, stop and report instead of attempting it.
 
 ## Steps
 
@@ -153,4 +165,4 @@ Execute `/tq:done`.
 
 1. One action per notification. Do not batch.
 2. Use only `gh` CLI (GitHub API tokens are managed by `gh`).
-3. **Never use `gh api /repos`** for PR or issue data — use `gh pr view --json` / `gh issue view --json` instead. Exception: Discussion has no dedicated subcommand, so `gh api /repos/*/discussions/*` is permitted.
+3. **Never use `gh api /repos`** for PR or issue data — use `gh pr view --json` / `gh issue view --json` instead. When no dedicated subcommand exists (e.g. Discussion), fall back to `gh api` with a GET request, subject to the Auto-mode boundaries above.
