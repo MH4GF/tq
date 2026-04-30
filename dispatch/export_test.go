@@ -6,3 +6,10 @@ func SetDirExists(fn func(string) bool) func() {
 	dirExists = fn
 	return func() { dirExists = orig }
 }
+
+// SetMarshalMeta replaces the marshalMeta function for testing and returns a restore function.
+func SetMarshalMeta(fn func(any) ([]byte, error)) func() {
+	orig := marshalMeta
+	marshalMeta = fn
+	return func() { marshalMeta = orig }
+}
