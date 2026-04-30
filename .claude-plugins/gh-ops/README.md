@@ -21,7 +21,7 @@ The following commands are created as tq action instructions by `watch`, and can
 
 | Command | Description |
 |---|---|
-| `/gh-ops:brief-pr <PR_URL>` | Generate a digest of another person's PR + Ask Devin chat |
+| `/gh-ops:brief-pr <PR_URL>` | PR comprehension copilot — generate digest + Ask Devin chat |
 | `/gh-ops:fix-conflict <PR_URL>` | Resolve merge conflicts on a PR |
 | `/gh-ops:fix-ci <PR_URL>` | Fix CI failures on a PR |
 | `/gh-ops:respond-review <PR_URL>` | Respond to review comments on a PR |
