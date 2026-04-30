@@ -25,6 +25,8 @@ func TestCheckSchedules(t *testing.T) {
 	createdOld := mustParse("2026-03-01 00:00:00")
 	lastRunRecent := mustParse("2026-03-12 09:00:00")
 	jst := time.FixedZone("JST", 9*3600)
+	createdJSTYesterday := mustParse("2026-03-11 12:00:00")
+	nowJST0900 := time.Date(2026, 3, 12, 9, 0, 0, 0, jst)
 
 	tests := []struct {
 		name                  string
@@ -117,6 +119,26 @@ func TestCheckSchedules(t *testing.T) {
 			createdAt:   createdOld,
 			lastRunAt:   &lastRunRecent,
 			now:         nowEarly,
+			wantActions: 0,
+		},
+		{
+			name:        "cron evaluated in now.Location(): 09:00 fires at 09:00 JST",
+			prompt:      "my-prompt",
+			title:       "My Prompt",
+			cron:        "0 9 * * *",
+			metadata:    "{}",
+			createdAt:   createdJSTYesterday,
+			now:         nowJST0900,
+			wantActions: 1,
+		},
+		{
+			name:        "cron evaluated in now.Location(): 18:00 does not fire at 09:00 JST",
+			prompt:      "my-prompt",
+			title:       "My Prompt",
+			cron:        "0 18 * * *",
+			metadata:    "{}",
+			createdAt:   createdJSTYesterday,
+			now:         nowJST0900,
 			wantActions: 0,
 		},
 	}

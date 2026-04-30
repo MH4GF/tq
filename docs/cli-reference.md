@@ -255,7 +255,7 @@ tq schedule create --instruction <TEXT> --task <ID> --cron <EXPR> [--title <TITL
 
 - `--instruction` — Instruction text (**required**)
 - `--task` — Task ID (**required**)
-- `--cron` — Cron expression, 5-field format (**required**, e.g. `"0 9 * * *"`)
+- `--cron` — Cron expression, 5-field format, evaluated in local timezone (**required**, e.g. `"0 9 * * *"`)
 - `--title` — Schedule title (defaults to instruction)
 - `--meta` — JSON metadata for dispatch control (same keys as `action create`)
 
