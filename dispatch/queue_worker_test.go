@@ -299,14 +299,15 @@ func (m *mockSessionLogChecker) IsSessionActive(workDir string, freshnessThresho
 
 func TestReapStaleActions_Interactive(t *testing.T) {
 	tests := []struct {
-		name               string
-		startedOffset      time.Duration
-		omitStartedAt      bool
-		tmux               *mockTmuxChecker
-		log                *mockSessionLogChecker
-		tmuxSession        string
-		wantStatus         string
-		wantResultContains string
+		name                   string
+		startedOffset          time.Duration
+		omitStartedAt          bool
+		tmux                   *mockTmuxChecker
+		log                    *mockSessionLogChecker
+		tmuxSession            string
+		interactiveHardTimeout time.Duration
+		wantStatus             string
+		wantResultContains     string
 	}{
 		{
 			name:               "reaps when tmux window missing",
@@ -328,10 +329,35 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			wantStatus:    db.ActionStatusRunning,
 		},
 		{
-			name:          "skips on tmux error",
+			name:          "skips on tmux error within hard timeout",
 			startedOffset: -5 * time.Minute,
 			tmux:          &mockTmuxChecker{err: fmt.Errorf("tmux not available")},
 			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:                   "reaps on tmux error after hard timeout",
+			startedOffset:          -2 * time.Hour,
+			tmux:                   &mockTmuxChecker{err: fmt.Errorf("tmux not available")},
+			interactiveHardTimeout: 1 * time.Hour,
+			wantStatus:             db.ActionStatusFailed,
+			wantResultContains:     "tmux unavailable",
+		},
+		{
+			name:                   "reaps on tmux error after hard timeout even with stale session log",
+			startedOffset:          -2 * time.Hour,
+			tmux:                   &mockTmuxChecker{err: fmt.Errorf("tmux not available")},
+			log:                    &mockSessionLogChecker{active: false},
+			interactiveHardTimeout: 1 * time.Hour,
+			wantStatus:             db.ActionStatusFailed,
+			wantResultContains:     "hard timeout",
+		},
+		{
+			name:                   "skips on tmux error when session log fresh even past hard timeout",
+			startedOffset:          -2 * time.Hour,
+			tmux:                   &mockTmuxChecker{err: fmt.Errorf("tmux not available")},
+			log:                    &mockSessionLogChecker{active: true, sessionID: "sess-live"},
+			interactiveHardTimeout: 1 * time.Hour,
+			wantStatus:             db.ActionStatusRunning,
 		},
 		{
 			name:          "no-op when no checker",
@@ -384,9 +410,10 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			d.SetActionSessionInfoForTest(1, ptr("main"), &windowName, startedAt)
 
 			cfg := WorkerConfig{
-				DispatchConfig:     DispatchConfig{DB: d},
-				StaleGracePeriod:   30 * time.Second,
-				HeartbeatFreshness: 120 * time.Second,
+				DispatchConfig:         DispatchConfig{DB: d},
+				StaleGracePeriod:       30 * time.Second,
+				HeartbeatFreshness:     120 * time.Second,
+				InteractiveHardTimeout: DefaultInteractiveHardTimeout,
 			}
 			if tt.tmux != nil {
 				cfg.TmuxChecker = tt.tmux
@@ -396,6 +423,9 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			}
 			if tt.tmuxSession != "" {
 				cfg.TmuxSession = tt.tmuxSession
+			}
+			if tt.interactiveHardTimeout > 0 {
+				cfg.InteractiveHardTimeout = tt.interactiveHardTimeout
 			}
 
 			reapStaleActions(context.Background(), cfg)
