@@ -30,7 +30,7 @@ tq task list --status open --jq '
 '
 ```
 
-The query above MUST include the `latest_triage_note` field exactly as written. `latest_triage_note` is the most recent `kind=triage_keep` note on the task, or `null`. When present it has `{reason, at, snooze_until?}`. It surfaces the previous "leave open" judgment so Step 3 can skip tasks whose situation has not changed.
+`latest_triage_note` is the most recent `kind=triage_keep` note on the task, or `null`. When present it has `{reason, at, snooze_until?}`. It surfaces the previous "leave open" judgment so Step 3 can skip tasks whose situation has not changed.
 
 Filter by `--project <id>` if `$ARGUMENTS` is given.
 
@@ -38,7 +38,7 @@ Filter by `--project <id>` if `$ARGUMENTS` is given.
 
 > Found N open tasks. M have prior `latest_triage_note` — Step 3 skip rule will be evaluated for each.
 
-Where `N` is the total task count and `M` is the count of tasks with `latest_triage_note != null`. Both numbers MUST be derived from the Step 1 query output (not estimated). Do NOT proceed to Step 2 without emitting this declaration — it is the gate that confirms `latest_triage_note` was retained from the query.
+Where `N` is the total task count and `M` is the count of tasks with `latest_triage_note != null`. Both numbers MUST be derived from the Step 1 query output. Do NOT proceed to Step 2 without emitting this declaration.
 
 ### 2. Project consistency check (before phase detection)
 
