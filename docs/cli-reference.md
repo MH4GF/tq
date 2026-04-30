@@ -228,7 +228,7 @@ tq action dispatch <ACTION_ID> [--session <NAME>]
 tq action resume <ACTION_ID> [--message <TEXT>] [--mode <MODE>] [--session <NAME>]
 ```
 
-Create a new action that resumes the claude session of a previously failed, cancelled, or done action via `claude --resume <session_id>`. The new action is linked to the parent through `metadata.parent_action_id` and `metadata.is_resume = true`.
+Create a new action that resumes the claude session of a previously completed/failed/cancelled action via `claude --resume <session_id>`. The new action is linked to the parent through `metadata.parent_action_id` and `metadata.is_resume = true`.
 
 The parent must be in `failed` / `cancelled` / `done` status and have a non-empty `claude_session_id` in metadata. Only the session id is inherited — other `claude_args` (`--worktree`, `--permission-mode`, etc.) are dropped because the resumed claude session restores its own context.
 
