@@ -98,17 +98,36 @@ The `Latest triage` column shows `Nd ago: <reason>` when `latest_triage_note` is
 
 Use the post-move `project_id` (tasks moved in Step 2 appear under their new project).
 
-### 6. Proposals — per-phase batching via AskUserQuestion
+### 6. Proposals — per-task sequential triage (Rumelt's kernel of strategy)
 
-**Batching rule**: Group tasks by phase. Within a phase, issue `AskUserQuestion` with at most 4 questions per call (one question per task). If the phase has more than 4 tasks, issue multiple rounds. Project moves are already resolved in Step 2 and are out of scope here. Tasks in **In progress** are shown in the Summary but skipped here (they are running — do not interrupt). Tasks excluded by the **Step 3 triage skip rule** are also skipped here.
+After the Step 5 summary, triage open tasks **one at a time, in order**. For each task, walk the three sub-steps below — Diagnosis, Guiding Policy, Coherent Actions — modeled on Richard Rumelt's *kernel of strategy* (*Good Strategy, Bad Strategy*): name the situation, choose a direction, then act coherently.
 
-**Per-option `description` must contain** the material a user needs to decide without scrolling back:
+**Skip from this step**: tasks excluded by the **Step 3 triage skip rule**, and tasks in the **In progress** phase (running — do not interrupt; they appear in Step 5 only). Project moves are already resolved in Step 2.
 
-- 1-2 line summary of the latest `result`.
-- For PR-related tasks: PR number + state from the Step 4 PR-state cache.
-- Days since last update (`updated_at` vs today).
+**MUST NOT** batch `AskUserQuestion` across tasks — task IDs and one-line summaries are not enough for a human to judge several cases in parallel. Complete 6-a → 6-b → 6-c → Step 7 execution for one task before starting the next task's 6-a.
 
-**Phase-specific option templates** (pick 2-4 per task):
+#### 6-a. Diagnosis
+
+In the **assistant message body** (not `AskUserQuestion`), present:
+
+- Task ID, title, age (days since `updated_at`).
+- Latest substantive action: ID, status, and a 1-3 line `result` quote (use a blockquote for the decisive lines).
+- Phase classification from Step 3 + the specific evidence that decided it (which keyword in `result_head`, which `latest.status`, which Step 4 PR `state`).
+- Phase-specific concern:
+  - **Awaiting review / Awaiting deploy**: blockers, PR state from the Step 4 cache.
+  - **Stalled / Blocked**: stall duration, unresolved obstacle.
+  - **Likely complete**: completion evidence (PR merged, etc.).
+  - **Not started**: probable reason for non-start.
+
+#### 6-b. Guiding Policy
+
+Continuing in the message body, state the recommended direction:
+
+- Recommended action (`Mark done` / `Archive` / continue / `Create ... action` / `Manually dispatch` / `Enable dispatch`) and **why**.
+- Counter-options ruled out and the reason.
+- For unfocus-project tasks with stalled `pending` actions, justify whether to keep, manually dispatch, or enable dispatch — the user must know `pending` actions will not auto-dispatch.
+
+Pick the 6-c options (2-4 per task) from this template:
 
 | Phase | Options |
 |---|---|
@@ -119,30 +138,39 @@ Use the post-move `project_id` (tasks moved in Step 2 appear under their new pro
 | Likely complete | `Mark done` / `Create merge action` / `Leave open` (see PR-state rule below) |
 | Not started | `Create first action` / `Archive` / `Leave open` |
 
-**Universal "leave open" options** (available to every phase in addition to the table above): `Leave open with note (keep)` and `Snooze N days`. Offer these whenever the user might pick `Leave open` so the next triage run can skip the task. The original no-op `Leave open` remains available for "no reason worth recording".
+**Likely complete — PR-state rule** (uses Step 4 cache):
 
-**Likely complete — PR-state rule** (uses cache from Step 4):
+- `state == MERGED` → `Mark done` first, label `Mark done (Recommended)`.
+- `state == OPEN` → `Create merge action` first, label `Create merge action (Recommended)`.
 
-- `state == MERGED` → put `Mark done` first with label `Mark done (Recommended)`.
-- `state == OPEN` → put `Create merge action` first with label `Create merge action (Recommended)`.
+**Universal "leave open" options**: every phase may add `Leave open with note (keep)` and `Snooze N days` so the next triage run can skip the task. Plain `Leave open` remains for "no reason worth recording".
 
-**Forward-motion default**: For every phase except In progress, at least one option MUST be a concrete forward-movement action (create next action, mark done, archive). Do not let tasks sit as "Leave open" by default.
+**Forward-motion default**: every phase except In progress MUST include at least one concrete forward-motion option (create next action, mark done, archive). Tasks must not sit as `Leave open` by default.
 
-**Unfocus-aware options**: When a task's project is unfocus AND the task has a `pending` action (or the proposal would otherwise be "Leave open"), the option set MUST include both of the following, with the material stated in the option `description`:
+**Unfocus-aware options**: when the task's project is unfocus AND it has a `pending` action (or the proposal would otherwise be `Leave open`), the option set MUST include both, with the unfocus state stated in the option `description`:
 
 - `Manually dispatch pending action` → runs `tq action dispatch <action_id>` for the waiting action.
 - `Enable dispatch and batch-run` → runs `tq project update <project_id> --dispatch-enabled true` so all pending actions in that project drain automatically.
 
-State in the task's summary line (option descriptions) that the project is unfocus and that pending actions will not auto-dispatch — the user must know this before picking "Leave open".
+**Likely complete with pending follow-ups**: when proposing `Mark done` while `pending` actions remain, distinguish in the option `description`:
 
-**Likely complete with pending follow-ups**: When proposing `Mark done` for a task that still has `pending` actions, distinguish the two cases in the option `description`:
+- Pending in an **unfocus** project → likely stale (queued but unreachable). Recommend `Mark done` and cancel/rework the leftovers separately.
+- Pending in a **focus** project → genuine follow-up in flight. Prefer `Leave open` until they complete, or cancel them explicitly before `Mark done`.
 
-- Pending actions belong to an **unfocus** project → likely stale (queued but unreachable). Suggest `Mark done` and cancel/rework the leftover actions separately.
-- Pending actions belong to a **focus** project → genuine follow-up in flight. Prefer `Leave open` until they complete, or explicitly cancel them before `Mark done`.
+#### 6-c. Coherent Actions
 
-**Action instruction quality**: When the user picks a `Create ... action` option, invoke `/tq:create-action` with a task_id and an instruction that quotes the specific next step from the previous `result` (e.g. "Request review on PR #XXX" — not a vague "request review"). Include relevant URLs, IDs, and the `next action` note from the prior result.
+Issue **one** `AskUserQuestion` for **this task only**:
 
-**Recommended marker**: Per `AskUserQuestion` spec, place the recommended option first and append `(Recommended)` to its label.
+- 2-4 options drawn from the 6-b template, shaped by the 6-a / 6-b context.
+- Place the recommended option first; append `(Recommended)` to its label.
+- Per-option `description` MUST contain the decision material:
+  - 1-2 line summary of the latest `result`.
+  - For PR-related tasks: PR number + state from the Step 4 PR-state cache.
+  - Days since last update (`updated_at` vs today).
+
+**Action instruction quality**: when the user picks `Create ... action`, invoke `/tq:create-action` with a `task_id` and an instruction that quotes the specific next step from the previous `result` (e.g. "Request review on PR #XXX" — not a vague "request review"). Include relevant URLs, IDs, and any `next action` note from the prior result. Do not call `tq action create` directly.
+
+After the user approves, immediately run the corresponding Step 7 command for the chosen option. Only once that command has completed (or `Leave open` etc. has been recorded) do you move on to the **next task's 6-a**. Do not present another task's diagnosis before the current task's Step 7 reflection finishes.
 
 ### 7. Execute
 
