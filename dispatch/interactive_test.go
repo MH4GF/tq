@@ -160,6 +160,49 @@ func TestInteractiveWorker_TooLong(t *testing.T) {
 	}
 }
 
+func TestInteractiveWorker_ControlCharacters(t *testing.T) {
+	tests := []struct {
+		name        string
+		instruction string
+		wantErr     bool
+	}{
+		{name: "newline", instruction: "first line\nrm -rf /", wantErr: true},
+		{name: "carriage return", instruction: "first\rsecond", wantErr: true},
+		{name: "crlf", instruction: "first\r\nsecond", wantErr: true},
+		{name: "escape", instruction: "abc\x1bdef", wantErr: true},
+		{name: "backspace", instruction: "abc\bdef", wantErr: true},
+		{name: "null", instruction: "abc\x00def", wantErr: true},
+		{name: "tab allowed", instruction: "col1\tcol2", wantErr: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &mockRunner{output: []byte("ok"), failAt: -1}
+			w := &InteractiveWorker{Runner: runner}
+
+			_, err := w.Execute(context.Background(), tc.instruction, ActionConfig{}, "/work", 1, 0)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error for instruction with control character")
+				}
+				if !strings.Contains(err.Error(), "forbidden control character") {
+					t.Errorf("error = %q, want to contain 'forbidden control character'", err.Error())
+				}
+				if len(runner.calls) != 0 {
+					t.Errorf("tmux should not be invoked; got %d calls", len(runner.calls))
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(runner.calls) != 3 {
+				t.Errorf("expected 3 runner calls, got %d", len(runner.calls))
+			}
+		})
+	}
+}
+
 func TestInteractiveWorker_Error(t *testing.T) {
 	tests := []struct {
 		name        string
