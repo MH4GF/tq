@@ -11,7 +11,9 @@ Inventory and organize open tasks.
 
 ### 1. Collect (lightweight)
 
-The raw `tq task list --status open` payload often exceeds 1MB. Fetch with `--jq` to extract only the fields needed for triage:
+The raw `tq task list --status open` payload often exceeds 1MB. Fetch with `--jq` to extract only the fields needed for triage.
+
+**MUST execute the following jq query verbatim — do not modify, simplify, or substitute custom field selections.** `latest_triage_note` is required by Step 3's skip rule; dropping it silently breaks the skip evaluation and forces re-decisions on already-triaged tasks.
 
 ```bash
 tq task list --status open --jq '
@@ -28,9 +30,15 @@ tq task list --status open --jq '
 '
 ```
 
-`latest_triage_note` is the most recent `kind=triage_keep` note on the task, or `null`. When present it has `{reason, at, snooze_until?}`. It surfaces the previous "leave open" judgment so Step 3 can skip tasks whose situation has not changed.
+The query above MUST include the `latest_triage_note` field exactly as written. `latest_triage_note` is the most recent `kind=triage_keep` note on the task, or `null`. When present it has `{reason, at, snooze_until?}`. It surfaces the previous "leave open" judgment so Step 3 can skip tasks whose situation has not changed.
 
 Filter by `--project <id>` if `$ARGUMENTS` is given.
+
+**Pre-flight declaration (MUST output before Step 2)**: After running the query, count the result and emit an assistant message in this exact form:
+
+> Found N open tasks. M have prior `latest_triage_note` — Step 3 skip rule will be evaluated for each.
+
+Where `N` is the total task count and `M` is the count of tasks with `latest_triage_note != null`. Both numbers MUST be derived from the Step 1 query output (not estimated). Do NOT proceed to Step 2 without emitting this declaration — it is the gate that confirms `latest_triage_note` was retained from the query.
 
 ### 2. Project consistency check (before phase detection)
 
@@ -100,9 +108,17 @@ Use the post-move `project_id` (tasks moved in Step 2 appear under their new pro
 
 ### 6. Proposals — per-task sequential triage (Rumelt's kernel of strategy)
 
-After the Step 5 summary, triage open tasks **one at a time, in order**. For each task, walk the three sub-steps below — Diagnosis, Guiding Policy, Coherent Actions — modeled on Richard Rumelt's *kernel of strategy* (*Good Strategy, Bad Strategy*): name the situation, choose a direction, then act coherently.
+**Pre-Step-6 skipped-task report (MUST output before any `AskUserQuestion`)**: Before starting the first task's 6-a Diagnosis, emit an assistant message listing every task excluded by the Step 3 triage skip rule, with the prior triage reason and timestamp. Use this exact form (one example with cooldown, one with snooze — pick the gating clause that matches each task):
 
-**Skip from this step**: tasks excluded by the **Step 3 triage skip rule**, and tasks in the **In progress** phase (running — do not interrupt; they appear in Step 5 only). Project moves are already resolved in Step 2.
+> Skipping N tasks with valid prior triage notes:
+> - Task #<id> (<title>) — `<reason>` (triaged Nd ago at YYYY-MM-DD; cooldown active)
+> - Task #<id> (<title>) — `<reason>` (triaged Nd ago at YYYY-MM-DD; snooze_until: YYYY-MM-DD)
+
+Each line MUST include the task `id`, `title`, the `latest_triage_note.reason` quoted verbatim in backticks, days since `latest_triage_note.at`, and the gating clause: `snooze_until: YYYY-MM-DD` when `latest_triage_note.snooze_until` is set, otherwise `cooldown active`. If no tasks are skipped, still emit `Skipping 0 tasks — no valid prior triage notes.` so the user can confirm the skip rule was evaluated. Do NOT issue the first `AskUserQuestion` without this report.
+
+After the Step 5 summary and the skipped-task report, triage open tasks **one at a time, in order**. For each task, walk the three sub-steps below — Diagnosis, Guiding Policy, Coherent Actions — modeled on Richard Rumelt's *kernel of strategy* (*Good Strategy, Bad Strategy*): name the situation, choose a direction, then act coherently.
+
+**Skip from this step**: tasks excluded by the **Step 3 triage skip rule** (already enumerated in the report above), and tasks in the **In progress** phase (running — do not interrupt; they appear in Step 5 only). Project moves are already resolved in Step 2.
 
 **MUST NOT** batch `AskUserQuestion` across tasks — task IDs and one-line summaries are not enough for a human to judge several cases in parallel. Complete 6-a → 6-b → 6-c → Step 7 execution for one task before starting the next task's 6-a.
 
