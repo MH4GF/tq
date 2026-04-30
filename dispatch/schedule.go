@@ -9,6 +9,8 @@ import (
 	"github.com/MH4GF/tq/db"
 )
 
+var marshalMeta = json.Marshal
+
 func CheckSchedules(database db.Store, now time.Time) error {
 	schedules, err := database.ListSchedules(0)
 	if err != nil {
@@ -75,9 +77,12 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			}
 			continue
 		}
-		metaJSON, err := json.Marshal(meta)
+		metaJSON, err := marshalMeta(meta)
 		if err != nil {
 			slog.Error("schedule: marshal metadata failed", "schedule_id", s.ID, "error", err)
+			if uerr := database.UpdateScheduleLastRunAt(s.ID, now.UTC().Format(db.TimeLayout)); uerr != nil {
+				slog.Error("schedule: update last_run_at failed after marshal failure", "schedule_id", s.ID, "error", uerr)
+			}
 			continue
 		}
 
