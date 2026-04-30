@@ -46,7 +46,7 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			continue
 		}
 
-		next := sched.Next(base)
+		next := sched.Next(base.In(now.Location()))
 		if now.Before(next) {
 			continue
 		}

@@ -25,7 +25,8 @@ var scheduleCreateCmd = &cobra.Command{
 	Long: `Create a scheduled action that runs on a cron schedule.
 
 --task, --cron, and --instruction are required.
---cron accepts standard 5-field cron expressions (minute hour dom month dow).
+--cron accepts standard 5-field cron expressions (minute hour dom month dow),
+evaluated in the local timezone.
 
 Metadata keys for dispatch control (passed to actions automatically):
   mode         Execution mode: "interactive" (default), "noninteractive", "remote"
