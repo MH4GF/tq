@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.21.17](https://github.com/MH4GF/tq/compare/v0.21.16...v0.21.17) - 2026-04-30
+- Replace /gh-ops:review-pr with /gh-ops:brief-pr by @MH4GF in https://github.com/MH4GF/tq/pull/203
+- Add Co-review template + skip merged/closed PRs in /gh-ops:watch by @MH4GF in https://github.com/MH4GF/tq/pull/205
+- Restructure dispatch postamble for clearer prompt engineering by @MH4GF in https://github.com/MH4GF/tq/pull/206
+- Restructure brief-pr digest for scannability by @MH4GF in https://github.com/MH4GF/tq/pull/207
+- Restructure /tq:triage Step 6 to Rumelt's kernel of strategy by @MH4GF in https://github.com/MH4GF/tq/pull/208
+- Ignore .claude/scheduled_tasks.lock runtime lock by @MH4GF in https://github.com/MH4GF/tq/pull/209
+- Add Auto-mode boundaries to gh-ops:watch skill by @MH4GF in https://github.com/MH4GF/tq/pull/210
+- Add task status change reasons to tq search field list by @MH4GF in https://github.com/MH4GF/tq/pull/211
+- Sync gh-ops README brief-pr description with command frontmatter by @MH4GF in https://github.com/MH4GF/tq/pull/212
+- Evaluate cron schedules in now's timezone by @MH4GF in https://github.com/MH4GF/tq/pull/213
+
 ## [v0.21.16](https://github.com/MH4GF/tq/compare/v0.21.15...v0.21.16) - 2026-04-26
 - Convert IgnoresDispatchSession test to table-driven by @MH4GF in https://github.com/MH4GF/tq/pull/200
 - Add PostToolUse hook for auto golangci-lint fmt + lint diag injection by @MH4GF in https://github.com/MH4GF/tq/pull/202
