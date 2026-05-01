@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -11,6 +12,34 @@ import (
 	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
+
+type taskDetailErrorStore struct {
+	db.Store
+	getTaskErr error
+	histErr    error
+	notesErr   error
+}
+
+func (s *taskDetailErrorStore) GetTask(id int64) (*db.Task, error) {
+	if s.getTaskErr != nil {
+		return nil, s.getTaskErr
+	}
+	return s.Store.GetTask(id)
+}
+
+func (s *taskDetailErrorStore) TaskStatusHistory(id int64) ([]db.TaskStatusHistoryEntry, error) {
+	if s.histErr != nil {
+		return nil, s.histErr
+	}
+	return s.Store.TaskStatusHistory(id)
+}
+
+func (s *taskDetailErrorStore) TaskNotes(id int64, kindFilter string) ([]db.TaskNoteEntry, error) {
+	if s.notesErr != nil {
+		return nil, s.notesErr
+	}
+	return s.Store.TaskNotes(id, kindFilter)
+}
 
 func TestTasksModel_Empty(t *testing.T) {
 	d := testutil.NewTestDB(t)
@@ -1033,6 +1062,98 @@ func TestTasksModel_ToggleFocus_SurfacesError(t *testing.T) {
 	}
 	if !strings.Contains(m.message, "toggle focus failed") {
 		t.Errorf("m.message = %q, want prefix 'toggle focus failed'", m.message)
+	}
+}
+
+func navigateToTaskLine(t *testing.T, m TasksModel, taskID int64) TasksModel {
+	t.Helper()
+	for range len(m.lines) + 2 {
+		line := m.lines[m.cursor]
+		if line.lineType == lineTask && line.taskID == taskID {
+			return m
+		}
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	}
+	t.Fatalf("did not land on task line for taskID=%d", taskID)
+	return m
+}
+
+func TestTasksModel_OpenTaskDetail_GetTaskErrorStaysInList(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Boom task", "{}", "")
+
+	stub := &taskDetailErrorStore{Store: d, getTaskErr: errors.New("db read failed")}
+	m := NewTasksModel(stub, "")
+	m = m.SetSize(120, 40)
+	m, _ = m.Update(m.Init()())
+
+	m = navigateToTaskLine(t, m, taskID)
+
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+
+	if m.mode != modeNormal {
+		t.Errorf("mode = %d, want modeNormal (should stay in list view when GetTask fails)", m.mode)
+	}
+	if m.detailTask != nil {
+		t.Errorf("detailTask should remain nil on GetTask failure, got %+v", m.detailTask)
+	}
+	if !m.messageIsError {
+		t.Errorf("messageIsError = false, want true")
+	}
+	if !strings.Contains(m.message, "open task detail failed") {
+		t.Errorf("m.message = %q, want prefix 'open task detail failed'", m.message)
+	}
+	if cmd == nil {
+		t.Errorf("expected a TTL clear cmd, got nil")
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "open task detail failed") {
+		t.Errorf("view should surface error, got %q", view)
+	}
+}
+
+func TestTasksModel_OpenTaskDetail_PartialErrorsTransitionWithMessage(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Partial task", "{}", "")
+
+	stub := &taskDetailErrorStore{
+		Store:    d,
+		histErr:  errors.New("history broken"),
+		notesErr: errors.New("notes broken"),
+	}
+	m := NewTasksModel(stub, "")
+	m = m.SetSize(120, 40)
+	m, _ = m.Update(m.Init()())
+
+	m = navigateToTaskLine(t, m, taskID)
+
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+
+	if m.mode != modeViewTaskDetail {
+		t.Errorf("mode = %d, want modeViewTaskDetail (should still transition with partial data)", m.mode)
+	}
+	if m.detailTask == nil || m.detailTask.ID != taskID {
+		t.Errorf("detailTask should be loaded, got %+v", m.detailTask)
+	}
+	if m.detailHistory != nil {
+		t.Errorf("detailHistory should remain nil on history failure, got %+v", m.detailHistory)
+	}
+	if m.detailNotes != nil {
+		t.Errorf("detailNotes should remain nil on notes failure, got %+v", m.detailNotes)
+	}
+	if !m.messageIsError {
+		t.Errorf("messageIsError = false, want true")
+	}
+	if !strings.Contains(m.message, "history") || !strings.Contains(m.message, "notes") {
+		t.Errorf("m.message = %q, want both 'history' and 'notes'", m.message)
+	}
+	if cmd == nil {
+		t.Errorf("expected a TTL clear cmd, got nil")
 	}
 }
 

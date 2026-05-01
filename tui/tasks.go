@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"sort"
 	"strings"
@@ -212,27 +213,33 @@ func (m TasksModel) Init() tea.Cmd {
 	return m.loadTasks()
 }
 
+// setMessage sets a transient status message and returns its TTL clear cmd.
+// Always use this instead of writing to message/messageIsError/messageGen
+// directly — bumping messageGen is required for clearTasksMessageMsg to
+// match the right generation, and a missed bump silently breaks TTL clearing.
+func (m *TasksModel) setMessage(msg string, isError bool) tea.Cmd {
+	m.message = msg
+	m.messageIsError = isError
+	m.messageGen++
+	return clearAfterTTL(clearTasksMessageMsg{gen: m.messageGen})
+}
+
 func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case actionAttachedMsg:
 		if msg.message != "" {
-			m.message = msg.message
-			m.messageIsError = false
-			m.messageGen++
-			return m, clearAfterTTL(clearTasksMessageMsg{gen: m.messageGen})
+			return m, m.setMessage(msg.message, false)
 		}
 		return m, nil
 	case actionResumedMsg:
 		reload := m.loadTasks()
+		var text string
 		if msg.err != nil {
-			m.message = fmt.Sprintf("resume failed: %v", msg.err)
-			m.messageIsError = true
+			text = fmt.Sprintf("resume failed: %v", msg.err)
 		} else {
-			m.message = fmt.Sprintf("resume action #%d created from #%d", msg.newID, msg.parentID)
-			m.messageIsError = false
+			text = fmt.Sprintf("resume action #%d created from #%d", msg.newID, msg.parentID)
 		}
-		m.messageGen++
-		return m, tea.Batch(reload, clearAfterTTL(clearTasksMessageMsg{gen: m.messageGen}))
+		return m, tea.Batch(reload, m.setMessage(text, msg.err != nil))
 	case clearTasksMessageMsg:
 		if msg.gen == m.messageGen {
 			m.message = ""
@@ -242,19 +249,13 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 	case dispatchToggledMsg:
 		reload := m.loadTasks()
 		if msg.err != nil {
-			m.message = fmt.Sprintf("toggle focus failed: %v", msg.err)
-			m.messageIsError = true
-			m.messageGen++
-			return m, tea.Batch(reload, clearAfterTTL(clearTasksMessageMsg{gen: m.messageGen}))
+			return m, tea.Batch(reload, m.setMessage(fmt.Sprintf("toggle focus failed: %v", msg.err), true))
 		}
 		return m, reload
 	case tasksLoadedMsg:
 		var clearCmd tea.Cmd
 		if msg.err != nil {
-			m.message = fmt.Sprintf("load tasks failed: %v", msg.err)
-			m.messageIsError = true
-			m.messageGen++
-			clearCmd = clearAfterTTL(clearTasksMessageMsg{gen: m.messageGen})
+			clearCmd = m.setMessage(fmt.Sprintf("load tasks failed: %v", msg.err), true)
 		}
 		m.trees = msg.trees
 		m.runningInteractive = msg.runningInteractive
@@ -317,7 +318,7 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 				m.detailScroll = 0
 				m.mode = modeViewDetail
 			} else if line.lineType == lineTask && line.taskID > 0 {
-				m.openTaskDetail(line.taskID)
+				return m, m.openTaskDetail(line.taskID)
 			}
 		}
 	case key.Matches(msg, key.NewBinding(key.WithKeys("o"))):
@@ -377,23 +378,39 @@ func (m TasksModel) updateViewDetail(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m *TasksModel) openTaskDetail(taskID int64) {
+func (m *TasksModel) openTaskDetail(taskID int64) tea.Cmd {
 	m.detailTask = nil
 	m.detailHistory = nil
 	m.detailNotes = nil
+
 	task, err := m.database.GetTask(taskID)
 	if err != nil {
-		return
+		slog.Warn("tui: load task detail failed", "task_id", taskID, "err", err)
+		return m.setMessage(fmt.Sprintf("open task detail failed: %v", err), true)
 	}
 	m.detailTask = task
+
+	var partial []string
 	if hist, err := m.database.TaskStatusHistory(taskID); err == nil {
 		m.detailHistory = hist
+	} else {
+		slog.Warn("tui: load task status history failed", "task_id", taskID, "err", err)
+		partial = append(partial, "history")
 	}
 	if notes, err := m.database.TaskNotes(taskID, ""); err == nil {
 		m.detailNotes = notes
+	} else {
+		slog.Warn("tui: load task notes failed", "task_id", taskID, "err", err)
+		partial = append(partial, "notes")
 	}
+
 	m.detailScroll = 0
 	m.mode = modeViewTaskDetail
+
+	if len(partial) > 0 {
+		return m.setMessage(fmt.Sprintf("task detail partial: %s unavailable", strings.Join(partial, ", ")), true)
+	}
+	return nil
 }
 
 func cardBorder(left, right string, width int) string {
