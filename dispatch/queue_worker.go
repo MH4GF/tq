@@ -13,11 +13,12 @@ import (
 )
 
 const (
-	DefaultMaxInteractive     = 3
-	DefaultStaleThreshold     = 30 * time.Second
-	DefaultPollInterval       = 10 * time.Second
-	DefaultStaleGracePeriod   = 30 * time.Second
-	DefaultHeartbeatFreshness = 120 * time.Second
+	DefaultMaxInteractive         = 3
+	DefaultStaleThreshold         = 30 * time.Second
+	DefaultPollInterval           = 10 * time.Second
+	DefaultStaleGracePeriod       = 30 * time.Second
+	DefaultHeartbeatFreshness     = 120 * time.Second
+	DefaultInteractiveHardTimeout = 1 * time.Hour
 )
 
 // TmuxChecker checks for the existence of tmux windows.
@@ -49,11 +50,12 @@ func (c *ExecTmuxChecker) ListWindows(ctx context.Context, session string) ([]st
 // WorkerConfig configures the queue worker.
 type WorkerConfig struct {
 	DispatchConfig
-	MaxInteractive     int
-	PollInterval       time.Duration
-	TmuxChecker        TmuxChecker
-	StaleGracePeriod   time.Duration
-	HeartbeatFreshness time.Duration
+	MaxInteractive         int
+	PollInterval           time.Duration
+	TmuxChecker            TmuxChecker
+	StaleGracePeriod       time.Duration
+	HeartbeatFreshness     time.Duration
+	InteractiveHardTimeout time.Duration
 }
 
 // RunWorker continuously dispatches pending actions.
@@ -73,6 +75,9 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 	}
 	if cfg.HeartbeatFreshness <= 0 {
 		cfg.HeartbeatFreshness = DefaultHeartbeatFreshness
+	}
+	if cfg.InteractiveHardTimeout <= 0 {
+		cfg.InteractiveHardTimeout = DefaultInteractiveHardTimeout
 	}
 
 	slog.Info("queue worker started", "max_interactive", cfg.MaxInteractive, "poll_interval", cfg.PollInterval)
@@ -138,10 +143,13 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 			}
 
 			for _, a := range actions {
+				var startedAt time.Time
 				if a.StartedAt.Valid {
-					started, err := time.Parse(db.TimeLayout, a.StartedAt.String)
-					if err == nil && now.Sub(started) < cfg.StaleGracePeriod {
-						continue
+					if s, err := time.Parse(db.TimeLayout, a.StartedAt.String); err == nil {
+						startedAt = s
+						if now.Sub(startedAt) < cfg.StaleGracePeriod {
+							continue
+						}
 					}
 				}
 
@@ -151,7 +159,17 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 
 				// Fallback: tmux window check
 				if windowSet == nil {
-					// tmux unavailable and session log didn't confirm active — skip conservatively
+					// Tmux unavailable and session log did not confirm liveness.
+					// Without any positive signal, fall back to a hard timeout so a
+					// broken tmux server cannot wedge the interactive slot forever.
+					if !startedAt.IsZero() && now.Sub(startedAt) >= cfg.InteractiveHardTimeout {
+						result := fmt.Sprintf("stale: tmux unavailable and action exceeded hard timeout (%v)", cfg.InteractiveHardTimeout)
+						if err := markActionFailed(cfg.DB, &a, result); err != nil {
+							slog.Error("mark stale action failed", "action_id", a.ID, "error", err)
+							continue
+						}
+						slog.Warn("reaped stale action via hard timeout", "action_id", a.ID, "hard_timeout", cfg.InteractiveHardTimeout)
+					}
 					continue
 				}
 				if _, exists := windowSet[WindowName(a.ID)]; exists {
