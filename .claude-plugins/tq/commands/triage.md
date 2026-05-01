@@ -182,7 +182,7 @@ Execute each approved option immediately:
 - `Manually dispatch pending action` → `tq action dispatch <action_id>` for the pending action identified in Step 3.
 - `Enable dispatch and batch-run` → `tq project update <project_id> --dispatch-enabled true`. Report the project name to the user so they know which project now auto-dispatches.
 - `Leave open with note (keep)` → ask the user for a one-line reason, then `tq task note <ID> --kind triage_keep --reason '<reason>'`.
-- `Snooze N days` → ask the user for the snooze duration (number of days, or an explicit `--until YYYY-MM-DD` date). Compute `snooze_until` and run `tq task note <ID> --kind triage_keep --reason '<reason>' --metadata '{"snooze_until":"YYYY-MM-DD"}'`.
+- `Snooze N days` → ask the user for the snooze duration (number of days, or an explicit `YYYY-MM-DD` target date). Compute `snooze_until` and run `tq task note <ID> --kind triage_keep --reason '<reason>' --metadata '{"snooze_until":"YYYY-MM-DD"}'`.
 - `Leave open` → no-op.
 
 If an execute fails, record the error, report it to the user, and continue with the remaining batch. After all rounds of all phases complete, triage ends.
