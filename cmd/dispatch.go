@@ -49,6 +49,10 @@ func getInteractiveWorkerFactory() func() dispatch.Worker {
 	return defaultInteractiveWorkerFactory
 }
 
+func SetInteractiveWorkerFactory(f func() dispatch.Worker) {
+	activeInteractiveWorkerFactory = f
+}
+
 var defaultRemoteWorkerFactory = func() dispatch.Worker {
 	return &dispatch.RemoteWorker{
 		Runner: &dispatch.ExecRunner{},
@@ -90,6 +94,7 @@ var actionDispatchCmd = &cobra.Command{
 				InteractiveFunc:    getInteractiveWorkerFactory(),
 				RemoteFunc:         getRemoteWorkerFactory(),
 				SessionLogChecker:  &dispatch.FileSessionLogChecker{},
+				TmuxSession:        dispatchSession,
 			},
 		}, action)
 
