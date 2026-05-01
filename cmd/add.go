@@ -36,7 +36,9 @@ Instruction is provided as a positional argument.
 --meta passes JSON metadata. The instruction is automatically merged into metadata.
 
 Metadata keys for dispatch control:
-  mode         Execution mode: "interactive" (default), "noninteractive", "remote"
+  mode         Execution mode: "interactive" (default), "noninteractive", "remote".
+               Interactive mode rejects instructions containing newlines or other C0
+               control bytes (except tab); use "noninteractive" for multi-line text.
   claude_args  Additional CLI arguments for claude (JSON array of strings,
                e.g. ["--permission-mode","plan","--worktree","--max-turns","5"])`,
 	Example: `  tq action create "/github-pr review this" --task 1 --title "Review PR"

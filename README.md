@@ -119,7 +119,7 @@ Controlled via `--meta` on `action create` / `schedule create`:
 
 | mode | Description |
 |------|-------------|
-| `interactive` (default) | `claude` in tmux — fire-and-forget, worker reports via `tq action done` / `tq action fail` |
+| `interactive` (default) | `claude` in tmux — fire-and-forget, worker reports via `tq action done` / `tq action fail`. Rejects instructions containing newlines or other C0 control bytes (except tab); use `noninteractive` for multi-line text. |
 | `noninteractive` | `claude -p` — captures stdout, auto-completes |
 | `remote` | Dispatched to remote worker |
 
