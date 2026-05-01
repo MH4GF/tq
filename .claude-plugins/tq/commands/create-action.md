@@ -28,6 +28,8 @@ IMPORTANT: Run !`tq action create --help` first to understand meta format and be
 Consult !`tq action create --help` for instruction format guidance.
 Use only information from the current session — do not investigate files (that is the worker's job).
 
+If the instruction spans multiple lines (free-text context, embedded URLs followed by next-step bullets, etc.), set `--meta '{"mode":"noninteractive"}'`. The default `interactive` mode rejects instructions containing newlines or other C0 control bytes (except tab) because they would fragment the tmux `send-keys` shell command — see `docs/cli-reference.md` `tq action create` for the full constraint.
+
 ### 3. Create
 
 ```bash

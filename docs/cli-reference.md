@@ -149,7 +149,7 @@ tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--st
 - `--task` — Task ID (**required**)
 - `--title` — Action title (**required**, max 100 chars)
 - `--meta` — JSON metadata for dispatch control:
-  - `mode` — `"interactive"` (default), `"noninteractive"`, `"remote"`
+  - `mode` — `"interactive"` (default), `"noninteractive"`, `"remote"`. Interactive mode rejects instructions containing newlines or other C0 control bytes (except tab) because they would fragment the tmux `send-keys` shell command. Use `"noninteractive"` (or `"remote"`) for multi-line or free-text instructions.
   - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--permission-mode","plan","--worktree","--max-turns","5"]`)
 - `--status` — Initial status (default: `pending`)
 - `--after` — Dispatch after this time (`YYYY-MM-DD HH:MM`, local timezone)
