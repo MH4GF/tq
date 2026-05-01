@@ -20,6 +20,64 @@ func (m *mockWorker) Execute(ctx context.Context, prompt string, cfg dispatch.Ac
 	return m.result, m.err
 }
 
+func TestDispatchInteractivePersistsSessionInfo(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		wantSession string
+	}{
+		{
+			name:        "default session",
+			args:        []string{"action", "dispatch", "1"},
+			wantSession: "main",
+		},
+		{
+			name:        "custom session",
+			args:        []string{"action", "dispatch", "1", "--session", "work"},
+			wantSession: "work",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+			cmd.SetConfigDir(t.TempDir())
+
+			taskID, _ := d.InsertTask(1, "t", "{}", "")
+			d.InsertAction("t", taskID, `{"instruction":"x","mode":"interactive"}`, db.ActionStatusPending, nil)
+
+			worker := &mockWorker{result: "tq-action-1"}
+			cmd.SetInteractiveWorkerFactory(func() dispatch.Worker { return worker })
+			t.Cleanup(func() { cmd.SetInteractiveWorkerFactory(nil) })
+
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs(tt.args)
+
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+
+			a, err := d.GetAction(1)
+			if err != nil {
+				t.Fatalf("get action: %v", err)
+			}
+			if !a.SessionID.Valid || a.SessionID.String != tt.wantSession {
+				t.Errorf("session_id = %v, want %q", a.SessionID, tt.wantSession)
+			}
+			wantPane := dispatch.WindowName(1)
+			if !a.TmuxPane.Valid || a.TmuxPane.String != wantPane {
+				t.Errorf("tmux_pane = %v, want %q", a.TmuxPane, wantPane)
+			}
+		})
+	}
+}
+
 func TestDispatch(t *testing.T) {
 	type wantAction struct {
 		id     int64
