@@ -1,0 +1,14 @@
+# action lifecycle: create → done, plus rejection on re-done.
+
+exec tq project create demo /tmp/demo
+exec tq task create 'lifecycle' --project 1
+
+exec tq action create 'do thing' --task 1 --title 'work'
+stdout 'action #1 created \(status: pending\)'
+
+exec tq action done 1
+stdout 'action #1 done'
+
+# done on an already-done action is rejected.
+! exec tq action done 1
+stderr 'action #1 is already "done", cannot mark as done'

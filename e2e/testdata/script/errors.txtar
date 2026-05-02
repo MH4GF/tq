@@ -1,0 +1,21 @@
+# Error paths: invalid --meta JSON, deprecated meta keys, missing IDs.
+
+exec tq project create demo /tmp/demo
+exec tq task create 't' --project 1
+
+! exec tq action create 'x' --task 1 --title 'x' --meta 'not-json'
+stderr 'invalid JSON for --meta'
+
+# permission_mode/worktree are deprecated as top-level keys; the user-facing
+# error contract steers users to claude_args.
+! exec tq action create 'x' --task 1 --title 'x' --meta '{"permission_mode":"plan"}'
+stderr 'metadata key "permission_mode" is no longer supported'
+
+! exec tq action done 9999
+stderr 'action #9999 not found'
+
+! exec tq action cancel 9999
+stderr 'action #9999 not found'
+
+! exec tq action fail 9999
+stderr 'action #9999 not found'

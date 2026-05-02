@@ -1,0 +1,31 @@
+# schedule lifecycle: create → list → enable/disable → update → delete.
+# Schedule operations are DB-only; no tmux required.
+
+exec tq project create demo /tmp/demo
+exec tq task create 'sched' --project 1
+
+exec tq schedule create --instruction '/sync' --task 1 --cron '*/5 * * * *' --title 'sync prs'
+stdout 'schedule #1 created'
+
+exec tq schedule list
+stdout '"cron_expr": "\*/5 \* \* \* \*"'
+stdout '"enabled": true'
+
+exec tq schedule disable 1
+stdout 'schedule #1 disabled'
+
+exec tq schedule enable 1
+stdout 'schedule #1 enabled'
+
+exec tq schedule update 1 --cron '*/10 * * * *'
+stdout 'schedule #1 updated'
+
+exec tq schedule list
+stdout '"cron_expr": "\*/10 \* \* \* \*"'
+
+exec tq schedule delete 1
+stdout 'schedule #1 deleted'
+
+# bad cron is rejected.
+! exec tq schedule create --instruction 'x' --task 1 --cron 'not-a-cron'
+stderr 'invalid cron expression "not-a-cron"'

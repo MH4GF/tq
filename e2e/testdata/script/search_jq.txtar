@@ -1,0 +1,16 @@
+# search --jq: filter the JSON output via gojq expressions.
+
+exec tq project create demo /tmp/demo
+exec tq task create 'alpha widget' --project 1
+exec tq task create 'beta gadget' --project 1
+
+exec tq search widget --jq '.[].entity_type'
+stdout '^task$'
+
+exec tq search gadget --jq '.[].snippet'
+stdout 'gadget'
+
+# Malformed jq expressions are reported as a parse error rather than
+# silently passing through unfiltered output.
+! exec tq search widget --jq '.[.'
+stderr 'jq parse error'

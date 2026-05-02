@@ -1,0 +1,13 @@
+# tq action attach: input-validation branches that don't require a live tmux.
+
+exec tq project create demo /tmp/demo
+exec tq task create 't' --project 1
+exec tq action create 'x' --task 1 --title 'x'
+
+# Action exists but has no tmux session info recorded yet (never dispatched).
+! exec tq action attach 1
+stderr 'has no tmux session info'
+
+# Non-existent action: GetAction failure surfaces as "get action: ...".
+! exec tq action attach 9999
+stderr '^Error: get action: '
