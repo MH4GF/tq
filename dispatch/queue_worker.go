@@ -19,6 +19,7 @@ const (
 	DefaultStaleGracePeriod       = 30 * time.Second
 	DefaultHeartbeatFreshness     = 120 * time.Second
 	DefaultInteractiveHardTimeout = 1 * time.Hour
+	DefaultEarlyDispatchTimeout   = 60 * time.Second
 )
 
 // TmuxChecker checks for the existence of tmux windows.
@@ -56,6 +57,7 @@ type WorkerConfig struct {
 	StaleGracePeriod       time.Duration
 	HeartbeatFreshness     time.Duration
 	InteractiveHardTimeout time.Duration
+	EarlyDispatchTimeout   time.Duration
 }
 
 // RunWorker continuously dispatches pending actions.
@@ -78,6 +80,9 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 	}
 	if cfg.InteractiveHardTimeout <= 0 {
 		cfg.InteractiveHardTimeout = DefaultInteractiveHardTimeout
+	}
+	if cfg.EarlyDispatchTimeout <= 0 {
+		cfg.EarlyDispatchTimeout = DefaultEarlyDispatchTimeout
 	}
 
 	slog.Info("queue worker started", "max_interactive", cfg.MaxInteractive, "poll_interval", cfg.PollInterval)
@@ -153,6 +158,10 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 					}
 				}
 
+				if reapEarlyStale(cfg, &a, startedAt, now) {
+					continue
+				}
+
 				if reapCheckClaudeSessionLog(cfg, &a) {
 					continue
 				}
@@ -216,6 +225,39 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 		}
 		slog.Warn("reaped stale noninteractive action", "action_id", a.ID)
 	}
+}
+
+// reapEarlyStale catches dispatches that crashed before writing any session log,
+// where the tmux window may still be alive (so reapCheckClaudeSessionLog cannot help).
+func reapEarlyStale(cfg WorkerConfig, a *db.Action, startedAt, now time.Time) bool {
+	if cfg.ClaudeSessionLogChecker == nil || startedAt.IsZero() {
+		return false
+	}
+	sinceStart := now.Sub(startedAt)
+	if sinceStart < cfg.EarlyDispatchTimeout {
+		return false
+	}
+
+	workDir, _, err := resolveWorkDir(cfg.DB, a)
+	if err != nil {
+		slog.Warn("early-stale watchdog: resolve work_dir failed", "action_id", a.ID, "error", err)
+	}
+	active, _, err := cfg.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, sinceStart)
+	if err != nil {
+		slog.Warn("early-stale watchdog: claude session log check failed", "action_id", a.ID, "error", err)
+		return false
+	}
+	if active {
+		return false
+	}
+
+	result := fmt.Sprintf("early-stale: no claude session log within %v of dispatch", cfg.EarlyDispatchTimeout)
+	if err := markActionFailed(cfg.DB, a, result); err != nil {
+		slog.Error("mark early-stale action failed", "action_id", a.ID, "error", err)
+		return false
+	}
+	slog.Warn("reaped early-stale action", "action_id", a.ID, "elapsed", sinceStart)
+	return true
 }
 
 // reapCheckClaudeSessionLog checks if the action's Claude Code session is still active.

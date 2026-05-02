@@ -364,13 +364,13 @@ func (db *DB) IsActionDispatchEnabled(actionID int64) (bool, error) {
 	return enabled, nil
 }
 
-func (db *DB) listRunningByTmuxSession(hasTmuxSession bool) ([]Action, error) {
-	cond := "IS NULL"
-	if hasTmuxSession {
-		cond = "IS NOT NULL"
-	}
+// interactiveModePredicate matches actions whose mode is interactive (the default
+// when unset). Keep ListRunningInteractive and CountRunningInteractive in sync.
+const interactiveModePredicate = "(json_extract(metadata, '$.mode') IS NULL OR json_extract(metadata, '$.mode') = 'interactive')"
+
+func (db *DB) ListRunningInteractive() ([]Action, error) {
 	rows, err := db.Query(
-		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND tmux_session "+cond+" ORDER BY id",
+		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND "+interactiveModePredicate+" ORDER BY id",
 		ActionStatusRunning,
 	)
 	if err != nil {
@@ -387,10 +387,6 @@ func (db *DB) listRunningByTmuxSession(hasTmuxSession bool) ([]Action, error) {
 		actions = append(actions, a)
 	}
 	return actions, rows.Err()
-}
-
-func (db *DB) ListRunningInteractive() ([]Action, error) {
-	return db.listRunningByTmuxSession(true)
 }
 
 func (db *DB) ListRunningNonInteractive() ([]Action, error) {
@@ -417,7 +413,7 @@ func (db *DB) ListRunningNonInteractive() ([]Action, error) {
 func (db *DB) CountRunningInteractive() (int, error) {
 	var count int
 	err := db.QueryRow(
-		"SELECT COUNT(*) FROM actions WHERE status = ? AND tmux_session IS NOT NULL",
+		"SELECT COUNT(*) FROM actions WHERE status = ? AND "+interactiveModePredicate,
 		ActionStatusRunning,
 	).Scan(&count)
 	return count, err

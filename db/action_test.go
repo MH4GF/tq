@@ -376,31 +376,27 @@ func TestListRunningInteractive(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 
-	// running with tmux_session → should be returned
-	d.InsertAction("a", taskID, "{}", db.ActionStatusRunning, nil)
+	d.InsertAction("with-session", taskID, "{}", db.ActionStatusRunning, nil)
 	d.Exec("UPDATE actions SET tmux_session = 'main', tmux_window = 'tq-action-1' WHERE id = 1")
-
-	// running without tmux_session → should NOT be returned
-	d.InsertAction("b", taskID, "{}", db.ActionStatusRunning, nil)
-
-	// pending → should NOT be returned
-	d.InsertAction("c", taskID, "{}", db.ActionStatusPending, nil)
-
-	// done → should NOT be returned
-	d.InsertAction("d", taskID, "{}", db.ActionStatusDone, nil)
+	d.InsertAction("default-mode-no-session", taskID, "{}", db.ActionStatusRunning, nil)
+	d.InsertAction("explicit-interactive", taskID, `{"mode":"interactive"}`, db.ActionStatusRunning, nil)
+	d.InsertAction("noninteractive", taskID, `{"mode":"noninteractive"}`, db.ActionStatusRunning, nil)
+	d.InsertAction("remote", taskID, `{"mode":"remote"}`, db.ActionStatusRunning, nil)
+	d.InsertAction("pending", taskID, "{}", db.ActionStatusPending, nil)
+	d.InsertAction("done", taskID, "{}", db.ActionStatusDone, nil)
 
 	actions, err := d.ListRunningInteractive()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(actions) != 1 {
-		t.Fatalf("expected 1 action, got %d", len(actions))
+	wantTitles := []string{"with-session", "default-mode-no-session", "explicit-interactive"}
+	if len(actions) != len(wantTitles) {
+		t.Fatalf("expected %d actions, got %d", len(wantTitles), len(actions))
 	}
-	if actions[0].Title != "a" {
-		t.Errorf("expected title 'a', got %s", actions[0].Title)
-	}
-	if !actions[0].TmuxSession.Valid || actions[0].TmuxSession.String != "main" {
-		t.Errorf("expected tmux_session 'main', got %v", actions[0].TmuxSession)
+	for i, want := range wantTitles {
+		if actions[i].Title != want {
+			t.Errorf("actions[%d].Title = %q, want %q", i, actions[i].Title, want)
+		}
 	}
 }
 
@@ -432,16 +428,20 @@ func TestCountRunningInteractive(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("a", taskID, "{}", db.ActionStatusRunning, nil)
-	d.InsertAction("b", taskID, "{}", db.ActionStatusRunning, nil)
+	d.InsertAction("with-session", taskID, "{}", db.ActionStatusRunning, nil)
+	d.InsertAction("default-no-session", taskID, "{}", db.ActionStatusRunning, nil)
+	d.InsertAction("explicit-interactive", taskID, `{"mode":"interactive"}`, db.ActionStatusRunning, nil)
+	d.InsertAction("noninteractive", taskID, `{"mode":"noninteractive"}`, db.ActionStatusRunning, nil)
+	d.InsertAction("remote", taskID, `{"mode":"remote"}`, db.ActionStatusRunning, nil)
+	d.InsertAction("pending", taskID, "{}", db.ActionStatusPending, nil)
 	d.Exec("UPDATE actions SET tmux_session = 'sess-1' WHERE id = 1")
 
 	count, err := d.CountRunningInteractive()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count != 1 {
-		t.Errorf("count = %d, want 1 (only one has tmux_session)", count)
+	if count != 3 {
+		t.Errorf("count = %d, want 3 (with-session + default-no-session + explicit-interactive)", count)
 	}
 }
 
