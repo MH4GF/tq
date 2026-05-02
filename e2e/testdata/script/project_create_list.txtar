@@ -8,4 +8,4 @@ stdout '"work_dir": "'$WORK'/demo"'
 
 # 同名プロジェクトは失敗する
 ! exec tq project create demo $WORK/demo
-stderr 'project'
+stderr 'UNIQUE constraint failed: projects.name'
