@@ -110,8 +110,7 @@ func TestCreateInvestigateFailureAction_SkipBehavior(t *testing.T) {
 		prompt         string
 		meta           string
 		status         string
-		markDone       bool
-		markDoneResult string
+		markDoneResult *string
 		failureResult  string
 		wantCount      int
 	}{
@@ -119,7 +118,7 @@ func TestCreateInvestigateFailureAction_SkipBehavior(t *testing.T) {
 			name:          "skips investigation itself (prevents infinite loop)",
 			prompt:        "internal:investigate-failure",
 			meta:          `{"is_investigate_failure":true}`,
-			status:        "failed",
+			status:        db.ActionStatusFailed,
 			failureResult: "investigation itself failed",
 			wantCount:     0,
 		},
@@ -127,9 +126,8 @@ func TestCreateInvestigateFailureAction_SkipBehavior(t *testing.T) {
 			name:           "skips already-terminal action killed after MarkDone",
 			prompt:         "watch-notifications",
 			meta:           `{}`,
-			status:         "pending",
-			markDone:       true,
-			markDoneResult: "outcome: processed 0 notifications",
+			status:         db.ActionStatusPending,
+			markDoneResult: ptr("outcome: processed 0 notifications"),
 			failureResult:  "signal: killed",
 			wantCount:      0,
 		},
@@ -137,7 +135,7 @@ func TestCreateInvestigateFailureAction_SkipBehavior(t *testing.T) {
 			name:          "skips signal killed (scheduled)",
 			prompt:        "test",
 			meta:          `{"schedule_id":"4","instruction":"test"}`,
-			status:        "failed",
+			status:        db.ActionStatusFailed,
 			failureResult: "signal: killed",
 			wantCount:     0,
 		},
@@ -145,7 +143,7 @@ func TestCreateInvestigateFailureAction_SkipBehavior(t *testing.T) {
 			name:          "skips signal killed (non-scheduled)",
 			prompt:        "test",
 			meta:          `{"instruction":"test"}`,
-			status:        "failed",
+			status:        db.ActionStatusFailed,
 			failureResult: "signal: killed",
 			wantCount:     0,
 		},
@@ -153,7 +151,7 @@ func TestCreateInvestigateFailureAction_SkipBehavior(t *testing.T) {
 			name:          "skips context deadline exceeded",
 			prompt:        "test",
 			meta:          `{}`,
-			status:        "failed",
+			status:        db.ActionStatusFailed,
 			failureResult: "context deadline exceeded",
 			wantCount:     0,
 		},
@@ -161,7 +159,7 @@ func TestCreateInvestigateFailureAction_SkipBehavior(t *testing.T) {
 			name:          "skips stale noninteractive timeout",
 			prompt:        "test",
 			meta:          `{}`,
-			status:        "failed",
+			status:        db.ActionStatusFailed,
 			failureResult: "stale: noninteractive action exceeded timeout (20m0s)",
 			wantCount:     0,
 		},
@@ -169,7 +167,7 @@ func TestCreateInvestigateFailureAction_SkipBehavior(t *testing.T) {
 			name:          "does not skip non-timeout failure",
 			prompt:        "deploy",
 			meta:          `{}`,
-			status:        "failed",
+			status:        db.ActionStatusFailed,
 			failureResult: "API Error: Unable to connect",
 			wantCount:     1,
 		},
@@ -182,8 +180,8 @@ func TestCreateInvestigateFailureAction_SkipBehavior(t *testing.T) {
 
 			taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
 			actionID, _ := d.InsertAction(tt.prompt, taskID, tt.meta, tt.status, nil)
-			if tt.markDone {
-				d.MarkDone(actionID, tt.markDoneResult)
+			if tt.markDoneResult != nil {
+				d.MarkDone(actionID, *tt.markDoneResult)
 			}
 			action, _ := d.GetAction(actionID)
 
