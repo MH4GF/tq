@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.21.19](https://github.com/MH4GF/tq/compare/v0.21.18...v0.21.19) - 2026-05-02
+- Merge investigate-failure skip tests into one table-driven test by @MH4GF in https://github.com/MH4GF/tq/pull/229
+- Reject Claude permission-mode values as tq action mode by @MH4GF in https://github.com/MH4GF/tq/pull/227
+- Stop hook: marker-based loop guard for in-session push-back chain by @MH4GF in https://github.com/MH4GF/tq/pull/228
+- Expand create-action skill with Opus 4.7 instruction guidelines by @MH4GF in https://github.com/MH4GF/tq/pull/231
+- chore: remove Claude Code Review workflow by @MH4GF in https://github.com/MH4GF/tq/pull/233
+- Sync gh-ops plugin version to tagpr release rail by @MH4GF in https://github.com/MH4GF/tq/pull/232
+- Make noninteractive Execute heartbeat-aware by @MH4GF in https://github.com/MH4GF/tq/pull/234
+
 ## [v0.21.18](https://github.com/MH4GF/tq/compare/v0.21.17...v0.21.18) - 2026-05-02
 - Force latest_triage_note checkpoints in tq:triage by @MH4GF in https://github.com/MH4GF/tq/pull/214
 - docs: match resume description to --help output by @MH4GF in https://github.com/MH4GF/tq/pull/216
