@@ -166,13 +166,14 @@ func TestInteractiveWorker_ControlCharacters(t *testing.T) {
 		instruction string
 		wantErr     bool
 	}{
-		{name: "newline", instruction: "first line\nrm -rf /", wantErr: true},
+		{name: "newline allowed", instruction: "first line\nrm -rf /", wantErr: false},
 		{name: "carriage return", instruction: "first\rsecond", wantErr: true},
 		{name: "crlf", instruction: "first\r\nsecond", wantErr: true},
 		{name: "escape", instruction: "abc\x1bdef", wantErr: true},
 		{name: "backspace", instruction: "abc\bdef", wantErr: true},
 		{name: "null", instruction: "abc\x00def", wantErr: true},
 		{name: "tab allowed", instruction: "col1\tcol2", wantErr: false},
+		{name: "wrapInstruction postamble passthrough", instruction: "user instruction body\n\n---\n\n## tq action context\n\nYou are executing **action #1** (task #2).\n", wantErr: false},
 	}
 
 	for _, tc := range tests {

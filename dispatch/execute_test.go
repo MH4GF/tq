@@ -890,3 +890,45 @@ func TestExecuteAction_NonInteractiveNilCheckerNoError(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// Regression: a clean single-line instruction must reach the real InteractiveWorker
+// without tripping the validator on wrapInstruction's leading-newline postamble.
+func TestExecuteAction_InteractiveAcceptsSingleLineInstruction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	rawInstruction := strings.Repeat("a", 100)
+	meta, _ := json.Marshal(map[string]any{"instruction": rawInstruction, "mode": ModeInteractive})
+	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+	d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil)
+
+	action, _ := d.NextPending(context.Background())
+
+	runner := &mockRunner{output: []byte("ok"), failAt: -1}
+	workerFunc := func() Worker { return &InteractiveWorker{Runner: runner} }
+
+	result, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+	}, action)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Mode != ModeInteractive {
+		t.Errorf("mode = %q, want %q", result.Mode, ModeInteractive)
+	}
+	if len(runner.calls) != 3 {
+		t.Fatalf("expected 3 tmux calls (new-window, send-keys, Enter), got %d", len(runner.calls))
+	}
+	sendKeysArgs := strings.Join(runner.calls[1].args, " ")
+	if !strings.Contains(sendKeysArgs, rawInstruction) {
+		t.Error("send-keys args should contain the raw user instruction")
+	}
+	if !strings.Contains(sendKeysArgs, "## tq action context") {
+		t.Error("send-keys args should contain the wrapInstruction postamble")
+	}
+}

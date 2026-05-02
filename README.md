@@ -119,7 +119,7 @@ Controlled via `--meta` on `action create` / `schedule create`. Any value outsid
 
 | mode | Description |
 |------|-------------|
-| `interactive` (default) | `claude` in tmux — fire-and-forget, worker reports via `tq action done` / `tq action fail`. Rejects instructions containing newlines or other C0 control bytes (except tab); use `noninteractive` for multi-line text. |
+| `interactive` (default) | `claude` in tmux — fire-and-forget, worker reports via `tq action done` / `tq action fail`. Rejects C0 control bytes other than tab and newline; use `noninteractive` if your instruction needs `\r`, escape codes, etc. |
 | `noninteractive` | `claude -p` — captures stdout, auto-completes. Heartbeat-aware: kept alive past the 600s minimum while the session log mtime stays fresh (≤120s old), up to a 60-minute hard cap |
 | `remote` | Dispatched to remote worker |
 
