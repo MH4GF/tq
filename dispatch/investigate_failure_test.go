@@ -104,101 +104,101 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 	}
 }
 
-func TestCreateInvestigateFailureAction_SkipsInvestigationItself(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	actionID, _ := d.InsertAction("internal:investigate-failure", taskID, `{"is_investigate_failure":true}`, "failed", nil)
-	action, _ := d.GetAction(actionID)
-
-	CreateInvestigateFailureAction(d, action, "investigation itself failed")
-
-	actions, _ := d.ListActions("", nil, 0)
-	// Should NOT create a new investigation action to prevent infinite loops
-	pendingCount := 0
-	for _, a := range actions {
-		if hasMetaKey(a.Metadata, MetaKeyIsInvestigation) && a.Status == db.ActionStatusPending {
-			pendingCount++
-		}
-	}
-	if pendingCount != 0 {
-		t.Errorf("expected 0 pending investigate actions (skip self), got %d", pendingCount)
-	}
-}
-
-func TestCreateInvestigateFailureAction_SkipsAlreadyTerminal(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	actionID, _ := d.InsertAction("watch-notifications", taskID, "{}", "pending", nil)
-	// Simulate: action completed via /tq:done, then process was killed by timeout
-	d.MarkDone(actionID, "outcome: processed 0 notifications")
-	action, _ := d.GetAction(actionID)
-
-	CreateInvestigateFailureAction(d, action, "signal: killed")
-
-	actions, _ := d.ListActions("", nil, 0)
-	for _, a := range actions {
-		if hasMetaKey(a.Metadata, MetaKeyIsInvestigation) {
-			t.Error("should not create investigate action for already-terminal action")
-		}
-	}
-}
-
-func TestCreateInvestigateFailureAction_SkipsTimeout(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-
+func TestCreateInvestigateFailureAction_SkipBehavior(t *testing.T) {
 	tests := []struct {
-		name          string
-		meta          string
-		failureResult string
+		name           string
+		prompt         string
+		meta           string
+		status         string
+		markDone       bool
+		markDoneResult string
+		failureResult  string
+		wantCount      int
 	}{
-		{"signal killed (scheduled)", `{"schedule_id":"4","instruction":"test"}`, "signal: killed"},
-		{"signal killed (non-scheduled)", `{"instruction":"test"}`, "signal: killed"},
-		{"context deadline exceeded", `{}`, "context deadline exceeded"},
-		{"stale noninteractive timeout", `{}`, "stale: noninteractive action exceeded timeout (20m0s)"},
+		{
+			name:          "skips investigation itself (prevents infinite loop)",
+			prompt:        "internal:investigate-failure",
+			meta:          `{"is_investigate_failure":true}`,
+			status:        "failed",
+			failureResult: "investigation itself failed",
+			wantCount:     0,
+		},
+		{
+			name:           "skips already-terminal action killed after MarkDone",
+			prompt:         "watch-notifications",
+			meta:           `{}`,
+			status:         "pending",
+			markDone:       true,
+			markDoneResult: "outcome: processed 0 notifications",
+			failureResult:  "signal: killed",
+			wantCount:      0,
+		},
+		{
+			name:          "skips signal killed (scheduled)",
+			prompt:        "test",
+			meta:          `{"schedule_id":"4","instruction":"test"}`,
+			status:        "failed",
+			failureResult: "signal: killed",
+			wantCount:     0,
+		},
+		{
+			name:          "skips signal killed (non-scheduled)",
+			prompt:        "test",
+			meta:          `{"instruction":"test"}`,
+			status:        "failed",
+			failureResult: "signal: killed",
+			wantCount:     0,
+		},
+		{
+			name:          "skips context deadline exceeded",
+			prompt:        "test",
+			meta:          `{}`,
+			status:        "failed",
+			failureResult: "context deadline exceeded",
+			wantCount:     0,
+		},
+		{
+			name:          "skips stale noninteractive timeout",
+			prompt:        "test",
+			meta:          `{}`,
+			status:        "failed",
+			failureResult: "stale: noninteractive action exceeded timeout (20m0s)",
+			wantCount:     0,
+		},
+		{
+			name:          "does not skip non-timeout failure",
+			prompt:        "deploy",
+			meta:          `{}`,
+			status:        "failed",
+			failureResult: "API Error: Unable to connect",
+			wantCount:     1,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actionID, _ := d.InsertAction("test", taskID, tt.meta, "failed", nil)
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+
+			taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
+			actionID, _ := d.InsertAction(tt.prompt, taskID, tt.meta, tt.status, nil)
+			if tt.markDone {
+				d.MarkDone(actionID, tt.markDoneResult)
+			}
 			action, _ := d.GetAction(actionID)
 
 			CreateInvestigateFailureAction(d, action, tt.failureResult)
 
 			actions, _ := d.ListActions("", nil, 0)
+			count := 0
 			for _, a := range actions {
-				if hasMetaKey(a.Metadata, MetaKeyIsInvestigation) {
-					t.Errorf("should not create investigate action for %s", tt.name)
+				if hasMetaKey(a.Metadata, MetaKeyIsInvestigation) && a.Status == db.ActionStatusPending {
+					count++
 				}
 			}
+			if count != tt.wantCount {
+				t.Errorf("pending investigate count = %d, want %d", count, tt.wantCount)
+			}
 		})
-	}
-}
-
-func TestCreateInvestigateFailureAction_DoesNotSkipNonTimeout(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	actionID, _ := d.InsertAction("deploy", taskID, "{}", "failed", nil)
-	action, _ := d.GetAction(actionID)
-
-	CreateInvestigateFailureAction(d, action, "API Error: Unable to connect")
-
-	actions, _ := d.ListActions("", nil, 0)
-	investigateCount := 0
-	for _, a := range actions {
-		if hasMetaKey(a.Metadata, MetaKeyIsInvestigation) {
-			investigateCount++
-		}
-	}
-	if investigateCount != 1 {
-		t.Errorf("expected 1 investigate action for non-timeout failure, got %d", investigateCount)
 	}
 }
