@@ -17,6 +17,9 @@ func validateMetaJSON(meta string) error {
 			return fmt.Errorf("metadata key %q is no longer supported; use claude_args instead (e.g. \"claude_args\":[\"--permission-mode\",\"plan\"])", key)
 		}
 	}
+	if err := dispatch.ValidateActionMode(obj); err != nil {
+		return err
+	}
 	if rawArgs, exists := obj[dispatch.MetaKeyClaudeArgs]; exists {
 		arr, ok := rawArgs.([]any)
 		if !ok {

@@ -29,7 +29,9 @@ var scheduleCreateCmd = &cobra.Command{
 evaluated in the local timezone.
 
 Metadata keys for dispatch control (passed to actions automatically):
-  mode         Execution mode: "interactive" (default), "noninteractive", "remote"
+  mode         Execution mode: "interactive" (default), "noninteractive", "remote".
+               Any other value is rejected — pass Claude permission-mode
+               (auto, plan, acceptEdits, ...) via claude_args instead.
   claude_args  Additional CLI arguments for claude (JSON array of strings,
                e.g. ["--permission-mode","plan","--worktree"])`,
 	Example: `  tq schedule create --instruction "/gmail-inbox-zero" --task 1 --cron "0 9 * * *" --title "Morning inbox zero"

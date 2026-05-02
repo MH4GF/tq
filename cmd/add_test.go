@@ -245,6 +245,69 @@ func TestAdd_ClaudeArgsInvalidType(t *testing.T) {
 	}
 }
 
+func TestAdd_InvalidMode(t *testing.T) {
+	tests := []struct {
+		name        string
+		meta        string
+		wantErrSubs []string
+	}{
+		{
+			name: "claude permission-mode auto",
+			meta: `{"mode":"auto"}`,
+			wantErrSubs: []string{
+				"must be one of: interactive, noninteractive, remote",
+				`got "auto"`,
+				"claude_args",
+				"--permission-mode",
+			},
+		},
+		{
+			name:        "claude permission-mode plan",
+			meta:        `{"mode":"plan"}`,
+			wantErrSubs: []string{`got "plan"`, "claude_args"},
+		},
+		{
+			name:        "case sensitive Interactive",
+			meta:        `{"mode":"Interactive"}`,
+			wantErrSubs: []string{`got "Interactive"`},
+		},
+		{
+			name:        "non-string mode",
+			meta:        `{"mode":123}`,
+			wantErrSubs: []string{`"mode" must be a string`},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+
+			d.InsertTask(1, "test task", "{}", "")
+
+			root := cmd.GetRootCmd()
+			root.SetOut(new(bytes.Buffer))
+			root.SetErr(new(bytes.Buffer))
+			root.SetArgs([]string{"action", "create", "review this", "--title", "test", "--task", "1", "--meta", tc.meta})
+
+			err := root.Execute()
+			if err == nil {
+				t.Fatal("expected error for invalid mode, got nil")
+			}
+			for _, sub := range tc.wantErrSubs {
+				if !contains(err.Error(), sub) {
+					t.Errorf("error = %q, want to contain %q", err.Error(), sub)
+				}
+			}
+
+			if _, gerr := d.GetAction(1); gerr == nil {
+				t.Error("action should NOT have been created when mode validation fails")
+			}
+		})
+	}
+}
+
 func TestAdd_InvalidMeta(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

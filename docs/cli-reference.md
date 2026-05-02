@@ -149,7 +149,7 @@ tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--st
 - `--task` — Task ID (**required**)
 - `--title` — Action title (**required**, max 100 chars)
 - `--meta` — JSON metadata for dispatch control:
-  - `mode` — `"interactive"` (default), `"noninteractive"`, `"remote"`. Interactive mode rejects instructions containing newlines or other C0 control bytes (except tab) because they would fragment the tmux `send-keys` shell command. Use `"noninteractive"` (or `"remote"`) for multi-line or free-text instructions.
+  - `mode` — `"interactive"` (default), `"noninteractive"`, `"remote"`. Any other value is rejected — pass Claude permission-mode (`auto`, `plan`, `acceptEdits`, …) via `claude_args` instead. Interactive mode rejects instructions containing newlines or other C0 control bytes (except tab) because they would fragment the tmux `send-keys` shell command. Use `"noninteractive"` (or `"remote"`) for multi-line or free-text instructions.
   - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--permission-mode","plan","--worktree","--max-turns","5"]`)
 - `--status` — Initial status (default: `pending`)
 - `--after` — Dispatch after this time (`YYYY-MM-DD HH:MM`, local timezone)
@@ -233,7 +233,7 @@ Create a new action that resumes the claude session of a previously completed/fa
 The parent must be in `failed` / `cancelled` / `done` status and have a non-empty `claude_session_id` in metadata. Only the session id is inherited — other `claude_args` (`--worktree`, `--permission-mode`, etc.) are dropped because the resumed claude session restores its own context.
 
 - `--message` — Additional instruction passed as the new prompt (default: `"Continue the previous session."`)
-- `--mode` — Execution mode: `interactive` | `noninteractive` | `remote` (default: parent action's mode)
+- `--mode` — Execution mode: `interactive` | `noninteractive` | `remote` (default: parent action's mode). Any other value is rejected.
 - `--session` — Target tmux session name, interactive mode only (default: `main`)
 
 ## schedule
