@@ -17,13 +17,9 @@ env CLAUDE_LOG=$WORK/claude.log
 # user's running tmux.
 exec tmux new-session -d -s e2e
 
-# Seed minimal data and create an action.
 exec tq project create demo $WORK
 exec tq task create 'demo task' --project 1
 exec tq action create 'hello world' --task 1 --title 'demo'
-
-# Dispatch — tq runs `tmux new-window` then `send-keys` to invoke
-# `claude '<instruction>'` in the e2e session.
 exec tq action dispatch 1 --session e2e
 
 # Block until the stub fires `tmux wait-for -S claude-done`.
@@ -32,7 +28,6 @@ exec tmux wait-for claude-done
 # Stub appended its argv to $CLAUDE_LOG; confirm the instruction reached it.
 grep 'hello world' $CLAUDE_LOG
 
-# Tear down the isolated server.
 exec tmux kill-server
 
 -- claude-stub --

@@ -65,12 +65,7 @@ All list commands output JSON.`,
 		return nil
 	},
 	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
-		if database != nil && !dbInjected {
-			err := database.Close()
-			database = nil
-			return err
-		}
-		return nil
+		return closeDBIfOwned()
 	},
 }
 
@@ -132,18 +127,29 @@ func ResetForTest() {
 	resetFlagsRecursive(rootCmd)
 }
 
-// ResetState resets all package-level state. Used by E2E harnesses
-// (e.g. testscript) that re-enter Execute() multiple times within a
-// single Go process.
+// ResetState resets all package-level state. Required because testscript
+// re-enters Execute() multiple times within a single Go process; without
+// this, the previous run's database handle and flag values leak across
+// scenarios.
 func ResetState() {
-	if database != nil && !dbInjected {
-		_ = database.Close()
-	}
+	_ = closeDBIfOwned()
 	database = nil
 	dbInjected = false
 	configDirOverride = ""
 	dbPathFlag = ""
 	resetFlagsRecursive(rootCmd)
+}
+
+// closeDBIfOwned closes the package-level database only if it was opened
+// by Execute() (not injected via SetDB). Nils the handle on success so
+// the next Execute() reopens cleanly.
+func closeDBIfOwned() error {
+	if database == nil || dbInjected {
+		return nil
+	}
+	err := database.Close()
+	database = nil
+	return err
 }
 
 func resetFlagsRecursive(c *cobra.Command) {
