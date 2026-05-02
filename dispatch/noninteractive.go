@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	defaultTimeout                = 600
-	nonInteractiveStaleMultiplier = 2
+	defaultTimeout                   = 600
+	nonInteractiveStaleMultiplier    = 2
+	defaultNonInteractiveHardTimeout = 60 * time.Minute
 )
 
 type claudeJSONOutput struct {
@@ -39,9 +40,18 @@ func (d PermissionDenial) Summary() string {
 
 // NonInteractiveWorker runs `claude -p` for non-interactive actions.
 // LastDenials reflects only the most recent Execute call and is reset on each call.
+//
+// When SessionLogChecker is non-nil, Execute keeps the child alive past
+// MinimumTimeout as long as the session log mtime is fresh, up to
+// AbsoluteMaxTimeout. When nil, Execute falls back to a fixed-duration timeout
+// (legacy 600s).
 type NonInteractiveWorker struct {
-	Runner      CommandRunner
-	lastDenials []PermissionDenial
+	Runner             CommandRunner
+	SessionLogChecker  SessionLogChecker
+	HeartbeatFreshness time.Duration
+	MinimumTimeout     time.Duration
+	AbsoluteMaxTimeout time.Duration
+	lastDenials        []PermissionDenial
 }
 
 // LastDenials returns permission denials observed during the most recent Execute call.
@@ -58,15 +68,89 @@ func (w *NonInteractiveWorker) Execute(ctx context.Context, instruction string, 
 	}
 	env := buildTQEnv(actionID, taskID)
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, defaultTimeout*time.Second)
-	defer cancel()
+	if w.SessionLogChecker == nil {
+		timeoutCtx, cancel := context.WithTimeout(ctx, defaultTimeout*time.Second)
+		defer cancel()
+		output, err := w.Runner.Run(timeoutCtx, "claude", args, workDir, env)
+		return w.processRunResult(output, err, "")
+	}
 
-	output, err := w.Runner.Run(timeoutCtx, "claude", args, workDir, env)
-	if err != nil {
-		if len(output) > 0 {
-			return "", fmt.Errorf("%w\noutput: %s", err, truncate(output, 2000))
+	minimum := w.MinimumTimeout
+	if minimum <= 0 {
+		minimum = defaultTimeout * time.Second
+	}
+	freshness := w.HeartbeatFreshness
+	if freshness <= 0 {
+		freshness = DefaultHeartbeatFreshness
+	}
+	absoluteMax := w.AbsoluteMaxTimeout
+	if absoluteMax <= 0 {
+		absoluteMax = defaultNonInteractiveHardTimeout
+	}
+
+	runCtx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+
+	type runResult struct {
+		output []byte
+		err    error
+	}
+	runCh := make(chan runResult, 1)
+	go func() {
+		out, runErr := w.Runner.Run(runCtx, "claude", args, workDir, env)
+		runCh <- runResult{out, runErr}
+	}()
+
+	var killReason string
+	watcherDone := make(chan struct{})
+	go func() {
+		defer close(watcherDone)
+		start := time.Now()
+		ticker := time.NewTicker(freshness)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-runCtx.Done():
+				return
+			case now := <-ticker.C:
+				elapsed := now.Sub(start)
+				if elapsed >= absoluteMax {
+					killReason = fmt.Sprintf("absolute max exceeded (%v)", absoluteMax)
+					cancelRun()
+					return
+				}
+				// Warmup floor: skip heartbeat checks until MinimumTimeout to
+				// avoid false-killing before claude writes its first session log.
+				if elapsed < minimum {
+					continue
+				}
+				active, _, err := w.SessionLogChecker.IsSessionActive(workDir, freshness)
+				if err != nil {
+					slog.Warn("noninteractive heartbeat check failed", "action_id", actionID, "error", err)
+					continue
+				}
+				if !active {
+					killReason = fmt.Sprintf("heartbeat stale (no session log update within %v)", freshness)
+					cancelRun()
+					return
+				}
+			}
 		}
-		return "", err
+	}()
+
+	res := <-runCh
+	cancelRun()
+	<-watcherDone
+
+	return w.processRunResult(res.output, res.err, killReason)
+}
+
+func (w *NonInteractiveWorker) processRunResult(output []byte, runErr error, killReason string) (string, error) {
+	if runErr != nil {
+		if killReason != "" {
+			runErr = fmt.Errorf("noninteractive cancelled: %s: %w", killReason, runErr)
+		}
+		return "", appendOutput(runErr, output)
 	}
 
 	var wrapper claudeJSONOutput
@@ -122,6 +206,13 @@ func truncate(b []byte, max int) []byte {
 		return b
 	}
 	return b[:max]
+}
+
+func appendOutput(err error, output []byte) error {
+	if len(output) > 0 {
+		return fmt.Errorf("%w\noutput: %s", err, truncate(output, 2000))
+	}
+	return err
 }
 
 func formatDenialsWarning(denials []PermissionDenial) string {
