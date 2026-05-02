@@ -130,6 +130,20 @@ func ResetForTest() {
 	resetFlagsRecursive(rootCmd)
 }
 
+// ResetForTestscript resets package-level globals and cobra flag state so the
+// same in-process binary can be reinvoked across testscript scenarios without
+// leaking the previous run's database handle or flag values.
+func ResetForTestscript() {
+	if database != nil && !dbInjected {
+		_ = database.Close()
+	}
+	database = nil
+	dbInjected = false
+	configDirOverride = ""
+	dbPathFlag = ""
+	resetFlagsRecursive(rootCmd)
+}
+
 func resetFlagsRecursive(c *cobra.Command) {
 	c.Flags().VisitAll(func(f *pflag.Flag) {
 		_ = f.Value.Set(f.DefValue)

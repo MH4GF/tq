@@ -1,0 +1,6 @@
+# search コマンドが期待 JSON を返す
+exec tq project create searchproj $WORK/searchproj
+exec tq task create 'find me by keyword' --project 1
+exec tq search keyword
+stdout '"snippet":'
+stdout 'find me by keyword'

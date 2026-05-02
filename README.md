@@ -126,6 +126,10 @@ Controlled via `--meta` on `action create` / `schedule create`. Any value outsid
 Additional metadata keys:
 - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--permission-mode","plan","--worktree","--max-turns","5"]`)
 
+## E2E Tests
+
+CLI scenarios are pinned via [`go-internal/testscript`](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) under `e2e/testdata/script/*.txtar`. Each scenario gets an isolated SQLite DB at `$WORK/tq.db` and runs as part of `go test ./...`. To add a new scenario, drop a new `.txtar` file alongside the existing ones — the `tq` command, `TQ_DB_PATH`, and `HOME` are already wired up. Run locally with `go test ./e2e/...` (use `-count=3` to check for flakes).
+
 ## License
 
 MIT

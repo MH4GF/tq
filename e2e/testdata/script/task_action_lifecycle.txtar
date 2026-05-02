@@ -1,0 +1,16 @@
+# project / task / action のライフサイクル
+exec tq project create app $WORK/app
+exec tq task create 'sample task' --project 1
+stdout 'task #1 created'
+
+exec tq action create 'Review the PR end-to-end' --task 1 --title 'Review PR'
+stdout 'action #1 created'
+
+exec tq action list --task 1
+stdout '"title": "Review PR"'
+stdout '"status": "pending"'
+
+# action cancel の状態遷移
+exec tq action cancel 1
+exec tq action list --task 1
+stdout '"status": "cancelled"'

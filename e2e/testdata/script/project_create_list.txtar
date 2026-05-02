@@ -1,0 +1,11 @@
+# project の作成と一覧
+exec tq project create demo $WORK/demo
+stdout 'project #1 created'
+
+exec tq project list
+stdout '"name": "demo"'
+stdout '"work_dir": "'$WORK'/demo"'
+
+# 同名プロジェクトは失敗する
+! exec tq project create demo $WORK/demo
+stderr 'project'
