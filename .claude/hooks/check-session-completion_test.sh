@@ -62,6 +62,33 @@ teardown() {
   unset GH_PR_LIST_OUT GH_PR_LIST_FAIL TQ_SKIP_COMPLETION_CHECK
 }
 
+marker_path() { echo "$WORK/.git/info/tq-stop-hook-last-reason"; }
+
+preset_marker() {
+  local sid="$1" key="$2"
+  mkdir -p "$WORK/.git/info"
+  printf '%s\t%s' "$sid" "$key" > "$(marker_path)"
+}
+
+assert_marker() {
+  local name="$1" want="$2" got
+  if [ "$want" = "<missing>" ]; then
+    if [ -e "$(marker_path)" ]; then
+      FAIL=$((FAIL + 1))
+      FAILED_CASES+=("$name: marker should be missing, got: $(cat "$(marker_path)")")
+      return
+    fi
+  else
+    got=$(cat "$(marker_path)" 2>/dev/null || echo "<missing>")
+    if [ "$got" != "$want" ]; then
+      FAIL=$((FAIL + 1))
+      FAILED_CASES+=("$name: marker=$got (want $want)")
+      return
+    fi
+  fi
+  PASS=$((PASS + 1))
+}
+
 # run_case <name> <stdin> <expected_exit> <expect_decision: block|none> [reason_substr]
 run_case() {
   local name="$1" stdin="$2" want_exit="$3" want_decision="$4" want_reason="${5:-}"
@@ -96,10 +123,11 @@ run_case() {
   PASS=$((PASS + 1))
 }
 
-# ---------- T1: stop_hook_active ----------
+# ---------- T1: stop_hook_active is ignored — clean feature branch allows stop ----------
 setup_repo; setup_gh_stub
 git checkout -q -b feat/x
-run_case "T1 stop_hook_active" '{"stop_hook_active":true}' 0 none
+export GH_PR_LIST_OUT="[]"
+run_case "T1 stop_hook_active ignored (clean)" '{"stop_hook_active":true}' 0 none
 teardown
 
 # ---------- T2: branch=main (still on main, ignore everything) ----------
@@ -207,6 +235,68 @@ teardown
 setup_feature_branch_with_commit
 export GH_PR_LIST_FAIL=1
 run_case "T15 gh fail open" '{}' 0 none
+teardown
+
+# ========== Marker-based loop guard tests (T19-T24) ==========
+
+# ---------- T19: same (session, reason) suppresses ----------
+# Marker pre-set with current sid+uncommitted. Uncommitted condition holds.
+# Expect: no output (suppressed) and marker unchanged.
+setup_feature_branch_with_commit
+echo "z" >> README.md  # uncommitted
+preset_marker "sid-A" "uncommitted"
+run_case "T19 same reason suppressed" '{"session_id":"sid-A"}' 0 none
+assert_marker "T19 marker preserved" "$(printf 'sid-A\tuncommitted')"
+teardown
+
+# ---------- T20: different reason fires and updates marker ----------
+# Marker pre-set with sid-A+uncommitted. Now state is pr-missing (no uncommitted, ahead+no PR).
+# Expect: block + marker rewritten to sid-A\tpr-missing.
+setup_feature_branch_with_commit
+preset_marker "sid-A" "uncommitted"
+export GH_PR_LIST_OUT="[]"
+run_case "T20 reason transition fires" '{"session_id":"sid-A"}' 0 block "PR がありません"
+assert_marker "T20 marker updated" "$(printf 'sid-A\tpr-missing')"
+teardown
+
+# ---------- T21: clean state clears marker ----------
+# No uncommitted, no ahead, no PR. Marker pre-set should be removed.
+setup_repo; setup_gh_stub
+git checkout -q -b feat/x
+preset_marker "sid-A" "uncommitted"
+export GH_PR_LIST_OUT="[]"
+run_case "T21 clean clears marker" '{"session_id":"sid-A"}' 0 none
+assert_marker "T21 marker cleared" "<missing>"
+teardown
+
+# ---------- T22: PR MERGED clears marker ----------
+setup_feature_branch_with_commit
+preset_marker "sid-A" "ci-pending#99"
+export GH_PR_LIST_OUT='[{"number":99,"state":"MERGED","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[]}]'
+run_case "T22 PR merged clears marker" '{"session_id":"sid-A"}' 0 none
+assert_marker "T22 marker cleared" "<missing>"
+teardown
+
+# ---------- T23: same reason but different session re-fires ----------
+# Marker holds sid-OLD\tuncommitted. Current session is sid-NEW with same uncommitted state.
+# Expect: block fires (different session_id => different marker line).
+setup_feature_branch_with_commit
+echo "z" >> README.md  # uncommitted
+preset_marker "sid-OLD" "uncommitted"
+run_case "T23 different session re-fires" '{"session_id":"sid-NEW"}' 0 block "未コミット変更"
+assert_marker "T23 marker updated to new sid" "$(printf 'sid-NEW\tuncommitted')"
+teardown
+
+# ---------- T24: scenario chain (uncommitted → commit → pr-missing) ----------
+setup_feature_branch_with_commit
+echo "z" >> README.md
+run_case "T24a uncommitted block" '{"session_id":"sid-chain"}' 0 block "未コミット変更"
+assert_marker "T24a marker=uncommitted" "$(printf 'sid-chain\tuncommitted')"
+git add README.md
+git commit --quiet -m "chain"
+export GH_PR_LIST_OUT="[]"
+run_case "T24b pr-missing after commit" '{"session_id":"sid-chain"}' 0 block "PR がありません"
+assert_marker "T24b marker=pr-missing" "$(printf 'sid-chain\tpr-missing')"
 teardown
 
 # ---------- Report ----------
