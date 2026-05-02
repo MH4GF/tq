@@ -1,0 +1,9 @@
+# task lifecycle: create under a project, then list.
+
+exec tq project create demo /tmp/demo
+
+exec tq task create 'first task' --project 1
+stdout 'task #1 created'
+
+exec tq task list --project 1
+stdout 'first task'

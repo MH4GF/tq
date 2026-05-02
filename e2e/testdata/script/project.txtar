@@ -1,0 +1,10 @@
+# project lifecycle: create then list.
+
+exec tq project list
+stdout '\[\]'
+
+exec tq project create demo /tmp/demo
+stdout 'project #1 created'
+
+exec tq project list
+stdout '"name": "demo"'

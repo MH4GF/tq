@@ -1,0 +1,7 @@
+# search across project tasks by keyword.
+
+exec tq project create demo /tmp/demo
+exec tq task create 'searchable item' --project 1
+
+exec tq search searchable
+stdout 'searchable item'

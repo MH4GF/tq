@@ -66,7 +66,9 @@ All list commands output JSON.`,
 	},
 	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
 		if database != nil && !dbInjected {
-			return database.Close()
+			err := database.Close()
+			database = nil
+			return err
 		}
 		return nil
 	},
@@ -127,6 +129,20 @@ func SetConfigDir(dir string) {
 }
 
 func ResetForTest() {
+	resetFlagsRecursive(rootCmd)
+}
+
+// ResetState resets all package-level state. Used by E2E harnesses
+// (e.g. testscript) that re-enter Execute() multiple times within a
+// single Go process.
+func ResetState() {
+	if database != nil && !dbInjected {
+		_ = database.Close()
+	}
+	database = nil
+	dbInjected = false
+	configDirOverride = ""
+	dbPathFlag = ""
 	resetFlagsRecursive(rootCmd)
 }
 
