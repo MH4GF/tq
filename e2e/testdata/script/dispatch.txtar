@@ -1,0 +1,40 @@
+# Interactive dispatch: tq action dispatch sends a stubbed `claude`
+# command into an isolated tmux session. The stub records its arguments
+# and signals completion via `tmux wait-for`, so the harness can block
+# decisively without sleeps.
+
+[!exec:tmux] skip 'tmux not installed'
+
+# Place claude stub on PATH (must come first so tmux-spawned shells see it).
+mkdir bin
+mv claude-stub bin/claude
+exec chmod 755 bin/claude
+env PATH=$WORK/bin:$PATH
+env CLAUDE_LOG=$WORK/claude.log
+
+# Bring up an isolated tmux session. TMUX_TMPDIR (set in test Setup)
+# scopes the server socket to $WORK, so this never collides with a
+# user's running tmux.
+exec tmux new-session -d -s e2e
+
+exec tq project create demo $WORK
+exec tq task create 'demo task' --project 1
+exec tq action create 'hello world' --task 1 --title 'demo'
+exec tq action dispatch 1 --session e2e
+
+# Block until the stub fires `tmux wait-for -S claude-done`.
+# Wrap in `timeout` where available (Linux/CI) so a misconfigured
+# scenario fails fast in ~30s instead of hanging until the CI job timeout.
+[exec:timeout] exec timeout 30 tmux wait-for claude-done
+[!exec:timeout] exec tmux wait-for claude-done
+
+# Stub appended its argv to $CLAUDE_LOG; confirm the instruction reached it.
+grep 'hello world' $CLAUDE_LOG
+
+exec tmux kill-server
+
+-- claude-stub --
+#!/bin/sh
+echo "$@" >> "$CLAUDE_LOG"
+tmux wait-for -S claude-done
+exit 0

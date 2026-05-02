@@ -126,6 +126,10 @@ Controlled via `--meta` on `action create` / `schedule create`. Any value outsid
 Additional metadata keys:
 - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--permission-mode","plan","--worktree","--max-turns","5"]`)
 
+## Testing
+
+Unit tests live alongside source files (`*_test.go`). End-to-end CLI scenarios are written as [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) files under `e2e/testdata/script/*.txtar`. Each scenario runs against an isolated `TQ_DB_PATH`, `HOME`, and `TMUX_TMPDIR`, so they can run in parallel without interference. Run all tests with `go test ./...`, or just the E2E suite with `go test ./e2e`. To add a scenario, drop a new `.txtar` file describing the CLI invocations and expected stdout/stderr; for tmux dispatch scenarios, embed a `claude` stub via `-- file --` sections and synchronize with `tmux wait-for` to keep the test deterministic.
+
 ## License
 
 MIT
