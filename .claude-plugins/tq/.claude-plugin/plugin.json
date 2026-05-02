@@ -2,5 +2,14 @@
   "name": "tq",
   "description": "tq task queue worker commands",
   "version": "0.21.19",
-  "author": { "name": "MH4GF" }
+  "author": { "name": "MH4GF" },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "tq internal claude-session-record" }
+        ]
+      }
+    ]
+  }
 }

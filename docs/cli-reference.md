@@ -242,6 +242,8 @@ Create a new action that resumes the claude session of a previously completed/fa
 
 The parent must be in `failed` / `cancelled` / `done` status and have a non-empty `claude_session_id` in metadata. Only the `claude_session_id` is inherited — other `claude_args` (`--worktree`, `--permission-mode`, etc.) are dropped because the resumed claude session restores its own context.
 
+`claude_session_id` is populated by the tq Claude Code plugin's `SessionStart` hook (see `.claude-plugins/tq/`), which records the id whenever a tq-dispatched claude session starts. As a fallback, the dispatch worker also captures it via the `~/.claude/projects` session log when the hook is unavailable.
+
 - `--message` — Additional instruction passed as the new prompt (default: `"Continue the previous session."`)
 - `--mode` — Execution mode: `interactive` | `noninteractive` | `remote` (default: parent action's mode). Any other value is rejected.
 - `--session` — Target tmux session name, interactive mode only (default: `main`)
