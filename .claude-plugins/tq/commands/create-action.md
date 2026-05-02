@@ -64,7 +64,7 @@ Pass via `--meta '{"claude_args":["--effort","<level>"]}'`. Choose by task compl
 
 #### Multi-line instructions
 
-If the instruction spans multiple lines (free-text context, embedded URLs followed by next-step bullets, etc.), set `--meta '{"mode":"noninteractive"}'`. The default `interactive` mode rejects instructions containing newlines or other C0 control bytes (except tab) because they would fragment the tmux `send-keys` shell command — see `docs/cli-reference.md` `tq action create` for the full constraint.
+If the instruction spans multiple lines (free-text context, embedded URLs followed by next-step bullets, etc.), set `--meta '{"mode":"noninteractive"}'`. Interactive mode does accept newlines, but tmux `send-keys` types each line into the shell separately, which clutters the pane and relies on PS2 continuation — `noninteractive` keeps the prompt clean. See `docs/cli-reference.md` `tq action create` for the full constraint.
 
 #### Examples
 

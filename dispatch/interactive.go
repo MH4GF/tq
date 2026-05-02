@@ -21,10 +21,11 @@ func (w *InteractiveWorker) Execute(ctx context.Context, instruction string, cfg
 	if len(instruction) > maxInstructionBytes {
 		return "", fmt.Errorf("instruction too long (%d bytes, limit %d); shorten via generator or split action", len(instruction), maxInstructionBytes)
 	}
+	// \n is allowed: wrapInstruction's postamble always starts with one.
 	for i := 0; i < len(instruction); i++ {
 		b := instruction[i]
-		if b < 0x20 && b != '\t' {
-			return "", fmt.Errorf("instruction contains forbidden control character (byte 0x%02x at offset %d); strip newlines/control bytes before submitting", b, i)
+		if b < 0x20 && b != '\t' && b != '\n' {
+			return "", fmt.Errorf("instruction contains forbidden control character (byte 0x%02x at offset %d); strip control bytes before submitting", b, i)
 		}
 	}
 
