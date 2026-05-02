@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.21.18](https://github.com/MH4GF/tq/compare/v0.21.17...v0.21.18) - 2026-05-02
+- Force latest_triage_note checkpoints in tq:triage by @MH4GF in https://github.com/MH4GF/tq/pull/214
+- docs: match resume description to --help output by @MH4GF in https://github.com/MH4GF/tq/pull/216
+- Reject control characters in interactive instructions by @MH4GF in https://github.com/MH4GF/tq/pull/217
+- Update last_run_at on schedule marshal failure to throttle retries by @MH4GF in https://github.com/MH4GF/tq/pull/218
+- Reap interactive actions when tmux is unavailable past hard timeout by @MH4GF in https://github.com/MH4GF/tq/pull/219
+- Drop nonexistent --until flag from triage Step 7 snooze instructions by @MH4GF in https://github.com/MH4GF/tq/pull/220
+- Document interactive-mode control byte rejection by @MH4GF in https://github.com/MH4GF/tq/pull/221
+- docs: align tq task list table description with --help output by @MH4GF in https://github.com/MH4GF/tq/pull/222
+- Align golden-rules GC prose with [enforced] taxonomy by @MH4GF in https://github.com/MH4GF/tq/pull/223
+- Persist session_info on tq action dispatch interactive path by @MH4GF in https://github.com/MH4GF/tq/pull/224
+- Surface DB read errors in TUI task detail open by @MH4GF in https://github.com/MH4GF/tq/pull/225
+- Document tq action get/attach/reset in CLI reference by @MH4GF in https://github.com/MH4GF/tq/pull/226
+
 ## [v0.21.17](https://github.com/MH4GF/tq/compare/v0.21.16...v0.21.17) - 2026-04-30
 - Replace /gh-ops:review-pr with /gh-ops:brief-pr by @MH4GF in https://github.com/MH4GF/tq/pull/203
 - Add Co-review template + skip merged/closed PRs in /gh-ops:watch by @MH4GF in https://github.com/MH4GF/tq/pull/205
