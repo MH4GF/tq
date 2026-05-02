@@ -23,7 +23,10 @@ exec tq action create 'hello world' --task 1 --title 'demo'
 exec tq action dispatch 1 --session e2e
 
 # Block until the stub fires `tmux wait-for -S claude-done`.
-exec tmux wait-for claude-done
+# Wrap in `timeout` where available (Linux/CI) so a misconfigured
+# scenario fails fast in ~30s instead of hanging until the CI job timeout.
+[exec:timeout] exec timeout 30 tmux wait-for claude-done
+[!exec:timeout] exec tmux wait-for claude-done
 
 # Stub appended its argv to $CLAUDE_LOG; confirm the instruction reached it.
 grep 'hello world' $CLAUDE_LOG
