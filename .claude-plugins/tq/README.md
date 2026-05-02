@@ -72,3 +72,13 @@ tq search deploy --project 1
 ### `tq:manager`
 
 tqタスク管理者。「タスク作って」「アクション追加して」「完了にして」「状況見せて」「割り込み実行して」「スケジュール実行したい」で発動
+
+## hooks
+
+### `SessionStart`
+
+`tq internal claude-session-record` を実行し、Claude Code が払い出した `session_id` を action metadata の `claude_session_id` に記録する。
+
+- 起動時の env 変数 `TQ_ACTION_ID` で対象 action を 1:1 で特定する。tq dispatch 経由で起動した claude セッションのみ記録対象。
+- `TQ_ACTION_ID` 未設定の手動 claude 起動には副作用なし (silent exit)。
+- hook が失敗しても claude セッションを巻き込まない (常に exit 0)。
