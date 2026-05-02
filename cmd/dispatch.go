@@ -14,8 +14,8 @@ import (
 
 var defaultWorkerFactory = func() dispatch.Worker {
 	return &dispatch.NonInteractiveWorker{
-		Runner:            &dispatch.ExecRunner{},
-		SessionLogChecker: &dispatch.FileSessionLogChecker{},
+		Runner:                  &dispatch.ExecRunner{},
+		ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
 	}
 }
 
@@ -90,12 +90,12 @@ var actionDispatchCmd = &cobra.Command{
 
 		result, err := dispatch.ExecuteAction(ctx, dispatch.ExecuteParams{
 			DispatchConfig: dispatch.DispatchConfig{
-				DB:                 database,
-				NonInteractiveFunc: getWorkerFactory(),
-				InteractiveFunc:    getInteractiveWorkerFactory(),
-				RemoteFunc:         getRemoteWorkerFactory(),
-				SessionLogChecker:  &dispatch.FileSessionLogChecker{},
-				TmuxSession:        dispatchSession,
+				DB:                      database,
+				NonInteractiveFunc:      getWorkerFactory(),
+				InteractiveFunc:         getInteractiveWorkerFactory(),
+				RemoteFunc:              getRemoteWorkerFactory(),
+				ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
+				TmuxSession:             dispatchSession,
 			},
 		}, action)
 

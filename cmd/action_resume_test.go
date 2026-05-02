@@ -222,7 +222,7 @@ func TestActionResumeCmd(t *testing.T) {
 			wantNewStatus:   db.ActionStatusFailed,
 		},
 		{
-			name: "error: parent missing session_id",
+			name: "error: parent missing claude_session_id",
 			setup: func(d db.Store) int64 {
 				taskID, _ := d.InsertTask(1, "t", "{}", "")
 				meta := `{"instruction":"orig","mode":"noninteractive"}`

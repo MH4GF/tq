@@ -39,18 +39,18 @@ type Action struct {
 	Metadata      string
 	Status        string
 	Result        sql.NullString
-	SessionID     sql.NullString
-	TmuxPane      sql.NullString
+	TmuxSession   sql.NullString
+	TmuxWindow    sql.NullString
 	DispatchAfter sql.NullString
 	CreatedAt     string
 	StartedAt     sql.NullString
 	CompletedAt   sql.NullString
 }
 
-const actionColumns = "id, title, task_id, metadata, status, result, session_id, tmux_pane, dispatch_after, created_at, started_at, completed_at"
+const actionColumns = "id, title, task_id, metadata, status, result, tmux_session, tmux_window, dispatch_after, created_at, started_at, completed_at"
 
 func (a *Action) scanFields() []any {
-	return []any{&a.ID, &a.Title, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.SessionID, &a.TmuxPane, &a.DispatchAfter, &a.CreatedAt, &a.StartedAt, &a.CompletedAt}
+	return []any{&a.ID, &a.Title, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.TmuxSession, &a.TmuxWindow, &a.DispatchAfter, &a.CreatedAt, &a.StartedAt, &a.CompletedAt}
 }
 
 func (a Action) MatchesDate(date string) bool {
@@ -141,7 +141,7 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 	a := &Action{}
 	err = tx.QueryRowContext(ctx,
 		`SELECT a.id, a.title, a.task_id, a.metadata, a.status, a.result,
-		        a.session_id, a.tmux_pane, a.dispatch_after, a.created_at, a.started_at, a.completed_at
+		        a.tmux_session, a.tmux_window, a.dispatch_after, a.created_at, a.started_at, a.completed_at
 		 FROM actions a
 		 INNER JOIN tasks t ON a.task_id = t.id
 		 INNER JOIN projects p ON t.project_id = p.id
@@ -364,13 +364,13 @@ func (db *DB) IsActionDispatchEnabled(actionID int64) (bool, error) {
 	return enabled, nil
 }
 
-func (db *DB) listRunningBySession(hasSession bool) ([]Action, error) {
+func (db *DB) listRunningByTmuxSession(hasTmuxSession bool) ([]Action, error) {
 	cond := "IS NULL"
-	if hasSession {
+	if hasTmuxSession {
 		cond = "IS NOT NULL"
 	}
 	rows, err := db.Query(
-		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND session_id "+cond+" ORDER BY id",
+		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND tmux_session "+cond+" ORDER BY id",
 		ActionStatusRunning,
 	)
 	if err != nil {
@@ -390,7 +390,7 @@ func (db *DB) listRunningBySession(hasSession bool) ([]Action, error) {
 }
 
 func (db *DB) ListRunningInteractive() ([]Action, error) {
-	return db.listRunningBySession(true)
+	return db.listRunningByTmuxSession(true)
 }
 
 func (db *DB) ListRunningNonInteractive() ([]Action, error) {
@@ -417,7 +417,7 @@ func (db *DB) ListRunningNonInteractive() ([]Action, error) {
 func (db *DB) CountRunningInteractive() (int, error) {
 	var count int
 	err := db.QueryRow(
-		"SELECT COUNT(*) FROM actions WHERE status = ? AND session_id IS NOT NULL",
+		"SELECT COUNT(*) FROM actions WHERE status = ? AND tmux_session IS NOT NULL",
 		ActionStatusRunning,
 	).Scan(&count)
 	return count, err
@@ -430,7 +430,7 @@ func (db *DB) ResetToPending(id int64) error {
 	}
 
 	_, err := db.Exec(
-		"UPDATE actions SET status = ?, started_at = NULL, session_id = NULL, tmux_pane = NULL WHERE id = ?",
+		"UPDATE actions SET status = ?, started_at = NULL, tmux_session = NULL, tmux_window = NULL WHERE id = ?",
 		ActionStatusPending, id,
 	)
 	if err == nil {
@@ -441,14 +441,14 @@ func (db *DB) ResetToPending(id int64) error {
 	return err
 }
 
-func (db *DB) SetSessionInfo(id int64, sessionID, tmuxPane string) error {
+func (db *DB) SetTmuxInfo(id int64, tmuxSession, tmuxWindow string) error {
 	_, err := db.Exec(
-		"UPDATE actions SET session_id = ?, tmux_pane = ? WHERE id = ?",
-		sessionID, tmuxPane, id,
+		"UPDATE actions SET tmux_session = ?, tmux_window = ? WHERE id = ?",
+		tmuxSession, tmuxWindow, id,
 	)
 	if err == nil {
-		db.emitEvent("action", id, "action.session_set", map[string]any{
-			"session_id": sessionID, "tmux_pane": tmuxPane,
+		db.emitEvent("action", id, "action.tmux_info_set", map[string]any{
+			"tmux_session": tmuxSession, "tmux_window": tmuxWindow,
 		})
 	}
 	return err

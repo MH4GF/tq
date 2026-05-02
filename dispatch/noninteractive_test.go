@@ -298,13 +298,13 @@ func TestNonInteractiveWorker_Execute_HeartbeatFresh_ExtendsBeyondMinimum(t *tes
 		output:     []byte(`{"type":"result","subtype":"success","result":"ok"}`),
 		finishedCh: finishedCh,
 	}
-	checker := &mockSessionLogChecker{active: true, sessionID: "sess-fresh"}
+	checker := &mockClaudeSessionLogChecker{active: true, claudeSessionID: "sess-fresh"}
 	w := &NonInteractiveWorker{
-		Runner:             runner,
-		SessionLogChecker:  checker,
-		MinimumTimeout:     50 * time.Millisecond,
-		HeartbeatFreshness: 20 * time.Millisecond,
-		AbsoluteMaxTimeout: 2 * time.Second,
+		Runner:                  runner,
+		ClaudeSessionLogChecker: checker,
+		MinimumTimeout:          50 * time.Millisecond,
+		HeartbeatFreshness:      20 * time.Millisecond,
+		AbsoluteMaxTimeout:      2 * time.Second,
 	}
 
 	resultCh := make(chan struct {
@@ -343,13 +343,13 @@ func TestNonInteractiveWorker_Execute_HeartbeatStale_AfterMinimum(t *testing.T) 
 	finishedCh := make(chan struct{})
 	defer close(finishedCh)
 	runner := &blockingRunner{finishedCh: finishedCh}
-	checker := &mockSessionLogChecker{active: false}
+	checker := &mockClaudeSessionLogChecker{active: false}
 	w := &NonInteractiveWorker{
-		Runner:             runner,
-		SessionLogChecker:  checker,
-		MinimumTimeout:     30 * time.Millisecond,
-		HeartbeatFreshness: 20 * time.Millisecond,
-		AbsoluteMaxTimeout: 5 * time.Second,
+		Runner:                  runner,
+		ClaudeSessionLogChecker: checker,
+		MinimumTimeout:          30 * time.Millisecond,
+		HeartbeatFreshness:      20 * time.Millisecond,
+		AbsoluteMaxTimeout:      5 * time.Second,
 	}
 
 	_, err := w.Execute(context.Background(), "test", ActionConfig{}, "/work", 1, 0)
@@ -365,13 +365,13 @@ func TestNonInteractiveWorker_Execute_AbsoluteMaxTimeout(t *testing.T) {
 	finishedCh := make(chan struct{})
 	defer close(finishedCh)
 	runner := &blockingRunner{finishedCh: finishedCh}
-	checker := &mockSessionLogChecker{active: true}
+	checker := &mockClaudeSessionLogChecker{active: true}
 	w := &NonInteractiveWorker{
-		Runner:             runner,
-		SessionLogChecker:  checker,
-		MinimumTimeout:     500 * time.Millisecond,
-		HeartbeatFreshness: 5 * time.Millisecond,
-		AbsoluteMaxTimeout: 50 * time.Millisecond,
+		Runner:                  runner,
+		ClaudeSessionLogChecker: checker,
+		MinimumTimeout:          500 * time.Millisecond,
+		HeartbeatFreshness:      5 * time.Millisecond,
+		AbsoluteMaxTimeout:      50 * time.Millisecond,
 	}
 
 	_, err := w.Execute(context.Background(), "test", ActionConfig{}, "/work", 1, 0)

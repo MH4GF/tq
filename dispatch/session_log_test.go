@@ -76,7 +76,7 @@ func writeSessionLog(t *testing.T, homeDir, cwd, sessionID string, logAge time.D
 	}
 }
 
-func TestFileSessionLogChecker(t *testing.T) {
+func TestFileClaudeSessionLogChecker(t *testing.T) {
 	tests := []struct {
 		name          string
 		sessionCwd    string
@@ -144,8 +144,8 @@ func TestFileSessionLogChecker(t *testing.T) {
 				}
 			}
 
-			checker := &FileSessionLogChecker{HomeDir: homeDir}
-			active, sessionID, err := checker.IsSessionActive(tt.cwd, 120*time.Second)
+			checker := &FileClaudeSessionLogChecker{HomeDir: homeDir}
+			active, claudeSessionID, err := checker.IsClaudeSessionActive(tt.cwd, 120*time.Second)
 			if tt.wantErr {
 				if err == nil {
 					t.Error("expected error, got nil")
@@ -156,8 +156,8 @@ func TestFileSessionLogChecker(t *testing.T) {
 			if active != tt.wantActive {
 				t.Errorf("active = %v, want %v", active, tt.wantActive)
 			}
-			if sessionID != tt.wantSessionID {
-				t.Errorf("sessionID = %q, want %q", sessionID, tt.wantSessionID)
+			if claudeSessionID != tt.wantSessionID {
+				t.Errorf("claudeSessionID = %q, want %q", claudeSessionID, tt.wantSessionID)
 			}
 		})
 	}

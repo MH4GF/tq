@@ -42,12 +42,12 @@ const (
 
 // DispatchConfig holds shared dispatch settings used by both WorkerConfig and ExecuteParams.
 type DispatchConfig struct {
-	DB                 db.Store
-	NonInteractiveFunc func() Worker
-	InteractiveFunc    func() Worker
-	RemoteFunc         func() Worker
-	TmuxSession        string
-	SessionLogChecker  SessionLogChecker
+	DB                      db.Store
+	NonInteractiveFunc      func() Worker
+	InteractiveFunc         func() Worker
+	RemoteFunc              func() Worker
+	TmuxSession             string
+	ClaudeSessionLogChecker ClaudeSessionLogChecker
 }
 
 type ExecuteParams struct {
@@ -234,8 +234,8 @@ func executeInteractive(ctx context.Context, params ExecuteParams, action *db.Ac
 
 	if params.TmuxSession != "" {
 		windowName := WindowName(action.ID)
-		if err := params.DB.SetSessionInfo(action.ID, params.TmuxSession, windowName); err != nil {
-			slog.Warn("failed to save session info", "action_id", action.ID, "error", err)
+		if err := params.DB.SetTmuxInfo(action.ID, params.TmuxSession, windowName); err != nil {
+			slog.Warn("failed to save tmux info", "action_id", action.ID, "error", err)
 		}
 	}
 
@@ -246,8 +246,8 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 	worker := params.NonInteractiveFunc()
 	result, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
 
-	// The worker polling loop cannot discover session ID during synchronous execution.
-	saveSessionID(params.DB, params.SessionLogChecker, action.ID, workDir)
+	// The worker polling loop cannot discover claude session ID during synchronous execution.
+	saveClaudeSessionID(params.DB, params.ClaudeSessionLogChecker, action.ID, workDir)
 
 	if err != nil {
 		if mfErr := markActionFailed(params.DB, action, err.Error()); mfErr != nil {
@@ -269,22 +269,22 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 	return &ExecuteResult{Mode: ModeNonInteractive, Output: result}, nil
 }
 
-func saveSessionID(store db.Store, checker SessionLogChecker, actionID int64, workDir string) {
+func saveClaudeSessionID(store db.Store, checker ClaudeSessionLogChecker, actionID int64, workDir string) {
 	if checker == nil {
 		return
 	}
-	active, sessionID, err := checker.IsSessionActive(workDir, postExecutionFreshness)
+	active, claudeSessionID, err := checker.IsClaudeSessionActive(workDir, postExecutionFreshness)
 	if err != nil {
-		slog.Warn("post-execution session log check failed", "action_id", actionID, "error", err)
+		slog.Warn("post-execution claude session log check failed", "action_id", actionID, "error", err)
 		return
 	}
-	if !active || sessionID == "" {
+	if !active || claudeSessionID == "" {
 		return
 	}
 	if err := store.MergeActionMetadata(actionID, map[string]any{
-		MetaKeyClaudeSessionID: sessionID,
+		MetaKeyClaudeSessionID: claudeSessionID,
 	}); err != nil {
-		slog.Warn("failed to save session id to metadata", "action_id", actionID, "error", err)
+		slog.Warn("failed to save claude_session_id to metadata", "action_id", actionID, "error", err)
 	}
 }
 

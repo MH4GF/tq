@@ -236,6 +236,26 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	// Rename actions.session_id → tmux_session (idempotent).
+	// Old name was misleading: the column stored a tmux session name, not a UUID.
+	if has, err := db.hasColumn("actions", "session_id"); err != nil {
+		return fmt.Errorf("migrate tmux_session: check column: %w", err)
+	} else if has {
+		if _, err := db.Exec("ALTER TABLE actions RENAME COLUMN session_id TO tmux_session"); err != nil {
+			return fmt.Errorf("migrate tmux_session: rename column: %w", err)
+		}
+	}
+
+	// Rename actions.tmux_pane → tmux_window (idempotent).
+	// Old name was misleading: the column stored a tmux window name, not a pane id.
+	if has, err := db.hasColumn("actions", "tmux_pane"); err != nil {
+		return fmt.Errorf("migrate tmux_window: check column: %w", err)
+	} else if has {
+		if _, err := db.Exec("ALTER TABLE actions RENAME COLUMN tmux_pane TO tmux_window"); err != nil {
+			return fmt.Errorf("migrate tmux_window: rename column: %w", err)
+		}
+	}
+
 	if err := db.migrateLegacyClaudeFlags("actions"); err != nil {
 		return fmt.Errorf("migrate legacy claude flags in actions: %w", err)
 	}

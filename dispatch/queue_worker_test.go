@@ -79,7 +79,7 @@ func TestRunWorker_InteractiveLimitEnforced(t *testing.T) {
 	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix conflict","mode":"interactive"}`, db.ActionStatusPending, nil)
 
 	d.InsertAction("respond-review", taskID, "{}", db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(2, ptr("session-1"), nil, nil)
+	d.SetActionTmuxInfoForTest(2, ptr("session-1"), nil, nil)
 
 	interactiveWorker := &countingWorker{result: "interactive:session=test"}
 
@@ -242,7 +242,7 @@ func TestRunWorker_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
 	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix conflict","mode":"interactive"}`, db.ActionStatusPending, nil)
 
 	d.InsertAction("respond-review", taskID, `{"instruction":"respond to review","mode":"interactive"}`, db.ActionStatusRunning, nil)
-	d.SetActionSessionInfoForTest(3, ptr("session-1"), nil, nil)
+	d.SetActionTmuxInfoForTest(3, ptr("session-1"), nil, nil)
 
 	remoteWorker := &countingWorker{result: "remote:session=https://example.com"}
 	interactiveWorker := &countingWorker{result: "interactive:action=2"}
@@ -288,22 +288,22 @@ func (m *mockTmuxChecker) ListWindows(ctx context.Context, session string) ([]st
 	return m.windows, m.err
 }
 
-type mockSessionLogChecker struct {
-	mu        sync.Mutex
-	active    bool
-	sessionID string
-	err       error
-	calls     int
+type mockClaudeSessionLogChecker struct {
+	mu              sync.Mutex
+	active          bool
+	claudeSessionID string
+	err             error
+	calls           int
 }
 
-func (m *mockSessionLogChecker) IsSessionActive(workDir string, freshnessThreshold time.Duration) (bool, string, error) {
+func (m *mockClaudeSessionLogChecker) IsClaudeSessionActive(workDir string, freshnessThreshold time.Duration) (bool, string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.calls++
-	return m.active, m.sessionID, m.err
+	return m.active, m.claudeSessionID, m.err
 }
 
-func (m *mockSessionLogChecker) callCount() int {
+func (m *mockClaudeSessionLogChecker) callCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.calls
@@ -315,7 +315,7 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 		startedOffset          time.Duration
 		omitStartedAt          bool
 		tmux                   *mockTmuxChecker
-		log                    *mockSessionLogChecker
+		log                    *mockClaudeSessionLogChecker
 		tmuxSession            string
 		interactiveHardTimeout time.Duration
 		wantStatus             string
@@ -358,7 +358,7 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			name:                   "reaps on tmux error after hard timeout even with stale session log",
 			startedOffset:          -2 * time.Hour,
 			tmux:                   &mockTmuxChecker{err: fmt.Errorf("tmux not available")},
-			log:                    &mockSessionLogChecker{active: false},
+			log:                    &mockClaudeSessionLogChecker{active: false},
 			interactiveHardTimeout: 1 * time.Hour,
 			wantStatus:             db.ActionStatusFailed,
 			wantResultContains:     "hard timeout",
@@ -367,7 +367,7 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			name:                   "skips on tmux error when session log fresh even past hard timeout",
 			startedOffset:          -2 * time.Hour,
 			tmux:                   &mockTmuxChecker{err: fmt.Errorf("tmux not available")},
-			log:                    &mockSessionLogChecker{active: true, sessionID: "sess-live"},
+			log:                    &mockClaudeSessionLogChecker{active: true, claudeSessionID: "sess-live"},
 			interactiveHardTimeout: 1 * time.Hour,
 			wantStatus:             db.ActionStatusRunning,
 		},
@@ -387,14 +387,14 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			name:          "skips when session log fresh",
 			startedOffset: -5 * time.Minute,
 			tmux:          &mockTmuxChecker{windows: []string{"zsh"}},
-			log:           &mockSessionLogChecker{active: true, sessionID: "sess-123"},
+			log:           &mockClaudeSessionLogChecker{active: true, claudeSessionID: "sess-123"},
 			wantStatus:    db.ActionStatusRunning,
 		},
 		{
 			name:          "reaps when session log stale and window gone",
 			startedOffset: -5 * time.Minute,
 			tmux:          &mockTmuxChecker{windows: []string{"zsh"}},
-			log:           &mockSessionLogChecker{active: false},
+			log:           &mockClaudeSessionLogChecker{active: false},
 			wantStatus:    db.ActionStatusFailed,
 		},
 		{
@@ -419,7 +419,7 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 				s := time.Now().Add(tt.startedOffset)
 				startedAt = &s
 			}
-			d.SetActionSessionInfoForTest(1, ptr("main"), &windowName, startedAt)
+			d.SetActionTmuxInfoForTest(1, ptr("main"), &windowName, startedAt)
 
 			cfg := WorkerConfig{
 				DispatchConfig:         DispatchConfig{DB: d},
@@ -431,7 +431,7 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 				cfg.TmuxChecker = tt.tmux
 			}
 			if tt.log != nil {
-				cfg.SessionLogChecker = tt.log
+				cfg.ClaudeSessionLogChecker = tt.log
 			}
 			if tt.tmuxSession != "" {
 				cfg.TmuxSession = tt.tmuxSession
@@ -463,7 +463,7 @@ func TestReapStaleActions_NonInteractive(t *testing.T) {
 		name               string
 		startedOffset      time.Duration
 		omitStartedAt      bool
-		log                *mockSessionLogChecker
+		log                *mockClaudeSessionLogChecker
 		wantStatus         string
 		wantResultContains string
 		wantMetaSessionID  string
@@ -487,25 +487,25 @@ func TestReapStaleActions_NonInteractive(t *testing.T) {
 		{
 			name:          "skipped by fresh heartbeat",
 			startedOffset: -25 * time.Minute,
-			log:           &mockSessionLogChecker{active: true, sessionID: "sess-456"},
+			log:           &mockClaudeSessionLogChecker{active: true, claudeSessionID: "sess-456"},
 			wantStatus:    db.ActionStatusRunning,
 		},
 		{
 			name:          "reaped by stale heartbeat",
 			startedOffset: -25 * time.Minute,
-			log:           &mockSessionLogChecker{active: false},
+			log:           &mockClaudeSessionLogChecker{active: false},
 			wantStatus:    db.ActionStatusFailed,
 		},
 		{
 			name:          "reaped when checker errors",
 			startedOffset: -25 * time.Minute,
-			log:           &mockSessionLogChecker{err: fmt.Errorf("permission denied")},
+			log:           &mockClaudeSessionLogChecker{err: fmt.Errorf("permission denied")},
 			wantStatus:    db.ActionStatusFailed,
 		},
 		{
 			name:              "saves session id to metadata",
 			startedOffset:     -25 * time.Minute,
-			log:               &mockSessionLogChecker{active: true, sessionID: "sess-789"},
+			log:               &mockClaudeSessionLogChecker{active: true, claudeSessionID: "sess-789"},
 			wantStatus:        db.ActionStatusRunning,
 			wantMetaSessionID: "sess-789",
 		},
@@ -521,7 +521,7 @@ func TestReapStaleActions_NonInteractive(t *testing.T) {
 
 			if !tt.omitStartedAt {
 				started := time.Now().Add(tt.startedOffset)
-				d.SetActionSessionInfoForTest(1, nil, nil, &started)
+				d.SetActionTmuxInfoForTest(1, nil, nil, &started)
 			}
 
 			cfg := WorkerConfig{
@@ -529,7 +529,7 @@ func TestReapStaleActions_NonInteractive(t *testing.T) {
 				HeartbeatFreshness: 120 * time.Second,
 			}
 			if tt.log != nil {
-				cfg.SessionLogChecker = tt.log
+				cfg.ClaudeSessionLogChecker = tt.log
 			}
 
 			reapStaleActions(context.Background(), cfg)

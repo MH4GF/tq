@@ -162,7 +162,7 @@ tq action list [--task <ID>] [--status <STATUS>] [--jq <EXPR>] [--limit <N>]
 
 - `--task` — Filter by task ID
 - `--status` — Filter by status (`pending`, `running`, `dispatched`, `done`, `failed`, `cancelled`)
-- `--jq` — Filter JSON output (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `session_id`, `dispatch_after`, `started_at`, `completed_at`, `created_at`)
+- `--jq` — Filter JSON output (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `tmux_session`, `tmux_window`, `dispatch_after`, `started_at`, `completed_at`, `created_at`)
 - `--limit` — Limit number of results
 
 ### `tq action get`
@@ -173,7 +173,7 @@ tq action get <ACTION_ID> [--jq <EXPR>]
 
 Print a single action as JSON.
 
-- `--jq` — Filter JSON output using a jq expression (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `session_id`, `dispatch_after`, `started_at`, `completed_at`, `created_at`)
+- `--jq` — Filter JSON output using a jq expression (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `tmux_session`, `tmux_window`, `dispatch_after`, `started_at`, `completed_at`, `created_at`)
 
 ### `tq action done`
 
@@ -238,9 +238,9 @@ tq action dispatch <ACTION_ID> [--session <NAME>]
 tq action resume <ACTION_ID> [--message <TEXT>] [--mode <MODE>] [--session <NAME>]
 ```
 
-Create a new action that resumes the claude session of a previously completed/failed/cancelled action via `claude --resume <session_id>`. The new action is linked to the parent through `metadata.parent_action_id` and `metadata.is_resume = true`.
+Create a new action that resumes the claude session of a previously completed/failed/cancelled action via `claude --resume <claude_session_id>`. The new action is linked to the parent through `metadata.parent_action_id` and `metadata.is_resume = true`.
 
-The parent must be in `failed` / `cancelled` / `done` status and have a non-empty `claude_session_id` in metadata. Only the session id is inherited — other `claude_args` (`--worktree`, `--permission-mode`, etc.) are dropped because the resumed claude session restores its own context.
+The parent must be in `failed` / `cancelled` / `done` status and have a non-empty `claude_session_id` in metadata. Only the `claude_session_id` is inherited — other `claude_args` (`--worktree`, `--permission-mode`, etc.) are dropped because the resumed claude session restores its own context.
 
 - `--message` — Additional instruction passed as the new prompt (default: `"Continue the previous session."`)
 - `--mode` — Execution mode: `interactive` | `noninteractive` | `remote` (default: parent action's mode). Any other value is rejected.
@@ -252,7 +252,7 @@ The parent must be in `failed` / `cancelled` / `done` status and have a non-empt
 tq action attach <ACTION_ID>
 ```
 
-Switch the current tmux client to the action's tmux window. Must be run from inside a tmux session, and the action must have a recorded `session_id` / `tmux_pane` (set when dispatched interactively).
+Switch the current tmux client to the action's tmux window. Must be run from inside a tmux session, and the action must have a recorded `tmux_session` / `tmux_window` (set when dispatched interactively).
 
 ### `tq action reset`
 
@@ -260,7 +260,7 @@ Switch the current tmux client to the action's tmux window. Must be run from ins
 tq action reset <ACTION_ID>
 ```
 
-Reset a `failed` or `cancelled` action back to `pending` so it can be re-dispatched. The action's `started_at`, `session_id`, and `tmux_pane` fields are cleared.
+Reset a `failed` or `cancelled` action back to `pending` so it can be re-dispatched. The action's `started_at`, `tmux_session`, and `tmux_window` fields are cleared.
 
 Only `failed` and `cancelled` actions can be reset. `pending` and `done` actions return an error; `running` and `dispatched` actions are also rejected to prevent spawning a duplicate worker — cancel or fail them first, then reset.
 
