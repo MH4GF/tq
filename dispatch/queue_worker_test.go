@@ -314,10 +314,12 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 		name                   string
 		startedOffset          time.Duration
 		omitStartedAt          bool
+		omitSessionInfo        bool
 		tmux                   *mockTmuxChecker
 		log                    *mockClaudeSessionLogChecker
 		tmuxSession            string
 		interactiveHardTimeout time.Duration
+		earlyDispatchTimeout   time.Duration
 		wantStatus             string
 		wantResultContains     string
 	}{
@@ -360,6 +362,7 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			tmux:                   &mockTmuxChecker{err: fmt.Errorf("tmux not available")},
 			log:                    &mockClaudeSessionLogChecker{active: false},
 			interactiveHardTimeout: 1 * time.Hour,
+			earlyDispatchTimeout:   24 * time.Hour,
 			wantStatus:             db.ActionStatusFailed,
 			wantResultContains:     "hard timeout",
 		},
@@ -391,17 +394,42 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			wantStatus:    db.ActionStatusRunning,
 		},
 		{
-			name:          "reaps when session log stale and window gone",
-			startedOffset: -5 * time.Minute,
-			tmux:          &mockTmuxChecker{windows: []string{"zsh"}},
-			log:           &mockClaudeSessionLogChecker{active: false},
-			wantStatus:    db.ActionStatusFailed,
+			name:                 "reaps when session log stale and window gone (no watchdog)",
+			startedOffset:        -5 * time.Minute,
+			tmux:                 &mockTmuxChecker{windows: []string{"zsh"}},
+			log:                  &mockClaudeSessionLogChecker{active: false},
+			earlyDispatchTimeout: 24 * time.Hour,
+			wantStatus:           db.ActionStatusFailed,
+			wantResultContains:   "session log not fresh",
 		},
 		{
 			name:          "reaps via tmux fallback when no log checker",
 			startedOffset: -5 * time.Minute,
 			tmux:          &mockTmuxChecker{windows: []string{"zsh"}},
 			wantStatus:    db.ActionStatusFailed,
+		},
+		{
+			name:               "watchdog reaps when no session log within early timeout (window still up)",
+			startedOffset:      -90 * time.Second,
+			tmux:               &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}},
+			log:                &mockClaudeSessionLogChecker{active: false},
+			wantStatus:         db.ActionStatusFailed,
+			wantResultContains: "early-stale",
+		},
+		{
+			name:          "watchdog skips within early timeout",
+			startedOffset: -45 * time.Second,
+			tmux:          &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}},
+			log:           &mockClaudeSessionLogChecker{active: false},
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:               "reaps session_id NULL action when window missing",
+			startedOffset:      -5 * time.Minute,
+			omitSessionInfo:    true,
+			tmux:               &mockTmuxChecker{windows: []string{"zsh"}},
+			wantStatus:         db.ActionStatusFailed,
+			wantResultContains: "stale",
 		},
 	}
 
@@ -419,13 +447,20 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 				s := time.Now().Add(tt.startedOffset)
 				startedAt = &s
 			}
-			d.SetActionTmuxInfoForTest(1, ptr("main"), &windowName, startedAt)
+			tmuxSession := ptr("main")
+			tmuxWindowPtr := &windowName
+			if tt.omitSessionInfo {
+				tmuxSession = nil
+				tmuxWindowPtr = nil
+			}
+			d.SetActionTmuxInfoForTest(1, tmuxSession, tmuxWindowPtr, startedAt)
 
 			cfg := WorkerConfig{
 				DispatchConfig:         DispatchConfig{DB: d},
 				StaleGracePeriod:       30 * time.Second,
 				HeartbeatFreshness:     120 * time.Second,
 				InteractiveHardTimeout: DefaultInteractiveHardTimeout,
+				EarlyDispatchTimeout:   DefaultEarlyDispatchTimeout,
 			}
 			if tt.tmux != nil {
 				cfg.TmuxChecker = tt.tmux
@@ -438,6 +473,9 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			}
 			if tt.interactiveHardTimeout > 0 {
 				cfg.InteractiveHardTimeout = tt.interactiveHardTimeout
+			}
+			if tt.earlyDispatchTimeout > 0 {
+				cfg.EarlyDispatchTimeout = tt.earlyDispatchTimeout
 			}
 
 			reapStaleActions(context.Background(), cfg)
