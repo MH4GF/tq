@@ -419,6 +419,16 @@ func TestValidateActionMetadata(t *testing.T) {
 			meta:    map[string]any{},
 			wantErr: true,
 		},
+		{
+			name:    "valid instruction with valid mode",
+			meta:    map[string]any{MetaKeyInstruction: "do something", MetaKeyMode: ModeNonInteractive},
+			wantErr: false,
+		},
+		{
+			name:    "valid instruction but invalid mode",
+			meta:    map[string]any{MetaKeyInstruction: "do something", MetaKeyMode: "auto"},
+			wantErr: true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -428,6 +438,85 @@ func TestValidateActionMetadata(t *testing.T) {
 				t.Error("expected error, got nil")
 			}
 			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateActionMode(t *testing.T) {
+	tests := []struct {
+		name           string
+		meta           map[string]any
+		wantErr        bool
+		wantErrSubstrs []string
+	}{
+		{name: "unset", meta: map[string]any{}, wantErr: false},
+		{name: "interactive", meta: map[string]any{MetaKeyMode: ModeInteractive}, wantErr: false},
+		{name: "noninteractive", meta: map[string]any{MetaKeyMode: ModeNonInteractive}, wantErr: false},
+		{name: "remote", meta: map[string]any{MetaKeyMode: ModeRemote}, wantErr: false},
+		{name: "empty string treated as unset", meta: map[string]any{MetaKeyMode: ""}, wantErr: false},
+		{
+			name:    "claude permission-mode auto",
+			meta:    map[string]any{MetaKeyMode: "auto"},
+			wantErr: true,
+			wantErrSubstrs: []string{
+				"must be one of: interactive, noninteractive, remote",
+				`got "auto"`,
+				"claude_args",
+				"--permission-mode",
+			},
+		},
+		{
+			name:           "claude permission-mode plan",
+			meta:           map[string]any{MetaKeyMode: "plan"},
+			wantErr:        true,
+			wantErrSubstrs: []string{`got "plan"`, "claude_args"},
+		},
+		{
+			name:           "claude permission-mode acceptEdits",
+			meta:           map[string]any{MetaKeyMode: "acceptEdits"},
+			wantErr:        true,
+			wantErrSubstrs: []string{`got "acceptEdits"`, "claude_args"},
+		},
+		{
+			name:           "claude permission-mode bypassPermissions",
+			meta:           map[string]any{MetaKeyMode: "bypassPermissions"},
+			wantErr:        true,
+			wantErrSubstrs: []string{`got "bypassPermissions"`, "claude_args"},
+		},
+		{
+			name:           "case sensitive: capitalized rejected",
+			meta:           map[string]any{MetaKeyMode: "Interactive"},
+			wantErr:        true,
+			wantErrSubstrs: []string{`got "Interactive"`},
+		},
+		{
+			name:           "non-string number rejected",
+			meta:           map[string]any{MetaKeyMode: 123},
+			wantErr:        true,
+			wantErrSubstrs: []string{"must be a string"},
+		},
+		{
+			name:           "non-string bool rejected",
+			meta:           map[string]any{MetaKeyMode: true},
+			wantErr:        true,
+			wantErrSubstrs: []string{"must be a string"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateActionMode(tc.meta)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				for _, sub := range tc.wantErrSubstrs {
+					if !strings.Contains(err.Error(), sub) {
+						t.Errorf("error %q does not contain %q", err.Error(), sub)
+					}
+				}
+			} else if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 		})
@@ -743,6 +832,37 @@ func TestExecuteAction_MarkFailedErrorIsLogged(t *testing.T) {
 				t.Errorf("expected log to contain underlying error, got:\n%s", logs)
 			}
 		})
+	}
+}
+
+// Empty-string "mode" must fall back to the interactive default — without
+// the guard in ExecuteAction, cfg.Mode = "" silently routes to noninteractive.
+func TestExecuteAction_EmptyModeDefaultsToInteractive(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": ""})
+	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+	d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil)
+
+	action, _ := d.NextPending(context.Background())
+
+	worker := &countingWorker{result: "interactive:done"}
+	workerFunc := func() Worker { return worker }
+
+	result, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+	}, action)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Mode != ModeInteractive {
+		t.Errorf("mode = %q, want %q", result.Mode, ModeInteractive)
 	}
 }
 

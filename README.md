@@ -115,7 +115,7 @@ project → task → action
 
 ### Worker Types
 
-Controlled via `--meta` on `action create` / `schedule create`:
+Controlled via `--meta` on `action create` / `schedule create`. Any value outside this set is rejected — pass Claude permission-mode (`auto`, `plan`, `acceptEdits`, …) via `claude_args` instead.
 
 | mode | Description |
 |------|-------------|

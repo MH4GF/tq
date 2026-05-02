@@ -37,6 +37,8 @@ Instruction is provided as a positional argument.
 
 Metadata keys for dispatch control:
   mode         Execution mode: "interactive" (default), "noninteractive", "remote".
+               Any other value is rejected — pass Claude permission-mode
+               (auto, plan, acceptEdits, ...) via claude_args instead.
                Interactive mode rejects instructions containing newlines or other C0
                control bytes (except tab); use "noninteractive" for multi-line text.
   claude_args  Additional CLI arguments for claude (JSON array of strings,

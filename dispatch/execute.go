@@ -90,6 +90,39 @@ func (c ActionConfig) IsInteractive() bool    { return c.Mode == ModeInteractive
 func (c ActionConfig) IsNonInteractive() bool { return c.Mode == ModeNonInteractive }
 func (c ActionConfig) IsRemote() bool         { return c.Mode == ModeRemote }
 
+var validModes = map[string]bool{
+	ModeInteractive:    true,
+	ModeNonInteractive: true,
+	ModeRemote:         true,
+}
+
+// ValidateActionMode rejects Claude permission-mode values (auto, plan,
+// acceptEdits, ...) passed by mistake as tq's mode, which previously caused
+// silent fallback to noninteractive. Missing key and empty string are
+// treated as unspecified — callers default to interactive.
+func ValidateActionMode(meta map[string]any) error {
+	raw, ok := meta[MetaKeyMode]
+	if !ok {
+		return nil
+	}
+	s, ok := raw.(string)
+	if !ok {
+		return fmt.Errorf(`metadata "mode" must be a string, got %T`, raw)
+	}
+	if s == "" {
+		return nil
+	}
+	if !validModes[s] {
+		return fmt.Errorf(
+			`metadata "mode" must be one of: %s, %s, %s (got %q). `+
+				`If you intended Claude permission-mode, use claude_args instead, e.g. `+
+				`{"claude_args":["--permission-mode","%s"]}`,
+			ModeInteractive, ModeNonInteractive, ModeRemote, s, s,
+		)
+	}
+	return nil
+}
+
 // markActionFailed marks the action as failed and creates a follow-up
 // investigate-failure action. Returns the MarkFailed error wrapped, if any;
 // CreateInvestigateFailureAction logs its own errors and never returns one.
@@ -122,7 +155,7 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 	instruction := actionMeta[MetaKeyInstruction].(string)
 
 	cfg := ActionConfig{Mode: ModeInteractive}
-	if modeStr, ok := actionMeta[MetaKeyMode].(string); ok {
+	if modeStr, ok := actionMeta[MetaKeyMode].(string); ok && modeStr != "" {
 		cfg.Mode = modeStr
 	}
 	if rawArgs, ok := actionMeta[MetaKeyClaudeArgs].([]any); ok {
@@ -281,6 +314,9 @@ func ValidateActionMetadata(meta map[string]any) error {
 	inst, ok := meta[MetaKeyInstruction].(string)
 	if !ok || strings.TrimSpace(inst) == "" {
 		return errors.New("metadata must contain a non-empty \"instruction\" field")
+	}
+	if err := ValidateActionMode(meta); err != nil {
+		return err
 	}
 	return nil
 }

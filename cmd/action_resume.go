@@ -39,6 +39,10 @@ claude session restores its own context.`,
 			return fmt.Errorf("invalid action ID %q: %w", args[0], err)
 		}
 
+		if err := dispatch.ValidateActionMode(map[string]any{dispatch.MetaKeyMode: resumeMode}); err != nil {
+			return err
+		}
+
 		newID, err := database.ResumeAction(parentID, db.ResumeOptions{
 			Message: resumeMessage,
 			Mode:    resumeMode,
