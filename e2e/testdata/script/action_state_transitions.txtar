@@ -1,0 +1,22 @@
+# action state machine: cancel/fail then reset back to pending.
+
+exec tq project create demo /tmp/demo
+exec tq task create 'states' --project 1
+
+# fail with reason → reset
+exec tq action create 'a1' --task 1 --title 'a1'
+exec tq action fail 1 'boom'
+stdout 'action #1 failed \(reason: boom\)'
+exec tq action reset 1
+stdout 'action #1 reset to pending'
+
+# cancel without reason → reset
+exec tq action create 'a2' --task 1 --title 'a2'
+exec tq action cancel 2
+stdout 'action #2 cancelled'
+exec tq action reset 2
+stdout 'action #2 reset to pending'
+
+# reset on pending is rejected.
+! exec tq action reset 1
+stderr 'cannot reset \(only failed or cancelled'
