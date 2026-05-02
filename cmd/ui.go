@@ -45,7 +45,8 @@ var uiCmd = &cobra.Command{
 					DB: database,
 					NonInteractiveFunc: func() dispatch.Worker {
 						return &dispatch.NonInteractiveWorker{
-							Runner: &dispatch.ExecRunner{},
+							Runner:            &dispatch.ExecRunner{},
+							SessionLogChecker: &dispatch.FileSessionLogChecker{},
 						}
 					},
 					InteractiveFunc: func() dispatch.Worker {

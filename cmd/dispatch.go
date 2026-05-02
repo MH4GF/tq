@@ -14,7 +14,8 @@ import (
 
 var defaultWorkerFactory = func() dispatch.Worker {
 	return &dispatch.NonInteractiveWorker{
-		Runner: &dispatch.ExecRunner{},
+		Runner:            &dispatch.ExecRunner{},
+		SessionLogChecker: &dispatch.FileSessionLogChecker{},
 	}
 }
 

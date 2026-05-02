@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // CommandRunner abstracts command execution for testing.
@@ -16,10 +17,17 @@ type CommandRunner interface {
 // ExecRunner is the real implementation using os/exec.
 type ExecRunner struct{}
 
+// execWaitDelay bounds how long Cmd.Wait blocks after ctx cancel before
+// pipes are forcibly closed. Without this, grandchildren that inherit
+// stdout/stderr (e.g. MCP servers spawned by claude) keep the pipes open
+// after SIGKILL and cmd.Wait hangs indefinitely.
+const execWaitDelay = 30 * time.Second
+
 func (r *ExecRunner) Run(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.Env = append(filteredEnv(), env...)
+	cmd.WaitDelay = execWaitDelay
 	return cmd.CombinedOutput()
 }
 

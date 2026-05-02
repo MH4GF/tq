@@ -291,3 +291,94 @@ func TestNonInteractiveWorker_Execute_Timeout(t *testing.T) {
 		t.Errorf("deadline diff from expected = %v, want within 2s", diff)
 	}
 }
+
+func TestNonInteractiveWorker_Execute_HeartbeatFresh_ExtendsBeyondMinimum(t *testing.T) {
+	finishedCh := make(chan struct{})
+	runner := &blockingRunner{
+		output:     []byte(`{"type":"result","subtype":"success","result":"ok"}`),
+		finishedCh: finishedCh,
+	}
+	checker := &mockSessionLogChecker{active: true, sessionID: "sess-fresh"}
+	w := &NonInteractiveWorker{
+		Runner:             runner,
+		SessionLogChecker:  checker,
+		MinimumTimeout:     50 * time.Millisecond,
+		HeartbeatFreshness: 20 * time.Millisecond,
+		AbsoluteMaxTimeout: 2 * time.Second,
+	}
+
+	resultCh := make(chan struct {
+		out string
+		err error
+	}, 1)
+	go func() {
+		out, err := w.Execute(context.Background(), "test", ActionConfig{}, "/work", 1, 0)
+		resultCh <- struct {
+			out string
+			err error
+		}{out, err}
+	}()
+
+	time.Sleep(150 * time.Millisecond)
+	close(finishedCh)
+
+	select {
+	case r := <-resultCh:
+		if r.err != nil {
+			t.Fatalf("unexpected error: %v", r.err)
+		}
+		if r.out != "ok" {
+			t.Errorf("result = %q, want %q", r.out, "ok")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("test timeout: Execute did not return")
+	}
+
+	if got := checker.callCount(); got < 3 {
+		t.Errorf("expected several heartbeat checks past warmup, got %d", got)
+	}
+}
+
+func TestNonInteractiveWorker_Execute_HeartbeatStale_AfterMinimum(t *testing.T) {
+	finishedCh := make(chan struct{})
+	defer close(finishedCh)
+	runner := &blockingRunner{finishedCh: finishedCh}
+	checker := &mockSessionLogChecker{active: false}
+	w := &NonInteractiveWorker{
+		Runner:             runner,
+		SessionLogChecker:  checker,
+		MinimumTimeout:     30 * time.Millisecond,
+		HeartbeatFreshness: 20 * time.Millisecond,
+		AbsoluteMaxTimeout: 5 * time.Second,
+	}
+
+	_, err := w.Execute(context.Background(), "test", ActionConfig{}, "/work", 1, 0)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "heartbeat stale") {
+		t.Errorf("error = %q, want to contain 'heartbeat stale'", err.Error())
+	}
+}
+
+func TestNonInteractiveWorker_Execute_AbsoluteMaxTimeout(t *testing.T) {
+	finishedCh := make(chan struct{})
+	defer close(finishedCh)
+	runner := &blockingRunner{finishedCh: finishedCh}
+	checker := &mockSessionLogChecker{active: true}
+	w := &NonInteractiveWorker{
+		Runner:             runner,
+		SessionLogChecker:  checker,
+		MinimumTimeout:     500 * time.Millisecond,
+		HeartbeatFreshness: 5 * time.Millisecond,
+		AbsoluteMaxTimeout: 50 * time.Millisecond,
+	}
+
+	_, err := w.Execute(context.Background(), "test", ActionConfig{}, "/work", 1, 0)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "absolute max") {
+		t.Errorf("error = %q, want to contain 'absolute max'", err.Error())
+	}
+}

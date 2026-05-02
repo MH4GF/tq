@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -288,13 +289,24 @@ func (m *mockTmuxChecker) ListWindows(ctx context.Context, session string) ([]st
 }
 
 type mockSessionLogChecker struct {
+	mu        sync.Mutex
 	active    bool
 	sessionID string
 	err       error
+	calls     int
 }
 
 func (m *mockSessionLogChecker) IsSessionActive(workDir string, freshnessThreshold time.Duration) (bool, string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.calls++
 	return m.active, m.sessionID, m.err
+}
+
+func (m *mockSessionLogChecker) callCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.calls
 }
 
 func TestReapStaleActions_Interactive(t *testing.T) {

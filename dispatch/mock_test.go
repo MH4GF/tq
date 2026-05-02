@@ -27,6 +27,21 @@ func (m *mockRunner) Run(ctx context.Context, name string, args []string, dir st
 	return m.output, nil
 }
 
+// blockingRunner blocks until ctx is cancelled or finishedCh is closed.
+type blockingRunner struct {
+	output     []byte
+	finishedCh chan struct{}
+}
+
+func (r *blockingRunner) Run(ctx context.Context, _ string, _ []string, _ string, _ []string) ([]byte, error) {
+	select {
+	case <-ctx.Done():
+		return r.output, ctx.Err()
+	case <-r.finishedCh:
+		return r.output, nil
+	}
+}
+
 // sequenceRunner returns successive outputs across calls; the last entry repeats.
 type sequenceRunner struct {
 	outputs [][]byte
