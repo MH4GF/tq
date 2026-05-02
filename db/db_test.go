@@ -147,11 +147,8 @@ func TestMigrateLegacyClaudeFlags(t *testing.T) {
 }
 
 func TestMigrate_RenamesTmuxColumns(t *testing.T) {
-	// Simulate an old DB that still has the legacy session_id / tmux_pane columns.
-	// Migrate() must rename them to tmux_session / tmux_window without losing data.
 	d := testutil.NewTestDB(t)
 
-	// Replace the migrated actions table with the legacy schema and seed a row.
 	if _, err := d.Exec(`
 		DROP TABLE actions;
 		CREATE TABLE actions (
@@ -176,7 +173,6 @@ func TestMigrate_RenamesTmuxColumns(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	// New columns must exist; old columns must be gone.
 	var tmuxSession, tmuxWindow string
 	if err := d.QueryRow("SELECT tmux_session, tmux_window FROM actions WHERE id = 1").Scan(&tmuxSession, &tmuxWindow); err != nil {
 		t.Fatalf("read renamed columns: %v", err)
@@ -188,7 +184,6 @@ func TestMigrate_RenamesTmuxColumns(t *testing.T) {
 		t.Errorf("tmux_window = %q, want %q", tmuxWindow, "tq-action-1")
 	}
 
-	// Verify old columns are absent (PRAGMA table_info should not return them).
 	rows, err := d.Query("PRAGMA table_info(actions)")
 	if err != nil {
 		t.Fatal(err)
@@ -208,7 +203,6 @@ func TestMigrate_RenamesTmuxColumns(t *testing.T) {
 		}
 	}
 
-	// Re-running migrate must be a no-op.
 	if err := d.Migrate(); err != nil {
 		t.Fatalf("second migrate: %v", err)
 	}
