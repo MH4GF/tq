@@ -1,6 +1,6 @@
 {
   "name": "gh-ops",
   "description": "GitHub notification watcher and classifier",
-  "version": "0.2.0",
+  "version": "0.21.18",
   "author": { "name": "MH4GF" }
 }

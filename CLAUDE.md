@@ -21,6 +21,12 @@ Run `tq --help` for data model, commands, and usage examples.
 - Architecture layers enforced by depguard: db (foundation) → dispatch/tui (service) → cmd (orchestrator) → main
 - Golden rules (verifiable architectural constraints): `docs/golden-rules.md`
 
+## Release
+
+- All `.claude-plugins/*/.claude-plugin/plugin.json` files MUST share the same `version` as `cmd/version.go`; tagpr only bumps files matching the prior version string.
+- Do not set `version` in `.claude-plugin/marketplace.json` plugin entries — `plugin.json` is the single source of truth.
+- Release flow is automated by tagpr; the bump target list lives in `.tagpr`.
+
 ## Quality Gates
 
 - MUST: Run `/quality-review` before marking work complete
