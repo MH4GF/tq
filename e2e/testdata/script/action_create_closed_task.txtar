@@ -1,0 +1,15 @@
+# action create rejects a closed (done/archived) parent task; user must
+# reopen it explicitly. No --force escape hatch on purpose: reopening
+# leaves a status-change event in history, which is desirable for audit.
+
+exec tq project create demo /tmp/demo
+exec tq task create 'closed task' --project 1
+exec tq task update 1 --status done --note 'finished'
+
+! exec tq action create 'late add' --task 1 --title 'late'
+stderr 'status=done'
+
+# Reopening the task allows action creation again.
+exec tq task update 1 --status open --note 'reopen for follow-up'
+exec tq action create 'follow-up' --task 1 --title 'follow-up'
+stdout 'created'

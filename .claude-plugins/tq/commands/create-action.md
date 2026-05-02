@@ -22,6 +22,7 @@ IMPORTANT: Run !`tq action create --help` first to understand meta format and be
 1. Identify the target project: check `tq project list` and match by work_dir or repo context.
 2. Search within that project: `tq search "<keyword>" --project <project_id>`.
 3. If a matching task exists, use its task_id. Otherwise create one with `tq task create --project <project_id>`.
+4. Verify the task is still open. `tq action create` rejects parent tasks with status `done` or `archived`; if you really mean to attach a follow-up to a closed task, reopen it first with `tq task update <task_id> --status open`.
 
 ### 2. Build instruction
 

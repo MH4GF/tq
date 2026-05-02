@@ -24,6 +24,10 @@ var ValidTaskStatuses = map[string]bool{
 	TaskStatusArchived: true,
 }
 
+func IsTerminalTaskStatus(status string) bool {
+	return status == TaskStatusDone || status == TaskStatusArchived
+}
+
 type Task struct {
 	ID        int64
 	ProjectID int64

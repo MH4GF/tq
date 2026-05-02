@@ -13,6 +13,7 @@ func TestAdd(t *testing.T) {
 	tests := []struct {
 		name             string
 		dispatchDisabled bool
+		taskStatus       string
 		args             []string
 		wantErr          string
 		wantOut          []string
@@ -47,6 +48,18 @@ func TestAdd(t *testing.T) {
 			wantOut:          []string{"will not be auto-dispatched"},
 			wantNotOut:       []string{"will be dispatched automatically"},
 		},
+		{
+			name:       "parent task done",
+			taskStatus: "done",
+			args:       []string{"action", "create", "x", "--task", "1", "--title", "t"},
+			wantErr:    "status=done",
+		},
+		{
+			name:       "parent task archived",
+			taskStatus: "archived",
+			args:       []string{"action", "create", "x", "--task", "1", "--title", "t"},
+			wantErr:    "status=archived",
+		},
 	}
 
 	for _, tc := range tests {
@@ -57,6 +70,12 @@ func TestAdd(t *testing.T) {
 			cmd.ResetForTest()
 			cmd.SetConfigDir(t.TempDir())
 			d.InsertTask(1, "test task", "{}", "")
+
+			if tc.taskStatus != "" {
+				if err := d.UpdateTask(1, tc.taskStatus, ""); err != nil {
+					t.Fatal(err)
+				}
+			}
 
 			if tc.dispatchDisabled {
 				if err := d.SetDispatchEnabled(1, false); err != nil {
