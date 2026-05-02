@@ -23,13 +23,13 @@ var attachCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("get action: %w", err)
 		}
-		if !action.SessionID.Valid {
+		if !action.TmuxSession.Valid {
 			return fmt.Errorf("action #%d has no tmux session info (action may not be running interactively)", id)
 		}
 		if os.Getenv("TMUX") == "" {
 			return fmt.Errorf("this command must be run inside a tmux session")
 		}
-		return exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:%s", action.SessionID.String, action.TmuxPane.String)).Run()
+		return exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:%s", action.TmuxSession.String, action.TmuxWindow.String)).Run()
 	},
 }
 

@@ -122,8 +122,8 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 	now := time.Now()
 
-	// Interactive stale check (session log heartbeat, fallback to tmux window check)
-	if cfg.SessionLogChecker != nil || cfg.TmuxChecker != nil {
+	// Interactive stale check (claude session log heartbeat, fallback to tmux window check)
+	if cfg.ClaudeSessionLogChecker != nil || cfg.TmuxChecker != nil {
 		actions, err := cfg.DB.ListRunningInteractive()
 		if err != nil {
 			slog.Error("list running interactive for stale check", "error", err)
@@ -153,7 +153,7 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 					}
 				}
 
-				if reapCheckSessionLog(cfg, &a) {
+				if reapCheckClaudeSessionLog(cfg, &a) {
 					continue
 				}
 
@@ -205,7 +205,7 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 			continue
 		}
 
-		if reapCheckSessionLog(cfg, &a) {
+		if reapCheckClaudeSessionLog(cfg, &a) {
 			continue
 		}
 
@@ -218,37 +218,37 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 	}
 }
 
-// reapCheckSessionLog checks if the action's Claude Code session is still active.
+// reapCheckClaudeSessionLog checks if the action's Claude Code session is still active.
 // Returns true if the session is active (action should NOT be reaped).
-// Also saves the discovered sessionId to action metadata for future use.
-func reapCheckSessionLog(cfg WorkerConfig, a *db.Action) bool {
-	if cfg.SessionLogChecker == nil {
+// Also saves the discovered claude_session_id to action metadata for future use.
+func reapCheckClaudeSessionLog(cfg WorkerConfig, a *db.Action) bool {
+	if cfg.ClaudeSessionLogChecker == nil {
 		return false
 	}
 
 	workDir, _, err := resolveWorkDir(cfg.DB, a)
 	if err != nil {
-		slog.Warn("session log check: resolve work_dir failed", "action_id", a.ID, "error", err)
+		slog.Warn("claude session log check: resolve work_dir failed", "action_id", a.ID, "error", err)
 	}
-	active, sessionID, err := cfg.SessionLogChecker.IsSessionActive(workDir, cfg.HeartbeatFreshness)
+	active, claudeSessionID, err := cfg.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, cfg.HeartbeatFreshness)
 	if err != nil {
-		slog.Warn("session log check failed", "action_id", a.ID, "error", err)
+		slog.Warn("claude session log check failed", "action_id", a.ID, "error", err)
 		return false
 	}
 	if !active {
 		return false
 	}
 
-	slog.Info("action session log is fresh, skipping stale check",
-		"action_id", a.ID, "session_id", sessionID)
+	slog.Info("action claude session log is fresh, skipping stale check",
+		"action_id", a.ID, "claude_session_id", claudeSessionID)
 
-	// Save sessionId to metadata for future use (claude --resume, log investigation).
+	// Save claude_session_id to metadata for future use (claude --resume, log investigation).
 	// Skip if already saved to avoid redundant DB writes on every poll cycle.
-	if sessionID != "" && !metadataHasValue(a.Metadata, MetaKeyClaudeSessionID, sessionID) {
+	if claudeSessionID != "" && !metadataHasValue(a.Metadata, MetaKeyClaudeSessionID, claudeSessionID) {
 		if err := cfg.DB.MergeActionMetadata(a.ID, map[string]any{
-			MetaKeyClaudeSessionID: sessionID,
+			MetaKeyClaudeSessionID: claudeSessionID,
 		}); err != nil {
-			slog.Warn("failed to save session id to metadata", "action_id", a.ID, "error", err)
+			slog.Warn("failed to save claude_session_id to metadata", "action_id", a.ID, "error", err)
 		}
 	}
 

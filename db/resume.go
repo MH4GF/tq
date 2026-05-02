@@ -17,9 +17,10 @@ type ResumeOptions struct {
 }
 
 // ResumeAction creates a new pending action that resumes the parent action's
-// claude session via `claude --resume <session_id>`. Only the session id is
-// inherited; other claude_args (--worktree, --permission-mode, etc.) are
-// dropped because the resumed claude session restores its own context.
+// claude session via `claude --resume <claude_session_id>`. Only the
+// claude_session_id is inherited; other claude_args (--worktree,
+// --permission-mode, etc.) are dropped because the resumed claude session
+// restores its own context.
 func (db *DB) ResumeAction(parentID int64, opts ResumeOptions) (int64, error) {
 	parent, err := db.GetAction(parentID)
 	if err != nil {

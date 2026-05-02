@@ -41,17 +41,17 @@ func (d PermissionDenial) Summary() string {
 // NonInteractiveWorker runs `claude -p` for non-interactive actions.
 // LastDenials reflects only the most recent Execute call and is reset on each call.
 //
-// When SessionLogChecker is non-nil, Execute keeps the child alive past
+// When ClaudeSessionLogChecker is non-nil, Execute keeps the child alive past
 // MinimumTimeout as long as the session log mtime is fresh, up to
 // AbsoluteMaxTimeout. When nil, Execute falls back to a fixed-duration timeout
 // (legacy 600s).
 type NonInteractiveWorker struct {
-	Runner             CommandRunner
-	SessionLogChecker  SessionLogChecker
-	HeartbeatFreshness time.Duration
-	MinimumTimeout     time.Duration
-	AbsoluteMaxTimeout time.Duration
-	lastDenials        []PermissionDenial
+	Runner                  CommandRunner
+	ClaudeSessionLogChecker ClaudeSessionLogChecker
+	HeartbeatFreshness      time.Duration
+	MinimumTimeout          time.Duration
+	AbsoluteMaxTimeout      time.Duration
+	lastDenials             []PermissionDenial
 }
 
 // LastDenials returns permission denials observed during the most recent Execute call.
@@ -68,7 +68,7 @@ func (w *NonInteractiveWorker) Execute(ctx context.Context, instruction string, 
 	}
 	env := buildTQEnv(actionID, taskID)
 
-	if w.SessionLogChecker == nil {
+	if w.ClaudeSessionLogChecker == nil {
 		timeoutCtx, cancel := context.WithTimeout(ctx, defaultTimeout*time.Second)
 		defer cancel()
 		output, err := w.Runner.Run(timeoutCtx, "claude", args, workDir, env)
@@ -124,7 +124,7 @@ func (w *NonInteractiveWorker) Execute(ctx context.Context, instruction string, 
 				if elapsed < minimum {
 					continue
 				}
-				active, _, err := w.SessionLogChecker.IsSessionActive(workDir, freshness)
+				active, _, err := w.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, freshness)
 				if err != nil {
 					slog.Warn("noninteractive heartbeat check failed", "action_id", actionID, "error", err)
 					continue

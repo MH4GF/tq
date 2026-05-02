@@ -31,18 +31,18 @@ func (db *DB) execTestUpdate(table string, id int64, clauses []setClause, caller
 	return nil
 }
 
-func (db *DB) SetActionSessionInfoForTest(id int64, sessionID, tmuxPane *string, startedAt *time.Time) error {
+func (db *DB) SetActionTmuxInfoForTest(id int64, tmuxSession, tmuxWindow *string, startedAt *time.Time) error {
 	var clauses []setClause
-	if sessionID != nil {
-		clauses = append(clauses, setClause{"session_id", *sessionID})
+	if tmuxSession != nil {
+		clauses = append(clauses, setClause{"tmux_session", *tmuxSession})
 	}
-	if tmuxPane != nil {
-		clauses = append(clauses, setClause{"tmux_pane", *tmuxPane})
+	if tmuxWindow != nil {
+		clauses = append(clauses, setClause{"tmux_window", *tmuxWindow})
 	}
 	if startedAt != nil {
 		clauses = append(clauses, setClause{"started_at", startedAt.UTC().Format(testTimeFormat)})
 	}
-	return db.execTestUpdate("actions", id, clauses, "SetActionSessionInfoForTest")
+	return db.execTestUpdate("actions", id, clauses, "SetActionTmuxInfoForTest")
 }
 
 func (db *DB) SetScheduleTimestampsForTest(id int64, createdAt, lastRunAt *time.Time) error {

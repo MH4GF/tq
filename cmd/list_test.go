@@ -145,8 +145,11 @@ func TestList(t *testing.T) {
 				if row["result"] != nil {
 					t.Errorf("result should be null, got %v", row["result"])
 				}
-				if row["session_id"] != nil {
-					t.Errorf("session_id should be null, got %v", row["session_id"])
+				if row["tmux_session"] != nil {
+					t.Errorf("tmux_session should be null, got %v", row["tmux_session"])
+				}
+				if row["tmux_window"] != nil {
+					t.Errorf("tmux_window should be null, got %v", row["tmux_window"])
 				}
 				if row["started_at"] != nil {
 					t.Errorf("started_at should be null, got %v", row["started_at"])

@@ -14,7 +14,7 @@ type CommandWriter interface {
 	MarkCancelled(id int64, result string) error
 	MarkDispatched(id int64) error
 	ResetToPending(id int64) error
-	SetSessionInfo(id int64, sessionID, tmuxPane string) error
+	SetTmuxInfo(id int64, tmuxSession, tmuxWindow string) error
 	MergeActionMetadata(id int64, updates map[string]any) error
 	UpdateAction(id int64, title *string, taskID *int64, metadata *string) error
 	NextPending(ctx context.Context) (*Action, error)
@@ -88,7 +88,7 @@ type QueryReader interface {
 // TestHelper provides test-seam methods for test setup.
 // These methods bypass validation and do not emit events.
 type TestHelper interface {
-	SetActionSessionInfoForTest(id int64, sessionID, tmuxPane *string, startedAt *time.Time) error
+	SetActionTmuxInfoForTest(id int64, tmuxSession, tmuxWindow *string, startedAt *time.Time) error
 	SetScheduleTimestampsForTest(id int64, createdAt, lastRunAt *time.Time) error
 	SetActionTimestampsForTest(id int64, createdAt, completedAt *time.Time) error
 	SetTaskTimestampsForTest(id int64, createdAt, updatedAt *time.Time) error

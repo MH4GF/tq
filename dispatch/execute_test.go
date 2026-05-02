@@ -23,7 +23,7 @@ func TestExecuteAction(t *testing.T) {
 		workerResult      string
 		workerErr         error
 		workerDenials     []PermissionDenial
-		sessionID         string // non-empty → install mockSessionLogChecker
+		sessionID         string // non-empty → install mockClaudeSessionLogChecker
 		beforeInteractive func(*db.Action) error
 		wantMode          string
 		wantStatus        string
@@ -182,7 +182,7 @@ func TestExecuteAction(t *testing.T) {
 				RemoteFunc:         workerFunc,
 			}
 			if tc.sessionID != "" {
-				cfg.SessionLogChecker = &mockSessionLogChecker{active: true, sessionID: tc.sessionID}
+				cfg.ClaudeSessionLogChecker = &mockClaudeSessionLogChecker{active: true, claudeSessionID: tc.sessionID}
 			}
 
 			result, err := ExecuteAction(context.Background(), ExecuteParams{

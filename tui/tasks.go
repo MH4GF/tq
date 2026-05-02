@@ -323,7 +323,7 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 		}
 	case key.Matches(msg, key.NewBinding(key.WithKeys("o"))):
 		if m.cursor >= 0 && m.cursor < len(m.lines) {
-			if a := m.lines[m.cursor].action; a != nil && a.SessionID.Valid {
+			if a := m.lines[m.cursor].action; a != nil && a.TmuxSession.Valid {
 				return m, m.attachAction(a)
 			}
 		}
@@ -643,10 +643,10 @@ func actionResumable(a *db.Action) bool {
 	if a == nil || !db.IsTerminalActionStatus(a.Status) {
 		return false
 	}
-	return actionSessionID(a) != ""
+	return actionClaudeSessionID(a) != ""
 }
 
-func actionSessionID(a *db.Action) string {
+func actionClaudeSessionID(a *db.Action) string {
 	if a == nil || a.Metadata == "" || a.Metadata == "{}" {
 		return ""
 	}
@@ -669,7 +669,7 @@ func (m TasksModel) resumeAction(a *db.Action) tea.Cmd {
 
 func (m TasksModel) attachAction(a *db.Action) tea.Cmd {
 	return func() tea.Msg {
-		target := fmt.Sprintf("%s:%s", a.SessionID.String, a.TmuxPane.String)
+		target := fmt.Sprintf("%s:%s", a.TmuxSession.String, a.TmuxWindow.String)
 		if err := exec.Command("tmux", "select-window", "-t", target).Run(); err != nil {
 			return actionAttachedMsg{id: a.ID, message: fmt.Sprintf("attach failed: %v", err)}
 		}
@@ -747,7 +747,7 @@ func (m TasksModel) HelpKeys() []HelpKey {
 			keys = append(keys, HelpKey{"enter", "expand"})
 		}
 		if line.action != nil {
-			if line.action.SessionID.Valid {
+			if line.action.TmuxSession.Valid {
 				keys = append(keys, HelpKey{"o", "attach"})
 			}
 			if line.action.Result.Valid && line.action.Result.String != "" {

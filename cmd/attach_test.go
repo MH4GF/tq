@@ -39,7 +39,7 @@ func TestAttach(t *testing.T) {
 			taskID, _ := d.InsertTask(1, "test", "{}", "")
 			id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusRunning, nil)
 			if tc.sessionID != "" {
-				d.SetSessionInfo(id, tc.sessionID, "tq-action-1")
+				d.SetTmuxInfo(id, tc.sessionID, "tq-action-1")
 			}
 
 			root := cmd.GetRootCmd()

@@ -45,8 +45,8 @@ var uiCmd = &cobra.Command{
 					DB: database,
 					NonInteractiveFunc: func() dispatch.Worker {
 						return &dispatch.NonInteractiveWorker{
-							Runner:            &dispatch.ExecRunner{},
-							SessionLogChecker: &dispatch.FileSessionLogChecker{},
+							Runner:                  &dispatch.ExecRunner{},
+							ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
 						}
 					},
 					InteractiveFunc: func() dispatch.Worker {
@@ -60,8 +60,8 @@ var uiCmd = &cobra.Command{
 							Runner: &dispatch.ExecRunner{},
 						}
 					},
-					TmuxSession:       uiSession,
-					SessionLogChecker: &dispatch.FileSessionLogChecker{},
+					TmuxSession:             uiSession,
+					ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
 				},
 				MaxInteractive: effectiveMaxInteractive,
 				PollInterval:   uiPollInterval,

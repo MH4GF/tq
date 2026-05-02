@@ -9,24 +9,27 @@ import (
 	"time"
 )
 
-// SessionLogChecker checks if a Claude Code session is actively working.
-type SessionLogChecker interface {
-	IsSessionActive(workDir string, freshnessThreshold time.Duration) (active bool, sessionID string, err error)
+// ClaudeSessionLogChecker checks if a Claude Code session is actively working.
+type ClaudeSessionLogChecker interface {
+	IsClaudeSessionActive(workDir string, freshnessThreshold time.Duration) (active bool, claudeSessionID string, err error)
 }
 
-// FileSessionLogChecker implements SessionLogChecker by scanning ~/.claude/sessions/*.json
-// and checking the corresponding session log file's modification time.
-type FileSessionLogChecker struct {
+// FileClaudeSessionLogChecker implements ClaudeSessionLogChecker by scanning
+// ~/.claude/sessions/*.json and checking the corresponding session log file's
+// modification time.
+type FileClaudeSessionLogChecker struct {
 	HomeDir string // overrides home directory for testing
 }
 
+// claudeSessionMeta mirrors the JSON shape of ~/.claude/sessions/*.json. The
+// SessionID field maps to the raw "sessionId" key written by Claude Code.
 type claudeSessionMeta struct {
 	PID       int    `json:"pid"`
 	SessionID string `json:"sessionId"`
 	Cwd       string `json:"cwd"`
 }
 
-func (c *FileSessionLogChecker) IsSessionActive(workDir string, freshnessThreshold time.Duration) (bool, string, error) {
+func (c *FileClaudeSessionLogChecker) IsClaudeSessionActive(workDir string, freshnessThreshold time.Duration) (bool, string, error) {
 	homeDir := c.HomeDir
 	if homeDir == "" {
 		var err error
@@ -42,7 +45,7 @@ func (c *FileSessionLogChecker) IsSessionActive(workDir string, freshnessThresho
 		return false, "", fmt.Errorf("read sessions dir: %w", err)
 	}
 
-	var bestSessionID string
+	var bestClaudeSessionID string
 	var bestModTime time.Time
 
 	for _, entry := range entries {
@@ -74,13 +77,13 @@ func (c *FileSessionLogChecker) IsSessionActive(workDir string, freshnessThresho
 		if time.Since(modTime) < freshnessThreshold {
 			if bestModTime.IsZero() || modTime.After(bestModTime) {
 				bestModTime = modTime
-				bestSessionID = meta.SessionID
+				bestClaudeSessionID = meta.SessionID
 			}
 		}
 	}
 
-	if bestSessionID != "" {
-		return true, bestSessionID, nil
+	if bestClaudeSessionID != "" {
+		return true, bestClaudeSessionID, nil
 	}
 	return false, "", nil
 }

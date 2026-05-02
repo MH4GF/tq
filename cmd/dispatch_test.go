@@ -67,12 +67,12 @@ func TestDispatchInteractivePersistsSessionInfo(t *testing.T) {
 			if err != nil {
 				t.Fatalf("get action: %v", err)
 			}
-			if !a.SessionID.Valid || a.SessionID.String != tt.wantSession {
-				t.Errorf("session_id = %v, want %q", a.SessionID, tt.wantSession)
+			if !a.TmuxSession.Valid || a.TmuxSession.String != tt.wantSession {
+				t.Errorf("tmux_session = %v, want %q", a.TmuxSession, tt.wantSession)
 			}
-			wantPane := dispatch.WindowName(1)
-			if !a.TmuxPane.Valid || a.TmuxPane.String != wantPane {
-				t.Errorf("tmux_pane = %v, want %q", a.TmuxPane, wantPane)
+			wantWindow := dispatch.WindowName(1)
+			if !a.TmuxWindow.Valid || a.TmuxWindow.String != wantWindow {
+				t.Errorf("tmux_window = %v, want %q", a.TmuxWindow, wantWindow)
 			}
 		})
 	}

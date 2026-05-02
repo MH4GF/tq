@@ -23,7 +23,7 @@ var actionResumeCmd = &cobra.Command{
 	Use:   "resume <action_id>",
 	Short: "Resume the claude session of a closed action",
 	Long: `Create a new action that resumes the claude session of a previously
-completed/failed/cancelled action via 'claude --resume <session_id>'.
+completed/failed/cancelled action via 'claude --resume <claude_session_id>'.
 
 The new action inherits only the parent's claude_session_id; other claude_args
 (--worktree, --permission-mode, etc.) are NOT inherited because the resumed
@@ -58,12 +58,12 @@ claude session restores its own context.`,
 
 		result, err := dispatch.ExecuteAction(ctx, dispatch.ExecuteParams{
 			DispatchConfig: dispatch.DispatchConfig{
-				DB:                 database,
-				NonInteractiveFunc: getWorkerFactory(),
-				InteractiveFunc:    interactiveWorkerForResume(resumeSession),
-				RemoteFunc:         getRemoteWorkerFactory(),
-				SessionLogChecker:  &dispatch.FileSessionLogChecker{},
-				TmuxSession:        resumeSession,
+				DB:                      database,
+				NonInteractiveFunc:      getWorkerFactory(),
+				InteractiveFunc:         interactiveWorkerForResume(resumeSession),
+				RemoteFunc:              getRemoteWorkerFactory(),
+				ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
+				TmuxSession:             resumeSession,
 			},
 		}, action)
 

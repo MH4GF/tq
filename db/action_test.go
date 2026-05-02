@@ -376,11 +376,11 @@ func TestListRunningInteractive(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 
-	// running with session_id → should be returned
+	// running with tmux_session → should be returned
 	d.InsertAction("a", taskID, "{}", db.ActionStatusRunning, nil)
-	d.Exec("UPDATE actions SET session_id = 'main', tmux_pane = 'tq-action-1' WHERE id = 1")
+	d.Exec("UPDATE actions SET tmux_session = 'main', tmux_window = 'tq-action-1' WHERE id = 1")
 
-	// running without session_id → should NOT be returned
+	// running without tmux_session → should NOT be returned
 	d.InsertAction("b", taskID, "{}", db.ActionStatusRunning, nil)
 
 	// pending → should NOT be returned
@@ -399,8 +399,8 @@ func TestListRunningInteractive(t *testing.T) {
 	if actions[0].Title != "a" {
 		t.Errorf("expected title 'a', got %s", actions[0].Title)
 	}
-	if !actions[0].SessionID.Valid || actions[0].SessionID.String != "main" {
-		t.Errorf("expected session_id 'main', got %v", actions[0].SessionID)
+	if !actions[0].TmuxSession.Valid || actions[0].TmuxSession.String != "main" {
+		t.Errorf("expected tmux_session 'main', got %v", actions[0].TmuxSession)
 	}
 }
 
@@ -434,14 +434,14 @@ func TestCountRunningInteractive(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	d.InsertAction("a", taskID, "{}", db.ActionStatusRunning, nil)
 	d.InsertAction("b", taskID, "{}", db.ActionStatusRunning, nil)
-	d.Exec("UPDATE actions SET session_id = 'sess-1' WHERE id = 1")
+	d.Exec("UPDATE actions SET tmux_session = 'sess-1' WHERE id = 1")
 
 	count, err := d.CountRunningInteractive()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if count != 1 {
-		t.Errorf("count = %d, want 1 (only one has session_id)", count)
+		t.Errorf("count = %d, want 1 (only one has tmux_session)", count)
 	}
 }
 
@@ -451,7 +451,7 @@ func TestResetToPending(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertAction("a", taskID, "{}", db.ActionStatusRunning, nil)
-	d.Exec("UPDATE actions SET session_id = 'sess-1', tmux_pane = 'tq-action-1' WHERE id = ?", id)
+	d.Exec("UPDATE actions SET tmux_session = 'sess-1', tmux_window = 'tq-action-1' WHERE id = ?", id)
 
 	if err := d.ResetToPending(id); err != nil {
 		t.Fatal(err)
@@ -464,31 +464,31 @@ func TestResetToPending(t *testing.T) {
 	if a.StartedAt.Valid {
 		t.Error("started_at should be NULL after reset")
 	}
-	if a.SessionID.Valid {
-		t.Error("session_id should be NULL after reset")
+	if a.TmuxSession.Valid {
+		t.Error("tmux_session should be NULL after reset")
 	}
-	if a.TmuxPane.Valid {
-		t.Error("tmux_pane should be NULL after reset")
+	if a.TmuxWindow.Valid {
+		t.Error("tmux_window should be NULL after reset")
 	}
 }
 
-func TestSetSessionInfo(t *testing.T) {
+func TestSetTmuxInfo(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusRunning, nil)
 
-	if err := d.SetSessionInfo(id, "main", "tq-action-1"); err != nil {
+	if err := d.SetTmuxInfo(id, "main", "tq-action-1"); err != nil {
 		t.Fatal(err)
 	}
 
 	a, _ := d.GetAction(id)
-	if !a.SessionID.Valid || a.SessionID.String != "main" {
-		t.Errorf("session_id = %v, want 'main'", a.SessionID)
+	if !a.TmuxSession.Valid || a.TmuxSession.String != "main" {
+		t.Errorf("tmux_session = %v, want 'main'", a.TmuxSession)
 	}
-	if !a.TmuxPane.Valid || a.TmuxPane.String != "tq-action-1" {
-		t.Errorf("tmux_pane = %v, want 'tq-action-1'", a.TmuxPane)
+	if !a.TmuxWindow.Valid || a.TmuxWindow.String != "tq-action-1" {
+		t.Errorf("tmux_window = %v, want 'tq-action-1'", a.TmuxWindow)
 	}
 }
 
