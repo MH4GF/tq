@@ -306,7 +306,8 @@ tq schedule create --instruction <TEXT> --task <ID> --cron <EXPR> [--title <TITL
 tq schedule list [--jq <EXPR>] [--limit <N>]
 ```
 
-- `--jq` — Filter JSON output (fields: `id`, `task_id`, `instruction`, `title`, `cron_expr`, `metadata`, `enabled`, `last_run_at`, `created_at`)
+- `--jq` — Filter JSON output (fields: `id`, `task_id`, `instruction`, `title`, `cron_expr`, `metadata`, `enabled`, `last_run_at`, `last_error`, `created_at`)
+- `last_error` is `null` while the schedule is healthy; it is populated when an action could not be created (e.g. invalid metadata) and cleared on the next successful run.
 - `--limit` — Limit number of results
 
 ### `tq schedule update`

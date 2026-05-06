@@ -89,19 +89,30 @@ func TestUpdateScheduleEnabled(t *testing.T) {
 	}
 }
 
-func TestUpdateScheduleLastRunAt(t *testing.T) {
+func TestUpdateScheduleRun(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertSchedule(taskID, "test", "Test", "* * * * *", "{}")
 
-	if err := d.UpdateScheduleLastRunAt(id, "2026-03-12 10:00:00"); err != nil {
+	if err := d.UpdateScheduleRun(id, "2026-03-12 10:00:00", "boom"); err != nil {
 		t.Fatal(err)
 	}
 	s, _ := d.GetSchedule(id)
 	if !s.LastRunAt.Valid || s.LastRunAt.String != "2026-03-12 10:00:00" {
 		t.Errorf("last_run_at = %v, want 2026-03-12 10:00:00", s.LastRunAt)
+	}
+	if !s.LastError.Valid || s.LastError.String != "boom" {
+		t.Errorf("last_error = %v, want %q", s.LastError, "boom")
+	}
+
+	if err := d.UpdateScheduleRun(id, "2026-03-12 10:05:00", ""); err != nil {
+		t.Fatal(err)
+	}
+	s, _ = d.GetSchedule(id)
+	if s.LastError.Valid {
+		t.Errorf("last_error = %q, want NULL after success run", s.LastError.String)
 	}
 }
 

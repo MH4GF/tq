@@ -15,13 +15,14 @@ type Schedule struct {
 	Metadata    string
 	Enabled     bool
 	LastRunAt   sql.NullString
+	LastError   sql.NullString
 	CreatedAt   string
 }
 
-const scheduleColumns = "id, task_id, instruction, title, cron_expr, metadata, enabled, last_run_at, created_at"
+const scheduleColumns = "id, task_id, instruction, title, cron_expr, metadata, enabled, last_run_at, last_error, created_at"
 
 func (s *Schedule) scanFields() []any {
-	return []any{&s.ID, &s.TaskID, &s.Instruction, &s.Title, &s.CronExpr, &s.Metadata, &s.Enabled, &s.LastRunAt, &s.CreatedAt}
+	return []any{&s.ID, &s.TaskID, &s.Instruction, &s.Title, &s.CronExpr, &s.Metadata, &s.Enabled, &s.LastRunAt, &s.LastError, &s.CreatedAt}
 }
 
 func (db *DB) InsertSchedule(taskID int64, instruction, title, cronExpr, metadata string) (int64, error) {
@@ -79,11 +80,18 @@ func (db *DB) UpdateScheduleEnabled(id int64, enabled bool) error {
 	return err
 }
 
-func (db *DB) UpdateScheduleLastRunAt(id int64, t string) error {
-	_, err := db.Exec("UPDATE schedules SET last_run_at = ? WHERE id = ?", t, id)
+// UpdateScheduleRun records one tick of CheckSchedules in a single UPDATE.
+// Pass errMsg="" on a successful action insertion (clears last_error);
+// pass a non-empty string when the action could not be created.
+func (db *DB) UpdateScheduleRun(id int64, lastRunAt, errMsg string) error {
+	_, err := db.Exec(
+		"UPDATE schedules SET last_run_at = ?, last_error = NULLIF(?, '') WHERE id = ?",
+		lastRunAt, errMsg, id,
+	)
 	if err == nil {
 		db.emitEvent("schedule", id, "schedule.ran", map[string]any{
-			"last_run_at": t,
+			"last_run_at": lastRunAt,
+			"last_error":  errMsg,
 		})
 	}
 	return err

@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS schedules (
   metadata    TEXT NOT NULL DEFAULT '{}',
   enabled     INTEGER NOT NULL DEFAULT 1,
   last_run_at TEXT,
+  last_error  TEXT,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

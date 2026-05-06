@@ -11,7 +11,7 @@ import (
 var (
 	scheduleListLimit  int
 	scheduleListJQ     string
-	scheduleListFields = []string{"id", "task_id", "instruction", "title", "cron_expr", "metadata", "enabled", "last_run_at", "created_at"}
+	scheduleListFields = []string{"id", "task_id", "instruction", "title", "cron_expr", "metadata", "enabled", "last_run_at", "last_error", "created_at"}
 )
 
 var scheduleCmd = &cobra.Command{
@@ -97,6 +97,11 @@ var scheduleListCmd = &cobra.Command{
 				row["last_run_at"] = db.FormatLocal(s.LastRunAt.String)
 			} else {
 				row["last_run_at"] = nil
+			}
+			if s.LastError.Valid {
+				row["last_error"] = s.LastError.String
+			} else {
+				row["last_error"] = nil
 			}
 			row["created_at"] = db.FormatLocal(s.CreatedAt)
 			rows[i] = row

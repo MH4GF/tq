@@ -150,10 +150,11 @@ func (m SchedulesModel) View() string {
 	for i := visible.start; i < visible.end; i++ {
 		s := m.schedules[i]
 
-		// State: dot only
 		dot := styleDone.Render("●")
 		if !s.Enabled {
 			dot = styleMuted.Render("○")
+		} else if s.LastError.Valid {
+			dot = styleFailed.Render("●")
 		}
 
 		nextRun := "—"
@@ -237,6 +238,13 @@ func (m SchedulesModel) renderDetail(s *db.Schedule) string {
 			pad,
 			styleFieldLabel.Render(f.label),
 			styleFieldValue.Render(f.value),
+		)
+	}
+	if s.LastError.Valid {
+		fmt.Fprintf(&b, "%s%s  %s\n",
+			pad,
+			styleFieldLabel.Render("    Error"),
+			styleFailed.Render(s.LastError.String),
 		)
 	}
 	b.WriteString(pad + styleBorderChar.Render(strings.Repeat("─", bodyW)) + "\n")

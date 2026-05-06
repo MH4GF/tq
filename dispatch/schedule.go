@@ -70,18 +70,19 @@ func CheckSchedules(database db.Store, now time.Time) error {
 		}
 		meta[MetaKeyInstruction] = s.Instruction
 		meta[MetaKeyScheduleID] = fmt.Sprintf("%d", s.ID)
+		nowUTC := now.UTC().Format(db.TimeLayout)
 		if err := ValidateActionMetadata(meta); err != nil {
 			slog.Warn("schedule: invalid metadata", "schedule_id", s.ID, "error", err)
-			if uerr := database.UpdateScheduleLastRunAt(s.ID, now.UTC().Format(db.TimeLayout)); uerr != nil {
-				slog.Error("schedule: update last_run_at failed after invalid metadata", "schedule_id", s.ID, "error", uerr)
+			if uerr := database.UpdateScheduleRun(s.ID, nowUTC, fmt.Sprintf("invalid metadata: %v", err)); uerr != nil {
+				slog.Error("schedule: record run failed after invalid metadata", "schedule_id", s.ID, "error", uerr)
 			}
 			continue
 		}
 		metaJSON, err := marshalMeta(meta)
 		if err != nil {
 			slog.Error("schedule: marshal metadata failed", "schedule_id", s.ID, "error", err)
-			if uerr := database.UpdateScheduleLastRunAt(s.ID, now.UTC().Format(db.TimeLayout)); uerr != nil {
-				slog.Error("schedule: update last_run_at failed after marshal failure", "schedule_id", s.ID, "error", uerr)
+			if uerr := database.UpdateScheduleRun(s.ID, nowUTC, fmt.Sprintf("marshal metadata: %v", err)); uerr != nil {
+				slog.Error("schedule: record run failed after marshal failure", "schedule_id", s.ID, "error", uerr)
 			}
 			continue
 		}
@@ -92,8 +93,8 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			continue
 		}
 
-		if err := database.UpdateScheduleLastRunAt(s.ID, now.UTC().Format(db.TimeLayout)); err != nil {
-			slog.Error("schedule: update last_run_at failed", "schedule_id", s.ID, "error", err)
+		if err := database.UpdateScheduleRun(s.ID, nowUTC, ""); err != nil {
+			slog.Error("schedule: record run failed after success", "schedule_id", s.ID, "error", err)
 		}
 
 		slog.Info("schedule: action created", "action_id", id, "schedule_id", s.ID, "instruction", s.Instruction, "task_id", s.TaskID)
