@@ -18,7 +18,7 @@ You manage tasks and actions on behalf of the user via tq CLI.
 - **Which instruction?** Infer from context. If the user provides a direct instruction (e.g., a slash command), pass it as a positional argument to `tq action create`.
 - **Dispatch immediately?** Only when user says "割り込み" or "すぐ実行". Otherwise create as pending.
 - **Looking for past context?** Use `tq search "<keyword>" --project <id>` to search within a specific project. Omit `--project` only when the target project is unknown.
-- **What did action #N find? Why did it stop?** Start with `tq action get <id> --jq '.result'`. If the result is thin, read the tail of the Claude Code session log — resolve the path with the recipe below and open it via `Read` (last ~200 lines). When `claude_session_id` is empty (e.g. SessionStart hook didn't fire), `.result` is the only signal.
+- **What did action #N find? Why did it stop?** If `tq action get <id> --jq '.result'` is thin, resolve the Claude Code session log via the recipe below and `Read` its tail (~200 lines). When `claude_session_id` is empty, `.result` is the only signal.
 
 ```bash
 SID=$(tq action get <id> --jq '.metadata | fromjson.claude_session_id // empty')

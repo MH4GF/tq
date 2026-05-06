@@ -93,7 +93,7 @@ SID=$(tq action get <id> --jq '.metadata | fromjson.claude_session_id // empty')
 [ -n "$SID" ] && find ~/.claude/projects -name "$SID.jsonl" -print -quit
 ```
 
-Use `Read` on the resolved path (last ~200 lines — the file may be large) and quote the latest `type:"assistant"` entry plus the trailing few `type:"tool_use"` entries into 6-a Diagnosis. Additive — runs alongside the `tq task get` deep-dive, not instead of it.
+Use `Read` on the resolved path (last ~200 lines — the file may be large) and quote the latest few `type:"assistant"` entries (each embeds the response text plus any `tool_use` blocks in `message.content[]`) and any `type:"user"` entries carrying `tool_result` blocks, into 6-a Diagnosis. This does not replace the `tq task get` deep-dive — it runs in addition.
 
 ### 4. PR-state pre-fetch
 
