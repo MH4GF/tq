@@ -16,6 +16,7 @@
 package e2e_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,8 +55,6 @@ func TestLibsqlE2E(t *testing.T) {
 			testscript.Run(t, testscript.Params{
 				Files: []string{path},
 				Setup: func(env *testscript.Env) error {
-					// Hand the libsql URL straight through to the child tq
-					// process. The token (if any) lives inside the URL.
 					env.Setenv("TQ_DB_URL", url)
 					env.Setenv("HOME", env.WorkDir)
 
@@ -74,7 +73,9 @@ func TestLibsqlE2E(t *testing.T) {
 
 // resetLibsqlSchema drops every tq table on the shared libsql DB and
 // reapplies the migration so the next scenario starts with a clean
-// slate (autoincrement id=1, no leftover rows).
+// slate (autoincrement id=1, no leftover rows). The table list is
+// queried from sqlite_master so future schema additions are picked up
+// automatically.
 func resetLibsqlSchema(t *testing.T, url string) {
 	t.Helper()
 	d, err := db.Open(url)
@@ -83,9 +84,40 @@ func resetLibsqlSchema(t *testing.T, url string) {
 	}
 	defer func() { _ = d.Close() }()
 
-	tables := []string{"events", "worker_heartbeats", "schedules", "actions", "tasks", "projects"}
+	ctx := context.Background()
+	// PRAGMA foreign_keys is connection-scoped; pin one connection so the
+	// disable-FK + DROPs land on the same session and FK enforcement
+	// doesn't re-enable for subsequent statements via pool rotation.
+	conn, err := d.Conn(ctx)
+	if err != nil {
+		t.Fatalf("acquire conn: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
+		t.Fatalf("disable fk: %v", err)
+	}
+	rows, err := conn.QueryContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+	if err != nil {
+		t.Fatalf("list tables: %v", err)
+	}
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			_ = rows.Close()
+			t.Fatalf("scan table name: %v", err)
+		}
+		tables = append(tables, name)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		t.Fatalf("iterate tables: %v", err)
+	}
+	_ = rows.Close()
+
 	for _, tbl := range tables {
-		if _, err := d.Exec("DROP TABLE IF EXISTS " + tbl); err != nil {
+		if _, err := conn.ExecContext(ctx, "DROP TABLE IF EXISTS "+tbl); err != nil {
 			t.Fatalf("drop %s: %v", tbl, err)
 		}
 	}

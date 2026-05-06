@@ -123,8 +123,6 @@ func (db *DB) Search(keyword string, projectID int64) ([]SearchResult, error) {
 	for range 5 {
 		args = append(args, branchArgs...)
 	}
-	// Final UNION branch needs the event_type bind first, then the keyword
-	// (and optional project filter from branchArgs).
 	args = append(args, EventTaskStatusChanged)
 	args = append(args, branchArgs...)
 

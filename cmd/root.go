@@ -56,10 +56,8 @@ All list commands output JSON.`,
 		if err != nil {
 			return err
 		}
-		if !db.IsLibsqlURL(dbPath) {
-			if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-				return fmt.Errorf("create db dir: %w", err)
-			}
+		if err := ensureLocalDBDir(dbPath); err != nil {
+			return err
 		}
 		database, err = db.Open(dbPath)
 		if err != nil {
@@ -87,6 +85,18 @@ func resolveDBPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "tq.db"), nil
+}
+
+// ensureLocalDBDir creates the parent directory for a local sqlite DB.
+// No-op for libsql URLs.
+func ensureLocalDBDir(dbPath string) error {
+	if db.IsLibsqlURL(dbPath) {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		return fmt.Errorf("create db dir: %w", err)
+	}
+	return nil
 }
 
 func configDir() (string, error) {

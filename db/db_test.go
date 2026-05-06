@@ -26,10 +26,6 @@ func TestIsLibsqlURL(t *testing.T) {
 	}{
 		{"libsql://example.turso.io", true},
 		{"libsql://localhost:8080?tls=0", true},
-		// Other URL schemes are NOT libsql; route them through sqlite (which
-		// will then fail loudly). We do not silently route http/ws etc. to
-		// the libsql driver — the libsql client handles transport via
-		// libsql:// URL flags.
 		{"https://example.turso.io", false},
 		{"http://localhost:8080", false},
 		{"wss://example.turso.io", false},
