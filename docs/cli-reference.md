@@ -129,7 +129,7 @@ Notes with `kind=triage_keep` are surfaced on `tq task list` as `latest_triage_n
 | Command | Description |
 |---------|-------------|
 | `tq action create <INSTRUCTION> --task <ID> --title <TITLE>` | Create an action |
-| `tq action list` | List actions (JSON) |
+| `tq action list` | List actions, optionally filtered by status and/or task ID (JSON) |
 | `tq action get <ID>` | Get an action by ID (JSON) |
 | `tq action update <ID>` | Update an action |
 | `tq action done <ID> [RESULT]` | Mark action as done |
