@@ -23,9 +23,9 @@ func (w *InteractiveWorker) Execute(ctx context.Context, instruction string, cfg
 	if len(instruction) > maxInstructionBytes {
 		return "", fmt.Errorf("instruction too long (%d bytes, limit %d); shorten via generator or split action", len(instruction), maxInstructionBytes)
 	}
-	// Reject ASCII control bytes early; the instruction is stored in the DB and
-	// later substituted into the claude argv via shell command substitution, so
-	// embedded control characters would corrupt downstream consumers.
+	// \n is allowed: RenderPrompt's postamble always starts with one. Other C0
+	// bytes would corrupt the prompt downstream when claude reads the
+	// substituted argv.
 	for i := 0; i < len(instruction); i++ {
 		b := instruction[i]
 		if b < 0x20 && b != '\t' && b != '\n' {
@@ -47,13 +47,10 @@ func (w *InteractiveWorker) Execute(ctx context.Context, instruction string, cfg
 		return "", fmt.Errorf("create tmux window: %w (output: %s)", err, string(out))
 	}
 
-	// 2. Send claude command text.
-	//
-	// The prompt is fetched at claude-launch time via `$(tq action prompt <id>)`
-	// so the send-keys payload stays ~100 bytes regardless of instruction
-	// length. Inlining the wrapped instruction directly trips macOS pty
-	// canonical-mode MAX_CANON (1024 bytes) and silently truncates long
-	// prompts.
+	// 2. Send claude command text. Prompt rendering is deferred to
+	// claude-launch time via `$(tq action prompt <id>)`; inlining the wrapped
+	// instruction here would trip macOS pty canonical-mode MAX_CANON (1024
+	// bytes) and silently truncate long prompts.
 	tmuxTarget := fmt.Sprintf("%s:%s", session, windowName)
 	envPrefix := fmt.Sprintf("TQ_ACTION_ID=%d TQ_TASK_ID=%d", actionID, taskID)
 	var claudeArgsBuf strings.Builder

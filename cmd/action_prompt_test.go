@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -26,30 +27,46 @@ func runActionPrompt(t *testing.T, d db.Store, args ...string) (string, error) {
 	return buf.String(), err
 }
 
+func mustMarshal(t *testing.T, v any) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return string(b)
+}
+
 func TestActionPromptCmd_RendersWrappedPrompt(t *testing.T) {
 	tests := []struct {
-		name            string
-		mode            string
-		wantTerminate   bool // mode != remote → /tq:done /tq:failed appears
-		wantInstruction string
+		name          string
+		mode          string
+		isResume      bool
+		wantTerminate bool // mode != remote → /tq:done /tq:failed appears
 	}{
-		{name: "interactive", mode: dispatch.ModeInteractive, wantTerminate: true, wantInstruction: "Fix the bug"},
-		{name: "noninteractive", mode: dispatch.ModeNonInteractive, wantTerminate: true, wantInstruction: "Fix the bug"},
-		{name: "remote", mode: dispatch.ModeRemote, wantTerminate: false, wantInstruction: "Fix the bug"},
-		{name: "default mode (empty -> interactive)", mode: "", wantTerminate: true, wantInstruction: "Fix the bug"},
+		{name: "interactive", mode: dispatch.ModeInteractive, wantTerminate: true},
+		{name: "noninteractive", mode: dispatch.ModeNonInteractive, wantTerminate: true},
+		{name: "remote drops terminate block", mode: dispatch.ModeRemote, wantTerminate: false},
+		{name: "default mode (empty -> interactive)", mode: "", wantTerminate: true},
+		// Hardcoded isResume=false: the postamble keeps "Required first step"
+		// even when metadata signals a resumed session.
+		{name: "resume metadata is ignored", mode: dispatch.ModeInteractive, isResume: true, wantTerminate: true},
 	}
+
+	const instruction = "Fix the bug"
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			d := testutil.NewTestDB(t)
 			testutil.SeedTestProjects(t, d)
 			taskID, _ := d.InsertTask(1, "task", "{}", "")
-			metaParts := `{"instruction":"Fix the bug"`
+			meta := map[string]any{dispatch.MetaKeyInstruction: instruction}
 			if tc.mode != "" {
-				metaParts += `,"mode":"` + tc.mode + `"`
+				meta[dispatch.MetaKeyMode] = tc.mode
 			}
-			metaParts += `}`
-			actionID, _ := d.InsertAction("a", taskID, metaParts, db.ActionStatusPending, nil)
+			if tc.isResume {
+				meta[dispatch.MetaKeyIsResume] = true
+			}
+			actionID, _ := d.InsertAction("a", taskID, mustMarshal(t, meta), db.ActionStatusPending, nil)
 
 			out, err := runActionPrompt(t, d, intToStr(actionID))
 			if err != nil {
@@ -60,7 +77,7 @@ func TestActionPromptCmd_RendersWrappedPrompt(t *testing.T) {
 			if effectiveMode == "" {
 				effectiveMode = dispatch.ModeInteractive
 			}
-			want := dispatch.RenderPrompt(tc.wantInstruction, actionID, taskID, effectiveMode, false)
+			want := dispatch.RenderPrompt(instruction, actionID, taskID, effectiveMode, false)
 			if !strings.HasSuffix(want, "\n") {
 				want += "\n"
 			}
@@ -68,11 +85,8 @@ func TestActionPromptCmd_RendersWrappedPrompt(t *testing.T) {
 				t.Errorf("output mismatch.\n got: %q\nwant: %q", out, want)
 			}
 
-			if !strings.HasPrefix(out, tc.wantInstruction) {
+			if !strings.HasPrefix(out, instruction) {
 				t.Errorf("output should start with the raw instruction; got prefix %q", out[:min(len(out), 40)])
-			}
-			if !strings.Contains(out, "## tq action context") {
-				t.Error("output should contain postamble heading")
 			}
 			if !strings.Contains(out, "Required first step") {
 				t.Error("output should always contain 'Required first step' (isResume hardcoded false)")
@@ -83,32 +97,10 @@ func TestActionPromptCmd_RendersWrappedPrompt(t *testing.T) {
 			if !tc.wantTerminate && strings.Contains(out, "/tq:done") {
 				t.Error("output should NOT contain /tq:done for remote mode")
 			}
-			if !strings.HasSuffix(out, "\n") {
-				t.Error("output must end with a single trailing LF")
-			}
-			if strings.HasSuffix(out, "\n\n") {
-				t.Error("output must end with exactly one trailing LF, not two")
+			if !strings.HasSuffix(out, "\n") || strings.HasSuffix(out, "\n\n") {
+				t.Errorf("output must end with exactly one trailing LF, got: %q", out[max(0, len(out)-3):])
 			}
 		})
-	}
-}
-
-func TestActionPromptCmd_ResumeActionStillIncludesFirstStep(t *testing.T) {
-	// Documents the current scope decision: the CLI hardcodes isResume=false,
-	// so even resume actions render with the "Required first step" postamble.
-	// A follow-up PR will drop the isResume parameter entirely.
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	taskID, _ := d.InsertTask(1, "task", "{}", "")
-	meta := `{"instruction":"Continue the previous session.","mode":"interactive","is_resume":true,"claude_session_id":"sess-x"}`
-	actionID, _ := d.InsertAction("resume", taskID, meta, db.ActionStatusPending, nil)
-
-	out, err := runActionPrompt(t, d, intToStr(actionID))
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if !strings.Contains(out, "Required first step") {
-		t.Error("resume action should still include 'Required first step' (isResume hardcoded false)")
 	}
 }
 
@@ -129,8 +121,11 @@ func TestActionPromptCmd_EmptyInstruction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	taskID, _ := d.InsertTask(1, "task", "{}", "")
-	meta := `{"instruction":"   ","mode":"interactive"}`
-	actionID, _ := d.InsertAction("a", taskID, meta, db.ActionStatusPending, nil)
+	meta := map[string]any{
+		dispatch.MetaKeyInstruction: "   ",
+		dispatch.MetaKeyMode:        dispatch.ModeInteractive,
+	}
+	actionID, _ := d.InsertAction("a", taskID, mustMarshal(t, meta), db.ActionStatusPending, nil)
 
 	_, err := runActionPrompt(t, d, intToStr(actionID))
 	if err == nil {

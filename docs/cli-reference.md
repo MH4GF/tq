@@ -139,6 +139,7 @@ Notes with `kind=triage_keep` are surfaced on `tq task list` as `latest_triage_n
 | `tq action reset <ID>` | Reset a failed or cancelled action to pending |
 | `tq action dispatch <ID>` | Dispatch a pending action immediately by its ID |
 | `tq action resume <ID>` | Resume the claude session of a closed action |
+| `tq action prompt <ID>` | Render the wrapped claude prompt for an action (used by interactive dispatch) |
 
 ### `tq action create`
 
@@ -247,6 +248,16 @@ The parent must be in `failed` / `cancelled` / `done` status and have a non-empt
 - `--message` — Additional instruction passed as the new prompt (default: `"Continue the previous session."`)
 - `--mode` — Execution mode: `interactive` | `noninteractive` | `remote` (default: parent action's mode). Any other value is rejected.
 - `--session` — Target tmux session name, interactive mode only (default: `main`)
+
+### `tq action prompt`
+
+```
+tq action prompt <ACTION_ID>
+```
+
+Render the wrapped claude prompt (instruction + tq action context postamble) for an action and write it to stdout, ending with exactly one trailing LF.
+
+Used internally by interactive dispatch as `claude "$(tq action prompt <id>)"` so the `tmux send-keys` payload stays under macOS pty `MAX_CANON` (1024 bytes) regardless of instruction length. Output is byte-identical to the prompt that the noninteractive/remote workers receive in-process.
 
 ### `tq action attach`
 

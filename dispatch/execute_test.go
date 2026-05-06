@@ -891,10 +891,9 @@ func TestExecuteAction_NonInteractiveNilCheckerNoError(t *testing.T) {
 	}
 }
 
-// Regression: ExecuteAction must drive InteractiveWorker so that the tmux
-// send-keys payload uses the `tq action prompt <id>` shell substitution form
-// (and never inlines the raw instruction or applies legacy `'\”` escaping).
-// The MAX_CANON workaround relies on this short payload shape.
+// MAX_CANON regression guard: send-keys must stay short by routing through
+// the `tq action prompt <id>` shell substitution rather than inlining the
+// raw instruction.
 func TestExecuteAction_InteractiveAcceptsSingleLineInstruction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

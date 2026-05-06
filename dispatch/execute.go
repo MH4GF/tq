@@ -137,7 +137,7 @@ func markActionFailed(store db.Store, action *db.Action, failMsg string) error {
 
 // ExecuteAction reads instruction from metadata and dispatches via the appropriate worker.
 func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action) (*ExecuteResult, error) {
-	actionMeta, err := parseMetadata(action.Metadata)
+	actionMeta, err := ParseActionMetadata(action.Metadata)
 	if err != nil {
 		failMsg := fmt.Sprintf("parse action metadata: %v", err)
 		if mfErr := markActionFailed(params.DB, action, failMsg); mfErr != nil {
@@ -332,7 +332,9 @@ func ValidateActionMetadata(meta map[string]any) error {
 	return nil
 }
 
-func parseMetadata(raw string) (map[string]any, error) {
+// ParseActionMetadata decodes the JSON metadata blob stored on an action,
+// short-circuiting empty / "{}" payloads to avoid an Unmarshal of an empty map.
+func ParseActionMetadata(raw string) (map[string]any, error) {
 	m := make(map[string]any)
 	if raw == "" || raw == "{}" {
 		return m, nil

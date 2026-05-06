@@ -8,10 +8,10 @@ exec tq task create 'render prompt' --project 1
 
 # Interactive mode (default for action context): full postamble incl.
 # Required first step + /tq:done /tq:failed.
-exec tq action create 'BEGIN_INSTRUCTION_BODY do the thing' --task 1 --title 'interactive' --meta '{"mode":"interactive"}'
+exec tq action create 'do the thing' --task 1 --title 'interactive' --meta '{"mode":"interactive"}'
 stdout 'action #1 created'
 exec tq action prompt 1
-stdout 'BEGIN_INSTRUCTION_BODY do the thing'
+stdout 'do the thing'
 stdout '## tq action context'
 stdout 'You are executing \*\*action #1\*\* \(task #1\)'
 stdout 'Required first step'
