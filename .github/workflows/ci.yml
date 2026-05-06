@@ -43,14 +43,12 @@ jobs:
     timeout-minutes: 15
     services:
       sqld:
+        # The libsql-server image ships without wget/curl/nc, so we can't
+        # express a service-level healthcheck. Instead we wait for the
+        # /health endpoint from the runner (which has curl) below.
         image: ghcr.io/tursodatabase/libsql-server:v0.24.32
         ports:
           - 8080:8080
-        options: >-
-          --health-cmd "wget -qO- http://localhost:8080/health"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
     env:
       # Port-explicit libsql:// URL with tls=0 routes to plain HTTP, which
       # the in-container sqld serves. No auth token: the sqld default has
@@ -62,4 +60,15 @@ jobs:
         with:
           go-version-file: go.mod
       - run: sudo apt-get update && sudo apt-get install -y tmux
+      - name: Wait for sqld /health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/health >/dev/null 2>&1; then
+              echo "sqld ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "sqld did not become healthy in 30s" >&2
+          exit 1
       - run: go test -tags libsql_e2e ./e2e/ -run TestLibsqlE2E -v -timeout 10m
