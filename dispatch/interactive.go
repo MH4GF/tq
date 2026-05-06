@@ -60,7 +60,10 @@ func (w *InteractiveWorker) Execute(ctx context.Context, instruction string, cfg
 		claudeArgsBuf.WriteString(escaped)
 		claudeArgsBuf.WriteByte('\'')
 	}
-	claudeCmd := fmt.Sprintf(`%s claude "$(tq action prompt %d)"%s`, envPrefix, actionID, claudeArgsBuf.String())
+	// `&&` short-circuits `claude` if `tq action prompt` fails (deleted
+	// action, DB error, etc.); without it the shell expands an empty string
+	// and silently launches claude with no prompt.
+	claudeCmd := fmt.Sprintf(`p="$(tq action prompt %d)" && %s claude "$p"%s`, actionID, envPrefix, claudeArgsBuf.String())
 	out, err = w.Runner.Run(ctx, "tmux", []string{
 		"send-keys", "-t", tmuxTarget, claudeCmd,
 	}, workDir, nil)

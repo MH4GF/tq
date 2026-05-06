@@ -926,9 +926,13 @@ func TestExecuteAction_InteractiveAcceptsSingleLineInstruction(t *testing.T) {
 		t.Fatalf("expected 3 tmux calls (new-window, send-keys, Enter), got %d", len(runner.calls))
 	}
 	sendKeysArgs := strings.Join(runner.calls[1].args, " ")
-	wantSubstitution := fmt.Sprintf(`claude "$(tq action prompt %d)"`, action.ID)
-	if !strings.Contains(sendKeysArgs, wantSubstitution) {
-		t.Errorf("send-keys args should contain %q; got: %q", wantSubstitution, sendKeysArgs)
+	for _, want := range []string{
+		fmt.Sprintf(`p="$(tq action prompt %d)" && `, action.ID),
+		`claude "$p"`,
+	} {
+		if !strings.Contains(sendKeysArgs, want) {
+			t.Errorf("send-keys args should contain %q; got: %q", want, sendKeysArgs)
+		}
 	}
 	if strings.Contains(sendKeysArgs, rawInstruction) {
 		t.Error("send-keys args must NOT inline the raw instruction (MAX_CANON regression guard)")

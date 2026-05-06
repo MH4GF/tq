@@ -251,7 +251,7 @@ The parent must be in `failed` / `cancelled` / `done` status and have a non-empt
 
 ### `tq action prompt`
 
-```
+```text
 tq action prompt <ACTION_ID>
 ```
 

@@ -25,7 +25,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 			actionID: 42,
 			taskID:   10,
 			wantContains: []string{
-				`claude "$(tq action prompt 42)"`,
+				`p="$(tq action prompt 42)" && `, `claude "$p"`,
 				"TQ_ACTION_ID=42", "TQ_TASK_ID=10",
 			},
 			wantNotContain: []string{
@@ -43,7 +43,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 			actionID: 7,
 			wantContains: []string{
 				"work:tq-action-7",
-				`claude "$(tq action prompt 7)"`,
+				`p="$(tq action prompt 7)" && `, `claude "$p"`,
 			},
 			wantNewWindow: []string{"new-window", "-t", "work", "-n", "tq-action-7", "-c", "/work/dir"},
 		},
@@ -54,7 +54,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 			actionID: 42,
 			taskID:   10,
 			wantContains: []string{
-				`claude "$(tq action prompt 42)" '--max-turns' '5'`,
+				`p="$(tq action prompt 42)" && `, `claude "$p" '--max-turns' '5'`,
 			},
 		},
 		{
@@ -74,7 +74,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 			actionID: 42,
 			taskID:   10,
 			wantContains: []string{
-				`claude "$(tq action prompt 42)" '--worktree'`,
+				`p="$(tq action prompt 42)" && `, `claude "$p" '--worktree'`,
 			},
 		},
 		{
@@ -93,7 +93,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 			prompt:   "it's a test",
 			actionID: 99,
 			wantContains: []string{
-				`claude "$(tq action prompt 99)"`,
+				`p="$(tq action prompt 99)" && `, `claude "$p"`,
 			},
 			wantNotContain: []string{
 				"it's a test",
@@ -152,7 +152,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 
 // MAX_CANON regression: even multi-KB instructions must produce a short
 // send-keys payload. The instruction lives in the DB; the worker only
-// emits a `$(tq action prompt N)` substitution.
+// emits a `tq action prompt N` substitution guarded by `&&`.
 func TestInteractiveWorker_LongInstructionStaysShortInSendKeys(t *testing.T) {
 	runner := &mockRunner{output: []byte("ok"), failAt: -1}
 	w := &InteractiveWorker{Runner: runner}
@@ -173,9 +173,10 @@ func TestInteractiveWorker_LongInstructionStaysShortInSendKeys(t *testing.T) {
 	if strings.Contains(sendKeys, long) {
 		t.Error("send-keys must NOT inline the raw instruction")
 	}
-	want := `claude "$(tq action prompt 4242)"`
-	if !strings.Contains(sendKeys, want) {
-		t.Errorf("send-keys = %q, want to contain %q", sendKeys, want)
+	for _, want := range []string{`p="$(tq action prompt 4242)" && `, `claude "$p"`} {
+		if !strings.Contains(sendKeys, want) {
+			t.Errorf("send-keys = %q, want to contain %q", sendKeys, want)
+		}
 	}
 }
 
