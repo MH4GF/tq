@@ -248,59 +248,37 @@ func TestExecuteAction(t *testing.T) {
 
 func TestRenderPrompt(t *testing.T) {
 	tests := []struct {
-		name        string
-		mode        string
-		isResume    bool
-		wantDone    bool
-		wantHistory bool
+		name     string
+		mode     string
+		wantDone bool
 	}{
 		{
-			name:        "interactive includes /tq:done and /tq:failed",
-			mode:        ModeInteractive,
-			wantDone:    true,
-			wantHistory: true,
+			name:     "interactive includes /tq:done and /tq:failed",
+			mode:     ModeInteractive,
+			wantDone: true,
 		},
 		{
-			name:        "noninteractive includes /tq:done and /tq:failed",
-			mode:        ModeNonInteractive,
-			wantDone:    true,
-			wantHistory: true,
+			name:     "noninteractive includes /tq:done and /tq:failed",
+			mode:     ModeNonInteractive,
+			wantDone: true,
 		},
 		{
-			name:        "remote excludes /tq:done and /tq:failed",
-			mode:        ModeRemote,
-			wantDone:    false,
-			wantHistory: true,
-		},
-		{
-			name:        "resume noninteractive skips history but keeps /tq:done",
-			mode:        ModeNonInteractive,
-			isResume:    true,
-			wantDone:    true,
-			wantHistory: false,
-		},
-		{
-			name:        "resume interactive skips history but keeps /tq:done",
-			mode:        ModeInteractive,
-			isResume:    true,
-			wantDone:    true,
-			wantHistory: false,
+			name:     "remote excludes /tq:done and /tq:failed",
+			mode:     ModeRemote,
+			wantDone: false,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := RenderPrompt("Fix the bug", 99, 42, tc.mode, tc.isResume)
+			got := RenderPrompt("Fix the bug", 99, 42, tc.mode)
 			if !strings.Contains(got, "action #99") {
 				t.Error("should contain action ID")
 			}
 			if !strings.Contains(got, "task #42") {
 				t.Error("should contain task ID")
 			}
-			if tc.wantHistory && !strings.Contains(got, "tq action list --task 42") {
+			if !strings.Contains(got, "tq action list --task 42") {
 				t.Error("should contain postamble with tq action list and task ID")
-			}
-			if !tc.wantHistory && strings.Contains(got, "tq action list --task 42") {
-				t.Error("should NOT contain tq action list postamble (resume)")
 			}
 			if !strings.Contains(got, "Fix the bug") {
 				t.Error("should contain the original instruction")
@@ -322,7 +300,7 @@ func TestRenderPrompt(t *testing.T) {
 }
 
 func TestRenderPrompt_InstructionComesFirst(t *testing.T) {
-	got := RenderPrompt("/daily-report", 100, 50, ModeNonInteractive, false)
+	got := RenderPrompt("/daily-report", 100, 50, ModeNonInteractive)
 	if !strings.HasPrefix(got, "/daily-report") {
 		t.Errorf("instruction should be the first line, got: %q", got[:min(len(got), 80)])
 	}
@@ -332,33 +310,27 @@ func TestRenderPrompt_PromptStructure(t *testing.T) {
 	tests := []struct {
 		name               string
 		mode               string
-		isResume           bool
-		wantFirstStep      bool
 		wantTerminateBlock bool
 	}{
 		{
-			name:               "noninteractive non-resume has both blocks",
+			name:               "noninteractive has both blocks",
 			mode:               ModeNonInteractive,
-			wantFirstStep:      true,
 			wantTerminateBlock: true,
 		},
 		{
-			name:               "resume drops first-step block but keeps terminate block",
+			name:               "interactive has both blocks",
 			mode:               ModeInteractive,
-			isResume:           true,
-			wantFirstStep:      false,
 			wantTerminateBlock: true,
 		},
 		{
 			name:               "remote keeps first-step block but drops terminate block",
 			mode:               ModeRemote,
-			wantFirstStep:      true,
 			wantTerminateBlock: false,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := RenderPrompt("Fix the bug", 99, 42, tc.mode, tc.isResume)
+			got := RenderPrompt("Fix the bug", 99, 42, tc.mode)
 
 			if !strings.Contains(got, "## tq action context") {
 				t.Error("postamble should contain the markdown heading")
@@ -370,9 +342,8 @@ func TestRenderPrompt_PromptStructure(t *testing.T) {
 				t.Errorf("postamble should not contain triple newlines (blank-line bloat); got:\n%s", got)
 			}
 
-			hasFirstStep := strings.Contains(got, "Required first step (do not skip)")
-			if hasFirstStep != tc.wantFirstStep {
-				t.Errorf("Required-first-step block presence = %v, want %v", hasFirstStep, tc.wantFirstStep)
+			if !strings.Contains(got, "Required first step (do not skip)") {
+				t.Error("postamble should always contain the Required-first-step block")
 			}
 
 			hasTerminateBlock := strings.Contains(got, "When the action terminates, choose exactly one")

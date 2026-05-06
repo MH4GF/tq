@@ -169,9 +169,8 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 		return nil, fmt.Errorf("validate claude_args: %w", err)
 	}
 
-	isResume, _ := actionMeta[MetaKeyIsResume].(bool)
 	if !cfg.IsInteractive() {
-		instruction = RenderPrompt(instruction, action.ID, action.TaskID, cfg.Mode, isResume)
+		instruction = RenderPrompt(instruction, action.ID, action.TaskID, cfg.Mode)
 	}
 
 	workDir, recovery, err := resolveWorkDir(params.DB, action)
@@ -295,22 +294,16 @@ func saveClaudeSessionID(store db.Store, checker ClaudeSessionLogChecker, action
 // required first step, /tq:done /tq:failed selector). Shared by Go-side dispatch
 // (noninteractive/remote) and the `tq action prompt` CLI subcommand so both
 // callers produce byte-identical output.
-//
-// TODO: drop the isResume parameter in a follow-up PR. The CLI callsite already
-// hardcodes false; once noninteractive/remote callers stop relying on the
-// "Required first step" suppression, the branch can go away entirely.
-func RenderPrompt(instruction string, actionID, taskID int64, mode string, isResume bool) string {
+func RenderPrompt(instruction string, actionID, taskID int64, mode string) string {
 	var b strings.Builder
 	b.WriteString(instruction)
 	b.WriteString("\n\n---\n\n## tq action context\n\n")
 	fmt.Fprintf(&b, "You are executing **action #%d** (task #%d).\n", actionID, taskID)
 
-	if !isResume {
-		fmt.Fprintf(&b,
-			"\n**Required first step (do not skip):** run `tq action list --task %d` to load the task history — completed actions, their outcomes, and the decisions that led here. Skipping this step leads to duplicated or contradictory work.\n",
-			taskID,
-		)
-	}
+	fmt.Fprintf(&b,
+		"\n**Required first step (do not skip):** run `tq action list --task %d` to load the task history — completed actions, their outcomes, and the decisions that led here. Skipping this step leads to duplicated or contradictory work.\n",
+		taskID,
+	)
 
 	if mode != ModeRemote {
 		b.WriteString("\n**When the action terminates, choose exactly one:**\n\n")

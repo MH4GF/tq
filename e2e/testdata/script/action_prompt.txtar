@@ -35,8 +35,8 @@ stdout 'do thing remotely'
 stdout 'Required first step'
 ! stdout '/tq:done'
 
-# Resume action: isResume=true in metadata is intentionally ignored by the
-# CLI in this PR (hardcoded false). Required first step still appears.
+# Resume action: is_resume=true in metadata has no effect on the rendered
+# prompt — Required first step is always emitted.
 exec tq action create 'continue' --task 1 --title 'resume-style' --meta '{"mode":"interactive","is_resume":true}'
 stdout 'action #4 created'
 exec tq action prompt 4
