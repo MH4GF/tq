@@ -39,8 +39,7 @@ under the macOS pty MAX_CANON limit regardless of instruction length.`,
 		if mode == "" {
 			mode = dispatch.ModeInteractive
 		}
-		// isResume hardcoded false; see RenderPrompt TODO.
-		out := dispatch.RenderPrompt(instruction, action.ID, action.TaskID, mode, false)
+		out := dispatch.RenderPrompt(instruction, action.ID, action.TaskID, mode)
 		if !strings.HasSuffix(out, "\n") {
 			out += "\n"
 		}

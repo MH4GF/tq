@@ -47,8 +47,8 @@ func TestActionPromptCmd_RendersWrappedPrompt(t *testing.T) {
 		{name: "noninteractive", mode: dispatch.ModeNonInteractive, wantTerminate: true},
 		{name: "remote drops terminate block", mode: dispatch.ModeRemote, wantTerminate: false},
 		{name: "default mode (empty -> interactive)", mode: "", wantTerminate: true},
-		// Hardcoded isResume=false: the postamble keeps "Required first step"
-		// even when metadata signals a resumed session.
+		// is_resume metadata has no effect on rendered prompt — the
+		// "Required first step" block is always emitted.
 		{name: "resume metadata is ignored", mode: dispatch.ModeInteractive, isResume: true, wantTerminate: true},
 	}
 
@@ -77,7 +77,7 @@ func TestActionPromptCmd_RendersWrappedPrompt(t *testing.T) {
 			if effectiveMode == "" {
 				effectiveMode = dispatch.ModeInteractive
 			}
-			want := dispatch.RenderPrompt(instruction, actionID, taskID, effectiveMode, false)
+			want := dispatch.RenderPrompt(instruction, actionID, taskID, effectiveMode)
 			if !strings.HasSuffix(want, "\n") {
 				want += "\n"
 			}
@@ -89,7 +89,7 @@ func TestActionPromptCmd_RendersWrappedPrompt(t *testing.T) {
 				t.Errorf("output should start with the raw instruction; got prefix %q", out[:min(len(out), 40)])
 			}
 			if !strings.Contains(out, "Required first step") {
-				t.Error("output should always contain 'Required first step' (isResume hardcoded false)")
+				t.Error("output should always contain 'Required first step'")
 			}
 			if tc.wantTerminate && !strings.Contains(out, "/tq:done") {
 				t.Error("output should contain /tq:done for non-remote modes")
