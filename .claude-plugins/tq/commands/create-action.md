@@ -63,10 +63,6 @@ Pass via `--meta '{"claude_args":["--effort","<level>"]}'`. Choose by task compl
 | Trivial cleanup, just invokes another slash command | omit (defaults are fine) |
 | Long-horizon deep work, hard refactor | `max` (try it, watch for overthinking) |
 
-#### Multi-line instructions
-
-If the instruction spans multiple lines (free-text context, embedded URLs followed by next-step bullets, etc.), set `--meta '{"mode":"noninteractive"}'`. Interactive mode does accept newlines, but tmux `send-keys` types each line into the shell separately, which clutters the pane and relies on PS2 continuation — `noninteractive` keeps the prompt clean. See `docs/cli-reference.md` `tq action create` for the full constraint.
-
 #### Examples
 
 **Pair 1 — vague vs goal-clear**

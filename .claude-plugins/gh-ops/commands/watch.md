@@ -81,13 +81,11 @@ For actionable notifications, select the **first matching** instruction by prior
 | 6 | Own PR, not yet reviewed | `/gh-ops:self-review <PR_URL>` |
 | 7 | Notification is informational only (Discussion, Release, mention without action signal, body referencing follow-up PR/Issue) | **Co-review template** (see below) |
 
-If row 7 also doesn't fit and the situation truly needs free-text describing, write a detailed instruction including the PR/issue URL, context from the notification, and specific next steps. Do NOT use a slash command in that case. Such free-text instructions are typically multi-line, so they MUST be created with `--meta '{"mode":"noninteractive"}'` — interactive mode types each line into the tmux pane separately, which clutters the prompt and relies on PS2 continuation.
+If row 7 also doesn't fit and the situation truly needs free-text describing, write a detailed instruction including the PR/issue URL, context from the notification, and specific next steps. Do NOT use a slash command in that case.
 
 ##### Co-review template (row 7)
 
 Co-review actions are discussion-oriented: the dispatched agent must surface context to the user and confirm the next step via AskUserQuestion before acting. Pre-fill the template using data collected in Step 2a.
-
-The template is multi-line, so the action MUST be created with `--meta '{"mode":"noninteractive"}'` (see Step 2f). Interactive mode would type each line into the tmux pane separately, which clutters the prompt and relies on PS2 continuation.
 
 ```text
 This action is a co-review discussion with the user. Before taking any action, organize the context below, then use AskUserQuestion to confirm the next step with the user.
@@ -144,13 +142,6 @@ tq task create "<title>" --project <project_id> --meta '{"url":"<url>"}'
 
 # Create action (instruction is the slash command from 2d)
 tq action create <instruction> --task <task_id> --title "<title>"
-```
-
-If the instruction is multi-line (the Co-review template from row 7, or any free-text instruction with embedded newlines), pass `--meta '{"mode":"noninteractive"}'`. The default interactive mode types each line into the tmux pane separately, which clutters the prompt and relies on PS2 continuation:
-
-```bash
-tq action create "<multi-line instruction>" --task <task_id> --title "<title>" \
-  --meta '{"mode":"noninteractive"}'
 ```
 
 ### 3. Mark notifications as read
