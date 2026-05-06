@@ -56,7 +56,16 @@ To create an action (spawns a new Claude Code session):
 
 The agent will tune the instruction, associate it with the right task, create the action, and the queue worker will automatically pick it up.
 
-See [CLI Reference](docs/cli-reference.md) for the full command list.
+### More commands
+
+Beyond `project`, `task`, `action`, and `ui`, tq exposes a few more top-level commands:
+
+- `tq search <keyword>` — full-text search across tasks and actions (titles, results, metadata)
+- `tq schedule` — manage cron-based scheduled actions (`create` / `list` / `update` / `enable` / `disable` / `delete`)
+- `tq event list` — query the event log (audit trail across projects, tasks, actions, and schedules)
+- `tq completion <shell>` — generate shell autocompletion scripts (bash / zsh / fish / powershell)
+
+See [CLI Reference](docs/cli-reference.md) for the full command list with flags.
 
 ## Configuration
 
