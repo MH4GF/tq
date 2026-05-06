@@ -23,7 +23,7 @@ var attachCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("get action: %w", err)
 		}
-		if !action.TmuxSession.Valid {
+		if !action.TmuxSession.Valid || !action.TmuxWindow.Valid {
 			return fmt.Errorf("action #%d has no tmux session info (action may not be running interactively)", id)
 		}
 		if os.Getenv("TMUX") == "" {
