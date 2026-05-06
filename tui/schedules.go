@@ -20,18 +20,20 @@ const (
 )
 
 type SchedulesModel struct {
-	schedules []db.Schedule
-	cursor    int
-	width     int
-	height    int
-	database  db.Store
-	message   string
-	mode      schedulesMode
-	detailIdx int
+	schedules      []db.Schedule
+	cursor         int
+	width          int
+	height         int
+	database       db.Store
+	message        string
+	messageIsError bool
+	mode           schedulesMode
+	detailIdx      int
 }
 
 type schedulesLoadedMsg struct {
 	schedules []db.Schedule
+	err       error
 }
 
 func NewSchedulesModel(database db.Store) SchedulesModel {
@@ -42,7 +44,7 @@ func (m SchedulesModel) loadSchedules() tea.Cmd {
 	return func() tea.Msg {
 		schedules, err := m.database.ListSchedules(0)
 		if err != nil {
-			return schedulesLoadedMsg{}
+			return schedulesLoadedMsg{err: err}
 		}
 		return schedulesLoadedMsg{schedules: schedules}
 	}
@@ -55,6 +57,10 @@ func (m SchedulesModel) Init() tea.Cmd {
 func (m SchedulesModel) Update(msg tea.Msg) (SchedulesModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case schedulesLoadedMsg:
+		if msg.err != nil {
+			m.message = fmt.Sprintf("load schedules failed: %v", msg.err)
+			m.messageIsError = true
+		}
 		m.schedules = msg.schedules
 		if m.cursor >= len(m.schedules) {
 			m.cursor = max(0, len(m.schedules)-1)
@@ -64,6 +70,7 @@ func (m SchedulesModel) Update(msg tea.Msg) (SchedulesModel, tea.Cmd) {
 			return m.updateDetail(msg)
 		}
 		m.message = ""
+		m.messageIsError = false
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("j", "down"))):
 			if m.cursor < len(m.schedules)-1 {
@@ -84,7 +91,10 @@ func (m SchedulesModel) Update(msg tea.Msg) (SchedulesModel, tea.Cmd) {
 			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("d"))):
 			if s := m.selectedSchedule(); s != nil {
-				if err := m.database.DeleteSchedule(s.ID); err == nil {
+				if err := m.database.DeleteSchedule(s.ID); err != nil {
+					m.message = fmt.Sprintf("delete schedule #%d failed: %v", s.ID, err)
+					m.messageIsError = true
+				} else {
 					m.message = fmt.Sprintf("schedule #%d deleted", s.ID)
 				}
 				return m, m.loadSchedules()
@@ -108,12 +118,16 @@ func (m SchedulesModel) updateDetail(msg tea.KeyMsg) (SchedulesModel, tea.Cmd) {
 
 func (m SchedulesModel) toggleEnabled(s *db.Schedule) (SchedulesModel, tea.Cmd) {
 	newEnabled := !s.Enabled
-	if err := m.database.UpdateScheduleEnabled(s.ID, newEnabled); err == nil {
+	if err := m.database.UpdateScheduleEnabled(s.ID, newEnabled); err != nil {
+		m.message = fmt.Sprintf("toggle schedule #%d failed: %v", s.ID, err)
+		m.messageIsError = true
+	} else {
 		action := "enabled"
 		if !newEnabled {
 			action = "disabled"
 		}
 		m.message = fmt.Sprintf("schedule #%d %s", s.ID, action)
+		m.messageIsError = false
 	}
 	return m, m.loadSchedules()
 }
@@ -131,7 +145,11 @@ func (m SchedulesModel) View() string {
 	}
 
 	if len(m.schedules) == 0 {
-		return styleMuted.Render("  No schedules")
+		body := styleMuted.Render("  No schedules")
+		if msg := m.renderMessage(); msg != "" {
+			body += "\n\n  " + msg
+		}
+		return body
 	}
 
 	const (
@@ -183,11 +201,22 @@ func (m SchedulesModel) View() string {
 		b.WriteString(line + "\n")
 	}
 
-	if m.message != "" {
-		b.WriteString("\n  " + styleDone.Render(m.message) + "\n")
+	if msg := m.renderMessage(); msg != "" {
+		b.WriteString("\n  " + msg + "\n")
 	}
 
 	return b.String()
+}
+
+func (m SchedulesModel) renderMessage() string {
+	if m.message == "" {
+		return ""
+	}
+	style := styleDone
+	if m.messageIsError {
+		style = styleWarning
+	}
+	return style.Render(m.message)
 }
 
 func (m SchedulesModel) renderDetail(s *db.Schedule) string {
