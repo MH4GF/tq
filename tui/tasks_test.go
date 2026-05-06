@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -851,6 +852,54 @@ func TestTasksModel_MessageStaleTimerIgnored(t *testing.T) {
 	m, _ = m.Update(clearTasksMessageMsg{gen: m.messageGen})
 	if m.message != "" {
 		t.Errorf("current-gen clear should wipe message, got %q", m.message)
+	}
+}
+
+func TestTasksModel_AttachActionRejectsHalfSetTmuxInfo(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	m := NewTasksModel(d, "")
+
+	tests := []struct {
+		name    string
+		action  *db.Action
+		wantMsg string
+	}{
+		{
+			name: "session valid, window invalid",
+			action: &db.Action{
+				ID:          1,
+				TmuxSession: sql.NullString{String: "main", Valid: true},
+				TmuxWindow:  sql.NullString{Valid: false},
+			},
+			wantMsg: "no tmux session info",
+		},
+		{
+			name: "session invalid, window valid",
+			action: &db.Action{
+				ID:          2,
+				TmuxSession: sql.NullString{Valid: false},
+				TmuxWindow:  sql.NullString{String: "tq-action-2", Valid: true},
+			},
+			wantMsg: "no tmux session info",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			msg := m.attachAction(tc.action)()
+			attached, ok := msg.(actionAttachedMsg)
+			if !ok {
+				t.Fatalf("msg type = %T, want actionAttachedMsg", msg)
+			}
+			if attached.message != tc.wantMsg {
+				t.Errorf("message = %q, want %q", attached.message, tc.wantMsg)
+			}
+			if attached.id != tc.action.ID {
+				t.Errorf("id = %d, want %d", attached.id, tc.action.ID)
+			}
+		})
 	}
 }
 

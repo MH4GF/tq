@@ -13,6 +13,7 @@ func TestAttach(t *testing.T) {
 	tests := []struct {
 		name       string
 		sessionID  string
+		windowID   string
 		wantErr    bool
 		wantErrMsg string
 	}{
@@ -23,8 +24,15 @@ func TestAttach(t *testing.T) {
 			wantErrMsg: "has no tmux session info",
 		},
 		{
+			name:       "session set but window NULL",
+			sessionID:  "main",
+			wantErr:    true,
+			wantErrMsg: "has no tmux session info",
+		},
+		{
 			name:      "with session info (tmux command fails outside tmux)",
 			sessionID: "main",
+			windowID:  "tq-action-1",
 			wantErr:   true,
 		},
 	}
@@ -39,7 +47,13 @@ func TestAttach(t *testing.T) {
 			taskID, _ := d.InsertTask(1, "test", "{}", "")
 			id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusRunning, nil)
 			if tc.sessionID != "" {
-				d.SetTmuxInfo(id, tc.sessionID, "tq-action-1")
+				var windowPtr *string
+				if tc.windowID != "" {
+					windowPtr = &tc.windowID
+				}
+				if err := d.SetActionTmuxInfoForTest(id, &tc.sessionID, windowPtr, nil); err != nil {
+					t.Fatalf("SetActionTmuxInfoForTest: %v", err)
+				}
 			}
 
 			root := cmd.GetRootCmd()
