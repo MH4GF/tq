@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -15,6 +16,32 @@ func TestOpen(t *testing.T) {
 	}
 	if mode != "wal" && mode != "memory" {
 		t.Errorf("expected wal or memory journal mode, got %s", mode)
+	}
+}
+
+func TestIsLibsqlURL(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want bool
+	}{
+		{"libsql://example.turso.io", true},
+		{"libsql://localhost:8080?tls=0", true},
+		{"https://example.turso.io", false},
+		{"http://localhost:8080", false},
+		{"wss://example.turso.io", false},
+		{"ws://localhost:8080", false},
+		{"/Users/me/.config/tq/tq.db", false},
+		{"./relative/path.db", false},
+		{":memory:", false},
+		{"file:test.db", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.dsn, func(t *testing.T) {
+			if got := db.IsLibsqlURL(tt.dsn); got != tt.want {
+				t.Errorf("IsLibsqlURL(%q) = %v, want %v", tt.dsn, got, tt.want)
+			}
+		})
 	}
 }
 

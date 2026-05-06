@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -53,8 +52,8 @@ var openStoreFn = func() (db.Store, func(), error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve db path: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		return nil, nil, fmt.Errorf("create db dir: %w", err)
+	if err := ensureLocalDBDir(dbPath); err != nil {
+		return nil, nil, err
 	}
 	d, err := db.Open(dbPath)
 	if err != nil {

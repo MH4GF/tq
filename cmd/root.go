@@ -33,8 +33,12 @@ Pending actions are auto-dispatched by the queue worker (tq ui), or manually via
 
 Database location precedence:
   1. --db flag
-  2. TQ_DB_PATH environment variable
+  2. TQ_DB_URL environment variable
   3. ~/.config/tq/tq.db (default)
+
+The --db flag and TQ_DB_URL accept either a local sqlite file path
+or a libsql URL (libsql://host?authToken=...). For Turso/self-hosted
+sqld endpoints, embed the auth token in the URL query string.
 
 All list commands output JSON.`,
 	Example: `  # Quick start
@@ -52,8 +56,8 @@ All list commands output JSON.`,
 		if err != nil {
 			return err
 		}
-		if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-			return fmt.Errorf("create db dir: %w", err)
+		if err := ensureLocalDBDir(dbPath); err != nil {
+			return err
 		}
 		database, err = db.Open(dbPath)
 		if err != nil {
@@ -73,7 +77,7 @@ func resolveDBPath() (string, error) {
 	if dbPathFlag != "" {
 		return dbPathFlag, nil
 	}
-	if p := os.Getenv("TQ_DB_PATH"); p != "" {
+	if p := os.Getenv("TQ_DB_URL"); p != "" {
 		return p, nil
 	}
 	dir, err := configDir()
@@ -81,6 +85,18 @@ func resolveDBPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "tq.db"), nil
+}
+
+// ensureLocalDBDir creates the parent directory for a local sqlite DB.
+// No-op for libsql URLs.
+func ensureLocalDBDir(dbPath string) error {
+	if db.IsLibsqlURL(dbPath) {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		return fmt.Errorf("create db dir: %w", err)
+	}
+	return nil
 }
 
 func configDir() (string, error) {
@@ -97,7 +113,7 @@ func configDir() (string, error) {
 func init() {
 	rootCmd.Version = version
 	rootCmd.PersistentFlags().StringVar(&dbPathFlag, "db", "",
-		"SQLite database path (overrides TQ_DB_PATH; default: ~/.config/tq/tq.db)")
+		"DB path or libsql URL (overrides TQ_DB_URL; default: ~/.config/tq/tq.db)")
 	rootCmd.AddCommand(taskCmd)
 	rootCmd.AddCommand(actionCmd)
 	rootCmd.AddCommand(uiCmd)

@@ -37,3 +37,39 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y tmux
       - run: go test ./...
       - run: go build ./...
+
+  e2e-libsql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [lint, test]
+    services:
+      sqld:
+        # The libsql-server image ships without wget/curl/nc, so we can't
+        # express a service-level healthcheck. Instead we wait for the
+        # /health endpoint from the runner (which has curl) below.
+        image: ghcr.io/tursodatabase/libsql-server:v0.24.32
+        ports:
+          - 8080:8080
+    env:
+      # Port-explicit libsql:// URL with tls=0 routes to plain HTTP, which
+      # the in-container sqld serves. No auth token: the sqld default has
+      # auth disabled, matching a hermetic CI sandbox.
+      TQ_DB_URL: "libsql://localhost:8080?tls=0"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+      - run: sudo apt-get update && sudo apt-get install -y tmux
+      - name: Wait for sqld /health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/health >/dev/null 2>&1; then
+              echo "sqld ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "sqld did not become healthy in 60s" >&2
+          exit 1
+      - run: go test -tags libsql_e2e ./e2e/ -run TestLibsqlE2E -v -timeout 10m

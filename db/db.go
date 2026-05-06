@@ -5,25 +5,46 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"strings"
 
+	_ "github.com/tursodatabase/libsql-client-go/libsql"
 	_ "modernc.org/sqlite"
 )
 
 //go:embed schema.sql
 var schemaSQL string
 
+// IsLibsqlURL reports whether dsn is a libsql:// URL that should be
+// opened through the libsql driver. We deliberately do NOT match
+// `https://` / `ws://` etc. — keeping the trigger to a single explicit
+// scheme avoids misrouting arbitrary URLs, and the libsql client itself
+// maps `libsql://...?tls=0` (and similar transport flags) onto the
+// underlying http/ws connection internally.
+func IsLibsqlURL(dsn string) bool {
+	return strings.HasPrefix(dsn, "libsql://")
+}
+
 type DB struct {
 	*sql.DB
 }
 
 func Open(dsn string) (*DB, error) {
-	sqlDB, err := sql.Open("sqlite", dsn)
+	driver := "sqlite"
+	if IsLibsqlURL(dsn) {
+		driver = "libsql"
+	}
+	sqlDB, err := sql.Open(driver, dsn)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := sqlDB.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		_ = sqlDB.Close()
-		return nil, err
+	// PRAGMA journal_mode=WAL is meaningful only for a local sqlite file.
+	// libsql endpoints manage durability server-side and either no-op or
+	// reject the pragma depending on the surface.
+	if driver == "sqlite" {
+		if _, err := sqlDB.Exec("PRAGMA journal_mode=WAL"); err != nil {
+			_ = sqlDB.Close()
+			return nil, err
+		}
 	}
 	if _, err := sqlDB.Exec("PRAGMA foreign_keys=ON"); err != nil {
 		_ = sqlDB.Close()
