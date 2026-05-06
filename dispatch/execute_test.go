@@ -246,7 +246,7 @@ func TestExecuteAction(t *testing.T) {
 	}
 }
 
-func TestWrapInstruction(t *testing.T) {
+func TestRenderPrompt(t *testing.T) {
 	tests := []struct {
 		name        string
 		mode        string
@@ -289,7 +289,7 @@ func TestWrapInstruction(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := wrapInstruction("Fix the bug", 99, 42, tc.mode, tc.isResume)
+			got := RenderPrompt("Fix the bug", 99, 42, tc.mode, tc.isResume)
 			if !strings.Contains(got, "action #99") {
 				t.Error("should contain action ID")
 			}
@@ -321,14 +321,14 @@ func TestWrapInstruction(t *testing.T) {
 	}
 }
 
-func TestWrapInstruction_InstructionComesFirst(t *testing.T) {
-	got := wrapInstruction("/daily-report", 100, 50, ModeNonInteractive, false)
+func TestRenderPrompt_InstructionComesFirst(t *testing.T) {
+	got := RenderPrompt("/daily-report", 100, 50, ModeNonInteractive, false)
 	if !strings.HasPrefix(got, "/daily-report") {
 		t.Errorf("instruction should be the first line, got: %q", got[:min(len(got), 80)])
 	}
 }
 
-func TestWrapInstruction_PromptStructure(t *testing.T) {
+func TestRenderPrompt_PromptStructure(t *testing.T) {
 	tests := []struct {
 		name               string
 		mode               string
@@ -358,7 +358,7 @@ func TestWrapInstruction_PromptStructure(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := wrapInstruction("Fix the bug", 99, 42, tc.mode, tc.isResume)
+			got := RenderPrompt("Fix the bug", 99, 42, tc.mode, tc.isResume)
 
 			if !strings.Contains(got, "## tq action context") {
 				t.Error("postamble should contain the markdown heading")
@@ -891,8 +891,10 @@ func TestExecuteAction_NonInteractiveNilCheckerNoError(t *testing.T) {
 	}
 }
 
-// Regression: a clean single-line instruction must reach the real InteractiveWorker
-// without tripping the validator on wrapInstruction's leading-newline postamble.
+// Regression: ExecuteAction must drive InteractiveWorker so that the tmux
+// send-keys payload uses the `tq action prompt <id>` shell substitution form
+// (and never inlines the raw instruction or applies legacy `'\”` escaping).
+// The MAX_CANON workaround relies on this short payload shape.
 func TestExecuteAction_InteractiveAcceptsSingleLineInstruction(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -925,10 +927,17 @@ func TestExecuteAction_InteractiveAcceptsSingleLineInstruction(t *testing.T) {
 		t.Fatalf("expected 3 tmux calls (new-window, send-keys, Enter), got %d", len(runner.calls))
 	}
 	sendKeysArgs := strings.Join(runner.calls[1].args, " ")
-	if !strings.Contains(sendKeysArgs, rawInstruction) {
-		t.Error("send-keys args should contain the raw user instruction")
+	wantSubstitution := fmt.Sprintf(`claude "$(tq action prompt %d)"`, action.ID)
+	if !strings.Contains(sendKeysArgs, wantSubstitution) {
+		t.Errorf("send-keys args should contain %q; got: %q", wantSubstitution, sendKeysArgs)
 	}
-	if !strings.Contains(sendKeysArgs, "## tq action context") {
-		t.Error("send-keys args should contain the wrapInstruction postamble")
+	if strings.Contains(sendKeysArgs, rawInstruction) {
+		t.Error("send-keys args must NOT inline the raw instruction (MAX_CANON regression guard)")
+	}
+	if strings.Contains(sendKeysArgs, "## tq action context") {
+		t.Error("send-keys args must NOT inline the wrapped postamble (MAX_CANON regression guard)")
+	}
+	if strings.Contains(sendKeysArgs, `'\''`) {
+		t.Error("send-keys args must NOT use legacy single-quote shell escape")
 	}
 }
