@@ -32,7 +32,7 @@
           },
           {
             "type": "command",
-            "command": "[ \"$TQ_AUTO_UPDATE\" = \"1\" ] && go install github.com/MH4GF/tq@latest && tq --version || true",
+            "command": "go install . && tq --version",
             "timeout": 120
           }
         ]
