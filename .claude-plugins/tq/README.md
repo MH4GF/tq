@@ -73,6 +73,8 @@ tq search deploy --project 1
 
 tqタスク管理者。「タスク作って」「アクション追加して」「完了にして」「状況見せて」「割り込み実行して」「スケジュール実行したい」で発動
 
+`skills/manager/SKILL.md`
+
 ## hooks
 
 ### `SessionStart`
