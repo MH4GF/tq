@@ -10,6 +10,17 @@
       "Skill(simplify)"
     ]
   },
+  "extraKnownMarketplaces": {
+    "tq-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "MH4GF/tq"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "tq@tq-marketplace": true
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -17,6 +28,11 @@
           {
             "type": "command",
             "command": "npx -y gh-setup-hooks",
+            "timeout": 120
+          },
+          {
+            "type": "command",
+            "command": "[ \"$TQ_AUTO_UPDATE\" = \"1\" ] && go install github.com/MH4GF/tq@latest && tq --version || true",
             "timeout": 120
           }
         ]
