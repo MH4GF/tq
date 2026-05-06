@@ -1,5 +1,5 @@
-# DB path precedence: --db flag > TQ_DB_PATH env > default.
-# The harness Setup pins TQ_DB_PATH to $WORK/tq.db, so we contrast that
+# DB path precedence: --db flag > TQ_DB_URL env > default.
+# The harness Setup pins TQ_DB_URL to $WORK/tq.db, so we contrast that
 # against an explicit --db pointing at $WORK/alt.db.
 
 exec tq --db $WORK/alt.db project create alt /tmp/alt
@@ -11,7 +11,7 @@ stdout '"name": "alt"'
 exec tq project list
 stdout '\[\]'
 
-# --db wins even when TQ_DB_PATH points at a different (non-default) path.
-env TQ_DB_PATH=$WORK/other.db
+# --db wins even when TQ_DB_URL points at a different (non-default) path.
+env TQ_DB_URL=$WORK/other.db
 exec tq --db $WORK/alt.db project list
 stdout '"name": "alt"'

@@ -16,8 +16,12 @@ func tryOpenDBForHelp() (db.Store, func()) {
 	if err != nil {
 		return nil, func() {}
 	}
-	if _, err := os.Stat(dbPath); err != nil {
-		return nil, func() {}
+	// Local file: skip help if the file isn't there yet (no DB to read).
+	// libsql URL: trust the URL; Open will surface any reachability error.
+	if !db.IsLibsqlURL(dbPath) {
+		if _, err := os.Stat(dbPath); err != nil {
+			return nil, func() {}
+		}
 	}
 	store, err := db.Open(dbPath)
 	if err != nil {

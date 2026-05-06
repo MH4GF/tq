@@ -37,3 +37,29 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y tmux
       - run: go test ./...
       - run: go build ./...
+
+  e2e-libsql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      sqld:
+        image: ghcr.io/tursodatabase/libsql-server:v0.24.32
+        ports:
+          - 8080:8080
+        options: >-
+          --health-cmd "wget -qO- http://localhost:8080/health"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # Port-explicit libsql:// URL with tls=0 routes to plain HTTP, which
+      # the in-container sqld serves. No auth token: the sqld default has
+      # auth disabled, matching a hermetic CI sandbox.
+      TQ_DB_URL: "libsql://localhost:8080?tls=0"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+      - run: sudo apt-get update && sudo apt-get install -y tmux
+      - run: go test -tags libsql_e2e ./e2e/ -run TestLibsqlE2E -v -timeout 10m

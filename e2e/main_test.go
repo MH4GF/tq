@@ -31,7 +31,7 @@ func TestE2E(t *testing.T) {
 	testscript.Run(t, testscript.Params{
 		Dir: "testdata/script",
 		Setup: func(env *testscript.Env) error {
-			env.Setenv("TQ_DB_PATH", filepath.Join(env.WorkDir, "tq.db"))
+			env.Setenv("TQ_DB_URL", filepath.Join(env.WorkDir, "tq.db"))
 			env.Setenv("HOME", env.WorkDir)
 
 			// tmux unix sockets are constrained by the platform's

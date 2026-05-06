@@ -29,6 +29,16 @@ func TestResolveDBPath(t *testing.T) {
 			want: "/env/path/tq.db",
 		},
 		{
+			name: "libsql URL passed through verbatim from env",
+			env:  "libsql://demo.turso.io?authToken=tok",
+			want: "libsql://demo.turso.io?authToken=tok",
+		},
+		{
+			name: "libsql URL passed through verbatim from flag",
+			flag: "libsql://demo.turso.io?authToken=tok",
+			want: "libsql://demo.turso.io?authToken=tok",
+		},
+		{
 			name:      "default uses configDir",
 			configDir: configDir,
 			want:      filepath.Join(configDir, "tq.db"),
@@ -37,7 +47,7 @@ func TestResolveDBPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("TQ_DB_PATH", tt.env)
+			t.Setenv("TQ_DB_URL", tt.env)
 			prev := dbPathFlag
 			dbPathFlag = tt.flag
 			t.Cleanup(func() { dbPathFlag = prev })
@@ -60,7 +70,7 @@ func TestResolveDBPath(t *testing.T) {
 }
 
 func TestDBFlag_EndToEnd(t *testing.T) {
-	t.Setenv("TQ_DB_PATH", "")
+	t.Setenv("TQ_DB_URL", "")
 
 	prevDB, prevInjected := database, dbInjected
 	database = nil

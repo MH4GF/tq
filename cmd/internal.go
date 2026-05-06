@@ -53,8 +53,10 @@ var openStoreFn = func() (db.Store, func(), error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve db path: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		return nil, nil, fmt.Errorf("create db dir: %w", err)
+	if !db.IsLibsqlURL(dbPath) {
+		if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+			return nil, nil, fmt.Errorf("create db dir: %w", err)
+		}
 	}
 	d, err := db.Open(dbPath)
 	if err != nil {

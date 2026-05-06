@@ -62,8 +62,15 @@ See [CLI Reference](docs/cli-reference.md) for the full command list.
 
 The database lives at `~/.config/tq/tq.db` by default. Override with:
 
-- `--db <path>` flag (highest precedence)
-- `TQ_DB_PATH` environment variable
+- `--db <path-or-url>` flag (highest precedence)
+- `TQ_DB_URL` environment variable
+
+Both accept either a local sqlite file path or a libsql URL
+(`libsql://...?authToken=...`), so the same binary can talk to a remote
+[Turso](https://turso.tech) database (or any libsql-compatible endpoint
+such as a self-hosted [sqld](https://github.com/tursodatabase/libsql)).
+Verified against Turso. Embed the auth token in the URL query string;
+no separate env var is read.
 
 Useful for running multiple isolated queues (e.g. a separate DB for demos or testing).
 
@@ -128,7 +135,9 @@ Additional metadata keys:
 
 ## Testing
 
-Unit tests live alongside source files (`*_test.go`). End-to-end CLI scenarios are written as [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) files under `e2e/testdata/script/*.txtar`. Each scenario runs against an isolated `TQ_DB_PATH`, `HOME`, and `TMUX_TMPDIR`, so they can run in parallel without interference. Run all tests with `go test ./...`, or just the E2E suite with `go test ./e2e`. To add a scenario, drop a new `.txtar` file describing the CLI invocations and expected stdout/stderr; for tmux dispatch scenarios, embed a `claude` stub via `-- file --` sections and synchronize with `tmux wait-for` to keep the test deterministic.
+Unit tests live alongside source files (`*_test.go`). End-to-end CLI scenarios are written as [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) files under `e2e/testdata/script/*.txtar`. Each scenario runs against an isolated `TQ_DB_URL`, `HOME`, and `TMUX_TMPDIR`, so they can run in parallel without interference. Run all tests with `go test ./...`, or just the E2E suite with `go test ./e2e`. To add a scenario, drop a new `.txtar` file describing the CLI invocations and expected stdout/stderr; for tmux dispatch scenarios, embed a `claude` stub via `-- file --` sections and synchronize with `tmux wait-for` to keep the test deterministic.
+
+The same e2e suite can be replayed against a libsql endpoint to verify driver compatibility. With a sqld container (or Turso DB) reachable, set `TQ_DB_URL=libsql://...` and run `go test -tags libsql_e2e ./e2e/ -run TestLibsqlE2E`. The libsql variant resets the schema between scenarios since they share one DB. CI runs this against a sqld service container on every PR.
 
 ## License
 
