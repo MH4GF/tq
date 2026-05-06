@@ -27,6 +27,7 @@ The following commands are created as tq action instructions by `watch`, and can
 | `/gh-ops:respond-review <PR_URL>` | Respond to review comments on a PR |
 | `/gh-ops:merge-pr <PR_URL>` | Judge and execute PR merge |
 | `/gh-ops:self-review <PR_URL>` | Self-review a PR before requesting review |
+| `/gh-ops:wait-pr-checks [PR_URL]` | Wait for PR checks to complete and report results |
 
 ## Usage
 
