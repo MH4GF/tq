@@ -2,6 +2,7 @@ package dispatch_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -220,6 +221,73 @@ func TestCheckSchedules_MarshalFailureUpdatesLastRunAt(t *testing.T) {
 	}
 	if s.LastRunAt.String != "2026-03-12 10:00:00" {
 		t.Errorf("last_run_at = %q, want %q", s.LastRunAt.String, "2026-03-12 10:00:00")
+	}
+	if !s.LastError.Valid {
+		t.Fatal("expected last_error to be populated after marshal failure")
+	}
+	if !strings.Contains(s.LastError.String, "marshal metadata") {
+		t.Errorf("last_error = %q, want to contain %q", s.LastError.String, "marshal metadata")
+	}
+}
+
+func TestCheckSchedules_InvalidMetadataRecordsLastError(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	scheduleID, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", `{"mode":"bogus"}`)
+
+	createdAt, _ := time.Parse(db.TimeLayout, "2026-03-12 09:58:00")
+	d.SetScheduleTimestampsForTest(scheduleID, &createdAt, nil)
+
+	now, _ := time.Parse(db.TimeLayout, "2026-03-12 10:00:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := d.ListActions("", nil, 0)
+	if len(actions) != 0 {
+		t.Fatalf("expected 0 actions on invalid metadata, got %d", len(actions))
+	}
+
+	s, _ := d.GetSchedule(scheduleID)
+	if !s.LastRunAt.Valid {
+		t.Fatal("expected last_run_at to be set after invalid metadata (throttle retries)")
+	}
+	if !s.LastError.Valid {
+		t.Fatal("expected last_error to be populated on invalid metadata")
+	}
+	if !strings.Contains(s.LastError.String, "invalid metadata") {
+		t.Errorf("last_error = %q, want to contain %q", s.LastError.String, "invalid metadata")
+	}
+}
+
+func TestCheckSchedules_LastErrorClearedOnSuccess(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	scheduleID, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
+	if err := d.UpdateScheduleLastError(scheduleID, "stale failure"); err != nil {
+		t.Fatalf("seed last_error: %v", err)
+	}
+
+	createdAt, _ := time.Parse(db.TimeLayout, "2026-03-12 09:58:00")
+	d.SetScheduleTimestampsForTest(scheduleID, &createdAt, nil)
+
+	now, _ := time.Parse(db.TimeLayout, "2026-03-12 10:00:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := d.ListActions("", nil, 0)
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+
+	s, _ := d.GetSchedule(scheduleID)
+	if s.LastError.Valid {
+		t.Errorf("expected last_error to be cleared after success, got %q", s.LastError.String)
 	}
 }
 

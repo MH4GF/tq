@@ -15,13 +15,14 @@ type Schedule struct {
 	Metadata    string
 	Enabled     bool
 	LastRunAt   sql.NullString
+	LastError   sql.NullString
 	CreatedAt   string
 }
 
-const scheduleColumns = "id, task_id, instruction, title, cron_expr, metadata, enabled, last_run_at, created_at"
+const scheduleColumns = "id, task_id, instruction, title, cron_expr, metadata, enabled, last_run_at, last_error, created_at"
 
 func (s *Schedule) scanFields() []any {
-	return []any{&s.ID, &s.TaskID, &s.Instruction, &s.Title, &s.CronExpr, &s.Metadata, &s.Enabled, &s.LastRunAt, &s.CreatedAt}
+	return []any{&s.ID, &s.TaskID, &s.Instruction, &s.Title, &s.CronExpr, &s.Metadata, &s.Enabled, &s.LastRunAt, &s.LastError, &s.CreatedAt}
 }
 
 func (db *DB) InsertSchedule(taskID int64, instruction, title, cronExpr, metadata string) (int64, error) {
@@ -84,6 +85,31 @@ func (db *DB) UpdateScheduleLastRunAt(id int64, t string) error {
 	if err == nil {
 		db.emitEvent("schedule", id, "schedule.ran", map[string]any{
 			"last_run_at": t,
+		})
+	}
+	return err
+}
+
+// UpdateScheduleLastError sets last_error; pass "" to clear.
+func (db *DB) UpdateScheduleLastError(id int64, msg string) error {
+	if msg == "" {
+		_, err := db.Exec("UPDATE schedules SET last_error = NULL WHERE id = ?", id)
+		return err
+	}
+	_, err := db.Exec("UPDATE schedules SET last_error = ? WHERE id = ?", msg, id)
+	return err
+}
+
+// UpdateScheduleFailure atomically advances last_run_at and records last_error
+// for a schedule whose action could not be created. Combining both writes into
+// a single UPDATE halves DB traffic on the failure path and avoids a window
+// where one field is updated but the other is not.
+func (db *DB) UpdateScheduleFailure(id int64, lastRunAt, errMsg string) error {
+	_, err := db.Exec("UPDATE schedules SET last_run_at = ?, last_error = ? WHERE id = ?", lastRunAt, errMsg, id)
+	if err == nil {
+		db.emitEvent("schedule", id, "schedule.ran", map[string]any{
+			"last_run_at": lastRunAt,
+			"last_error":  errMsg,
 		})
 	}
 	return err

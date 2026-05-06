@@ -280,6 +280,14 @@ func (db *DB) Migrate() error {
 		return fmt.Errorf("migrate legacy claude flags in schedules: %w", err)
 	}
 
+	if has, err := db.hasColumn("schedules", "last_error"); err != nil {
+		return fmt.Errorf("migrate last_error: check column: %w", err)
+	} else if !has {
+		if _, err := db.Exec("ALTER TABLE schedules ADD COLUMN last_error TEXT"); err != nil {
+			return fmt.Errorf("migrate last_error: alter table: %w", err)
+		}
+	}
+
 	return nil
 }
 
