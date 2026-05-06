@@ -150,7 +150,7 @@ tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--st
 - `--task` — Task ID (**required**). Rejected if the task status is `done` or `archived`; reopen with `tq task update <ID> --status open` first if intentional.
 - `--title` — Action title (**required**, max 100 chars)
 - `--meta` — JSON metadata for dispatch control:
-  - `mode` — `"interactive"` (default), `"noninteractive"`, `"remote"`. Any other value is rejected — pass Claude permission-mode (`auto`, `plan`, `acceptEdits`, …) via `claude_args` instead. Interactive mode rejects C0 control bytes other than tab and newline (CR, ESC, BS, NUL, …) because they would corrupt the tmux pane or fragment the shell command. Use `"noninteractive"` (or `"remote"`) when the instruction must carry such bytes verbatim.
+  - `mode` — `"interactive"` (default), `"noninteractive"`, `"remote"`. Any other value is rejected — pass Claude permission-mode (`auto`, `plan`, `acceptEdits`, …) via `claude_args` instead.
   - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--permission-mode","plan","--worktree","--max-turns","5"]`)
 - `--status` — Initial status (default: `pending`)
 - `--after` — Dispatch after this time (`YYYY-MM-DD HH:MM`, local timezone)
