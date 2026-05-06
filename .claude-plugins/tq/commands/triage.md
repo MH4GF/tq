@@ -86,6 +86,15 @@ tq task get <ID> --jq '.actions | sort_by(.created_at) | last | {status, result}
 
 If multiple tasks need deep-dive, issue the `tq task get` calls in parallel (single message, multiple Bash calls). Skip deep-dive when `latest.status ∈ {running, pending}` or when the truncated head already contains a decisive keyword.
 
+**Session-log fallback**: When the deep-dive still leaves `result` thin (failed action with a 1-line error, running action with empty `result`, or `len(result) < 100`) AND `metadata.claude_session_id` is non-empty, read the Claude Code session log to recover the missing detail:
+
+```bash
+SID=$(tq action get <id> --jq '.metadata | fromjson.claude_session_id // empty')
+[ -n "$SID" ] && find ~/.claude/projects -name "$SID.jsonl" -print -quit
+```
+
+Use `Read` on the resolved path (last ~200 lines — the file may be large) and quote the latest `type:"assistant"` entry plus the trailing few `type:"tool_use"` entries into 6-a Diagnosis. Additive — runs alongside the `tq task get` deep-dive, not instead of it.
+
 ### 4. PR-state pre-fetch
 
 For tasks classified as Awaiting review / Awaiting deploy / Likely complete, collect all PR URLs from `metadata_url` or the latest result and run `gh pr view <url> --json state,mergedAt,mergeable,reviewDecision` calls **in parallel** (single message, multiple Bash calls).
