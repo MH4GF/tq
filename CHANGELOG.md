@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.21.20](https://github.com/MH4GF/tq/compare/v0.21.19...v0.21.20) - 2026-05-06
+- Rename session_id to tmux_session/tmux_window + claude side, with migration by @MH4GF in https://github.com/MH4GF/tq/pull/235
+- Capture claude_session_id via SessionStart hook by @MH4GF in https://github.com/MH4GF/tq/pull/237
+- Allow newlines in interactive instruction validator by @MH4GF in https://github.com/MH4GF/tq/pull/239
+- Harden interactive reaper against session_id leaks + early dispatch watchdog by @MH4GF in https://github.com/MH4GF/tq/pull/238
+- Add E2E test framework with testscript by @MH4GF in https://github.com/MH4GF/tq/pull/240
+- Reject action create under done/archived parent task by @MH4GF in https://github.com/MH4GF/tq/pull/241
+- Expand E2E scenarios for action lifecycle, schedule, errors, db precedence, attach by @MH4GF in https://github.com/MH4GF/tq/pull/242
+- Add tq action prompt subcommand to bypass tmux send-keys MAX_CANON by @MH4GF in https://github.com/MH4GF/tq/pull/243
+- Support libsql:// remote DB via TQ_DB_URL by @MH4GF in https://github.com/MH4GF/tq/pull/244
+
 ## [v0.21.19](https://github.com/MH4GF/tq/compare/v0.21.18...v0.21.19) - 2026-05-02
 - Merge investigate-failure skip tests into one table-driven test by @MH4GF in https://github.com/MH4GF/tq/pull/229
 - Reject Claude permission-mode values as tq action mode by @MH4GF in https://github.com/MH4GF/tq/pull/227
