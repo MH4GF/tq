@@ -42,9 +42,7 @@ type CommandWriter interface {
 	UpdateSchedule(id int64, title, cronExpr, metadata, instruction *string, taskID *int64) error
 	UpdateScheduleEnabled(id int64, enabled bool) error
 	DeleteSchedule(id int64) error
-	UpdateScheduleLastRunAt(id int64, t string) error
-	UpdateScheduleLastError(id int64, msg string) error
-	UpdateScheduleFailure(id int64, lastRunAt, errMsg string) error
+	UpdateScheduleRun(id int64, lastRunAt, errMsg string) error
 }
 
 // QueryReader defines all read operations.
