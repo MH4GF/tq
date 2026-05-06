@@ -17,6 +17,7 @@ package e2e_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,7 +61,7 @@ func TestLibsqlE2E(t *testing.T) {
 
 					tmuxDir, err := os.MkdirTemp("/tmp", "tq-libsql-e2e-tmux-")
 					if err != nil {
-						return err
+						return fmt.Errorf("create tmux temp dir: %w", err)
 					}
 					env.Setenv("TMUX_TMPDIR", tmuxDir)
 					env.Defer(func() { _ = os.RemoveAll(tmuxDir) })

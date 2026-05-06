@@ -41,6 +41,7 @@ jobs:
   e2e-libsql:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: [lint, test]
     services:
       sqld:
         # The libsql-server image ships without wget/curl/nc, so we can't
@@ -62,13 +63,13 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y tmux
       - name: Wait for sqld /health
         run: |
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             if curl -fsS http://localhost:8080/health >/dev/null 2>&1; then
               echo "sqld ready after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "sqld did not become healthy in 30s" >&2
+          echo "sqld did not become healthy in 60s" >&2
           exit 1
       - run: go test -tags libsql_e2e ./e2e/ -run TestLibsqlE2E -v -timeout 10m
