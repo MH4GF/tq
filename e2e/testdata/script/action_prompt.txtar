@@ -1,0 +1,47 @@
+# action prompt: render the wrapped claude prompt for an action.
+# Used by interactive dispatch as `claude "$(tq action prompt <id>)"` so
+# the tmux send-keys payload stays short regardless of instruction length
+# (the macOS pty MAX_CANON guard).
+
+exec tq project create demo /tmp/demo
+exec tq task create 'render prompt' --project 1
+
+# Interactive mode (default for action context): full postamble incl.
+# Required first step + /tq:done /tq:failed.
+exec tq action create 'do the thing' --task 1 --title 'interactive' --meta '{"mode":"interactive"}'
+stdout 'action #1 created'
+exec tq action prompt 1
+stdout 'do the thing'
+stdout '## tq action context'
+stdout 'You are executing \*\*action #1\*\* \(task #1\)'
+stdout 'Required first step'
+stdout 'tq action list --task 1'
+stdout '/tq:done'
+stdout '/tq:failed'
+
+# Noninteractive mode: same postamble shape (terminate block still applies).
+exec tq action create 'do thing noninteractive' --task 1 --title 'noninteractive' --meta '{"mode":"noninteractive"}'
+stdout 'action #2 created'
+exec tq action prompt 2
+stdout 'do thing noninteractive'
+stdout 'Required first step'
+stdout '/tq:done'
+
+# Remote mode: postamble keeps the first-step block but drops /tq:done.
+exec tq action create 'do thing remotely' --task 1 --title 'remote' --meta '{"mode":"remote"}'
+stdout 'action #3 created'
+exec tq action prompt 3
+stdout 'do thing remotely'
+stdout 'Required first step'
+! stdout '/tq:done'
+
+# Resume action: isResume=true in metadata is intentionally ignored by the
+# CLI in this PR (hardcoded false). Required first step still appears.
+exec tq action create 'continue' --task 1 --title 'resume-style' --meta '{"mode":"interactive","is_resume":true}'
+stdout 'action #4 created'
+exec tq action prompt 4
+stdout 'Required first step'
+
+# Unknown ID surfaces a clear error.
+! exec tq action prompt 999
+stderr 'get action'

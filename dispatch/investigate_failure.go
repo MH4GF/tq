@@ -14,7 +14,7 @@ import (
 // To prevent infinite loops, investigation actions are not created for failures
 // of investigation actions themselves.
 func CreateInvestigateFailureAction(database db.Store, action *db.Action, failureResult string) {
-	meta, _ := parseMetadata(action.Metadata)
+	meta, _ := ParseActionMetadata(action.Metadata)
 	if _, ok := meta[MetaKeyIsInvestigation]; ok {
 		slog.Info("skipping investigate-failure for investigation action itself", "action_id", action.ID)
 		return

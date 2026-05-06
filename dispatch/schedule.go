@@ -63,7 +63,7 @@ func CheckSchedules(database db.Store, now time.Time) error {
 			continue
 		}
 
-		meta, err := parseMetadata(s.Metadata)
+		meta, err := ParseActionMetadata(s.Metadata)
 		if err != nil {
 			slog.Warn("schedule: parse metadata failed", "schedule_id", s.ID, "error", err)
 			meta = make(map[string]any)

@@ -137,7 +137,7 @@ func markActionFailed(store db.Store, action *db.Action, failMsg string) error {
 
 // ExecuteAction reads instruction from metadata and dispatches via the appropriate worker.
 func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action) (*ExecuteResult, error) {
-	actionMeta, err := parseMetadata(action.Metadata)
+	actionMeta, err := ParseActionMetadata(action.Metadata)
 	if err != nil {
 		failMsg := fmt.Sprintf("parse action metadata: %v", err)
 		if mfErr := markActionFailed(params.DB, action, failMsg); mfErr != nil {
@@ -170,7 +170,9 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 	}
 
 	isResume, _ := actionMeta[MetaKeyIsResume].(bool)
-	instruction = wrapInstruction(instruction, action.ID, action.TaskID, cfg.Mode, isResume)
+	if !cfg.IsInteractive() {
+		instruction = RenderPrompt(instruction, action.ID, action.TaskID, cfg.Mode, isResume)
+	}
 
 	workDir, recovery, err := resolveWorkDir(params.DB, action)
 	if err != nil {
@@ -288,7 +290,16 @@ func saveClaudeSessionID(store db.Store, checker ClaudeSessionLogChecker, action
 	}
 }
 
-func wrapInstruction(instruction string, actionID, taskID int64, mode string, isResume bool) string {
+// RenderPrompt builds the wrapped claude prompt for an action: the user-provided
+// instruction followed by a postamble that injects tq action context (action ID,
+// required first step, /tq:done /tq:failed selector). Shared by Go-side dispatch
+// (noninteractive/remote) and the `tq action prompt` CLI subcommand so both
+// callers produce byte-identical output.
+//
+// TODO: drop the isResume parameter in a follow-up PR. The CLI callsite already
+// hardcodes false; once noninteractive/remote callers stop relying on the
+// "Required first step" suppression, the branch can go away entirely.
+func RenderPrompt(instruction string, actionID, taskID int64, mode string, isResume bool) string {
 	var b strings.Builder
 	b.WriteString(instruction)
 	b.WriteString("\n\n---\n\n## tq action context\n\n")
@@ -321,7 +332,9 @@ func ValidateActionMetadata(meta map[string]any) error {
 	return nil
 }
 
-func parseMetadata(raw string) (map[string]any, error) {
+// ParseActionMetadata decodes the JSON metadata blob stored on an action,
+// short-circuiting empty / "{}" payloads to avoid an Unmarshal of an empty map.
+func ParseActionMetadata(raw string) (map[string]any, error) {
 	m := make(map[string]any)
 	if raw == "" || raw == "{}" {
 		return m, nil

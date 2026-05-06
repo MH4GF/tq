@@ -14,14 +14,18 @@ type InteractiveWorker struct {
 	Session string
 }
 
-// Guards tmux send-keys; its internal buffer rejects larger inputs with "command too long".
+// Sanity cap on the raw instruction; the prompt is fetched at claude launch
+// time via `$(tq action prompt <id>)` so this no longer guards tmux send-keys
+// directly, but oversized prompts still degrade the claude session.
 const maxInstructionBytes = 16 * 1024
 
 func (w *InteractiveWorker) Execute(ctx context.Context, instruction string, cfg ActionConfig, workDir string, actionID, taskID int64) (string, error) {
 	if len(instruction) > maxInstructionBytes {
 		return "", fmt.Errorf("instruction too long (%d bytes, limit %d); shorten via generator or split action", len(instruction), maxInstructionBytes)
 	}
-	// \n is allowed: wrapInstruction's postamble always starts with one.
+	// \n is allowed: RenderPrompt's postamble always starts with one. Other C0
+	// bytes would corrupt the prompt downstream when claude reads the
+	// substituted argv.
 	for i := 0; i < len(instruction); i++ {
 		b := instruction[i]
 		if b < 0x20 && b != '\t' && b != '\n' {
@@ -43,9 +47,11 @@ func (w *InteractiveWorker) Execute(ctx context.Context, instruction string, cfg
 		return "", fmt.Errorf("create tmux window: %w (output: %s)", err, string(out))
 	}
 
-	// 2. Send claude command text
+	// 2. Send claude command text. Prompt rendering is deferred to
+	// claude-launch time via `$(tq action prompt <id>)`; inlining the wrapped
+	// instruction here would trip macOS pty canonical-mode MAX_CANON (1024
+	// bytes) and silently truncate long prompts.
 	tmuxTarget := fmt.Sprintf("%s:%s", session, windowName)
-	escapedPrompt := strings.ReplaceAll(instruction, "'", "'\\''")
 	envPrefix := fmt.Sprintf("TQ_ACTION_ID=%d TQ_TASK_ID=%d", actionID, taskID)
 	var claudeArgsBuf strings.Builder
 	for _, arg := range cfg.ClaudeArgs {
@@ -54,7 +60,10 @@ func (w *InteractiveWorker) Execute(ctx context.Context, instruction string, cfg
 		claudeArgsBuf.WriteString(escaped)
 		claudeArgsBuf.WriteByte('\'')
 	}
-	claudeCmd := fmt.Sprintf("%s claude '%s'%s", envPrefix, escapedPrompt, claudeArgsBuf.String())
+	// `&&` short-circuits `claude` if `tq action prompt` fails (deleted
+	// action, DB error, etc.); without it the shell expands an empty string
+	// and silently launches claude with no prompt.
+	claudeCmd := fmt.Sprintf(`p="$(tq action prompt %d)" && %s claude "$p"%s`, actionID, envPrefix, claudeArgsBuf.String())
 	out, err = w.Runner.Run(ctx, "tmux", []string{
 		"send-keys", "-t", tmuxTarget, claudeCmd,
 	}, workDir, nil)

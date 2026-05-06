@@ -18,7 +18,7 @@ func CreatePermissionBlockAction(database db.Store, action *db.Action, denials [
 		return
 	}
 
-	meta, _ := parseMetadata(action.Metadata)
+	meta, _ := ParseActionMetadata(action.Metadata)
 	if _, ok := meta[MetaKeyIsPermissionBlock]; ok {
 		slog.Info("skipping permission-block action for permission-block action itself", "action_id", action.ID)
 		return

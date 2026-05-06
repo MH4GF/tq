@@ -25,11 +25,13 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 			actionID: 42,
 			taskID:   10,
 			wantContains: []string{
-				"claude", "Fix the bug",
+				`p="$(tq action prompt 42)" && `, `claude "$p"`,
 				"TQ_ACTION_ID=42", "TQ_TASK_ID=10",
 			},
 			wantNotContain: []string{
 				"TQ_DIR", "--tmux",
+				"Fix the bug", // raw instruction must not be inlined (MAX_CANON guard)
+				`'\''`,        // legacy single-quote escape must not appear
 			},
 			wantNewWindow: []string{"new-window", "-t", "main", "-n", "tq-action-42", "-c", "/work/dir"},
 		},
@@ -41,6 +43,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 			actionID: 7,
 			wantContains: []string{
 				"work:tq-action-7",
+				`p="$(tq action prompt 7)" && `, `claude "$p"`,
 			},
 			wantNewWindow: []string{"new-window", "-t", "work", "-n", "tq-action-7", "-c", "/work/dir"},
 		},
@@ -51,7 +54,7 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 			actionID: 42,
 			taskID:   10,
 			wantContains: []string{
-				"'--max-turns' '5'",
+				`p="$(tq action prompt 42)" && `, `claude "$p" '--max-turns' '5'`,
 			},
 		},
 		{
@@ -71,11 +74,11 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 			actionID: 42,
 			taskID:   10,
 			wantContains: []string{
-				"'Fix the bug' '--worktree'",
+				`p="$(tq action prompt 42)" && `, `claude "$p" '--worktree'`,
 			},
 		},
 		{
-			name:     "claude_args with special characters",
+			name:     "claude_args with special characters still escaped",
 			cfg:      ActionConfig{ClaudeArgs: []string{"--system-prompt", "you're a helper"}},
 			prompt:   "Fix the bug",
 			actionID: 42,
@@ -85,12 +88,16 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:     "single quote escape",
+			name:     "instruction with apostrophe is not inlined",
 			cfg:      ActionConfig{},
 			prompt:   "it's a test",
 			actionID: 99,
 			wantContains: []string{
-				"it'\\''s a test",
+				`p="$(tq action prompt 99)" && `, `claude "$p"`,
+			},
+			wantNotContain: []string{
+				"it's a test",
+				`it'\''s`,
 			},
 		},
 	}
@@ -143,6 +150,36 @@ func TestInteractiveWorker_Execute(t *testing.T) {
 	}
 }
 
+// MAX_CANON regression: even multi-KB instructions must produce a short
+// send-keys payload. The instruction lives in the DB; the worker only
+// emits a `tq action prompt N` substitution guarded by `&&`.
+func TestInteractiveWorker_LongInstructionStaysShortInSendKeys(t *testing.T) {
+	runner := &mockRunner{output: []byte("ok"), failAt: -1}
+	w := &InteractiveWorker{Runner: runner}
+
+	long := strings.Repeat("a", 5000)
+	_, err := w.Execute(context.Background(), long, ActionConfig{}, "/work", 4242, 99)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(runner.calls) != 3 {
+		t.Fatalf("expected 3 runner calls, got %d", len(runner.calls))
+	}
+	sendKeys := strings.Join(runner.calls[1].args, " ")
+	// Payload size must be far below macOS pty MAX_CANON (1024 bytes).
+	if len(sendKeys) > 256 {
+		t.Errorf("send-keys payload too large: %d bytes; want <= 256 (MAX_CANON guard)", len(sendKeys))
+	}
+	if strings.Contains(sendKeys, long) {
+		t.Error("send-keys must NOT inline the raw instruction")
+	}
+	for _, want := range []string{`p="$(tq action prompt 4242)" && `, `claude "$p"`} {
+		if !strings.Contains(sendKeys, want) {
+			t.Errorf("send-keys = %q, want to contain %q", sendKeys, want)
+		}
+	}
+}
+
 func TestInteractiveWorker_TooLong(t *testing.T) {
 	runner := &mockRunner{output: []byte("ok"), failAt: -1}
 	w := &InteractiveWorker{Runner: runner}
@@ -173,7 +210,7 @@ func TestInteractiveWorker_ControlCharacters(t *testing.T) {
 		{name: "backspace", instruction: "abc\bdef", wantErr: true},
 		{name: "null", instruction: "abc\x00def", wantErr: true},
 		{name: "tab allowed", instruction: "col1\tcol2", wantErr: false},
-		{name: "wrapInstruction postamble passthrough", instruction: "user instruction body\n\n---\n\n## tq action context\n\nYou are executing **action #1** (task #2).\n", wantErr: false},
+		{name: "RenderPrompt postamble passthrough", instruction: "user instruction body\n\n---\n\n## tq action context\n\nYou are executing **action #1** (task #2).\n", wantErr: false},
 	}
 
 	for _, tc := range tests {
