@@ -159,6 +159,9 @@ func (db *DB) SetWorkDir(projectID int64, workDir string) error {
 	if n == 0 {
 		return fmt.Errorf("project %d not found", projectID)
 	}
+	db.emitEvent("project", projectID, "project.work_dir_changed", map[string]any{
+		"work_dir": workDir,
+	})
 	return nil
 }
 
