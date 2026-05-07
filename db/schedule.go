@@ -100,26 +100,32 @@ func (db *DB) UpdateScheduleRun(id int64, lastRunAt, errMsg string) error {
 func (db *DB) UpdateSchedule(id int64, title, cronExpr, metadata, instruction *string, taskID *int64) error {
 	var setClauses []string
 	var args []any
+	payload := map[string]any{}
 
 	if title != nil {
 		setClauses = append(setClauses, "title = ?")
 		args = append(args, *title)
+		payload["title"] = *title
 	}
 	if cronExpr != nil {
 		setClauses = append(setClauses, "cron_expr = ?")
 		args = append(args, *cronExpr)
+		payload["cron_expr"] = *cronExpr
 	}
 	if metadata != nil {
 		setClauses = append(setClauses, "metadata = ?")
 		args = append(args, *metadata)
+		payload["metadata"] = *metadata
 	}
 	if instruction != nil {
 		setClauses = append(setClauses, "instruction = ?")
 		args = append(args, *instruction)
+		payload["instruction"] = *instruction
 	}
 	if taskID != nil {
 		setClauses = append(setClauses, "task_id = ?")
 		args = append(args, *taskID)
+		payload["task_id"] = *taskID
 	}
 
 	if len(setClauses) == 0 {
@@ -129,6 +135,9 @@ func (db *DB) UpdateSchedule(id int64, title, cronExpr, metadata, instruction *s
 	query := "UPDATE schedules SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
 	args = append(args, id)
 	_, err := db.Exec(query, args...)
+	if err == nil {
+		db.emitEvent("schedule", id, "schedule.updated", payload)
+	}
 	return err
 }
 

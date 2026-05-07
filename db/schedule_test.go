@@ -1,6 +1,7 @@
 package db_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/MH4GF/tq/testutil"
@@ -174,6 +175,48 @@ func TestUpdateSchedule(t *testing.T) {
 
 	if err := d.UpdateSchedule(id, nil, nil, nil, nil, nil); err == nil {
 		t.Error("expected error when no fields specified")
+	}
+}
+
+func TestUpdateSchedule_EmitsEvent(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	id, _ := d.InsertSchedule(taskID, "instr", "Original", "* * * * *", "{}")
+
+	newTitle := "Updated"
+	newCron := "0 */3 * * *"
+	if err := d.UpdateSchedule(id, &newTitle, &newCron, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := d.ListEvents("schedule", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events (created + updated), got %d", len(events))
+	}
+	updated := events[1]
+	if updated.EventType != "schedule.updated" {
+		t.Fatalf("event_type = %q, want schedule.updated", updated.EventType)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(updated.Payload), &payload); err != nil {
+		t.Fatalf("payload unmarshal: %v", err)
+	}
+	if payload["title"] != "Updated" {
+		t.Errorf("payload[title] = %v, want %q", payload["title"], "Updated")
+	}
+	if payload["cron_expr"] != "0 */3 * * *" {
+		t.Errorf("payload[cron_expr] = %v, want %q", payload["cron_expr"], "0 */3 * * *")
+	}
+	for _, k := range []string{"metadata", "instruction", "task_id"} {
+		if _, ok := payload[k]; ok {
+			t.Errorf("payload should not include unchanged field %q: %v", k, payload)
+		}
 	}
 }
 
