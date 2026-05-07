@@ -14,9 +14,10 @@ import (
 )
 
 var (
-	uiMaxInteractive int
-	uiPollInterval   time.Duration
-	uiSession        string
+	uiMaxInteractive    int
+	uiMaxNonInteractive int
+	uiPollInterval      time.Duration
+	uiSession           string
 )
 
 var uiCmd = &cobra.Command{
@@ -37,6 +38,10 @@ var uiCmd = &cobra.Command{
 		effectiveMaxInteractive := uiMaxInteractive
 		if effectiveMaxInteractive <= 0 {
 			effectiveMaxInteractive = dispatch.DefaultMaxInteractive
+		}
+		effectiveMaxNonInteractive := uiMaxNonInteractive
+		if effectiveMaxNonInteractive <= 0 {
+			effectiveMaxNonInteractive = dispatch.DefaultMaxNonInteractive
 		}
 
 		workerBg := func(ctx context.Context) error {
@@ -63,9 +68,10 @@ var uiCmd = &cobra.Command{
 					TmuxSession:             uiSession,
 					ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
 				},
-				MaxInteractive: effectiveMaxInteractive,
-				PollInterval:   uiPollInterval,
-				TmuxChecker:    &dispatch.ExecTmuxChecker{Runner: &dispatch.ExecRunner{}},
+				MaxInteractive:    effectiveMaxInteractive,
+				MaxNonInteractive: effectiveMaxNonInteractive,
+				PollInterval:      uiPollInterval,
+				TmuxChecker:       &dispatch.ExecTmuxChecker{Runner: &dispatch.ExecRunner{}},
 			}
 			return dispatch.RunWorker(ctx, cfg)
 		}
@@ -80,7 +86,8 @@ var uiCmd = &cobra.Command{
 }
 
 func init() {
-	uiCmd.Flags().IntVar(&uiMaxInteractive, "max-interactive", dispatch.DefaultMaxInteractive, "Maximum concurrent interactive sessions")
+	uiCmd.Flags().IntVar(&uiMaxInteractive, "max-interactive", dispatch.DefaultMaxInteractive, "Maximum concurrent interactive sessions (cognitive-load cap)")
+	uiCmd.Flags().IntVar(&uiMaxNonInteractive, "max-noninteractive", dispatch.DefaultMaxNonInteractive, "Maximum concurrent noninteractive (claude -p) processes (OS resource cap)")
 	uiCmd.Flags().DurationVar(&uiPollInterval, "poll", dispatch.DefaultPollInterval, "Queue worker poll interval")
 	uiCmd.Flags().StringVar(&uiSession, "session", "main", "Target tmux session name")
 }

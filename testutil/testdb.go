@@ -12,6 +12,10 @@ func NewTestDB(t *testing.T) *db.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// `:memory:` creates a fresh in-memory DB per connection. Pin to a single
+	// connection so concurrent goroutines (e.g. dispatch worker async) all
+	// hit the same DB instance.
+	d.SetMaxOpenConns(1)
 	if err := d.Migrate(); err != nil {
 		t.Fatal(err)
 	}
