@@ -17,6 +17,7 @@ import (
 func ptr[T any](v T) *T { return &v }
 
 type countingWorker struct {
+	mu      sync.Mutex
 	count   int
 	result  string
 	err     error
@@ -24,8 +25,23 @@ type countingWorker struct {
 }
 
 func (w *countingWorker) Execute(ctx context.Context, instruction string, cfg ActionConfig, workDir string, actionID, taskID int64) (string, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.count++
 	return w.result, w.err
+}
+
+func (w *countingWorker) Count() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.count
+}
+
+func (w *countingWorker) Set(result string, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.result = result
+	w.err = err
 }
 
 func (w *countingWorker) LastDenials() []PermissionDenial { return w.denials }
@@ -114,8 +130,8 @@ func TestRunWorker_ProcessesAndStops(t *testing.T) {
 		t.Fatalf("RunWorker error = %v, want context.DeadlineExceeded", err)
 	}
 
-	if worker.count != 1 {
-		t.Errorf("worker.count = %d, want 1", worker.count)
+	if worker.Count() != 1 {
+		t.Errorf("worker.count = %d, want 1", worker.Count())
 	}
 
 	action, _ := d.GetAction(1)
@@ -155,8 +171,8 @@ func TestRunWorker_InteractiveLimitEnforced(t *testing.T) {
 
 	_ = RunWorker(ctx, cfg)
 
-	if interactiveWorker.count != 0 {
-		t.Errorf("interactive worker called %d times, want 0 (limit reached)", interactiveWorker.count)
+	if interactiveWorker.Count() != 0 {
+		t.Errorf("interactive worker called %d times, want 0 (limit reached)", interactiveWorker.Count())
 	}
 }
 
@@ -276,8 +292,8 @@ func TestRunWorker_RemoteDispatch(t *testing.T) {
 
 	_ = RunWorker(ctx, cfg)
 
-	if remoteWorker.count != 1 {
-		t.Errorf("remote worker called %d times, want 1", remoteWorker.count)
+	if remoteWorker.Count() != 1 {
+		t.Errorf("remote worker called %d times, want 1", remoteWorker.Count())
 	}
 
 	action, _ := d.GetAction(1)
@@ -322,11 +338,11 @@ func TestRunWorker_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
 
 	_ = RunWorker(ctx, cfg)
 
-	if remoteWorker.count != 1 {
-		t.Errorf("remote worker called %d times, want 1 (should not be limited)", remoteWorker.count)
+	if remoteWorker.Count() != 1 {
+		t.Errorf("remote worker called %d times, want 1 (should not be limited)", remoteWorker.Count())
 	}
-	if interactiveWorker.count != 0 {
-		t.Errorf("interactive worker called %d times, want 0 (limit reached)", interactiveWorker.count)
+	if interactiveWorker.Count() != 0 {
+		t.Errorf("interactive worker called %d times, want 0 (limit reached)", interactiveWorker.Count())
 	}
 }
 
@@ -707,7 +723,7 @@ func TestRunWorker_NonInteractiveDoesNotBlockInteractive(t *testing.T) {
 	go func() { done <- RunWorker(ctx, cfg) }()
 
 	waitFor(t, 1*time.Second, "interactive worker dispatched while noninteractive is running", func() bool {
-		return intWorker.count >= 1 && niWorker.Count() >= 1
+		return intWorker.Count() >= 1 && niWorker.Count() >= 1
 	})
 
 	cancel()
@@ -716,8 +732,8 @@ func TestRunWorker_NonInteractiveDoesNotBlockInteractive(t *testing.T) {
 	if niWorker.Count() != 1 {
 		t.Errorf("niWorker.count = %d, want 1", niWorker.Count())
 	}
-	if intWorker.count != 1 {
-		t.Errorf("intWorker.count = %d, want 1", intWorker.count)
+	if intWorker.Count() != 1 {
+		t.Errorf("intWorker.count = %d, want 1", intWorker.Count())
 	}
 }
 
@@ -814,8 +830,7 @@ func TestRunWorker_NonInteractiveFailureDoesNotStopLoop(t *testing.T) {
 
 	// Queue another noninteractive after the failure.
 	d.InsertAction("ni-after", taskID, `{"instruction":"after","mode":"noninteractive"}`, db.ActionStatusPending, nil)
-	failedThenOK.err = nil
-	failedThenOK.result = `{"ok":true}`
+	failedThenOK.Set(`{"ok":true}`, nil)
 
 	waitFor(t, 1*time.Second, "follow-up noninteractive dispatched after failure", func() bool {
 		// id 2 is the investigate-failure action created from #1's failure.
@@ -826,4 +841,56 @@ func TestRunWorker_NonInteractiveFailureDoesNotStopLoop(t *testing.T) {
 
 	cancel()
 	<-done
+}
+
+// TestRunWorker_ShutdownDoesNotMarkInflightFailed verifies that ctx cancel
+// during shutdown does NOT mark in-flight noninteractive actions as failed
+// (and does not create investigate-failure follow-ups). They should remain
+// running so the next worker session's stale reaper can re-evaluate.
+func TestRunWorker_ShutdownDoesNotMarkInflightFailed(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+	d.InsertAction("long-ni", taskID, `{"instruction":"long","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+
+	niWorker := newBlockingWorker()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: func() Worker { return niWorker },
+			InteractiveFunc:    func() Worker { return &countingWorker{} },
+		},
+		MaxInteractive:    3,
+		MaxNonInteractive: 3,
+		PollInterval:      30 * time.Millisecond,
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- RunWorker(ctx, cfg) }()
+
+	waitFor(t, 1*time.Second, "noninteractive action starts running", func() bool {
+		a, err := d.GetAction(1)
+		return err == nil && a.Status == db.ActionStatusRunning
+	})
+
+	// Cancel the worker while the noninteractive is in flight.
+	cancel()
+	<-done
+
+	a, _ := d.GetAction(1)
+	if a.Status == db.ActionStatusFailed {
+		t.Errorf("action status = %q, want still running (shutdown should not mark in-flight as failed)", a.Status)
+	}
+
+	actions, _ := d.ListActions("", nil, 0)
+	for _, x := range actions {
+		if hasMetaKey(x.Metadata, MetaKeyIsInvestigation) {
+			t.Errorf("shutdown created spurious investigate-failure action #%d", x.ID)
+		}
+	}
 }

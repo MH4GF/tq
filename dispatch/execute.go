@@ -292,6 +292,14 @@ func runNonInteractive(ctx context.Context, params ExecuteParams, action *db.Act
 	saveClaudeSessionID(params.DB, params.ClaudeSessionLogChecker, action.ID, workDir)
 
 	if err != nil {
+		// On shutdown, ctx cancel propagates to every in-flight goroutine. Do
+		// not mark them failed (and trigger investigate-failure follow-ups);
+		// leave them running so the next dispatch cycle's stale reaper can
+		// either find them alive (heartbeat fresh) or reap them legitimately.
+		if errors.Is(err, context.Canceled) {
+			slog.Warn("noninteractive interrupted by shutdown; leaving for reaper", "action_id", action.ID)
+			return nil, err
+		}
 		if mfErr := markActionFailed(params.DB, action, err.Error()); mfErr != nil {
 			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
 		}
