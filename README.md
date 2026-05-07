@@ -8,7 +8,7 @@ Humans give instructions in natural language and monitor progress via TUI. The m
 
 ## Highlights
 
-- **Job queue model** — actions are queued and processed asynchronously by workers, with configurable concurrency limits (default: 3 interactive sessions)
+- **Job queue model** — actions are queued and processed asynchronously by workers, with independent concurrency caps for interactive (default: 3) and noninteractive (default: 5) execution
 - **Manager agent** — one Claude Code session manages others; humans just talk to it
 - **Delegates to Claude Code** — no custom workflow language; just runs `claude` in tmux, so skills, sub-agents, worktrees, and remote execution all work as-is
 - **CLI is for agents** — JSON-only output, `--jq` flag, agent-oriented `--help`; humans don't need to learn the CLI
@@ -87,7 +87,7 @@ project → task → action
 ### Design Principles
 
 - **SQLite is SSOT** — the database is the canonical state store
-- **Queue Worker** — processes one action at a time, keeping context fresh
+- **Queue Worker** — interactive actions dispatch into tmux (one at a time per slot); noninteractive actions run concurrently in goroutines so a long-running `claude -p` does not block the dispatch loop
 - **AI is hands only** — Go handles orchestration; AI executes as a `claude` worker
 - **TUI is read-only** — humans observe via TUI; operations are issued through CLI
 

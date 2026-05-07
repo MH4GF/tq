@@ -445,6 +445,28 @@ func TestCountRunningInteractive(t *testing.T) {
 	}
 }
 
+func TestCountRunningNonInteractive(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	d.InsertAction("ni-1", taskID, `{"mode":"noninteractive"}`, db.ActionStatusRunning, nil)
+	d.InsertAction("ni-2", taskID, `{"mode":"noninteractive"}`, db.ActionStatusRunning, nil)
+	d.InsertAction("interactive", taskID, `{"mode":"interactive"}`, db.ActionStatusRunning, nil)
+	d.InsertAction("default-mode", taskID, "{}", db.ActionStatusRunning, nil)
+	d.InsertAction("remote", taskID, `{"mode":"remote"}`, db.ActionStatusRunning, nil)
+	d.InsertAction("ni-pending", taskID, `{"mode":"noninteractive"}`, db.ActionStatusPending, nil)
+	d.InsertAction("ni-done", taskID, `{"mode":"noninteractive"}`, db.ActionStatusDone, nil)
+
+	count, err := d.CountRunningNonInteractive()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Errorf("count = %d, want 2 (ni-1 + ni-2)", count)
+	}
+}
+
 func TestResetToPending(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

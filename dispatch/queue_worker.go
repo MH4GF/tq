@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/MH4GF/tq/db"
@@ -14,6 +15,7 @@ import (
 
 const (
 	DefaultMaxInteractive         = 3
+	DefaultMaxNonInteractive      = 5
 	DefaultStaleThreshold         = 30 * time.Second
 	DefaultPollInterval           = 10 * time.Second
 	DefaultStaleGracePeriod       = 30 * time.Second
@@ -52,12 +54,18 @@ func (c *ExecTmuxChecker) ListWindows(ctx context.Context, session string) ([]st
 type WorkerConfig struct {
 	DispatchConfig
 	MaxInteractive         int
+	MaxNonInteractive      int
 	PollInterval           time.Duration
 	TmuxChecker            TmuxChecker
 	StaleGracePeriod       time.Duration
 	HeartbeatFreshness     time.Duration
 	InteractiveHardTimeout time.Duration
 	EarlyDispatchTimeout   time.Duration
+	// async, when non-nil, is used to launch noninteractive worker.Execute
+	// in the background so the dispatch loop is not blocked. RunWorker sets
+	// this internally before calling dispatchOne; tests usually leave it nil
+	// (synchronous path).
+	async func(func())
 }
 
 // RunWorker continuously dispatches pending actions.
@@ -65,6 +73,9 @@ type WorkerConfig struct {
 func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 	if cfg.MaxInteractive <= 0 {
 		cfg.MaxInteractive = DefaultMaxInteractive
+	}
+	if cfg.MaxNonInteractive <= 0 {
+		cfg.MaxNonInteractive = DefaultMaxNonInteractive
 	}
 	if cfg.PollInterval <= 0 {
 		cfg.PollInterval = DefaultPollInterval
@@ -85,7 +96,26 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 		cfg.EarlyDispatchTimeout = DefaultEarlyDispatchTimeout
 	}
 
-	slog.Info("queue worker started", "max_interactive", cfg.MaxInteractive, "poll_interval", cfg.PollInterval)
+	slog.Info("queue worker started",
+		"max_interactive", cfg.MaxInteractive,
+		"max_noninteractive", cfg.MaxNonInteractive,
+		"poll_interval", cfg.PollInterval,
+	)
+
+	var wg sync.WaitGroup
+	cfg.async = func(fn func()) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("dispatch goroutine panic recovered", "error", r)
+				}
+			}()
+			fn()
+		}()
+	}
+	defer wg.Wait()
 
 	var lastHeartbeat time.Time
 	for {
@@ -321,19 +351,35 @@ func dispatchOne(ctx context.Context, cfg WorkerConfig) (bool, error) {
 	result, err := ExecuteAction(ctx, ExecuteParams{
 		DispatchConfig: cfg.DispatchConfig,
 		BeforeInteractive: func(a *db.Action) error {
+			// NextPending has already marked this action running, so `running`
+			// includes the just-claimed action itself. Compare with `>` so
+			// `MaxInteractive=N` means "up to N concurrent" (inclusive).
 			running, err := cfg.DB.CountRunningInteractive()
 			if err != nil {
 				return fmt.Errorf("count running interactive: %w", err)
 			}
-			if running >= cfg.MaxInteractive {
+			if running > cfg.MaxInteractive {
 				slog.Debug("interactive limit reached, deferring", "action_id", a.ID, "running", running, "max", cfg.MaxInteractive)
 				return ErrInteractiveDeferred
 			}
 			return nil
 		},
+		BeforeNonInteractive: func(a *db.Action) error {
+			// `running` includes the just-claimed action (see BeforeInteractive).
+			running, err := cfg.DB.CountRunningNonInteractive()
+			if err != nil {
+				return fmt.Errorf("count running noninteractive: %w", err)
+			}
+			if running > cfg.MaxNonInteractive {
+				slog.Debug("noninteractive limit reached, deferring", "action_id", a.ID, "running", running, "max", cfg.MaxNonInteractive)
+				return ErrNonInteractiveDeferred
+			}
+			return nil
+		},
+		Async: cfg.async,
 	}, action)
 
-	if errors.Is(err, ErrInteractiveDeferred) {
+	if errors.Is(err, ErrInteractiveDeferred) || errors.Is(err, ErrNonInteractiveDeferred) {
 		return false, nil
 	}
 	var af *ActionFailedError

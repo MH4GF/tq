@@ -52,7 +52,12 @@ type DispatchConfig struct {
 
 type ExecuteParams struct {
 	DispatchConfig
-	BeforeInteractive func(action *db.Action) error
+	BeforeInteractive    func(action *db.Action) error
+	BeforeNonInteractive func(action *db.Action) error
+	// Async, when non-nil, runs noninteractive worker.Execute and its
+	// post-processing in a goroutine so the dispatch loop is not blocked.
+	// When nil (e.g. in unit tests), execution stays synchronous.
+	Async func(func())
 }
 
 type ExecuteResult struct {
@@ -73,7 +78,10 @@ func (e *ActionFailedError) Unwrap() error {
 	return e.Err
 }
 
-var ErrInteractiveDeferred = errors.New("interactive deferred")
+var (
+	ErrInteractiveDeferred    = errors.New("interactive deferred")
+	ErrNonInteractiveDeferred = errors.New("noninteractive deferred")
+)
 
 // WindowName returns the tmux window name for an action.
 func WindowName(actionID int64) string {
@@ -244,13 +252,54 @@ func executeInteractive(ctx context.Context, params ExecuteParams, action *db.Ac
 }
 
 func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db.Action, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
+	if params.BeforeNonInteractive != nil {
+		if err := params.BeforeNonInteractive(action); err != nil {
+			if errors.Is(err, ErrNonInteractiveDeferred) {
+				if rpErr := params.DB.ResetToPending(action.ID); rpErr != nil {
+					slog.Error("reset to pending", "action_id", action.ID, "error", rpErr)
+				}
+				return nil, ErrNonInteractiveDeferred
+			}
+			return nil, err
+		}
+	}
+
 	worker := params.NonInteractiveFunc()
+
+	if params.Async == nil {
+		// Synchronous path: keeps existing ExecuteAction unit tests deterministic.
+		return runNonInteractive(ctx, params, action, worker, instruction, cfg, workDir)
+	}
+
+	// Async path: dispatch loop continues immediately so other actions can be
+	// dispatched while claude -p runs. Errors are logged and DB is updated
+	// inside the goroutine.
+	actionCopy := *action
+	params.Async(func() {
+		_, _ = runNonInteractive(ctx, params, &actionCopy, worker, instruction, cfg, workDir)
+	})
+	return &ExecuteResult{Mode: ModeNonInteractive}, nil
+}
+
+// runNonInteractive executes the noninteractive worker and applies all
+// post-execution side effects (claude_session_id save, MarkDone /
+// markActionFailed, permission-block follow-up). On worker failure, returns
+// (nil, *ActionFailedError) so the synchronous path preserves existing
+// caller-visible behavior; the async path swallows the error after logging.
+func runNonInteractive(ctx context.Context, params ExecuteParams, action *db.Action, worker Worker, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
 	result, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
 
-	// The worker polling loop cannot discover claude session ID during synchronous execution.
 	saveClaudeSessionID(params.DB, params.ClaudeSessionLogChecker, action.ID, workDir)
 
 	if err != nil {
+		// On shutdown, ctx cancel propagates to every in-flight goroutine. Do
+		// not mark them failed (and trigger investigate-failure follow-ups);
+		// leave them running so the next dispatch cycle's stale reaper can
+		// either find them alive (heartbeat fresh) or reap them legitimately.
+		if errors.Is(err, context.Canceled) {
+			slog.Warn("noninteractive interrupted by shutdown; leaving for reaper", "action_id", action.ID)
+			return nil, err
+		}
 		if mfErr := markActionFailed(params.DB, action, err.Error()); mfErr != nil {
 			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
 		}
@@ -264,6 +313,7 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 	}
 
 	if err := params.DB.MarkDone(action.ID, result); err != nil {
+		slog.Error("mark done", "action_id", action.ID, "error", err)
 		return nil, fmt.Errorf("mark done: %w", err)
 	}
 

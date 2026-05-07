@@ -368,6 +368,10 @@ func (db *DB) IsActionDispatchEnabled(actionID int64) (bool, error) {
 // when unset). Keep ListRunningInteractive and CountRunningInteractive in sync.
 const interactiveModePredicate = "(json_extract(metadata, '$.mode') IS NULL OR json_extract(metadata, '$.mode') = 'interactive')"
 
+// noninteractiveModePredicate matches actions whose mode is explicitly noninteractive.
+// Keep ListRunningNonInteractive and CountRunningNonInteractive in sync.
+const noninteractiveModePredicate = "json_extract(metadata, '$.mode') = 'noninteractive'"
+
 func (db *DB) ListRunningInteractive() ([]Action, error) {
 	rows, err := db.Query(
 		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND "+interactiveModePredicate+" ORDER BY id",
@@ -391,7 +395,7 @@ func (db *DB) ListRunningInteractive() ([]Action, error) {
 
 func (db *DB) ListRunningNonInteractive() ([]Action, error) {
 	rows, err := db.Query(
-		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND json_extract(metadata, '$.mode') = 'noninteractive' ORDER BY id",
+		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND "+noninteractiveModePredicate+" ORDER BY id",
 		ActionStatusRunning,
 	)
 	if err != nil {
@@ -414,6 +418,15 @@ func (db *DB) CountRunningInteractive() (int, error) {
 	var count int
 	err := db.QueryRow(
 		"SELECT COUNT(*) FROM actions WHERE status = ? AND "+interactiveModePredicate,
+		ActionStatusRunning,
+	).Scan(&count)
+	return count, err
+}
+
+func (db *DB) CountRunningNonInteractive() (int, error) {
+	var count int
+	err := db.QueryRow(
+		"SELECT COUNT(*) FROM actions WHERE status = ? AND "+noninteractiveModePredicate,
 		ActionStatusRunning,
 	).Scan(&count)
 	return count, err

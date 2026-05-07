@@ -215,8 +215,8 @@ func TestExecuteAction(t *testing.T) {
 				t.Errorf("error = %v, want substring %q", err, tc.wantErrSubstr)
 			}
 
-			if worker.count != tc.wantWorkerCount {
-				t.Errorf("worker.count = %d, want %d", worker.count, tc.wantWorkerCount)
+			if worker.Count() != tc.wantWorkerCount {
+				t.Errorf("worker.count = %d, want %d", worker.Count(), tc.wantWorkerCount)
 			}
 
 			a, _ := d.GetAction(action.ID)

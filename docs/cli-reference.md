@@ -358,9 +358,12 @@ Each subcommand accepts `--no-descriptions` to disable completion descriptions. 
 ## ui
 
 ```
-tq ui [--max-interactive <N>] [--poll <DURATION>] [--session <NAME>]
+tq ui [--max-interactive <N>] [--max-noninteractive <N>] [--poll <DURATION>] [--session <NAME>]
 ```
 
-- `--max-interactive` — Maximum concurrent interactive sessions (default: `3`)
+- `--max-interactive` — Maximum concurrent interactive sessions, cognitive-load cap (default: `3`)
+- `--max-noninteractive` — Maximum concurrent noninteractive (`claude -p`) processes, OS resource cap (default: `5`)
 - `--poll` — Queue worker poll interval (default: `10s`)
 - `--session` — Target tmux session name (default: `main`)
+
+The two caps are independent slots. Noninteractive execution runs in goroutines so a long-running `claude -p` does not block the dispatch loop from starting new actions. See [`docs/dispatch.md`](dispatch.md) for the concurrency model.
