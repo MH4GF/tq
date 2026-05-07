@@ -1,5 +1,21 @@
 # Changelog
 
+## [v0.21.21](https://github.com/MH4GF/tq/compare/v0.21.20...v0.21.21) - 2026-05-07
+- Drop stale interactive validator help text by @MH4GF in https://github.com/MH4GF/tq/pull/245
+- Declare tq plugin marketplace + SessionStart auto-install hook by @MH4GF in https://github.com/MH4GF/tq/pull/247
+- Add Claude session-log fallback recipe to triage and manager by @MH4GF in https://github.com/MH4GF/tq/pull/248
+- Drop isResume parameter from RenderPrompt by @MH4GF in https://github.com/MH4GF/tq/pull/249
+- Simplify tq installation command in Claude settings by @MH4GF in https://github.com/MH4GF/tq/pull/250
+- gh-ops: add /gh-ops:wait-pr-checks command by @MH4GF in https://github.com/MH4GF/tq/pull/251
+- attach: require both tmux_session and tmux_window by @MH4GF in https://github.com/MH4GF/tq/pull/252
+- plugins: drop stale multi-line→noninteractive guidance by @MH4GF in https://github.com/MH4GF/tq/pull/254
+- docs(tq plugin README): add path reference to skills section by @MH4GF in https://github.com/MH4GF/tq/pull/255
+- Surface permanent schedule failures via last_error by @MH4GF in https://github.com/MH4GF/tq/pull/256
+- docs(cli-reference): mention status/task filtering on action list row by @MH4GF in https://github.com/MH4GF/tq/pull/257
+- Run noninteractive dispatch in goroutines (non-blocking loop, +max-noninteractive cap) by @MH4GF in https://github.com/MH4GF/tq/pull/258
+- Emit schedule.updated event from UpdateSchedule by @MH4GF in https://github.com/MH4GF/tq/pull/260
+- Emit project.work_dir_changed event in SetWorkDir by @MH4GF in https://github.com/MH4GF/tq/pull/259
+
 ## [v0.21.20](https://github.com/MH4GF/tq/compare/v0.21.19...v0.21.20) - 2026-05-06
 - Rename session_id to tmux_session/tmux_window + claude side, with migration by @MH4GF in https://github.com/MH4GF/tq/pull/235
 - Capture claude_session_id via SessionStart hook by @MH4GF in https://github.com/MH4GF/tq/pull/237
