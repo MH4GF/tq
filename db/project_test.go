@@ -282,6 +282,38 @@ func TestSetWorkDir(t *testing.T) {
 	}
 }
 
+func TestSetWorkDir_EmitsEvent(t *testing.T) {
+	d := testutil.NewTestDB(t)
+
+	id, err := d.InsertProject("test", "/tmp/old", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.SetWorkDir(id, "/tmp/new"); err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := d.ListEvents("project", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got *db.Event
+	for i := range events {
+		if events[i].EventType == "project.work_dir_changed" {
+			got = &events[i]
+			break
+		}
+	}
+	if got == nil {
+		t.Fatalf("expected project.work_dir_changed event, got %d events", len(events))
+	}
+	if !strings.Contains(got.Payload, `"work_dir":"/tmp/new"`) {
+		t.Errorf("payload missing work_dir=/tmp/new: %s", got.Payload)
+	}
+}
+
 func TestSetWorkDir_NotFound(t *testing.T) {
 	d := testutil.NewTestDB(t)
 
