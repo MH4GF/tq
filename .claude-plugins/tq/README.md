@@ -1,73 +1,73 @@
 # tq Claude Code Plugin
 
-tq task queue の操作用 Claude Code プラグイン。
+Claude Code plugin for operating the tq task queue.
 
-## インストール
+## Installation
 
-### marketplace source として追加
+### Add as a marketplace source
 
 ```bash
 claude plugin marketplace add MH4GF/tq
 ```
 
-### プラグインインストール
+### Install the plugin
 
 ```bash
 claude plugin install tq@tq-marketplace
 ```
 
-## コマンド
+## Commands
 
 ### `/tq:done <action_id> [summary]`
 
-tq アクションを完了にし、タスク全体の完了判定と follow-up アクションの提案まで行う。
+Mark a tq action as done, then judge task-level completion and propose follow-up actions.
 
-tq の interactive worker 経由で起動された Claude Code セッションで使用する。
+Use this from a Claude Code session launched via the tq interactive worker.
 
 ```
-/tq:done           # action_id を自動検出、サマリーを自動生成
-/tq:done 42        # action_id を指定、サマリーを自動生成
-/tq:done 42 認証バグの修正  # action_id とサマリーを指定
+/tq:done           # auto-detect action_id, auto-generate summary
+/tq:done 42        # specify action_id, auto-generate summary
+/tq:done 42 Fix auth bug  # specify action_id and summary
 ```
 
 ### `/tq:failed [action_id]`
 
-tq アクションを失敗としてマークし、タスク全体の完了判定と follow-up アクション（リトライや別アプローチが必要な場合）の提案まで行う。完了できなかったケース（権限不足、環境破損、外部API停止、CI flake等）で使用する。失敗したアクションは `tq action reset` で pending に戻して再試行可能。
+Mark a tq action as failed, then judge task-level completion and propose follow-up actions (retry or alternative approach when needed). Use for cases that could not be completed (missing permissions, broken environment, external API outage, CI flake, etc.). Failed actions can be returned to pending with `tq action reset` and retried.
 
 ```
-/tq:failed           # action_id を自動検出
-/tq:failed 42        # action_id を指定
+/tq:failed           # auto-detect action_id
+/tq:failed 42        # specify action_id
 ```
 
 ### `/tq:cancel [action_id]`
 
-tq アクションをキャンセルし改善提案を記録した上で、タスク全体の完了判定と follow-up アクションの提案まで行う。
+Cancel a tq action and record improvement suggestions, then judge task-level completion and propose follow-up actions.
 
 ```
-/tq:cancel           # action_id を自動検出
-/tq:cancel 42        # action_id を指定
+/tq:cancel           # auto-detect action_id
+/tq:cancel 42        # specify action_id
 ```
 
 ### `/tq:create-action [instruction]`
 
-tq アクションを作成する。指示を自動推測、またはユーザーが指定可能。
+Create a tq action. The instruction is auto-inferred, or the user can specify it.
 
 ### `/tq:triage [project_name]`
 
-open タスクの棚卸し。状況確認 → 整理提案 → 実行。
+Inventory open tasks: review status → propose cleanup → execute.
 
-## 利用する CLI コマンド
+## CLI commands used
 
 ### `tq search <keyword>`
 
-タスクタイトル、タスクメタデータ、タスクのステータス変更理由、アクションタイトル、アクション結果、アクションメタデータの横断全文検索。JSON で出力する。各結果には `project_id` が含まれる。`--jq` フラグでフィルタ可能、`--project <ID>` で特定プロジェクト内のみ検索。
+Cross-cutting full-text search over task titles, task metadata, task status-change reasons, action titles, action results, and action metadata. Outputs JSON. Each result includes `project_id`. Filter with `--jq`, or scope to a single project with `--project <ID>`.
 
 ```
 tq search "login bug"
 tq search deploy --project 1
 ```
 
-## スキル
+## Skills
 
 ### `tq:manager`
 
@@ -77,8 +77,8 @@ tqタスク管理者。「タスク作って」「アクション追加して」
 
 ### `SessionStart`
 
-`tq internal claude-session-record` を実行し、Claude Code が払い出した `session_id` を action metadata の `claude_session_id` に記録する。
+Runs `tq internal claude-session-record` to record the `session_id` issued by Claude Code into the action metadata's `claude_session_id`.
 
-- 起動時の env 変数 `TQ_ACTION_ID` で対象 action を 1:1 で特定する。tq dispatch 経由で起動した claude セッションのみ記録対象。
-- `TQ_ACTION_ID` 未設定の手動 claude 起動には副作用なし (silent exit)。
-- hook が失敗しても claude セッションを巻き込まない (常に exit 0)。
+- The startup env variable `TQ_ACTION_ID` identifies the target action 1:1. Only Claude sessions launched via tq dispatch are recorded.
+- No side effects on manual claude launches without `TQ_ACTION_ID` (silent exit).
+- Hook failures never disrupt the Claude session (always exits 0).
