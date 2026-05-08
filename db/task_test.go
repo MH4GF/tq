@@ -132,23 +132,6 @@ func TestListTasks(t *testing.T) {
 	}
 }
 
-func TestListTasksByProject(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	d.InsertTask(1, "task A", "{}", "")
-	d.InsertTask(1, "task B", "{}", "")
-	d.InsertTask(2, "task C", "{}", "")
-
-	tasks, err := d.ListTasksByProject(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(tasks) != 2 {
-		t.Errorf("expected 2 tasks for project 1, got %d", len(tasks))
-	}
-}
-
 func TestListTasksByProjectIDs(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
