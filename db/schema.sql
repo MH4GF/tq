@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS actions (
 
 CREATE INDEX IF NOT EXISTS idx_actions_dispatch ON actions(status, id ASC);
 CREATE INDEX IF NOT EXISTS idx_actions_task ON actions(task_id, id ASC);
+CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id, id DESC);
 
 CREATE TABLE IF NOT EXISTS schedules (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -595,41 +595,6 @@ func TestAction_MatchesDate_UTCLocalConversion(t *testing.T) {
 	}
 }
 
-func TestFilterForOpenTask(t *testing.T) {
-	targetDate := localDate("2026-03-04 10:00:00")
-	tests := []struct {
-		name         string
-		action       db.Action
-		wantIncluded bool
-	}{
-		{"pending non-terminal", db.Action{Status: db.ActionStatusPending, CreatedAt: "2026-01-01 00:00:00"}, true},
-		{"running non-terminal", db.Action{Status: db.ActionStatusRunning, CreatedAt: "2026-01-01 00:00:00"}, true},
-		{"dispatched non-terminal", db.Action{Status: db.ActionStatusDispatched, CreatedAt: "2026-01-01 00:00:00"}, true},
-		{"done with completed_at on date", db.Action{Status: db.ActionStatusDone, CreatedAt: "2026-01-01 00:00:00", CompletedAt: sql.NullString{String: "2026-03-04 10:00:00", Valid: true}}, true},
-		{"failed off date excluded", db.Action{Status: db.ActionStatusFailed, CreatedAt: "2026-01-01 00:00:00", CompletedAt: sql.NullString{String: "2026-01-01 12:00:00", Valid: true}}, false},
-		{"done with created_at on date", db.Action{Status: db.ActionStatusDone, CreatedAt: "2026-03-04 09:00:00"}, true},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := len(db.FilterForOpenTask([]db.Action{tc.action}, targetDate)) == 1
-			if got != tc.wantIncluded {
-				t.Errorf("FilterForOpenTask included=%v, want %v", got, tc.wantIncluded)
-			}
-		})
-	}
-}
-
-func TestFilterForOpenTask_EmptyDate(t *testing.T) {
-	actions := []db.Action{
-		{ID: 1, Status: db.ActionStatusDone, CreatedAt: "2026-01-01 00:00:00"},
-	}
-	filtered := db.FilterForOpenTask(actions, "")
-	if len(filtered) != 1 {
-		t.Errorf("expected all actions returned for empty date, got %d", len(filtered))
-	}
-}
-
 func TestClaimPending(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -706,6 +671,126 @@ func TestClaimPending_NotPending(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestListActionsByTaskIDsForView(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "task1", "{}", "")
+	otherTaskID, _ := d.InsertTask(1, "task2", "{}", "")
+
+	d.InsertAction("pending", taskID, "{}", db.ActionStatusPending, nil)
+	d.InsertAction("running", taskID, "{}", db.ActionStatusRunning, nil)
+	d.InsertAction("dispatched", taskID, "{}", db.ActionStatusDispatched, nil)
+
+	doneTodayID, _ := d.InsertAction("done-today", taskID, "{}", db.ActionStatusRunning, nil)
+	if err := d.MarkDone(doneTodayID, ""); err != nil {
+		t.Fatal(err)
+	}
+	failedTodayID, _ := d.InsertAction("failed-today", taskID, "{}", db.ActionStatusRunning, nil)
+	if err := d.MarkFailed(failedTodayID, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	d.InsertAction("other-pending", otherTaskID, "{}", db.ActionStatusPending, nil)
+
+	// Manually set timestamps for the "old" terminal action to be 10 days ago.
+	doneOldID, _ := d.InsertAction("done-old", taskID, "{}", db.ActionStatusRunning, nil)
+	if err := d.MarkDone(doneOldID, ""); err != nil {
+		t.Fatal(err)
+	}
+	oldUTC := time.Now().UTC().Add(-10 * 24 * time.Hour)
+	if err := d.SetActionTimestampsForTest(doneOldID, &oldUTC, &oldUTC); err != nil {
+		t.Fatal(err)
+	}
+
+	// Today as local date string (the SQL filter uses 'localtime').
+	today := time.Now().Format("2006-01-02")
+
+	titleSet := func(actions []db.Action) map[string]bool {
+		s := make(map[string]bool, len(actions))
+		for _, a := range actions {
+			s[a.Title] = true
+		}
+		return s
+	}
+
+	t.Run("empty filter returns all actions including terminals", func(t *testing.T) {
+		got, err := d.ListActionsByTaskIDsForView([]int64{taskID, otherTaskID}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		titles := titleSet(got[taskID])
+		for _, want := range []string{"pending", "running", "dispatched", "done-today", "failed-today", "done-old"} {
+			if !titles[want] {
+				t.Errorf("expected title %q in task1 actions, got %v", want, titles)
+			}
+		}
+		if !titleSet(got[otherTaskID])["other-pending"] {
+			t.Errorf("expected other-pending in task2 actions, got %v", got[otherTaskID])
+		}
+	})
+
+	t.Run("date filter excludes old terminal actions", func(t *testing.T) {
+		got, err := d.ListActionsByTaskIDsForView([]int64{taskID, otherTaskID}, today)
+		if err != nil {
+			t.Fatal(err)
+		}
+		titles := titleSet(got[taskID])
+		// non-terminals always returned regardless of date
+		for _, want := range []string{"pending", "running", "dispatched"} {
+			if !titles[want] {
+				t.Errorf("non-terminal %q should always be returned, got %v", want, titles)
+			}
+		}
+		// today's terminals returned
+		for _, want := range []string{"done-today", "failed-today"} {
+			if !titles[want] {
+				t.Errorf("today's terminal %q should be returned, got %v", want, titles)
+			}
+		}
+		// old terminal excluded
+		if titles["done-old"] {
+			t.Errorf("old terminal action should be excluded from date-filtered view, got %v", titles)
+		}
+		// other task's pending still returned
+		if !titleSet(got[otherTaskID])["other-pending"] {
+			t.Errorf("other task pending should be returned, got %v", got[otherTaskID])
+		}
+	})
+
+	t.Run("date filter matches by created_at when other dates miss", func(t *testing.T) {
+		// done-created-today: created today, started/completed in the past
+		id, _ := d.InsertAction("done-created-today", taskID, "{}", db.ActionStatusRunning, nil)
+		if err := d.MarkDone(id, ""); err != nil {
+			t.Fatal(err)
+		}
+		past := time.Now().UTC().Add(-30 * 24 * time.Hour)
+		// SetActionTimestampsForTest takes (createdAt, completedAt). Pass nil for createdAt
+		// to keep "today" and rewrite completed_at only.
+		if err := d.SetActionTimestampsForTest(id, nil, &past); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := d.ListActionsByTaskIDsForView([]int64{taskID}, today)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !titleSet(got[taskID])["done-created-today"] {
+			t.Errorf("action with created_at=today should be matched, got %v", titleSet(got[taskID]))
+		}
+	})
+
+	t.Run("empty taskIDs returns empty map", func(t *testing.T) {
+		got, err := d.ListActionsByTaskIDsForView(nil, today)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 0 {
+			t.Errorf("expected empty map, got %v", got)
+		}
+	})
 }
 
 func TestListActionsByTaskIDs(t *testing.T) {

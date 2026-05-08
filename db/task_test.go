@@ -149,6 +149,73 @@ func TestListTasksByProject(t *testing.T) {
 	}
 }
 
+func TestListTasksByProjectIDs(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	d.InsertTask(1, "p1-A", "{}", "")
+	d.InsertTask(1, "p1-B", "{}", "")
+	d.InsertTask(2, "p2-A", "{}", "")
+
+	tests := []struct {
+		name           string
+		projectIDs     []int64
+		wantPerProject map[int64]int
+	}{
+		{
+			name:           "multiple projects grouped",
+			projectIDs:     []int64{1, 2, 3},
+			wantPerProject: map[int64]int{1: 2, 2: 1},
+		},
+		{
+			name:           "single project",
+			projectIDs:     []int64{1},
+			wantPerProject: map[int64]int{1: 2},
+		},
+		{
+			name:           "project with no tasks omitted",
+			projectIDs:     []int64{3},
+			wantPerProject: map[int64]int{},
+		},
+		{
+			name:           "empty projectIDs returns empty map",
+			projectIDs:     nil,
+			wantPerProject: map[int64]int{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := d.ListTasksByProjectIDs(tc.projectIDs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != len(tc.wantPerProject) {
+				t.Errorf("len(map) = %d, want %d (got=%v)", len(got), len(tc.wantPerProject), got)
+			}
+			for pid, wantCount := range tc.wantPerProject {
+				if len(got[pid]) != wantCount {
+					t.Errorf("project %d tasks = %d, want %d", pid, len(got[pid]), wantCount)
+				}
+			}
+		})
+	}
+
+	t.Run("id DESC order", func(t *testing.T) {
+		got, err := d.ListTasksByProjectIDs([]int64{1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		tasks := got[1]
+		if len(tasks) != 2 {
+			t.Fatalf("expected 2 tasks for project 1, got %d", len(tasks))
+		}
+		if tasks[0].ID < tasks[1].ID {
+			t.Errorf("expected id DESC: tasks[0].ID=%d, tasks[1].ID=%d", tasks[0].ID, tasks[1].ID)
+		}
+	})
+}
+
 func TestInsertTaskWithWorkDir(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

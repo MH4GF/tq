@@ -138,21 +138,23 @@ func (m TasksModel) loadTasks() tea.Cmd {
 		}
 		sort.Slice(projects, func(i, j int) bool { return projects[i].ID < projects[j].ID })
 
-		tasksByProject := make(map[int64][]db.Task, len(projects))
+		projectIDs := make([]int64, len(projects))
+		for i, p := range projects {
+			projectIDs[i] = p.ID
+		}
+		tasksByProject, err := m.database.ListTasksByProjectIDs(projectIDs)
+		if err != nil {
+			recordErr(fmt.Errorf("list tasks: %w", err))
+			tasksByProject = map[int64][]db.Task{}
+		}
 		var allTaskIDs []int64
 		for _, p := range projects {
-			tasks, err := m.database.ListTasksByProject(p.ID)
-			if err != nil {
-				recordErr(fmt.Errorf("list tasks for project %d: %w", p.ID, err))
-				continue
-			}
-			tasksByProject[p.ID] = tasks
-			for _, t := range tasks {
+			for _, t := range tasksByProject[p.ID] {
 				allTaskIDs = append(allTaskIDs, t.ID)
 			}
 		}
 
-		actionsByTask, err := m.database.ListActionsByTaskIDs(allTaskIDs)
+		actionsByTask, err := m.database.ListActionsByTaskIDsForView(allTaskIDs, m.dateFilter)
 		if err != nil {
 			recordErr(fmt.Errorf("list actions: %w", err))
 			actionsByTask = map[int64][]db.Action{}
@@ -160,28 +162,18 @@ func (m TasksModel) loadTasks() tea.Cmd {
 
 		var trees []projectTree
 		for _, p := range projects {
-			tasks, ok := tasksByProject[p.ID]
-			if !ok {
-				continue
-			}
+			tasks := tasksByProject[p.ID]
 
 			var nodes []taskNode
 			for _, t := range tasks {
 				actions := actionsByTask[t.ID]
-				// ListActionsByTaskIDs returns id ASC; legacy ListActions
-				// used id DESC. Match the old order so the stable status
-				// sort below leaves equal-status actions newest-first.
-				sort.Slice(actions, func(i, j int) bool { return actions[i].ID > actions[j].ID })
-				if m.dateFilter != "" {
-					if t.Status == db.TaskStatusDone || t.Status == db.TaskStatusArchived {
-						actions = db.FilterByDate(actions, m.dateFilter)
-						if len(actions) == 0 && !t.MatchesDate(m.dateFilter) {
-							continue
-						}
-					} else {
-						actions = db.FilterForOpenTask(actions, m.dateFilter)
+				if m.dateFilter != "" && db.IsTerminalTaskStatus(t.Status) {
+					if !t.MatchesDate(m.dateFilter) && len(actions) == 0 {
+						continue
 					}
 				}
+				// SQL returns id DESC per task; stable status sort keeps
+				// equal-status actions newest-first.
 				sort.SliceStable(actions, func(i, j int) bool {
 					return actionStatusOrder(actions[i].Status) < actionStatusOrder(actions[j].Status)
 				})
