@@ -58,10 +58,12 @@ type QueryReader interface {
 	CountPendingByDispatch() (PendingCounts, error)
 	IsActionDispatchEnabled(actionID int64) (bool, error)
 	ListActionsByTaskIDs(taskIDs []int64) (map[int64][]Action, error)
+	ListActionsByTaskIDsForView(taskIDs []int64, dateFilter string) (map[int64][]Action, error)
 	// Task queries
 	GetTask(id int64) (*Task, error)
 	ListTasks(projectID int64, status string, limit int) ([]Task, error)
 	ListTasksByProject(projectID int64) ([]Task, error)
+	ListTasksByProjectIDs(projectIDs []int64) (map[int64][]Task, error)
 	ListTasksByStatus(status string) ([]Task, error)
 	GetOrCreateTriageTask(projectID int64) (int64, error)
 	TaskStatusHistory(taskID int64) ([]TaskStatusHistoryEntry, error)

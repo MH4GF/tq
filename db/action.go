@@ -66,34 +66,6 @@ func (a Action) MatchesDate(date string) bool {
 	return false
 }
 
-func FilterForOpenTask(actions []Action, date string) []Action {
-	if date == "" {
-		return actions
-	}
-	var filtered []Action
-	for _, a := range actions {
-		if a.Status == ActionStatusPending || a.Status == ActionStatusRunning || a.Status == ActionStatusDispatched {
-			filtered = append(filtered, a)
-		} else if a.MatchesDate(date) {
-			filtered = append(filtered, a)
-		}
-	}
-	return filtered
-}
-
-func FilterByDate(actions []Action, date string) []Action {
-	if date == "" {
-		return actions
-	}
-	var filtered []Action
-	for _, a := range actions {
-		if a.MatchesDate(date) {
-			filtered = append(filtered, a)
-		}
-	}
-	return filtered
-}
-
 func (db *DB) InsertAction(title string, taskID int64, metadata, status string, dispatchAfter *string) (int64, error) {
 	if !ValidActionStatuses[status] {
 		return 0, fmt.Errorf("invalid action status %q: must be one of pending, running, dispatched, done, failed, cancelled", status)
@@ -551,6 +523,67 @@ func (db *DB) UpdateAction(id int64, title *string, taskID *int64, metadata *str
 		})
 	}
 	return err
+}
+
+func (db *DB) ListActionsByTaskIDsForView(taskIDs []int64, dateFilter string) (map[int64][]Action, error) {
+	result := make(map[int64][]Action)
+	if len(taskIDs) == 0 {
+		return result, nil
+	}
+
+	idPlaceholders := make([]string, len(taskIDs))
+	args := make([]any, 0, len(taskIDs)+9)
+	for i, id := range taskIDs {
+		idPlaceholders[i] = "?"
+		args = append(args, id)
+	}
+
+	// ORDER BY task_id, id DESC matches idx_actions_task partitions and
+	// returns each task's actions newest-first, so callers can skip a
+	// re-sort.
+	var query string
+	if dateFilter != "" {
+		query = `SELECT ` + actionColumns + `
+			FROM actions
+			WHERE task_id IN (` + strings.Join(idPlaceholders, ", ") + `)
+			  AND (
+			    status IN (?, ?, ?)
+			    OR (
+			      status IN (?, ?, ?)
+			      AND (
+			           DATE(created_at,   'localtime') = ?
+			        OR DATE(started_at,   'localtime') = ?
+			        OR DATE(completed_at, 'localtime') = ?
+			      )
+			    )
+			  )
+			ORDER BY task_id, id DESC`
+		args = append(args,
+			ActionStatusPending, ActionStatusRunning, ActionStatusDispatched,
+			ActionStatusDone, ActionStatusFailed, ActionStatusCancelled,
+			dateFilter, dateFilter, dateFilter,
+		)
+	} else {
+		query = `SELECT ` + actionColumns + `
+			FROM actions
+			WHERE task_id IN (` + strings.Join(idPlaceholders, ", ") + `)
+			ORDER BY task_id, id DESC`
+	}
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var a Action
+		if err := rows.Scan(a.scanFields()...); err != nil {
+			return nil, err
+		}
+		result[a.TaskID] = append(result[a.TaskID], a)
+	}
+	return result, rows.Err()
 }
 
 func (db *DB) ListActionsByTaskIDs(taskIDs []int64) (map[int64][]Action, error) {

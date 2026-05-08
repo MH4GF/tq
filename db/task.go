@@ -374,6 +374,38 @@ func (db *DB) ListTasksByProject(projectID int64) ([]Task, error) {
 	return db.ListTasks(projectID, "", 0)
 }
 
+func (db *DB) ListTasksByProjectIDs(projectIDs []int64) (map[int64][]Task, error) {
+	result := make(map[int64][]Task)
+	if len(projectIDs) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(projectIDs))
+	args := make([]any, len(projectIDs))
+	for i, id := range projectIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	// ORDER BY project_id, id DESC matches idx_tasks_project so the planner
+	// can stream rows in index order without a temp B-tree sort.
+	query := "SELECT " + taskColumns + " FROM tasks WHERE project_id IN (" + strings.Join(placeholders, ", ") + ") ORDER BY project_id, id DESC"
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var t Task
+		if err := rows.Scan(t.scanFields()...); err != nil {
+			return nil, err
+		}
+		result[t.ProjectID] = append(result[t.ProjectID], t)
+	}
+	return result, rows.Err()
+}
+
 func (db *DB) GetOrCreateTriageTask(projectID int64) (int64, error) {
 	return db.EnsureTask(projectID, "triage")
 }
