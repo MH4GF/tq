@@ -479,7 +479,7 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 		},
 		{
 			name:               "watchdog reaps when no session log within early timeout (window still up)",
-			startedOffset:      -90 * time.Second,
+			startedOffset:      -6 * time.Minute,
 			tmux:               &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}},
 			log:                &mockClaudeSessionLogChecker{active: false},
 			wantStatus:         db.ActionStatusFailed,
@@ -487,7 +487,7 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 		},
 		{
 			name:          "watchdog skips within early timeout",
-			startedOffset: -45 * time.Second,
+			startedOffset: -2 * time.Minute,
 			tmux:          &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}},
 			log:           &mockClaudeSessionLogChecker{active: false},
 			wantStatus:    db.ActionStatusRunning,
