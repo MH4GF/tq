@@ -81,9 +81,9 @@ For each changed `cmd/*.go` file (non-test), append the matching sequence below 
 
 Start the report with one of the conclusion lines:
 
-- `**結論: PASS**`
-- `**結論: FAIL**`
-- `**結論: SKIPPED**`
+- `**Conclusion: PASS**`
+- `**Conclusion: FAIL**`
+- `**Conclusion: SKIPPED**`
 
 Then:
 

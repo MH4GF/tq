@@ -109,7 +109,7 @@ Present tasks by project in a table. Mark each project's section header with its
 |---|---|---|---|---|---|
 | 157 | Implement feature A | 3d | Awaiting review | #815 implement done — implementation complete, pushed | — |
 | 302 | Refactor parser | 2d | In progress (unfocus: manual dispatch required) | #900 implement pending — queued, will not auto-dispatch | — |
-| 55 | Fix bug B | 5d | Not started | — | 3d ago: PR待ち |
+| 55 | Fix bug B | 5d | Not started | — | 3d ago: awaiting PR review |
 
 The `Latest triage` column shows `Nd ago: <reason>` when `latest_triage_note` is present, otherwise `—`. Tasks skipped by the Step 3 triage skip rule still appear in this table but are excluded from Step 6.
 
