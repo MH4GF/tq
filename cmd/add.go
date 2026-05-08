@@ -139,14 +139,18 @@ func printQueueStatus(w io.Writer, actionID int64) {
 	pc, err := database.CountPendingByDispatch()
 	if err != nil {
 		slog.Error("count pending by dispatch", "error", err)
+		_, _ = fmt.Fprintf(w, "  queue: status unavailable: %v\n", err)
+		return
 	}
 	pendingLabel := pc.Label()
 
 	dispatchEnabled, err := database.IsActionDispatchEnabled(actionID)
 	if err != nil {
 		slog.Error("check action dispatch enabled", "error", err)
+		_, _ = fmt.Fprintf(w, "  queue: status unavailable: %v\n", err)
+		return
 	}
-	if err == nil && !dispatchEnabled {
+	if !dispatchEnabled {
 		_, _ = fmt.Fprintf(w, "  queue: %s\n", pendingLabel)
 		_, _ = fmt.Fprintf(w, "  [agent hint] project is unfocused — action will not be auto-dispatched. run 'tq action dispatch %d' to execute manually?\n", actionID)
 		return
@@ -169,6 +173,8 @@ func printQueueStatus(w io.Writer, actionID int64) {
 	runningInteractive, err := database.CountRunningInteractive()
 	if err != nil {
 		slog.Error("count running interactive", "error", err)
+		_, _ = fmt.Fprintf(w, "  queue: status unavailable: %v\n", err)
+		return
 	}
 	if runningInteractive >= maxInteractive {
 		_, _ = fmt.Fprintf(w, "  queue: %s — worker running, but interactive slots full (%d/%d)\n",
