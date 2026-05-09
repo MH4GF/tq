@@ -188,6 +188,10 @@ func TestGoldenRules(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("rule-17-explain-no-scan", func(t *testing.T) {
+		checkRule17(t, root)
+	})
 }
 
 func checkErrorUnwrap(t *testing.T, root string) []violation {
