@@ -146,6 +146,8 @@ tq action create <instruction> --task <task_id> --title "<title>"
 
 ### 3. Mark notifications as read
 
+Issue one Bash tool call per notification. Do NOT batch with a `for` loop or any other shell construct — Claude Code's permission matcher dispatches on the first token, so `for id in ...; do .../gh-mark-notification-read "$id"; done` is classified as `for` and never matches `Bash(**/scripts/gh-mark-notification-read *)`. In `--permission-mode auto` (which this skill runs under) the call is denied and the action aborts. Embed each `<thread_id>` as a literal value; do not use shell variables like `$id`.
+
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/scripts/gh-mark-notification-read <thread_id>
 ```
