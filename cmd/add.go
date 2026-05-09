@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -102,6 +103,10 @@ Metadata keys for dispatch control:
 		if err != nil {
 			return err
 		}
+		merged, err = autoStampExecutor(merged, status)
+		if err != nil {
+			return err
+		}
 
 		id, err := database.InsertAction(addTitle, addTask, merged, status, dispatchAfter)
 		if err != nil {
@@ -128,6 +133,36 @@ func mergeInstruction(metaJSON, instruction string) (string, error) {
 		}
 	}
 	m[dispatch.MetaKeyInstruction] = instruction
+	data, err := json.Marshal(m)
+	if err != nil {
+		return "", fmt.Errorf("marshal metadata: %w", err)
+	}
+	return string(data), nil
+}
+
+// autoStampExecutor stamps metadata.executor=cloud when the caller is opening
+// the action with status=running from inside a Claude Code cloud session
+// (CLAUDE_CODE_REMOTE=true). This is the only path where creation env equals
+// execution env — for status=pending the action will be dispatched later by an
+// arbitrary worker, so creation env tells us nothing about where it'll run.
+// Explicit metadata.executor in --meta is preserved.
+func autoStampExecutor(metaJSON, status string) (string, error) {
+	if status != db.ActionStatusRunning {
+		return metaJSON, nil
+	}
+	if os.Getenv("CLAUDE_CODE_REMOTE") != "true" {
+		return metaJSON, nil
+	}
+	m := make(map[string]any)
+	if metaJSON != "" && metaJSON != "{}" {
+		if err := json.Unmarshal([]byte(metaJSON), &m); err != nil {
+			return "", fmt.Errorf("parse metadata for executor stamp: %w", err)
+		}
+	}
+	if _, ok := m[dispatch.MetaKeyExecutor]; ok {
+		return metaJSON, nil
+	}
+	m[dispatch.MetaKeyExecutor] = dispatch.ExecutorCloud
 	data, err := json.Marshal(m)
 	if err != nil {
 		return "", fmt.Errorf("marshal metadata: %w", err)
