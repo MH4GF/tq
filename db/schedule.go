@@ -168,9 +168,9 @@ type ScheduleRunUpdate struct {
 	LastError string
 }
 
-// BulkUpdateScheduleRuns records one tick across many schedules in a single
-// transaction. Tx-atomic: any UPDATE failure rolls back the entire batch and
-// the next CheckSchedules tick re-decides outcomes.
+// BulkUpdateScheduleRuns records one tick result across many schedules in a
+// single transaction. Tx-atomic: any UPDATE failure rolls back the entire
+// batch.
 func (db *DB) BulkUpdateScheduleRuns(updates []ScheduleRunUpdate) error {
 	if len(updates) == 0 {
 		return nil
@@ -206,22 +206,19 @@ func (db *DB) BulkUpdateScheduleRuns(updates []ScheduleRunUpdate) error {
 
 // HasActiveActionsForSchedules returns, for each scheduleID in the input, true
 // if at least one pending/running/dispatched action references it via metadata
-// schedule_id. Replaces the per-schedule HasActiveActionWithMeta loop in
-// dispatch.CheckSchedules.
+// schedule_id. Missing IDs are absent from the map.
 func (db *DB) HasActiveActionsForSchedules(scheduleIDs []int64) (map[int64]bool, error) {
 	result := make(map[int64]bool, len(scheduleIDs))
 	if len(scheduleIDs) == 0 {
 		return result, nil
 	}
 
-	stringIDs := make([]string, len(scheduleIDs))
 	args := make([]any, 0, len(scheduleIDs)+3)
 	args = append(args, ActionStatusPending, ActionStatusRunning, ActionStatusDispatched)
 	placeholders := make([]string, len(scheduleIDs))
 	for i, id := range scheduleIDs {
 		placeholders[i] = "?"
-		stringIDs[i] = fmt.Sprintf("%d", id)
-		args = append(args, stringIDs[i])
+		args = append(args, fmt.Sprintf("%d", id))
 	}
 
 	query := "SELECT DISTINCT json_extract(metadata, '$.schedule_id') AS sid " +

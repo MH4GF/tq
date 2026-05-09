@@ -165,10 +165,9 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 	reapNonInteractive(cfg, now)
 }
 
-// reapInteractive scans running interactive actions and bulk-marks the stale
-// ones failed. The classify pass is in-memory only (no Store calls); workDir
-// is resolved from prefetched task/project maps so the loop body never touches
-// the database. Bulk mark failed runs once after classification.
+// reapInteractive scans running interactive actions, classifies them in
+// memory against prefetched task/project maps and a single tmux window
+// snapshot, then bulk-marks the stale ones failed.
 func reapInteractive(ctx context.Context, cfg WorkerConfig, now time.Time) {
 	actions, err := cfg.DB.ListRunningInteractive()
 	if err != nil {
@@ -259,8 +258,9 @@ func reapInteractive(ctx context.Context, cfg WorkerConfig, now time.Time) {
 	}
 }
 
-// reapNonInteractive mirrors reapInteractive but uses a simple time-based
-// timeout fallback instead of the tmux window check.
+// reapNonInteractive mirrors reapInteractive without the tmux fallback:
+// noninteractive actions are reaped on the time-based stale threshold once
+// their session log goes silent.
 func reapNonInteractive(cfg WorkerConfig, now time.Time) {
 	niActions, err := cfg.DB.ListRunningNonInteractive()
 	if err != nil {
@@ -321,10 +321,9 @@ func reapNonInteractive(cfg WorkerConfig, now time.Time) {
 	}
 }
 
-// collectSessionPatch records a discovered claude_session_id for later bulk
-// metadata merge, mirroring the dedupe check from the original per-action
-// MergeActionMetadata path so we don't re-write metadata that already has the
-// expected session id.
+// collectSessionPatch stages a claude_session_id metadata write for later
+// bulk merge. Skips actions whose metadata already records the same id so
+// the bulk call is a no-op when nothing changed.
 func collectSessionPatch(out map[int64]map[string]any, a *db.Action, sessionID string) {
 	if sessionID == "" {
 		return
@@ -335,9 +334,8 @@ func collectSessionPatch(out map[int64]map[string]any, a *db.Action, sessionID s
 	out[a.ID] = map[string]any{MetaKeyClaudeSessionID: sessionID}
 }
 
-// prefetchWorkDirContext bulk-fetches every task and project referenced by the
-// given actions so the reaper classify loop can resolve work_dir without per-
-// action DB calls. Returns empty maps on empty input.
+// prefetchWorkDirContext bulk-fetches the tasks (and their projects) needed
+// to resolve work_dir for every action. Returns empty maps on empty input.
 func prefetchWorkDirContext(database db.Store, actions []db.Action) (map[int64]*db.Task, map[int64]*db.Project, error) {
 	taskIDSet := make(map[int64]struct{}, len(actions))
 	for _, a := range actions {
@@ -367,9 +365,8 @@ func prefetchWorkDirContext(database db.Store, actions []db.Action) (map[int64]*
 	return taskMap, projectMap, nil
 }
 
-// workDirFromMaps replays the read-only resolveWorkDir logic against prefetched
-// maps. It returns "." when the relevant task/project is missing or has no
-// work_dir set, matching the original fallback chain.
+// workDirFromMaps mirrors resolveWorkDir's read-only decision tree but reads
+// from prefetched maps. Returns "." for any unresolvable case.
 func workDirFromMaps(a *db.Action, taskMap map[int64]*db.Task, projectMap map[int64]*db.Project) string {
 	task, ok := taskMap[a.TaskID]
 	if !ok {
@@ -429,10 +426,10 @@ func classifyEarlyStale(cfg WorkerConfig, a *db.Action, workDir string, startedA
 	return fmt.Sprintf("early-stale: no claude session log within %v of dispatch", cfg.EarlyDispatchTimeout), true
 }
 
-// claudeSessionStillActive returns (active, discoveredSessionID). The session
-// id is non-empty when the checker found a fresh log and surfaced its session
-// id; the reaper batches these into a single BulkMergeActionMetadata call so
-// the existing per-action MergeActionMetadata pattern is gone from the loop.
+// claudeSessionStillActive reports whether the action's session log shows
+// recent activity and surfaces the discovered session id (empty when the
+// checker had nothing to report). Errors and missing checker count as
+// "not active" so callers fall through to other liveness signals.
 func claudeSessionStillActive(cfg WorkerConfig, workDir string, freshness time.Duration) (bool, string) {
 	if cfg.ClaudeSessionLogChecker == nil {
 		return false, ""

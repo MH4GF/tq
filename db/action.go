@@ -456,8 +456,7 @@ func (db *DB) SetTmuxInfo(id int64, tmuxSession, tmuxWindow string) error {
 
 // BulkMergeActionMetadata merges per-action JSON metadata patches in a single
 // transaction. Tx-atomic: any read/parse/write failure rolls back every patch.
-// Empty input is a no-op. Used by the reaper to record opportunistically-
-// discovered claude_session_id values for live actions in one round-trip.
+// Empty input is a no-op.
 func (db *DB) BulkMergeActionMetadata(updates map[int64]map[string]any) error {
 	if len(updates) == 0 {
 		return nil
@@ -722,12 +721,9 @@ type ActionInsertSpec struct {
 }
 
 // ActionFailureUpdate describes one stale-action transition for BulkMarkFailed.
-// MetadataPatch is optional; when non-nil it is JSON-merged into the action's
-// existing metadata in the same transaction as the status flip.
 type ActionFailureUpdate struct {
-	ID            int64
-	Reason        string
-	MetadataPatch map[string]any
+	ID     int64
+	Reason string
 }
 
 // BulkInsertActions inserts all specs in a single multi-row INSERT and returns
@@ -790,10 +786,9 @@ func (db *DB) BulkInsertActions(specs []ActionInsertSpec) ([]int64, error) {
 	return ids, nil
 }
 
-// BulkMarkFailed marks every update.ID as failed in one transaction. Already-
-// terminal actions (done/failed/cancelled) are skipped silently to preserve the
-// idempotency of MarkFailed. If update.MetadataPatch is non-nil, the patch is
-// JSON-merged into the action's metadata as part of the same tx.
+// BulkMarkFailed marks every update.ID as failed in one transaction.
+// Already-terminal actions (done/failed/cancelled) are skipped silently so
+// repeat calls are no-ops, mirroring MarkFailed.
 func (db *DB) BulkMarkFailed(updates []ActionFailureUpdate) error {
 	if len(updates) == 0 {
 		return nil
@@ -825,27 +820,6 @@ func (db *DB) BulkMarkFailed(updates []ActionFailureUpdate) error {
 			ActionStatusFailed, u.Reason, u.ID, from,
 		); err != nil {
 			return fmt.Errorf("bulk mark failed: update id=%d: %w", u.ID, err)
-		}
-
-		if u.MetadataPatch != nil {
-			var existing string
-			if err := tx.QueryRowContext(ctx, "SELECT metadata FROM actions WHERE id = ?", u.ID).Scan(&existing); err != nil {
-				return fmt.Errorf("bulk mark failed: get metadata for id=%d: %w", u.ID, err)
-			}
-			merged := make(map[string]any)
-			if existing != "" && existing != "{}" {
-				if err := json.Unmarshal([]byte(existing), &merged); err != nil {
-					return fmt.Errorf("bulk mark failed: parse metadata for id=%d: %w", u.ID, err)
-				}
-			}
-			maps.Copy(merged, u.MetadataPatch)
-			data, err := json.Marshal(merged)
-			if err != nil {
-				return fmt.Errorf("bulk mark failed: marshal metadata for id=%d: %w", u.ID, err)
-			}
-			if _, err := tx.ExecContext(ctx, "UPDATE actions SET metadata = ? WHERE id = ?", string(data), u.ID); err != nil {
-				return fmt.Errorf("bulk mark failed: update metadata for id=%d: %w", u.ID, err)
-			}
 		}
 
 		done = append(done, committed{id: u.ID, from: from})

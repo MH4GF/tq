@@ -14,13 +14,13 @@ import (
 // dispatch/, or tui/. The fix is to add a bulk method on db.Store and call it
 // once outside the loop.
 //
-// Detection is type-driven (not name-driven): we walk every for/range body and
-// flag any CallExpr whose receiver type, after Underlying() resolution,
-// matches the db.Store interface, the *db.DB concrete type, or any other
-// type that implements db.Store. Helper-function calls inside the loop are
-// expanded by following SelectorExpr/Ident references through TypesInfo so
-// the rule cannot be bypassed by extracting the call to a one-line wrapper
-// in the same package.
+// Detection is type-driven (not name-driven): we walk every RangeStmt body
+// and flag any CallExpr whose Selection resolves to a method on the db.Store
+// interface (or any type that implements it). The check is direct only:
+// helper functions called from inside the loop are NOT followed, so a thin
+// wrapper that hides the Store call would bypass detection. Bare for{} and
+// for-cond{} polling loops are out of scope (independent ticks, no batching
+// possible).
 func TestRule15_NoStoreCallsInLoops(t *testing.T) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax |

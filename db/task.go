@@ -335,9 +335,8 @@ func (db *DB) GetTask(id int64) (*Task, error) {
 	return t, nil
 }
 
-// GetTasksByIDs returns the requested tasks keyed by ID. Missing IDs are simply
-// absent from the map (no error). Replaces the per-iteration GetTask N+1 in
-// dispatch.CheckSchedules.
+// GetTasksByIDs returns the requested tasks keyed by ID. Missing IDs are
+// absent from the map (no error).
 func (db *DB) GetTasksByIDs(ids []int64) (map[int64]*Task, error) {
 	result := make(map[int64]*Task, len(ids))
 	if len(ids) == 0 {

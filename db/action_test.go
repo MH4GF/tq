@@ -1414,9 +1414,8 @@ func TestBulkMarkFailed(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 		taskID, _ := d.InsertTask(1, "test", "{}", "")
 		var ids []int64
-		for i := range 3 {
+		for range 3 {
 			id, _ := d.InsertAction("a", taskID, "{}", db.ActionStatusRunning, nil)
-			_ = i
 			ids = append(ids, id)
 		}
 
@@ -1436,30 +1435,6 @@ func TestBulkMarkFailed(t *testing.T) {
 			if !a.Result.Valid || a.Result.String != updates[i].Reason {
 				t.Errorf("action %d result = %v, want %q", id, a.Result, updates[i].Reason)
 			}
-		}
-	})
-
-	t.Run("metadata patch is merged", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		id, _ := d.InsertAction("a", taskID, `{"existing":"keep"}`, db.ActionStatusRunning, nil)
-
-		err := d.BulkMarkFailed([]db.ActionFailureUpdate{{
-			ID: id, Reason: "stale", MetadataPatch: map[string]any{"claude_session_id": "sess-x"},
-		}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		a, _ := d.GetAction(id)
-		if a.Status != db.ActionStatusFailed {
-			t.Errorf("status = %q, want failed", a.Status)
-		}
-		if !strings.Contains(a.Metadata, `"claude_session_id":"sess-x"`) {
-			t.Errorf("metadata missing patch: %s", a.Metadata)
-		}
-		if !strings.Contains(a.Metadata, `"existing":"keep"`) {
-			t.Errorf("metadata lost existing key: %s", a.Metadata)
 		}
 	})
 

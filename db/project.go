@@ -41,8 +41,7 @@ func (db *DB) GetProjectByID(id int64) (*Project, error) {
 }
 
 // GetProjectsByIDs returns the requested projects keyed by ID. Missing IDs are
-// absent from the map (no error). Used by the reaper to prefetch every action's
-// fallback work_dir source in one query instead of looping GetProjectByID.
+// absent from the map (no error).
 func (db *DB) GetProjectsByIDs(ids []int64) (map[int64]*Project, error) {
 	result := make(map[int64]*Project, len(ids))
 	if len(ids) == 0 {

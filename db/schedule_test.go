@@ -320,9 +320,8 @@ func TestBulkUpdateScheduleRuns(t *testing.T) {
 		taskID, _ := d.InsertTask(1, "test", "{}", "")
 
 		var ids []int64
-		for i := range 3 {
+		for range 3 {
 			id, _ := d.InsertSchedule(taskID, "p", "T", "* * * * *", "{}")
-			_ = i
 			ids = append(ids, id)
 		}
 
