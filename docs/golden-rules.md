@@ -135,6 +135,20 @@ Current status totals are captured after each rule as `current violations: N`. A
   - `db/db.go:296` — `migrateLegacyClaudeFlags` legacy data sweep (one-shot migration helper; full scan is acceptable here).
   - `db/search.go:98,101,104,107,110,118` — `db.Search` keyword search (UNION ALL of `tasks.title`, `tasks.metadata`, `actions.title`, `actions.result`, `actions.metadata`, `events.payload.reason`). FTS5 conversion is a separate task and out of scope for this rule.
 
+### Query plan invariants
+
+**Rule 17 [enforced] — Every SQL statement issued by `db/` MUST avoid full-table `SCAN` in `EXPLAIN QUERY PLAN`, except for entries explicitly listed in `.goldenrules-rule17-allowlist`.**
+
+- Why: tq runs against Turso (libsql) in production where `rows-read` is metered. The Turso-recommended way to keep `rows-read` bounded is to verify each query's plan reports `SEARCH ... USING INDEX` rather than `SCAN tablename`. A missing index (e.g. `tasks(project_id)` historically) silently inflates reads; this rule structurally blocks that regression. Rule 16 covers the LIKE shape statically; Rule 17 covers the same concern dynamically (via the planner) and additionally catches cases unrelated to `LIKE` (missing FK indexes, full-table list operations, etc.). Background: `.claude/plans/ok-tq-create-action-refactored-galaxy.md` Action 4.
+- Verify: Go test harness `internal/goldenrules/` (`rule17_explain_test.go`) parses `db/*.go` via `go/ast`, extracts SQL from `*.Query` / `*.QueryRow` / `*.Exec` (and the `*Context` variants), runs `EXPLAIN QUERY PLAN` against `testutil.NewTestDB(t)`, and matches `^SCAN\s+\w+` in the `detail` column. Ceiling-based against `.goldenrules-rule17-allowlist` (deadcode-check pattern): new findings AND stale entries both fail. Run `go test ./internal/goldenrules/`.
+- Allowlist policy: `.goldenrules-rule17-allowlist` records intentional / unavoidable SCAN sites (full-table list with no WHERE, migration one-shots, FK-cascade chains that lack an index, leading-wildcard `LIKE` searches that are already tracked separately for FTS5 migration). Each entry is one line, format `<file>:<line> SCAN <table_or_alias>`. New SCANs MUST be either fixed (add an index, rewrite the query) or, if genuinely unavoidable, added to the allowlist with a category comment block above.
+- MVP limits (extend in a follow-up if violated by a real refactor):
+  - SQL extractor handles string literals, package-level `const` references, intra-function string variable assignments (first assignment wins), `+` concatenation, and `fmt.Sprintf` format strings (verbs replaced with `?`). It does NOT trace through helpers like `appendOrderLimit` — only the base assignment is checked.
+  - Queries built via `strings.Join` for IN-clauses are checked with a single `?` placeholder substituted in. This is the worst case for the index decision.
+  - Queries that fail `EXPLAIN QUERY PLAN` (typically migration queries against post-migration schema, e.g. dropped columns) are skipped with a count logged in the test output.
+  - The output of `EXPLAIN QUERY PLAN` is SQLite-version dependent; the test pins itself to the in-memory SQLite shipped with `testutil.NewTestDB(t)` to keep CI deterministic.
+- Current violations: 13 (see `.goldenrules-rule17-allowlist`). Burning these down (FTS5 for search, `schedules(task_id)` index, etc.) is tracked as separate follow-up actions.
+
 ---
 
 ## How to use this file
@@ -147,7 +161,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 **During periodic GC (`/gc-golden-rules`, weekly via tq schedule):**
 
-- Enforced rules (1-6, 8-14, 16) are checked by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
+- Enforced rules (1-6, 8-14, 16-17) are checked by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
 - For each violation found, the GC command creates a tq action via `/tq:create-action` with `claude_args: ["--worktree"]` for isolated execution.
 - The created actions handle the actual fixes — each targeted to a single violation.
 
@@ -185,8 +199,9 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 13 No dead code | OK | OK | OK | OK |
 | 14 No `*ForTest` in prod | — | OK | OK | OK |
 | 16 No leading-wildcard `LIKE` | 7 | OK | OK | OK |
+| 17 No SCAN in EXPLAIN | 13 | — | — | — |
 
-Totals: **7** current violations (all in `db/`, ceiling-pinned at 7; FTS5 conversion of `db.Search` is the burn-down path).
+Totals: **20** current violations (Rule 16: 7 ceiling-pinned LIKE patterns; Rule 17: 13 SCANs allowlisted in `.goldenrules-rule17-allowlist`; both burn down via FTS5 conversion of `db.Search` and per-query index work tracked as separate actions).
 
 ---
 

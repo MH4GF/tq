@@ -1,0 +1,30 @@
+# Rule 17 — expected SCAN entries from `EXPLAIN QUERY PLAN`.
+# See docs/golden-rules.md Rule 17 for context.
+#
+# Format: <file>:<line> SCAN <table_or_alias>
+# Lines starting with "#" and blank lines are ignored.
+#
+# A new SCAN finding not listed here fails CI. A listed entry that is no
+# longer reported (e.g., an index was added or the query was rewritten) also
+# fails CI — remove the stale line when that happens.
+#
+# Categories represented:
+#   - Full-table list (SELECT ... no WHERE)
+#   - Migration / one-shot maintenance queries (run once, small data)
+#   - Bulk-write operations (UPDATE/DELETE without filter)
+#   - FK-cascade or sub-DELETE that scans a referenced table without an index
+#   - Search using leading-wildcard LIKE (separate FTS5 work tracked elsewhere)
+
+db/action.go:276 SCAN actions
+db/db.go:142 SCAN tasks
+db/db.go:159 SCAN actions
+db/event.go:69 SCAN events
+db/project.go:100 SCAN schedules
+db/project.go:188 SCAN projects
+db/project.go:46 SCAN projects
+db/project.go:97 SCAN schedules
+db/schedule.go:145 SCAN schedules
+db/schedule.go:50 SCAN schedules
+db/search.go:129 SCAN a
+db/search.go:129 SCAN t
+db/task.go:356 SCAN tasks
