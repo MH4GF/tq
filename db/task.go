@@ -370,10 +370,6 @@ func (db *DB) ListTasks(projectID int64, status string, limit int) ([]Task, erro
 	return tasks, rows.Err()
 }
 
-func (db *DB) ListTasksByProject(projectID int64) ([]Task, error) {
-	return db.ListTasks(projectID, "", 0)
-}
-
 func (db *DB) ListTasksByProjectIDs(projectIDs []int64) (map[int64][]Task, error) {
 	result := make(map[int64][]Task)
 	if len(projectIDs) == 0 {
