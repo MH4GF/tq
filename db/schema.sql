@@ -37,6 +37,39 @@ CREATE INDEX IF NOT EXISTS idx_actions_dispatch ON actions(status, id ASC);
 CREATE INDEX IF NOT EXISTS idx_actions_task ON actions(task_id, id ASC);
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id, id DESC);
 
+CREATE TABLE IF NOT EXISTS task_action_counts (
+  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  status  TEXT NOT NULL,
+  count   INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (task_id, status)
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_actions_count_insert
+AFTER INSERT ON actions
+BEGIN
+  INSERT INTO task_action_counts (task_id, status, count)
+  VALUES (NEW.task_id, NEW.status, 1)
+  ON CONFLICT(task_id, status) DO UPDATE SET count = count + 1;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_actions_count_update
+AFTER UPDATE OF status ON actions
+WHEN OLD.status != NEW.status
+BEGIN
+  UPDATE task_action_counts SET count = count - 1
+  WHERE task_id = OLD.task_id AND status = OLD.status;
+  INSERT INTO task_action_counts (task_id, status, count)
+  VALUES (NEW.task_id, NEW.status, 1)
+  ON CONFLICT(task_id, status) DO UPDATE SET count = count + 1;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_actions_count_delete
+AFTER DELETE ON actions
+BEGIN
+  UPDATE task_action_counts SET count = count - 1
+  WHERE task_id = OLD.task_id AND status = OLD.status;
+END;
+
 CREATE TABLE IF NOT EXISTS schedules (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   task_id     INTEGER NOT NULL REFERENCES tasks(id),

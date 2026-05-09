@@ -288,6 +288,27 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	if err := db.backfillTaskActionCounts(); err != nil {
+		return fmt.Errorf("backfill task_action_counts: %w", err)
+	}
+
+	return nil
+}
+
+// backfillTaskActionCounts populates task_action_counts from existing actions
+// rows on the first migration. Idempotent: if the table already has rows,
+// triggers have been keeping it in sync, so skip.
+func (db *DB) backfillTaskActionCounts() error {
+	var hasRows int
+	if err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM task_action_counts LIMIT 1)").Scan(&hasRows); err != nil {
+		return fmt.Errorf("check rows: %w", err)
+	}
+	if hasRows != 0 {
+		return nil
+	}
+	if _, err := db.Exec("INSERT INTO task_action_counts (task_id, status, count) SELECT task_id, status, COUNT(*) FROM actions GROUP BY task_id, status"); err != nil {
+		return fmt.Errorf("insert: %w", err)
+	}
 	return nil
 }
 
