@@ -18,6 +18,7 @@ type CommandWriter interface {
 	ResetToPending(id int64) error
 	SetTmuxInfo(id int64, tmuxSession, tmuxWindow string) error
 	MergeActionMetadata(id int64, updates map[string]any) error
+	BulkMergeActionMetadata(updates map[int64]map[string]any) error
 	UpdateAction(id int64, title *string, taskID *int64, metadata *string) error
 	NextPending(ctx context.Context) (*Action, error)
 	ClaimPending(ctx context.Context, id int64) (*Action, error)
@@ -77,6 +78,7 @@ type QueryReader interface {
 	// Project queries
 	GetProjectByID(id int64) (*Project, error)
 	GetProjectByName(name string) (*Project, error)
+	GetProjectsByIDs(ids []int64) (map[int64]*Project, error)
 	ListProjects(limit int) ([]Project, error)
 	EnsureNotificationsProject() (int64, error)
 	// Schedule queries

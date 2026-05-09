@@ -159,84 +159,128 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 	now := time.Now()
 
-	// Interactive stale check (claude session log heartbeat, fallback to tmux window check)
 	if cfg.ClaudeSessionLogChecker != nil || cfg.TmuxChecker != nil {
-		actions, err := cfg.DB.ListRunningInteractive()
+		reapInteractive(ctx, cfg, now)
+	}
+	reapNonInteractive(cfg, now)
+}
+
+// reapInteractive scans running interactive actions and bulk-marks the stale
+// ones failed. The classify pass is in-memory only (no Store calls); workDir
+// is resolved from prefetched task/project maps so the loop body never touches
+// the database. Bulk mark failed runs once after classification.
+func reapInteractive(ctx context.Context, cfg WorkerConfig, now time.Time) {
+	actions, err := cfg.DB.ListRunningInteractive()
+	if err != nil {
+		slog.Error("list running interactive for stale check", "error", err)
+		return
+	}
+	if len(actions) == 0 {
+		return
+	}
+
+	taskMap, projectMap, err := prefetchWorkDirContext(cfg.DB, actions)
+	if err != nil {
+		slog.Error("prefetch work_dir context for interactive reaper", "error", err)
+		return
+	}
+
+	var windowSet map[string]struct{}
+	if cfg.TmuxChecker != nil {
+		windows, err := cfg.TmuxChecker.ListWindows(ctx, cfg.TmuxSession)
 		if err != nil {
-			slog.Error("list running interactive for stale check", "error", err)
-		} else if len(actions) > 0 {
-			// Build tmux window set for fallback
-			var windowSet map[string]struct{}
-			if cfg.TmuxChecker != nil {
-				windows, err := cfg.TmuxChecker.ListWindows(ctx, cfg.TmuxSession)
-				if err != nil {
-					slog.Warn("tmux list-windows failed", "error", err)
-				} else {
-					windowSet = make(map[string]struct{}, len(windows))
-					for _, w := range windows {
-						windowSet[w] = struct{}{}
-					}
-				}
-			}
-
-			for _, a := range actions {
-				if MetadataHasValue(a.Metadata, MetaKeyExecutor, ExecutorCloud) {
-					continue
-				}
-				var startedAt time.Time
-				if a.StartedAt.Valid {
-					if s, err := time.Parse(db.TimeLayout, a.StartedAt.String); err == nil {
-						startedAt = s
-						if now.Sub(startedAt) < cfg.StaleGracePeriod {
-							continue
-						}
-					}
-				}
-
-				if reapEarlyStale(cfg, &a, startedAt, now) {
-					continue
-				}
-
-				if reapCheckClaudeSessionLog(cfg, &a) {
-					continue
-				}
-
-				// Fallback: tmux window check
-				if windowSet == nil {
-					// Tmux unavailable and session log did not confirm liveness.
-					// Without any positive signal, fall back to a hard timeout so a
-					// broken tmux server cannot wedge the interactive slot forever.
-					if !startedAt.IsZero() && now.Sub(startedAt) >= cfg.InteractiveHardTimeout {
-						result := fmt.Sprintf("stale: tmux unavailable and action exceeded hard timeout (%v)", cfg.InteractiveHardTimeout)
-						if err := markActionFailed(cfg.DB, &a, result); err != nil {
-							slog.Error("mark stale action failed", "action_id", a.ID, "error", err)
-							continue
-						}
-						slog.Warn("reaped stale action via hard timeout", "action_id", a.ID, "hard_timeout", cfg.InteractiveHardTimeout)
-					}
-					continue
-				}
-				if _, exists := windowSet[WindowName(a.ID)]; exists {
-					continue
-				}
-
-				result := fmt.Sprintf("stale: session log not fresh and tmux window %q no longer exists", WindowName(a.ID))
-				if err := markActionFailed(cfg.DB, &a, result); err != nil {
-					slog.Error("mark stale action failed", "action_id", a.ID, "error", err)
-					continue
-				}
-				slog.Warn("reaped stale action", "action_id", a.ID)
+			slog.Warn("tmux list-windows failed", "error", err)
+		} else {
+			windowSet = make(map[string]struct{}, len(windows))
+			for _, w := range windows {
+				windowSet[w] = struct{}{}
 			}
 		}
 	}
 
-	// Noninteractive stale check (session log heartbeat, fallback to time-based)
+	var failures []db.ActionFailureUpdate
+	sessionPatches := make(map[int64]map[string]any)
+	for _, a := range actions {
+		if MetadataHasValue(a.Metadata, MetaKeyExecutor, ExecutorCloud) {
+			continue
+		}
+		var startedAt time.Time
+		if a.StartedAt.Valid {
+			if s, err := time.Parse(db.TimeLayout, a.StartedAt.String); err == nil {
+				startedAt = s
+				if now.Sub(startedAt) < cfg.StaleGracePeriod {
+					continue
+				}
+			}
+		}
+
+		workDir := workDirFromMaps(&a, taskMap, projectMap)
+
+		if reason, decided := classifyEarlyStale(cfg, &a, workDir, startedAt, now); decided {
+			if reason != "" {
+				failures = append(failures, db.ActionFailureUpdate{ID: a.ID, Reason: reason})
+				slog.Warn("reaped early-stale action", "action_id", a.ID, "elapsed", now.Sub(startedAt))
+			}
+			continue
+		}
+
+		active, sessionID := claudeSessionStillActive(cfg, workDir, cfg.HeartbeatFreshness)
+		if active {
+			collectSessionPatch(sessionPatches, &a, sessionID)
+			slog.Info("action claude session log is fresh, skipping stale check", "action_id", a.ID)
+			continue
+		}
+
+		if windowSet == nil {
+			if !startedAt.IsZero() && now.Sub(startedAt) >= cfg.InteractiveHardTimeout {
+				reason := fmt.Sprintf("stale: tmux unavailable and action exceeded hard timeout (%v)", cfg.InteractiveHardTimeout)
+				failures = append(failures, db.ActionFailureUpdate{ID: a.ID, Reason: reason})
+				slog.Warn("reaped stale action via hard timeout", "action_id", a.ID, "hard_timeout", cfg.InteractiveHardTimeout)
+			}
+			continue
+		}
+		if _, exists := windowSet[WindowName(a.ID)]; exists {
+			continue
+		}
+		reason := fmt.Sprintf("stale: session log not fresh and tmux window %q no longer exists", WindowName(a.ID))
+		failures = append(failures, db.ActionFailureUpdate{ID: a.ID, Reason: reason})
+		slog.Warn("reaped stale action", "action_id", a.ID)
+	}
+
+	if len(failures) > 0 {
+		if err := cfg.DB.BulkMarkFailed(failures); err != nil {
+			slog.Error("bulk mark stale interactive actions failed", "error", err, "count", len(failures))
+		}
+	}
+	if len(sessionPatches) > 0 {
+		if err := cfg.DB.BulkMergeActionMetadata(sessionPatches); err != nil {
+			slog.Warn("bulk merge claude_session_id patches failed", "error", err, "count", len(sessionPatches))
+		}
+	}
+}
+
+// reapNonInteractive mirrors reapInteractive but uses a simple time-based
+// timeout fallback instead of the tmux window check.
+func reapNonInteractive(cfg WorkerConfig, now time.Time) {
 	niActions, err := cfg.DB.ListRunningNonInteractive()
 	if err != nil {
 		slog.Error("list running noninteractive for stale check", "error", err)
 		return
 	}
+	if len(niActions) == 0 {
+		return
+	}
+
+	taskMap, projectMap, err := prefetchWorkDirContext(cfg.DB, niActions)
+	if err != nil {
+		slog.Error("prefetch work_dir context for noninteractive reaper", "error", err)
+		return
+	}
+
 	staleThreshold := time.Duration(defaultTimeout*nonInteractiveStaleMultiplier) * time.Second
+
+	var failures []db.ActionFailureUpdate
+	sessionPatches := make(map[int64]map[string]any)
 	for _, a := range niActions {
 		if MetadataHasValue(a.Metadata, MetaKeyExecutor, ExecutorCloud) {
 			continue
@@ -252,87 +296,153 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 			continue
 		}
 
-		if reapCheckClaudeSessionLog(cfg, &a) {
+		workDir := workDirFromMaps(&a, taskMap, projectMap)
+		active, sessionID := claudeSessionStillActive(cfg, workDir, cfg.HeartbeatFreshness)
+		if active {
+			collectSessionPatch(sessionPatches, &a, sessionID)
+			slog.Info("noninteractive action claude session log is fresh, skipping stale check", "action_id", a.ID)
 			continue
 		}
 
-		result := fmt.Sprintf("stale: noninteractive action exceeded timeout (%v)", staleThreshold)
-		if err := markActionFailed(cfg.DB, &a, result); err != nil {
-			slog.Error("mark stale noninteractive action failed", "action_id", a.ID, "error", err)
-			continue
-		}
+		reason := fmt.Sprintf("stale: noninteractive action exceeded timeout (%v)", staleThreshold)
+		failures = append(failures, db.ActionFailureUpdate{ID: a.ID, Reason: reason})
 		slog.Warn("reaped stale noninteractive action", "action_id", a.ID)
+	}
+
+	if len(failures) > 0 {
+		if err := cfg.DB.BulkMarkFailed(failures); err != nil {
+			slog.Error("bulk mark stale noninteractive actions failed", "error", err, "count", len(failures))
+		}
+	}
+	if len(sessionPatches) > 0 {
+		if err := cfg.DB.BulkMergeActionMetadata(sessionPatches); err != nil {
+			slog.Warn("bulk merge claude_session_id patches (NI) failed", "error", err, "count", len(sessionPatches))
+		}
 	}
 }
 
-// reapEarlyStale catches dispatches that crashed before writing any session log,
-// where the tmux window may still be alive (so reapCheckClaudeSessionLog cannot help).
-func reapEarlyStale(cfg WorkerConfig, a *db.Action, startedAt, now time.Time) bool {
+// collectSessionPatch records a discovered claude_session_id for later bulk
+// metadata merge, mirroring the dedupe check from the original per-action
+// MergeActionMetadata path so we don't re-write metadata that already has the
+// expected session id.
+func collectSessionPatch(out map[int64]map[string]any, a *db.Action, sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	if MetadataHasValue(a.Metadata, MetaKeyClaudeSessionID, sessionID) {
+		return
+	}
+	out[a.ID] = map[string]any{MetaKeyClaudeSessionID: sessionID}
+}
+
+// prefetchWorkDirContext bulk-fetches every task and project referenced by the
+// given actions so the reaper classify loop can resolve work_dir without per-
+// action DB calls. Returns empty maps on empty input.
+func prefetchWorkDirContext(database db.Store, actions []db.Action) (map[int64]*db.Task, map[int64]*db.Project, error) {
+	taskIDSet := make(map[int64]struct{}, len(actions))
+	for _, a := range actions {
+		taskIDSet[a.TaskID] = struct{}{}
+	}
+	taskIDs := make([]int64, 0, len(taskIDSet))
+	for id := range taskIDSet {
+		taskIDs = append(taskIDs, id)
+	}
+	taskMap, err := database.GetTasksByIDs(taskIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("get tasks: %w", err)
+	}
+
+	projectIDSet := make(map[int64]struct{}, len(taskMap))
+	for _, t := range taskMap {
+		projectIDSet[t.ProjectID] = struct{}{}
+	}
+	projectIDs := make([]int64, 0, len(projectIDSet))
+	for id := range projectIDSet {
+		projectIDs = append(projectIDs, id)
+	}
+	projectMap, err := database.GetProjectsByIDs(projectIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("get projects: %w", err)
+	}
+	return taskMap, projectMap, nil
+}
+
+// workDirFromMaps replays the read-only resolveWorkDir logic against prefetched
+// maps. It returns "." when the relevant task/project is missing or has no
+// work_dir set, matching the original fallback chain.
+func workDirFromMaps(a *db.Action, taskMap map[int64]*db.Task, projectMap map[int64]*db.Project) string {
+	task, ok := taskMap[a.TaskID]
+	if !ok {
+		return "."
+	}
+	if task.WorkDir != "" {
+		expanded := expandHome(task.WorkDir)
+		if dirExists(expanded) {
+			return expanded
+		}
+		// Fall through to project fallback (mirrors resolveWorkDir's recovery path).
+		project, ok := projectMap[task.ProjectID]
+		if !ok {
+			return "."
+		}
+		if project.WorkDir != "" {
+			projExpanded := expandHome(project.WorkDir)
+			if dirExists(projExpanded) {
+				return projExpanded
+			}
+		}
+		return "."
+	}
+	project, ok := projectMap[task.ProjectID]
+	if !ok {
+		return "."
+	}
+	if project.WorkDir != "" {
+		return expandHome(project.WorkDir)
+	}
+	return "."
+}
+
+// classifyEarlyStale evaluates the early-stale watchdog: an action that has
+// exceeded EarlyDispatchTimeout but never produced a session log. Returns
+// (reason, true) to schedule a failure, ("", true) to suppress further checks
+// for this action (session is active), and ("", false) to defer to the next
+// classifier in the chain.
+func classifyEarlyStale(cfg WorkerConfig, a *db.Action, workDir string, startedAt, now time.Time) (string, bool) {
 	if cfg.ClaudeSessionLogChecker == nil || startedAt.IsZero() {
-		return false
+		return "", false
 	}
 	sinceStart := now.Sub(startedAt)
 	if sinceStart < cfg.EarlyDispatchTimeout {
-		return false
-	}
-
-	workDir, _, err := resolveWorkDir(cfg.DB, a)
-	if err != nil {
-		slog.Warn("early-stale watchdog: resolve work_dir failed", "action_id", a.ID, "error", err)
+		return "", false
 	}
 	active, _, err := cfg.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, sinceStart)
 	if err != nil {
 		slog.Warn("early-stale watchdog: claude session log check failed", "action_id", a.ID, "error", err)
-		return false
+		return "", false
 	}
 	if active {
-		return false
+		// Session is alive even past the early window — defer to nothing else;
+		// the regular liveness check would also see this as fresh.
+		return "", true
 	}
-
-	result := fmt.Sprintf("early-stale: no claude session log within %v of dispatch", cfg.EarlyDispatchTimeout)
-	if err := markActionFailed(cfg.DB, a, result); err != nil {
-		slog.Error("mark early-stale action failed", "action_id", a.ID, "error", err)
-		return false
-	}
-	slog.Warn("reaped early-stale action", "action_id", a.ID, "elapsed", sinceStart)
-	return true
+	return fmt.Sprintf("early-stale: no claude session log within %v of dispatch", cfg.EarlyDispatchTimeout), true
 }
 
-// reapCheckClaudeSessionLog checks if the action's Claude Code session is still active.
-// Returns true if the session is active (action should NOT be reaped).
-// Also saves the discovered claude_session_id to action metadata for future use.
-func reapCheckClaudeSessionLog(cfg WorkerConfig, a *db.Action) bool {
+// claudeSessionStillActive returns (active, discoveredSessionID). The session
+// id is non-empty when the checker found a fresh log and surfaced its session
+// id; the reaper batches these into a single BulkMergeActionMetadata call so
+// the existing per-action MergeActionMetadata pattern is gone from the loop.
+func claudeSessionStillActive(cfg WorkerConfig, workDir string, freshness time.Duration) (bool, string) {
 	if cfg.ClaudeSessionLogChecker == nil {
-		return false
+		return false, ""
 	}
-
-	workDir, _, err := resolveWorkDir(cfg.DB, a)
+	active, claudeSessionID, err := cfg.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, freshness)
 	if err != nil {
-		slog.Warn("claude session log check: resolve work_dir failed", "action_id", a.ID, "error", err)
+		slog.Warn("claude session log check failed", "error", err)
+		return false, ""
 	}
-	active, claudeSessionID, err := cfg.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, cfg.HeartbeatFreshness)
-	if err != nil {
-		slog.Warn("claude session log check failed", "action_id", a.ID, "error", err)
-		return false
-	}
-	if !active {
-		return false
-	}
-
-	slog.Info("action claude session log is fresh, skipping stale check",
-		"action_id", a.ID, "claude_session_id", claudeSessionID)
-
-	// Save claude_session_id to metadata for future use (claude --resume, log investigation).
-	// Skip if already saved to avoid redundant DB writes on every poll cycle.
-	if claudeSessionID != "" && !MetadataHasValue(a.Metadata, MetaKeyClaudeSessionID, claudeSessionID) {
-		if err := cfg.DB.MergeActionMetadata(a.ID, map[string]any{
-			MetaKeyClaudeSessionID: claudeSessionID,
-		}); err != nil {
-			slog.Warn("failed to save claude_session_id to metadata", "action_id", a.ID, "error", err)
-		}
-	}
-
-	return true
+	return active, claudeSessionID
 }
 
 // MetadataHasValue reports whether the action's metadata JSON has the given

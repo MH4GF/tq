@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type Project struct {
@@ -37,6 +38,40 @@ func (db *DB) GetProjectByID(id int64) (*Project, error) {
 		return nil, err
 	}
 	return p, nil
+}
+
+// GetProjectsByIDs returns the requested projects keyed by ID. Missing IDs are
+// absent from the map (no error). Used by the reaper to prefetch every action's
+// fallback work_dir source in one query instead of looping GetProjectByID.
+func (db *DB) GetProjectsByIDs(ids []int64) (map[int64]*Project, error) {
+	result := make(map[int64]*Project, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := "SELECT " + projectColumns + " FROM projects WHERE id IN (" + strings.Join(placeholders, ", ") + ")"
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get projects by ids: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var p Project
+		if err := rows.Scan(p.scanFields()...); err != nil {
+			return nil, fmt.Errorf("get projects by ids: scan: %w", err)
+		}
+		pp := p
+		result[pp.ID] = &pp
+	}
+	return result, rows.Err()
 }
 
 func (db *DB) ListProjects(limit int) ([]Project, error) {

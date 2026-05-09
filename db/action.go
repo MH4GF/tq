@@ -454,6 +454,67 @@ func (db *DB) SetTmuxInfo(id int64, tmuxSession, tmuxWindow string) error {
 	return err
 }
 
+// BulkMergeActionMetadata merges per-action JSON metadata patches in a single
+// transaction. Tx-atomic: any read/parse/write failure rolls back every patch.
+// Empty input is a no-op. Used by the reaper to record opportunistically-
+// discovered claude_session_id values for live actions in one round-trip.
+func (db *DB) BulkMergeActionMetadata(updates map[int64]map[string]any) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("bulk merge action metadata: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	type committed struct {
+		id   int64
+		keys []string
+	}
+	var done []committed
+
+	for id, patch := range updates {
+		if len(patch) == 0 {
+			continue
+		}
+		var existing string
+		if err := tx.QueryRowContext(ctx, "SELECT metadata FROM actions WHERE id = ?", id).Scan(&existing); err != nil {
+			return fmt.Errorf("bulk merge action metadata: get id=%d: %w", id, err)
+		}
+		merged := make(map[string]any)
+		if existing != "" && existing != "{}" {
+			if err := json.Unmarshal([]byte(existing), &merged); err != nil {
+				return fmt.Errorf("bulk merge action metadata: parse id=%d: %w", id, err)
+			}
+		}
+		maps.Copy(merged, patch)
+		data, err := json.Marshal(merged)
+		if err != nil {
+			return fmt.Errorf("bulk merge action metadata: marshal id=%d: %w", id, err)
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE actions SET metadata = ? WHERE id = ?", string(data), id); err != nil {
+			return fmt.Errorf("bulk merge action metadata: update id=%d: %w", id, err)
+		}
+		keys := make([]string, 0, len(patch))
+		for k := range patch {
+			keys = append(keys, k)
+		}
+		done = append(done, committed{id: id, keys: keys})
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("bulk merge action metadata: commit: %w", err)
+	}
+	for _, c := range done {
+		db.emitEvent("action", c.id, "action.metadata_merged", map[string]any{
+			"keys_updated": c.keys,
+		})
+	}
+	return nil
+}
+
 func (db *DB) MergeActionMetadata(id int64, updates map[string]any) error {
 	var existing string
 	err := db.QueryRow("SELECT metadata FROM actions WHERE id = ?", id).Scan(&existing)
