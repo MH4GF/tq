@@ -169,6 +169,25 @@ func TestGoldenRules(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("rule-16-no-leading-wildcard-like", func(t *testing.T) {
+		const ceiling = 7
+		violations := scanFiles(t, root, scanConfig{
+			Dirs:        []string{"db", "cmd", "dispatch", "tui"},
+			FilePattern: "*.go",
+			LineRegexp:  regexp.MustCompile(`(?i)\bLIKE\s+'%`),
+		})
+		count := len(violations)
+		if count > ceiling {
+			t.Errorf("rule-16 violations (%d) exceed ceiling (%d); regression detected", count, ceiling)
+			reportViolations(t, violations)
+		} else if count > 0 {
+			t.Logf("rule-16: %d known violations (ceiling %d)", count, ceiling)
+			for _, v := range violations {
+				t.Logf("  %s:%d: %s", v.File, v.Line, v.Text)
+			}
+		}
+	})
 }
 
 func checkErrorUnwrap(t *testing.T, root string) []violation {
