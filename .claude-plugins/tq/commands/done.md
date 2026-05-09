@@ -36,4 +36,4 @@ Always run this flow — do not wait for the user to ask "what's next?".
 
 Constraints:
 - If the result's `remaining` section has incomplete signals, classification cannot be **Done**.
-- Dedup: skip the proposal if an active (pending/running) action with the same purpose already exists for this task.
+- Dedup: skip the proposal if an active (pending/running/dispatched) action with the same purpose already exists for this task.
