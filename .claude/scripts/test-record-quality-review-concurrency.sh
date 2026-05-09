@@ -15,15 +15,17 @@ fi
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 
-# Stub `git` so each parallel invocation reports its own SHA via $QR_TEST_SHA.
 mkdir -p "$work_dir/bin"
 cat > "$work_dir/bin/git" <<'EOF'
 #!/bin/bash
-if [[ "${1:-}" == "rev-parse" && "${2:-}" == "HEAD" ]]; then
-  echo "${QR_TEST_SHA:?QR_TEST_SHA must be set}"
-  exit 0
+# Strict stub: only `git rev-parse HEAD` is expected from the script under
+# test. Any other git invocation should fail the test loudly, not pass
+# through to the real git.
+if [[ "${1:-}" != "rev-parse" || "${2:-}" != "HEAD" ]]; then
+  echo "stub git: unexpected args: $*" >&2
+  exit 99
 fi
-exec /usr/bin/env -u PATH PATH="${REAL_PATH:-/usr/bin:/bin}" git "$@"
+echo "${QR_TEST_SHA:?QR_TEST_SHA must be set}"
 EOF
 chmod +x "$work_dir/bin/git"
 
@@ -36,7 +38,6 @@ for i in $(seq 1 "$n"); do
   (
     cd "$work_dir/run"
     export PATH="$work_dir/bin:$PATH"
-    export REAL_PATH="$PATH"
     export QR_TEST_SHA="$sha"
     "$script"
   ) &

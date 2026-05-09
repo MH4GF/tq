@@ -1,14 +1,17 @@
 #!/bin/bash
 set -euo pipefail
 
+if ! command -v flock >/dev/null 2>&1; then
+  echo "error: flock not found. On macOS run 'brew install flock'." >&2
+  exit 1
+fi
+
 mkdir -p .claude/tmp
 sha=$(git rev-parse HEAD)
 ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 state_file=".claude/tmp/quality-review-state.json"
 lock_file=".claude/tmp/quality-review-state.lock"
 
-# Serialize the read-modify-write so concurrent /quality-review runs across
-# worktrees do not race and silently drop SHAs from the gating ledger.
 exec 9>"$lock_file"
 flock -x -w 30 9
 
