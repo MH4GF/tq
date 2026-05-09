@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.21.22](https://github.com/MH4GF/tq/compare/v0.21.21...v0.21.22) - 2026-05-09
+- Cut Turso rows-read by date-aware action view + bulk task fetch + 30s tick by @MH4GF in https://github.com/MH4GF/tq/pull/261
+- fix(cmd): print 'queue: status unavailable' on DB error in printQueueStatus by @MH4GF in https://github.com/MH4GF/tq/pull/263
+- Normalize doc language: convert mixed-Japanese to English by @MH4GF in https://github.com/MH4GF/tq/pull/264
+- plugin: mark create-action instruction argument as optional by @MH4GF in https://github.com/MH4GF/tq/pull/265
+- dispatch: extend EarlyDispatchTimeout default 60s → 5m by @MH4GF in https://github.com/MH4GF/tq/pull/266
+- db: drop dead ListTasksByProject (Rule 13 deadcode-check blind spot) by @MH4GF in https://github.com/MH4GF/tq/pull/267
+- dispatch: exempt cloud-executed actions from reaper via metadata.executor by @MH4GF in https://github.com/MH4GF/tq/pull/270
+- fix(gh-ops/watch): replace ## headers in co-review template to avoid bash deny by @MH4GF in https://github.com/MH4GF/tq/pull/271
+- cmd: align task get help with docs (latest 10 nested actions) by @MH4GF in https://github.com/MH4GF/tq/pull/269
+- plugin: add allowed-tools to triage command frontmatter by @MH4GF in https://github.com/MH4GF/tq/pull/268
+- db: block task close while a dispatched action is in flight by @MH4GF in https://github.com/MH4GF/tq/pull/272
+- claude: enable auto mode + share tq-specific permissions by @MH4GF in https://github.com/MH4GF/tq/pull/274
+- fix(quality-review): serialize state ledger writes with flock by @MH4GF in https://github.com/MH4GF/tq/pull/273
+- goldenrules: add Rule 16 banning leading-wildcard LIKE in SQL by @MH4GF in https://github.com/MH4GF/tq/pull/275
+- add Rule 17: detect EXPLAIN QUERY PLAN SCAN in db/ via golden-rule test by @MH4GF in https://github.com/MH4GF/tq/pull/276
+
 ## [v0.21.21](https://github.com/MH4GF/tq/compare/v0.21.20...v0.21.21) - 2026-05-07
 - Drop stale interactive validator help text by @MH4GF in https://github.com/MH4GF/tq/pull/245
 - Declare tq plugin marketplace + SessionStart auto-install hook by @MH4GF in https://github.com/MH4GF/tq/pull/247
