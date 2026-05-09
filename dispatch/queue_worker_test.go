@@ -689,6 +689,80 @@ func TestReapStaleActions_NonInteractive(t *testing.T) {
 	}
 }
 
+func TestReapStaleActions_MultipleStaleInteractiveAllReaped(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+
+	staleAt := time.Now().Add(-5 * time.Minute)
+	const n = 3
+	for i := range n {
+		if _, err := d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil); err != nil {
+			t.Fatalf("seed action %d: %v", i, err)
+		}
+	}
+	for i := int64(1); i <= n; i++ {
+		d.SetActionTmuxInfoForTest(i, ptr("main"), ptr(WindowName(i)), &staleAt)
+	}
+
+	cfg := WorkerConfig{
+		DispatchConfig:         DispatchConfig{DB: d},
+		StaleGracePeriod:       30 * time.Second,
+		HeartbeatFreshness:     120 * time.Second,
+		InteractiveHardTimeout: DefaultInteractiveHardTimeout,
+		EarlyDispatchTimeout:   DefaultEarlyDispatchTimeout,
+		TmuxChecker:            &mockTmuxChecker{windows: []string{"zsh"}},
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	for i := int64(1); i <= n; i++ {
+		a, err := d.GetAction(i)
+		if err != nil {
+			t.Fatalf("GetAction(%d): %v", i, err)
+		}
+		if a.Status != db.ActionStatusFailed {
+			t.Errorf("action %d status = %q, want %q", i, a.Status, db.ActionStatusFailed)
+		}
+	}
+}
+
+func TestReapStaleActions_MultipleStaleNonInteractiveAllReaped(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+
+	staleAt := time.Now().Add(-25 * time.Minute)
+	const n = 3
+	for i := range n {
+		if _, err := d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil); err != nil {
+			t.Fatalf("seed action %d: %v", i, err)
+		}
+	}
+	for i := int64(1); i <= n; i++ {
+		d.SetActionTmuxInfoForTest(i, nil, nil, &staleAt)
+	}
+
+	cfg := WorkerConfig{
+		DispatchConfig:     DispatchConfig{DB: d},
+		HeartbeatFreshness: 120 * time.Second,
+	}
+
+	reapStaleActions(context.Background(), cfg)
+
+	for i := int64(1); i <= n; i++ {
+		a, err := d.GetAction(i)
+		if err != nil {
+			t.Fatalf("GetAction(%d): %v", i, err)
+		}
+		if a.Status != db.ActionStatusFailed {
+			t.Errorf("action %d status = %q, want %q", i, a.Status, db.ActionStatusFailed)
+		}
+	}
+}
+
 func TestDispatchOne_NoPending(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

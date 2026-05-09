@@ -2,6 +2,7 @@ package dispatch_test
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -288,6 +289,113 @@ func TestCheckSchedules_LastErrorClearedOnSuccess(t *testing.T) {
 	s, _ := d.GetSchedule(scheduleID)
 	if s.LastError.Valid {
 		t.Errorf("expected last_error to be cleared after success, got %q", s.LastError.String)
+	}
+}
+
+func TestCheckSchedules_MultipleSchedulesFiredAndRecorded(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+
+	createdAt, _ := time.Parse(db.TimeLayout, "2026-03-12 09:58:00")
+	scheduleIDs := make([]int64, 0, 3)
+	for i := 1; i <= 3; i++ {
+		id, err := d.InsertSchedule(taskID, "prompt", fmt.Sprintf("Title %d", i), "* * * * *", "{}")
+		if err != nil {
+			t.Fatalf("seed schedule %d: %v", i, err)
+		}
+		d.SetScheduleTimestampsForTest(id, &createdAt, nil)
+		scheduleIDs = append(scheduleIDs, id)
+	}
+
+	now, _ := time.Parse(db.TimeLayout, "2026-03-12 10:00:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := d.ListActions("", nil, 0)
+	if len(actions) != 3 {
+		t.Fatalf("len(actions) = %d, want 3", len(actions))
+	}
+
+	for _, id := range scheduleIDs {
+		s, err := d.GetSchedule(id)
+		if err != nil {
+			t.Fatalf("GetSchedule(%d): %v", id, err)
+		}
+		if !s.LastRunAt.Valid {
+			t.Errorf("schedule %d: last_run_at not set", id)
+		}
+		if s.LastError.Valid {
+			t.Errorf("schedule %d: unexpected last_error = %q", id, s.LastError.String)
+		}
+	}
+}
+
+func TestCheckSchedules_MixedValidAndInvalidMetadataPartialSuccess(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+
+	createdAt, _ := time.Parse(db.TimeLayout, "2026-03-12 09:58:00")
+	specs := []struct {
+		title    string
+		metadata string
+	}{
+		{title: "Title 1", metadata: "{}"},
+		{title: "Title 2", metadata: `{"mode":"bogus"}`},
+		{title: "Title 3", metadata: "{}"},
+	}
+	scheduleIDs := make([]int64, 0, len(specs))
+	for _, sp := range specs {
+		id, err := d.InsertSchedule(taskID, "prompt", sp.title, "* * * * *", sp.metadata)
+		if err != nil {
+			t.Fatalf("seed schedule %s: %v", sp.title, err)
+		}
+		d.SetScheduleTimestampsForTest(id, &createdAt, nil)
+		scheduleIDs = append(scheduleIDs, id)
+	}
+
+	now, _ := time.Parse(db.TimeLayout, "2026-03-12 10:00:00")
+	if err := dispatch.CheckSchedules(d, now); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, _ := d.ListActions("", nil, 0)
+	if len(actions) != 2 {
+		t.Fatalf("len(actions) = %d, want 2 (schedule #2 invalid metadata)", len(actions))
+	}
+
+	titles := map[string]bool{}
+	for _, a := range actions {
+		titles[a.Title] = true
+	}
+	if !titles["Title 1"] || !titles["Title 3"] {
+		t.Errorf("expected actions for Title 1 and Title 3, got %v", titles)
+	}
+	if titles["Title 2"] {
+		t.Errorf("did not expect action for Title 2 (invalid metadata)")
+	}
+
+	good := []int64{scheduleIDs[0], scheduleIDs[2]}
+	for _, id := range good {
+		s, _ := d.GetSchedule(id)
+		if !s.LastRunAt.Valid {
+			t.Errorf("schedule %d: last_run_at not set on success", id)
+		}
+		if s.LastError.Valid {
+			t.Errorf("schedule %d: unexpected last_error = %q", id, s.LastError.String)
+		}
+	}
+
+	bad, _ := d.GetSchedule(scheduleIDs[1])
+	if !bad.LastRunAt.Valid {
+		t.Errorf("invalid-metadata schedule: last_run_at not set (throttle should still record)")
+	}
+	if !bad.LastError.Valid || !strings.Contains(bad.LastError.String, "invalid metadata") {
+		t.Errorf("invalid-metadata schedule: last_error = %v, want containing %q", bad.LastError, "invalid metadata")
 	}
 }
 
