@@ -180,6 +180,9 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 			}
 
 			for _, a := range actions {
+				if MetadataHasValue(a.Metadata, MetaKeyExecutor, ExecutorCloud) {
+					continue
+				}
 				var startedAt time.Time
 				if a.StartedAt.Valid {
 					if s, err := time.Parse(db.TimeLayout, a.StartedAt.String); err == nil {
@@ -235,6 +238,9 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 	}
 	staleThreshold := time.Duration(defaultTimeout*nonInteractiveStaleMultiplier) * time.Second
 	for _, a := range niActions {
+		if MetadataHasValue(a.Metadata, MetaKeyExecutor, ExecutorCloud) {
+			continue
+		}
 		if !a.StartedAt.Valid {
 			continue
 		}
@@ -318,7 +324,7 @@ func reapCheckClaudeSessionLog(cfg WorkerConfig, a *db.Action) bool {
 
 	// Save claude_session_id to metadata for future use (claude --resume, log investigation).
 	// Skip if already saved to avoid redundant DB writes on every poll cycle.
-	if claudeSessionID != "" && !metadataHasValue(a.Metadata, MetaKeyClaudeSessionID, claudeSessionID) {
+	if claudeSessionID != "" && !MetadataHasValue(a.Metadata, MetaKeyClaudeSessionID, claudeSessionID) {
 		if err := cfg.DB.MergeActionMetadata(a.ID, map[string]any{
 			MetaKeyClaudeSessionID: claudeSessionID,
 		}); err != nil {
@@ -329,7 +335,11 @@ func reapCheckClaudeSessionLog(cfg WorkerConfig, a *db.Action) bool {
 	return true
 }
 
-func metadataHasValue(raw, key, value string) bool {
+// MetadataHasValue reports whether the action's metadata JSON has the given
+// string-typed key set to the given value. False on empty/invalid JSON or
+// non-string values. Used by the reaper to filter cloud-executed actions and
+// by hooks/CLI to keep merges idempotent.
+func MetadataHasValue(raw, key, value string) bool {
 	if raw == "" || raw == "{}" {
 		return false
 	}

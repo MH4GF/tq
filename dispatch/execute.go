@@ -38,6 +38,17 @@ const (
 	MetaKeyClaudeSessionID   = "claude_session_id"
 	MetaKeyParentActionID    = "parent_action_id"
 	MetaKeyIsResume          = "is_resume"
+	MetaKeyExecutor          = "executor"
+)
+
+// Executor values for metadata.executor. Distinguishes where the action's
+// claude session is actually running, independent of `mode` (which selects
+// tq's dispatch worker). Stamped by the SessionStart hook from
+// $CLAUDE_CODE_REMOTE, or auto-stamped by `tq action create --status running`
+// for cloud-side self-claimed actions (Cloud Routines).
+const (
+	ExecutorLocal = "local"
+	ExecutorCloud = "cloud"
 )
 
 // DispatchConfig holds shared dispatch settings used by both WorkerConfig and ExecuteParams.
