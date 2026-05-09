@@ -232,7 +232,7 @@ func triageNoteSummary(note db.TaskNoteEntry) map[string]any {
 
 var taskGetCmd = &cobra.Command{
 	Use:   "get <ID>",
-	Short: "Get a task by ID (JSON output, includes nested actions and status_history)",
+	Short: "Get a task by ID (JSON output, includes latest 10 nested actions and status_history)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := parseID(args[0])
