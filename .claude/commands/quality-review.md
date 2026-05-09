@@ -23,6 +23,8 @@ Record the current HEAD SHA **only when all three pass** the gate:
 
 If e2e-execute returned `FAIL`, do NOT record. Fix the regression first and re-run `/quality-review`.
 
+The recorder requires `flock` on `PATH` (macOS: `brew install flock`).
+
 ```bash
 .claude/scripts/record-quality-review.sh
 ```
