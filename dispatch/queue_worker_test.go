@@ -384,6 +384,7 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 		startedOffset          time.Duration
 		omitStartedAt          bool
 		omitSessionInfo        bool
+		metadata               string
 		tmux                   *mockTmuxChecker
 		log                    *mockClaudeSessionLogChecker
 		tmuxSession            string
@@ -500,6 +501,15 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			wantStatus:         db.ActionStatusFailed,
 			wantResultContains: "stale",
 		},
+		{
+			name:                 "skips cloud executor action even when window gone and log stale",
+			startedOffset:        -5 * time.Minute,
+			metadata:             `{"executor":"cloud"}`,
+			tmux:                 &mockTmuxChecker{windows: []string{"zsh"}},
+			log:                  &mockClaudeSessionLogChecker{active: false},
+			earlyDispatchTimeout: 24 * time.Hour,
+			wantStatus:           db.ActionStatusRunning,
+		},
 	}
 
 	for _, tt := range tests {
@@ -508,7 +518,11 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			testutil.SeedTestProjects(t, d)
 
 			taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-			d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil)
+			meta := tt.metadata
+			if meta == "" {
+				meta = "{}"
+			}
+			d.InsertAction("fix-conflict", taskID, meta, db.ActionStatusRunning, nil)
 
 			windowName := "tq-action-1"
 			var startedAt *time.Time
@@ -570,6 +584,7 @@ func TestReapStaleActions_NonInteractive(t *testing.T) {
 		name               string
 		startedOffset      time.Duration
 		omitStartedAt      bool
+		metadata           string
 		log                *mockClaudeSessionLogChecker
 		wantStatus         string
 		wantResultContains string
@@ -616,6 +631,13 @@ func TestReapStaleActions_NonInteractive(t *testing.T) {
 			wantStatus:        db.ActionStatusRunning,
 			wantMetaSessionID: "sess-789",
 		},
+		{
+			name:          "skips cloud executor noninteractive even past timeout",
+			startedOffset: -25 * time.Minute,
+			metadata:      `{"instruction":"x","mode":"noninteractive","executor":"cloud"}`,
+			log:           &mockClaudeSessionLogChecker{active: false},
+			wantStatus:    db.ActionStatusRunning,
+		},
 	}
 
 	for _, tt := range tests {
@@ -624,7 +646,11 @@ func TestReapStaleActions_NonInteractive(t *testing.T) {
 			testutil.SeedTestProjects(t, d)
 
 			taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-			d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil)
+			meta := tt.metadata
+			if meta == "" {
+				meta = `{"instruction":"check","mode":"noninteractive"}`
+			}
+			d.InsertAction("check-pr", taskID, meta, db.ActionStatusRunning, nil)
 
 			if !tt.omitStartedAt {
 				started := time.Now().Add(tt.startedOffset)

@@ -152,6 +152,7 @@ tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--st
 - `--meta` — JSON metadata for dispatch control:
   - `mode` — `"interactive"` (default), `"noninteractive"`, `"remote"`. Any other value is rejected — pass Claude permission-mode (`auto`, `plan`, `acceptEdits`, …) via `claude_args` instead.
   - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--permission-mode","plan","--worktree","--max-turns","5"]`)
+  - `executor` — `"local"` or `"cloud"`. Records where the action's claude session is actually running (orthogonal to `mode`). The reaper skips actions marked `executor=cloud` since local tmux/session-log liveness checks do not apply. Auto-stamped to `cloud` when `--status running` is passed from a Claude Code cloud session (`CLAUDE_CODE_REMOTE=true`); also stamped by the `SessionStart` hook in cloud sessions launched via tq dispatch. Explicit values in `--meta` are preserved.
 - `--status` — Initial status (default: `pending`)
 - `--after` — Dispatch after this time (`YYYY-MM-DD HH:MM`, local timezone)
 

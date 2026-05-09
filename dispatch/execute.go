@@ -38,7 +38,25 @@ const (
 	MetaKeyClaudeSessionID   = "claude_session_id"
 	MetaKeyParentActionID    = "parent_action_id"
 	MetaKeyIsResume          = "is_resume"
+	MetaKeyExecutor          = "executor"
 )
+
+// Executor values for metadata.executor. Distinguishes where the action's
+// claude session is actually running, independent of `mode` (which selects
+// tq's dispatch worker). Stamped by the SessionStart hook from
+// $CLAUDE_CODE_REMOTE, or auto-stamped by `tq action create --status running`
+// for cloud-side self-claimed actions (Cloud Routines).
+const (
+	ExecutorLocal = "local"
+	ExecutorCloud = "cloud"
+)
+
+// IsCloudExecution reports whether the current process is running inside a
+// Claude Code cloud session (Claude Code on the web, including Cloud Routines).
+// Anthropic sets CLAUDE_CODE_REMOTE=true in those environments.
+func IsCloudExecution() bool {
+	return os.Getenv("CLAUDE_CODE_REMOTE") == "true"
+}
 
 // DispatchConfig holds shared dispatch settings used by both WorkerConfig and ExecuteParams.
 type DispatchConfig struct {

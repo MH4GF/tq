@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
+	"github.com/MH4GF/tq/dispatch"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -322,6 +323,81 @@ func TestAdd_InvalidMode(t *testing.T) {
 
 			if _, gerr := d.GetAction(1); gerr == nil {
 				t.Error("action should NOT have been created when mode validation fails")
+			}
+		})
+	}
+}
+
+func TestAdd_AutoStampExecutor(t *testing.T) {
+	tests := []struct {
+		name         string
+		envRemote    string
+		args         []string
+		wantExecutor string // "" means key must be absent
+	}{
+		{
+			name:         "status=running + REMOTE=true → executor=cloud",
+			envRemote:    "true",
+			args:         []string{"action", "create", "x", "--task", "1", "--title", "t", "--status", "running"},
+			wantExecutor: dispatch.ExecutorCloud,
+		},
+		{
+			name:         "status=pending + REMOTE=true → executor unset (creation env != execution env)",
+			envRemote:    "true",
+			args:         []string{"action", "create", "x", "--task", "1", "--title", "t"},
+			wantExecutor: "",
+		},
+		{
+			name:         "status=running + REMOTE unset → executor unset",
+			envRemote:    "",
+			args:         []string{"action", "create", "x", "--task", "1", "--title", "t", "--status", "running"},
+			wantExecutor: "",
+		},
+		{
+			name:         "status=running + REMOTE=true + explicit executor=local → preserved",
+			envRemote:    "true",
+			args:         []string{"action", "create", "x", "--task", "1", "--title", "t", "--status", "running", "--meta", `{"executor":"local"}`},
+			wantExecutor: dispatch.ExecutorLocal,
+		},
+		{
+			name:         "status=running + REMOTE=false → executor unset",
+			envRemote:    "false",
+			args:         []string{"action", "create", "x", "--task", "1", "--title", "t", "--status", "running"},
+			wantExecutor: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+			cmd.SetConfigDir(t.TempDir())
+			d.InsertTask(1, "test task", "{}", "")
+			t.Setenv("CLAUDE_CODE_REMOTE", tc.envRemote)
+
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs(tc.args)
+
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute: %v (output: %s)", err, buf.String())
+			}
+
+			a, err := d.GetAction(1)
+			if err != nil {
+				t.Fatalf("get action: %v", err)
+			}
+			var meta map[string]any
+			if err := json.Unmarshal([]byte(a.Metadata), &meta); err != nil {
+				t.Fatalf("parse metadata: %v", err)
+			}
+			got, _ := meta[dispatch.MetaKeyExecutor].(string)
+			if got != tc.wantExecutor {
+				t.Errorf("metadata.executor = %q, want %q", got, tc.wantExecutor)
 			}
 		})
 	}

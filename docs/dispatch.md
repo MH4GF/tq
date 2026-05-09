@@ -47,6 +47,16 @@ A pending action that would exceed its cap is reset to `pending` (`ResetToPendin
 
 The session ID is used for `claude --resume` and for log investigation on failure. Capture is best-effort: a missing session ID does not fail the action.
 
+## Cloud-executed actions are exempt from reaping
+
+Actions whose `metadata.executor` is `"cloud"` are skipped by `reapStaleActions` in both interactive and noninteractive loops. Such actions run in Claude Code on the web (including Cloud Routines) and have no local tmux window or session log for the reaper to probe — liveness is the responsibility of the cloud session that opened the action, which closes it via `tq action done|fail`.
+
+`executor` is stamped:
+- by `tq action create --status running` when invoked from a cloud session (`CLAUDE_CODE_REMOTE=true`)
+- by the `SessionStart` hook (`tq internal claude-session-record`) when the session inherits a `TQ_ACTION_ID` and runs in cloud
+
+`mode=remote` (tq's own RemoteWorker dispatch) terminates with `MarkDispatched`, so its actions reach `status=dispatched` and are not picked up by the reaper's `status=running` queries — the executor exemption is for `status=running` actions only.
+
 ## Action lifecycle
 
 ```

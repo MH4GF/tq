@@ -110,30 +110,26 @@ func runClaudeSessionRecord(stdin io.Reader, stderr io.Writer, openStore func() 
 		warnf(stderr, "action #%d is %s, skipping", actionID, action.Status)
 		return
 	}
+	merge := map[string]any{}
 	// Idempotent: SessionStart fires on resume/clear/compact with the same
 	// session_id; skip the write to avoid redundant action.metadata_merged events.
-	if metadataHasSessionID(action.Metadata, payload.SessionID) {
+	if !dispatch.MetadataHasValue(action.Metadata, dispatch.MetaKeyClaudeSessionID, payload.SessionID) {
+		merge[dispatch.MetaKeyClaudeSessionID] = payload.SessionID
+	}
+	// In a Claude Code cloud session, stamp executor=cloud so the local reaper
+	// knows this action is not its responsibility (no local tmux/session log).
+	if dispatch.IsCloudExecution() &&
+		!dispatch.MetadataHasValue(action.Metadata, dispatch.MetaKeyExecutor, dispatch.ExecutorCloud) {
+		merge[dispatch.MetaKeyExecutor] = dispatch.ExecutorCloud
+	}
+	if len(merge) == 0 {
 		return
 	}
 
-	if err := store.MergeActionMetadata(actionID, map[string]any{
-		dispatch.MetaKeyClaudeSessionID: payload.SessionID,
-	}); err != nil {
+	if err := store.MergeActionMetadata(actionID, merge); err != nil {
 		warnf(stderr, "merge metadata: %v", err)
 		return
 	}
-}
-
-func metadataHasSessionID(rawMetadata, expected string) bool {
-	if rawMetadata == "" || rawMetadata == "{}" {
-		return false
-	}
-	var m map[string]any
-	if err := json.Unmarshal([]byte(rawMetadata), &m); err != nil {
-		return false
-	}
-	v, ok := m[dispatch.MetaKeyClaudeSessionID].(string)
-	return ok && v == expected
 }
 
 func warnf(stderr io.Writer, format string, args ...any) {
