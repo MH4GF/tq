@@ -21,7 +21,9 @@ const (
 	DefaultStaleGracePeriod       = 30 * time.Second
 	DefaultHeartbeatFreshness     = 120 * time.Second
 	DefaultInteractiveHardTimeout = 1 * time.Hour
-	DefaultEarlyDispatchTimeout   = 60 * time.Second
+	// Must exceed init-hook duration (worktree setup, migrations), not just
+	// claude startup — hooks run before any session log is written.
+	DefaultEarlyDispatchTimeout = 5 * time.Minute
 )
 
 // TmuxChecker checks for the existence of tmux windows.
