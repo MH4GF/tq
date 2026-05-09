@@ -103,6 +103,25 @@ func (db *DB) HasActiveActionWithMeta(taskID int64, metaKey, metaValue string) (
 	return count > 0, nil
 }
 
+// GetTaskActionCount reads from the trigger-maintained task_action_counts
+// table — an O(len(statuses)) PK lookup, not a scan of actions.
+func (db *DB) GetTaskActionCount(taskID int64, statuses []string) (int64, error) {
+	if len(statuses) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, len(statuses))
+	args := make([]any, 0, len(statuses)+1)
+	args = append(args, taskID)
+	for i, s := range statuses {
+		placeholders[i] = "?"
+		args = append(args, s)
+	}
+	query := "SELECT COALESCE(SUM(count), 0) FROM task_action_counts WHERE task_id = ? AND status IN (" + strings.Join(placeholders, ", ") + ")"
+	var count int64
+	err := db.QueryRow(query, args...).Scan(&count)
+	return count, err
+}
+
 func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {

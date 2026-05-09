@@ -51,6 +51,7 @@ type QueryReader interface {
 	GetAction(id int64) (*Action, error)
 	ListActions(status string, taskID *int64, limit int) ([]Action, error)
 	HasActiveActionWithMeta(taskID int64, metaKey, metaValue string) (bool, error)
+	GetTaskActionCount(taskID int64, statuses []string) (int64, error)
 	ListRunningInteractive() ([]Action, error)
 	ListRunningNonInteractive() ([]Action, error)
 	CountRunningInteractive() (int, error)

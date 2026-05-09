@@ -192,6 +192,25 @@ func TestGoldenRules(t *testing.T) {
 	t.Run("rule-17-explain-no-scan", func(t *testing.T) {
 		checkRule17(t, root)
 	})
+
+	t.Run("rule-18-no-aggregates-in-hot-paths", func(t *testing.T) {
+		const ceiling = 0
+		violations := scanFiles(t, root, scanConfig{
+			Dirs:        []string{"tui", "dispatch"},
+			FilePattern: "*.go",
+			LineRegexp:  regexp.MustCompile(`"[^"]*\bSELECT\s+(?:COUNT|SUM|AVG)\b`),
+		})
+		count := len(violations)
+		if count > ceiling {
+			t.Errorf("rule-18 violations (%d) exceed ceiling (%d); regression detected", count, ceiling)
+			reportViolations(t, violations)
+		} else if count > 0 {
+			t.Logf("rule-18: %d known violations (ceiling %d)", count, ceiling)
+			for _, v := range violations {
+				t.Logf("  %s:%d: %s", v.File, v.Line, v.Text)
+			}
+		}
+	})
 }
 
 func checkErrorUnwrap(t *testing.T, root string) []violation {

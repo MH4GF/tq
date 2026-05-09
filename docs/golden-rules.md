@@ -149,6 +149,17 @@ Current status totals are captured after each rule as `current violations: N`. A
   - The output of `EXPLAIN QUERY PLAN` is SQLite-version dependent; the test pins itself to the in-memory SQLite shipped with `testutil.NewTestDB(t)` to keep CI deterministic.
 - Current violations: 13 (see `.goldenrules-rule17-allowlist`). Burning these down (FTS5 for search, `schedules(task_id)` index, etc.) is tracked as separate follow-up actions.
 
+### Aggregate queries on hot paths
+
+**Rule 18 [enforced] — `tui/` and `dispatch/` MUST NOT contain `SELECT COUNT/SUM/AVG` string literals. Aggregate-driven counts on `actions` go through `db.Store.GetTaskActionCount`, which reads from the trigger-maintained `task_action_counts` table.**
+
+- Why: `turso db inspect tq --queries` repeatedly surfaces `SELECT COUNT(*) FROM actions WHERE task_id = ? AND status IN (...)` in the top-N rows-read consumers. Turso bills per row read, so per-tick aggregate scans dominate quota. The `task_action_counts(task_id, status, count)` table is maintained by `AFTER INSERT / AFTER UPDATE OF status / AFTER DELETE` triggers on `actions`, so any task's status counts are a 1-row index lookup. This rule structurally bans hot-path code from re-introducing aggregate scans — it is a specialization of Rule 11 narrowed to the most expensive aggregates.
+- Assumption: `actions.task_id` is immutable. Triggers do not handle `task_id` changes; no production path issues `UPDATE actions SET task_id = ?`. If that changes, add a trigger or migrate the data manually.
+- Backfill: `db.Migrate()` runs an idempotent `INSERT INTO task_action_counts SELECT task_id, status, COUNT(*) FROM actions GROUP BY task_id, status` only when `task_action_counts` is empty (`backfillTaskActionCounts` in `db/db.go`). Subsequent runs see existing rows kept in sync by the triggers and skip the backfill.
+- Verify: Go test harness `internal/goldenrules/` scans `tui/`, `dispatch/` for `"...SELECT COUNT|SUM|AVG..."` string literals. Ceiling-based: violations below the ceiling pass, regressions fail. Run `go test ./internal/goldenrules/`.
+- Detection limits (same as Rule 11/16): line-split (`"SELECT " + "COUNT(*)"`) and cross-literal concatenation (`prefix + " COUNT(*)"`) bypass detection. Reviewers MUST reject rewrites that exploit these to hide hot-path aggregates.
+- Current violations: 0.
+
 ---
 
 ## How to use this file
@@ -161,7 +172,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 **During periodic GC (`/gc-golden-rules`, weekly via tq schedule):**
 
-- Enforced rules (1-6, 8-14, 16-17) are checked by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
+- Enforced rules (1-6, 8-14, 16-18) are checked by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
 - For each violation found, the GC command creates a tq action via `/tq:create-action` with `claude_args: ["--worktree"]` for isolated execution.
 - The created actions handle the actual fixes — each targeted to a single violation.
 
@@ -200,6 +211,7 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 14 No `*ForTest` in prod | — | OK | OK | OK |
 | 16 No leading-wildcard `LIKE` | 7 | OK | OK | OK |
 | 17 No SCAN in EXPLAIN | 13 | — | — | — |
+| 18 No aggregate hot paths | — | OK | OK | — |
 
 Totals: **20** current violations (Rule 16: 7 ceiling-pinned LIKE patterns; Rule 17: 13 SCANs allowlisted in `.goldenrules-rule17-allowlist`; both burn down via FTS5 conversion of `db.Search` and per-query index work tracked as separate actions).
 

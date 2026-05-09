@@ -94,11 +94,7 @@ func (db *DB) UpdateTask(id int64, status, reason string) error {
 	}
 
 	if status == TaskStatusDone || status == TaskStatusArchived {
-		var activeCount int
-		err := db.QueryRow(
-			"SELECT COUNT(*) FROM actions WHERE task_id = ? AND status IN (?, ?, ?)",
-			id, ActionStatusPending, ActionStatusRunning, ActionStatusDispatched,
-		).Scan(&activeCount)
+		activeCount, err := db.GetTaskActionCount(id, []string{ActionStatusPending, ActionStatusRunning, ActionStatusDispatched})
 		if err != nil {
 			return fmt.Errorf("check active actions: %w", err)
 		}
