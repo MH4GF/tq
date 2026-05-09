@@ -1256,3 +1256,193 @@ func TestMarkTerminalNoEventWhenAlreadyTerminal(t *testing.T) {
 		t.Errorf("event count after no-op marks = %d, want %d (no new events)", len(after), len(before))
 	}
 }
+
+func TestBulkInsertActions(t *testing.T) {
+	t.Run("empty input is no-op", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		ids, err := d.BulkInsertActions(nil)
+		if err != nil {
+			t.Errorf("nil specs returned err: %v", err)
+		}
+		if len(ids) != 0 {
+			t.Errorf("len(ids) = %d, want 0", len(ids))
+		}
+	})
+
+	t.Run("normal: 3 actions inserted with returned IDs in input order", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+
+		specs := []db.ActionInsertSpec{
+			{Title: "first", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending},
+			{Title: "second", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending},
+			{Title: "third", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending},
+		}
+		ids, err := d.BulkInsertActions(specs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ids) != 3 {
+			t.Fatalf("len(ids) = %d, want 3", len(ids))
+		}
+		for i, id := range ids {
+			a, err := d.GetAction(id)
+			if err != nil {
+				t.Fatalf("GetAction(%d): %v", id, err)
+			}
+			if a.Title != specs[i].Title {
+				t.Errorf("ids[%d] title = %q, want %q (RETURNING did not preserve input order)", i, a.Title, specs[i].Title)
+			}
+		}
+	})
+
+	t.Run("invalid status fails fast (no rows inserted)", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+
+		specs := []db.ActionInsertSpec{
+			{Title: "ok", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending},
+			{Title: "bogus", TaskID: taskID, Metadata: "{}", Status: "garbage"},
+		}
+		ids, err := d.BulkInsertActions(specs)
+		if err == nil {
+			t.Fatal("expected error for invalid status")
+		}
+		if ids != nil {
+			t.Errorf("ids = %v, want nil on error", ids)
+		}
+		actions, _ := d.ListActions("", nil, 0)
+		if len(actions) != 0 {
+			t.Errorf("expected 0 inserted actions on validation failure, got %d", len(actions))
+		}
+	})
+
+	t.Run("FK violation rolls back entire batch", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+
+		specs := []db.ActionInsertSpec{
+			{Title: "good", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending},
+			{Title: "bad", TaskID: 99999, Metadata: "{}", Status: db.ActionStatusPending},
+		}
+		_, err := d.BulkInsertActions(specs)
+		if err == nil {
+			t.Fatal("expected FK violation error")
+		}
+		actions, _ := d.ListActions("", nil, 0)
+		if len(actions) != 0 {
+			t.Errorf("expected 0 actions after rollback, got %d (atomicity broken)", len(actions))
+		}
+	})
+}
+
+func TestBulkMarkFailed(t *testing.T) {
+	t.Run("empty input is no-op", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		if err := d.BulkMarkFailed(nil); err != nil {
+			t.Errorf("nil updates returned err: %v", err)
+		}
+	})
+
+	t.Run("normal: 3 running actions marked failed", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		var ids []int64
+		for i := range 3 {
+			id, _ := d.InsertAction("a", taskID, "{}", db.ActionStatusRunning, nil)
+			_ = i
+			ids = append(ids, id)
+		}
+
+		updates := []db.ActionFailureUpdate{
+			{ID: ids[0], Reason: "stale-1"},
+			{ID: ids[1], Reason: "stale-2"},
+			{ID: ids[2], Reason: "stale-3"},
+		}
+		if err := d.BulkMarkFailed(updates); err != nil {
+			t.Fatal(err)
+		}
+		for i, id := range ids {
+			a, _ := d.GetAction(id)
+			if a.Status != db.ActionStatusFailed {
+				t.Errorf("action %d status = %q, want failed", id, a.Status)
+			}
+			if !a.Result.Valid || a.Result.String != updates[i].Reason {
+				t.Errorf("action %d result = %v, want %q", id, a.Result, updates[i].Reason)
+			}
+		}
+	})
+
+	t.Run("metadata patch is merged", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		id, _ := d.InsertAction("a", taskID, `{"existing":"keep"}`, db.ActionStatusRunning, nil)
+
+		err := d.BulkMarkFailed([]db.ActionFailureUpdate{{
+			ID: id, Reason: "stale", MetadataPatch: map[string]any{"claude_session_id": "sess-x"},
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		a, _ := d.GetAction(id)
+		if a.Status != db.ActionStatusFailed {
+			t.Errorf("status = %q, want failed", a.Status)
+		}
+		if !strings.Contains(a.Metadata, `"claude_session_id":"sess-x"`) {
+			t.Errorf("metadata missing patch: %s", a.Metadata)
+		}
+		if !strings.Contains(a.Metadata, `"existing":"keep"`) {
+			t.Errorf("metadata lost existing key: %s", a.Metadata)
+		}
+	})
+
+	t.Run("already-terminal actions skipped without error", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		doneID, _ := d.InsertAction("a", taskID, "{}", db.ActionStatusRunning, nil)
+		_ = d.MarkDone(doneID, "ok")
+		runningID, _ := d.InsertAction("b", taskID, "{}", db.ActionStatusRunning, nil)
+
+		err := d.BulkMarkFailed([]db.ActionFailureUpdate{
+			{ID: doneID, Reason: "should be skipped"},
+			{ID: runningID, Reason: "real failure"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		stillDone, _ := d.GetAction(doneID)
+		if stillDone.Status != db.ActionStatusDone {
+			t.Errorf("done action status = %q, want unchanged %q", stillDone.Status, db.ActionStatusDone)
+		}
+		nowFailed, _ := d.GetAction(runningID)
+		if nowFailed.Status != db.ActionStatusFailed {
+			t.Errorf("running action status = %q, want failed", nowFailed.Status)
+		}
+	})
+
+	t.Run("missing ID rolls back entire batch", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		runningID, _ := d.InsertAction("a", taskID, "{}", db.ActionStatusRunning, nil)
+
+		err := d.BulkMarkFailed([]db.ActionFailureUpdate{
+			{ID: runningID, Reason: "real"},
+			{ID: 99999, Reason: "ghost"},
+		})
+		if err == nil {
+			t.Fatal("expected error for missing id")
+		}
+		a, _ := d.GetAction(runningID)
+		if a.Status != db.ActionStatusRunning {
+			t.Errorf("real action status = %q, want unchanged %q (atomicity broken)", a.Status, db.ActionStatusRunning)
+		}
+	})
+}

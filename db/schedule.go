@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -156,6 +157,98 @@ func (db *DB) EnabledScheduleIDs(taskID int64) ([]int64, error) {
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+// ScheduleRunUpdate describes one tick result for BulkUpdateScheduleRuns.
+// LastError == "" clears the column (success path); non-empty preserves the
+// reason so /schedule list can surface it.
+type ScheduleRunUpdate struct {
+	ID        int64
+	LastRunAt string
+	LastError string
+}
+
+// BulkUpdateScheduleRuns records one tick across many schedules in a single
+// transaction. Tx-atomic: any UPDATE failure rolls back the entire batch and
+// the next CheckSchedules tick re-decides outcomes.
+func (db *DB) BulkUpdateScheduleRuns(updates []ScheduleRunUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("bulk update schedule runs: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for _, u := range updates {
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE schedules SET last_run_at = ?, last_error = NULLIF(?, '') WHERE id = ?",
+			u.LastRunAt, u.LastError, u.ID,
+		); err != nil {
+			return fmt.Errorf("bulk update schedule runs: update id=%d: %w", u.ID, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("bulk update schedule runs: commit: %w", err)
+	}
+
+	for _, u := range updates {
+		db.emitEvent("schedule", u.ID, "schedule.ran", map[string]any{
+			"last_run_at": u.LastRunAt,
+			"last_error":  u.LastError,
+		})
+	}
+	return nil
+}
+
+// HasActiveActionsForSchedules returns, for each scheduleID in the input, true
+// if at least one pending/running/dispatched action references it via metadata
+// schedule_id. Replaces the per-schedule HasActiveActionWithMeta loop in
+// dispatch.CheckSchedules.
+func (db *DB) HasActiveActionsForSchedules(scheduleIDs []int64) (map[int64]bool, error) {
+	result := make(map[int64]bool, len(scheduleIDs))
+	if len(scheduleIDs) == 0 {
+		return result, nil
+	}
+
+	stringIDs := make([]string, len(scheduleIDs))
+	args := make([]any, 0, len(scheduleIDs)+3)
+	args = append(args, ActionStatusPending, ActionStatusRunning, ActionStatusDispatched)
+	placeholders := make([]string, len(scheduleIDs))
+	for i, id := range scheduleIDs {
+		placeholders[i] = "?"
+		stringIDs[i] = fmt.Sprintf("%d", id)
+		args = append(args, stringIDs[i])
+	}
+
+	query := "SELECT DISTINCT json_extract(metadata, '$.schedule_id') AS sid " +
+		"FROM actions WHERE status IN (?, ?, ?) " +
+		"AND json_extract(metadata, '$.schedule_id') IN (" + strings.Join(placeholders, ", ") + ")"
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("has active actions for schedules: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var sidStr sql.NullString
+		if err := rows.Scan(&sidStr); err != nil {
+			return nil, fmt.Errorf("has active actions for schedules: scan: %w", err)
+		}
+		if !sidStr.Valid {
+			continue
+		}
+		var sid int64
+		if _, err := fmt.Sscanf(sidStr.String, "%d", &sid); err != nil {
+			continue
+		}
+		result[sid] = true
+	}
+	return result, rows.Err()
 }
 
 func (db *DB) DeleteSchedule(id int64) error {
