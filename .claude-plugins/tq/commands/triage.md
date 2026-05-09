@@ -1,6 +1,7 @@
 ---
 description: Inventory and organize open tasks - review status, propose cleanup, execute
 argument-hint: "[project_name]"
+allowed-tools: Bash(tq *), Bash(gh pr view *), Bash(find *), Read, AskUserQuestion, Skill(tq:create-action)
 ---
 
 # tq triage
