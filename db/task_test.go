@@ -366,21 +366,29 @@ func TestUpdateTask_BlockedByActiveActions(t *testing.T) {
 	tests := []struct {
 		name                string
 		initialActionStatus string
+		markDispatched      bool
 		finalActionMark     bool
 		targetStatus        string
 		wantErr             bool
 	}{
-		{"pending action blocks done", db.ActionStatusPending, false, db.TaskStatusDone, true},
-		{"pending action blocks archived", db.ActionStatusPending, false, db.TaskStatusArchived, true},
-		{"running action blocks done", db.ActionStatusRunning, false, db.TaskStatusDone, true},
-		{"cancelled action does not block done", db.ActionStatusRunning, true, db.TaskStatusDone, false},
-		{"cancelled action does not block archived", db.ActionStatusPending, true, db.TaskStatusArchived, false},
+		{"pending action blocks done", db.ActionStatusPending, false, false, db.TaskStatusDone, true},
+		{"pending action blocks archived", db.ActionStatusPending, false, false, db.TaskStatusArchived, true},
+		{"running action blocks done", db.ActionStatusRunning, false, false, db.TaskStatusDone, true},
+		{"dispatched action blocks done", db.ActionStatusRunning, true, false, db.TaskStatusDone, true},
+		{"dispatched action blocks archived", db.ActionStatusRunning, true, false, db.TaskStatusArchived, true},
+		{"cancelled action does not block done", db.ActionStatusRunning, false, true, db.TaskStatusDone, false},
+		{"cancelled action does not block archived", db.ActionStatusPending, false, true, db.TaskStatusArchived, false},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			taskID, _ := d.InsertTask(1, "test", "{}", "")
 			actionID, _ := d.InsertAction(tc.name, taskID, "{}", tc.initialActionStatus, nil)
+			if tc.markDispatched {
+				if err := d.MarkDispatched(actionID); err != nil {
+					t.Fatalf("MarkDispatched: %v", err)
+				}
+			}
 			if tc.finalActionMark {
 				if err := d.MarkCancelled(actionID, ""); err != nil {
 					t.Fatalf("MarkCancelled: %v", err)
@@ -390,7 +398,7 @@ func TestUpdateTask_BlockedByActiveActions(t *testing.T) {
 			if (err != nil) != tc.wantErr {
 				t.Errorf("UpdateTask(%q) error = %v, wantErr %v", tc.targetStatus, err, tc.wantErr)
 			}
-			if tc.wantErr && err != nil && !strings.Contains(err.Error(), "pending/running action(s)") {
+			if tc.wantErr && err != nil && !strings.Contains(err.Error(), "pending/running/dispatched action(s)") {
 				t.Errorf("unexpected error message: %v", err)
 			}
 		})
