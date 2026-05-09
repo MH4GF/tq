@@ -399,6 +399,51 @@ func TestCheckSchedules_MixedValidAndInvalidMetadataPartialSuccess(t *testing.T)
 	}
 }
 
+type bulkInsertFailingStore struct {
+	db.Store
+	err error
+}
+
+func (s *bulkInsertFailingStore) BulkInsertActions(specs []db.ActionInsertSpec) ([]int64, error) {
+	return nil, s.err
+}
+
+func TestCheckSchedules_BulkInsertErrorAbortsTickAndRetries(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+
+	createdAt, _ := time.Parse(db.TimeLayout, "2026-03-12 09:58:00")
+	scheduleIDs := make([]int64, 0, 2)
+	for i := range 2 {
+		id, err := d.InsertSchedule(taskID, "p", fmt.Sprintf("Title %d", i), "* * * * *", "{}")
+		if err != nil {
+			t.Fatalf("seed schedule %d: %v", i, err)
+		}
+		d.SetScheduleTimestampsForTest(id, &createdAt, nil)
+		scheduleIDs = append(scheduleIDs, id)
+	}
+
+	wrapped := &bulkInsertFailingStore{Store: d, err: errors.New("simulated bulk insert failure")}
+
+	now, _ := time.Parse(db.TimeLayout, "2026-03-12 10:00:00")
+	if err := dispatch.CheckSchedules(wrapped, now); err == nil {
+		t.Fatal("expected CheckSchedules to return err on bulk insert failure")
+	}
+
+	actions, _ := d.ListActions("", nil, 0)
+	if len(actions) != 0 {
+		t.Errorf("expected 0 actions inserted, got %d (atomicity broken)", len(actions))
+	}
+	for _, id := range scheduleIDs {
+		s, _ := d.GetSchedule(id)
+		if s.LastRunAt.Valid {
+			t.Errorf("schedule %d: last_run_at = %q, want unset (success update must not run when insert fails)", id, s.LastRunAt.String)
+		}
+	}
+}
+
 func TestCheckSchedules_ClaudeArgsPropagated(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
