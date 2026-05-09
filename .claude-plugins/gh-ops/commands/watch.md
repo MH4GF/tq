@@ -146,10 +146,10 @@ tq action create <instruction> --task <task_id> --title "<title>"
 
 ### 3. Mark notifications as read
 
-Pass **all** thread_ids — those collected as skipped in Step 2b/2c and those whose actionable processing finished in Step 2 — as arguments to a **single command invocation**. Do NOT iterate with `for id in ...; do ...; done` or `&&` chains: the permission matcher cannot match leading tokens like `for` against the allowlist, which causes the entire action to be denied.
+Pass every thread_id (skipped from 2b/2c and processed from Step 2) as arguments to a single invocation. Do not loop with `for` or chain with `&&` — the permission matcher rejects those leading tokens.
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/gh-mark-notification-read <thread_id_1> <thread_id_2> ...
+${CLAUDE_PLUGIN_ROOT}/scripts/gh-mark-notification-read <thread_id>...
 ```
 
 ### 4. Output summary

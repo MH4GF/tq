@@ -3,10 +3,7 @@
 # Usage: gh-mark-notification-read <thread_id> [<thread_id>...]
 set -euo pipefail
 
-if [[ $# -lt 1 ]]; then
-  echo "Usage: gh-mark-notification-read <thread_id> [<thread_id>...]" >&2
-  exit 1
-fi
+: "${1:?Usage: gh-mark-notification-read <thread_id> [<thread_id>...]}"
 
 for thread_id in "$@"; do
   gh api -X PATCH "/notifications/threads/${thread_id}"
