@@ -1,13 +1,31 @@
 {
   "permissions": {
+    "defaultMode": "auto",
     "allow": [
       "Bash(git commit:*)",
       "Bash(gh api /notifications:*)",
       "Bash(gh api notifications:*)",
       "Bash(gh api /user:*)",
+      "Bash(gh pr:*)",
+      "Bash(turso --version)",
+      "Bash(turso auth:*)",
+      "Bash(turso plan:*)",
+      "Bash(turso db:*)",
+      "Bash(./scripts/deadcode-check.sh)",
+      "Bash(.claude/hooks/check-quality-review.sh)",
       "Bash(.claude/scripts/record-quality-review.sh)",
+      "WebFetch(domain:code.claude.com)",
+      "WebFetch(domain:pkg.go.dev)",
+      "WebFetch(domain:turso.tech)",
       "Skill(quality-review)",
       "Skill(simplify)"
+    ],
+    "deny": [
+      "Bash(turso db destroy:*)",
+      "Bash(turso db revert:*)",
+      "Bash(go clean -modcache:*)",
+      "Bash(gh release delete:*)",
+      "Bash(gh release delete-asset:*)"
     ]
   },
   "extraKnownMarketplaces": {
