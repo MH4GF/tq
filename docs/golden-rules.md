@@ -121,6 +121,20 @@ Current status totals are captured after each rule as `current violations: N`. A
 - Verify: `forbidigo` in `.golangci.yml` blocks `\.Set[A-Z][A-Za-z]*ForTest\b` outside `_test.go` files. Run `golangci-lint run ./...`.
 - Current violations: 0.
 
+### SQL query shape
+
+**Rule 16 [enforced] — SQL string literals MUST NOT contain leading-wildcard `LIKE '%...'` (or `LIKE '%' || ?`) patterns.**
+
+- Why: A `LIKE` predicate whose pattern starts with `%` cannot use a B-tree index and degrades to a full table scan. On Turso this is billed in rows-read; `turso db inspect tq --queries` Top #4 (`actions WHERE metadata LIKE '%permission_mode%' OR LIKE '%worktree%'`, 2.2M reads) and Top #6 (`db.Search` UNION ALL, 235K reads) are the canonical offenders.
+- Verify: Go test harness `internal/goldenrules/` scans `db/`, `cmd/`, `dispatch/`, `tui/` for the regex `(?i)\bLIKE\s+'%` (case-insensitive). Ceiling-based: violations below the ceiling pass, regressions fail. Run `go test ./internal/goldenrules/`.
+- Why not `forbidigo`: `forbidigo` v2's visitor only descends into `*ast.Ident` and `*ast.SelectorExpr`, so it cannot match against `*ast.BasicLit` string literals. The Go test harness mirrors Rule 11's mechanism for SQL-shape rules.
+- Detection limits (line-based scanner):
+  - Splits across source lines (e.g., `"...LIKE\n'%foo%'..."`) escape detection.
+  - Cross-literal concatenation (`"... LIKE " + "'%" + "..."`) escapes detection. Rewriting an existing violation in this shape to bypass the rule is a Rule 16 violation in spirit; reviewers should reject it.
+- Current violations: 7 (ceiling: 7).
+  - `db/db.go:296` — `migrateLegacyClaudeFlags` legacy data sweep (one-shot migration helper; full scan is acceptable here).
+  - `db/search.go:98,101,104,107,110,118` — `db.Search` keyword search (UNION ALL of `tasks.title`, `tasks.metadata`, `actions.title`, `actions.result`, `actions.metadata`, `events.payload.reason`). FTS5 conversion is a separate task and out of scope for this rule.
+
 ---
 
 ## How to use this file
@@ -133,7 +147,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 **During periodic GC (`/gc-golden-rules`, weekly via tq schedule):**
 
-- Enforced rules (1-6, 8-14) are checked by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
+- Enforced rules (1-6, 8-14, 16) are checked by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
 - For each violation found, the GC command creates a tq action via `/tq:create-action` with `claude_args: ["--worktree"]` for isolated execution.
 - The created actions handle the actual fixes — each targeted to a single violation.
 
@@ -170,8 +184,9 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 12 CLI WriteJSON | — | — | — | OK |
 | 13 No dead code | OK | OK | OK | OK |
 | 14 No `*ForTest` in prod | — | OK | OK | OK |
+| 16 No leading-wildcard `LIKE` | 7 | OK | OK | OK |
 
-Totals: **0** current violations.
+Totals: **7** current violations (all in `db/`, ceiling-pinned at 7; FTS5 conversion of `db.Search` is the burn-down path).
 
 ---
 
