@@ -163,8 +163,8 @@ func TestRunClaudeSessionRecord(t *testing.T) {
 				t.Fatalf("get action: %v", err)
 			}
 
-			gotSessionID := metaSessionID(t, got.Metadata)
-			seedSessionID := metaSessionID(t, meta)
+			gotSessionID := metaField(t, got.Metadata, dispatch.MetaKeyClaudeSessionID)
+			seedSessionID := metaField(t, meta, dispatch.MetaKeyClaudeSessionID)
 
 			if tc.wantNoMerge {
 				events, err := d.ListEvents("action", id)
@@ -271,17 +271,17 @@ func TestRunClaudeSessionRecord_ExecutorStamp(t *testing.T) {
 				t.Fatalf("get action: %v", err)
 			}
 
-			if gotSession := metaSessionID(t, got.Metadata); gotSession != tc.wantSessionID {
+			if gotSession := metaField(t, got.Metadata, dispatch.MetaKeyClaudeSessionID); gotSession != tc.wantSessionID {
 				t.Errorf("metadata.claude_session_id = %q, want %q", gotSession, tc.wantSessionID)
 			}
-			if gotExecutor := metaExecutor(t, got.Metadata); gotExecutor != tc.wantExecutor {
+			if gotExecutor := metaField(t, got.Metadata, dispatch.MetaKeyExecutor); gotExecutor != tc.wantExecutor {
 				t.Errorf("metadata.executor = %q, want %q", gotExecutor, tc.wantExecutor)
 			}
 		})
 	}
 }
 
-func metaExecutor(t *testing.T, raw string) string {
+func metaField(t *testing.T, raw, key string) string {
 	t.Helper()
 	if raw == "" || raw == "{}" {
 		return ""
@@ -290,22 +290,7 @@ func metaExecutor(t *testing.T, raw string) string {
 	if err := json.Unmarshal([]byte(raw), &m); err != nil {
 		t.Fatalf("parse metadata: %v", err)
 	}
-	if v, ok := m[dispatch.MetaKeyExecutor].(string); ok {
-		return v
-	}
-	return ""
-}
-
-func metaSessionID(t *testing.T, raw string) string {
-	t.Helper()
-	if raw == "" || raw == "{}" {
-		return ""
-	}
-	m := map[string]any{}
-	if err := json.Unmarshal([]byte(raw), &m); err != nil {
-		t.Fatalf("parse metadata: %v", err)
-	}
-	if v, ok := m[dispatch.MetaKeyClaudeSessionID].(string); ok {
+	if v, ok := m[key].(string); ok {
 		return v
 	}
 	return ""

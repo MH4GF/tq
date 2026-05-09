@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -150,7 +149,7 @@ func autoStampExecutor(metaJSON, status string) (string, error) {
 	if status != db.ActionStatusRunning {
 		return metaJSON, nil
 	}
-	if os.Getenv("CLAUDE_CODE_REMOTE") != "true" {
+	if !dispatch.IsCloudExecution() {
 		return metaJSON, nil
 	}
 	m := make(map[string]any)

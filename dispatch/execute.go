@@ -51,6 +51,13 @@ const (
 	ExecutorCloud = "cloud"
 )
 
+// IsCloudExecution reports whether the current process is running inside a
+// Claude Code cloud session (Claude Code on the web, including Cloud Routines).
+// Anthropic sets CLAUDE_CODE_REMOTE=true in those environments.
+func IsCloudExecution() bool {
+	return os.Getenv("CLAUDE_CODE_REMOTE") == "true"
+}
+
 // DispatchConfig holds shared dispatch settings used by both WorkerConfig and ExecuteParams.
 type DispatchConfig struct {
 	DB                      db.Store

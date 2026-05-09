@@ -337,8 +337,7 @@ func reapCheckClaudeSessionLog(cfg WorkerConfig, a *db.Action) bool {
 
 // MetadataHasValue reports whether the action's metadata JSON has the given
 // string-typed key set to the given value. False on empty/invalid JSON or
-// non-string values. Used by the reaper to filter cloud-executed actions and
-// by hooks/CLI to keep merges idempotent.
+// non-string values.
 func MetadataHasValue(raw, key, value string) bool {
 	if raw == "" || raw == "{}" {
 		return false

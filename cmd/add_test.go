@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
+	"github.com/MH4GF/tq/dispatch"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -338,7 +339,7 @@ func TestAdd_AutoStampExecutor(t *testing.T) {
 			name:         "status=running + REMOTE=true → executor=cloud",
 			envRemote:    "true",
 			args:         []string{"action", "create", "x", "--task", "1", "--title", "t", "--status", "running"},
-			wantExecutor: "cloud",
+			wantExecutor: dispatch.ExecutorCloud,
 		},
 		{
 			name:         "status=pending + REMOTE=true → executor unset (creation env != execution env)",
@@ -356,7 +357,7 @@ func TestAdd_AutoStampExecutor(t *testing.T) {
 			name:         "status=running + REMOTE=true + explicit executor=local → preserved",
 			envRemote:    "true",
 			args:         []string{"action", "create", "x", "--task", "1", "--title", "t", "--status", "running", "--meta", `{"executor":"local"}`},
-			wantExecutor: "local",
+			wantExecutor: dispatch.ExecutorLocal,
 		},
 		{
 			name:         "status=running + REMOTE=false → executor unset",
@@ -394,7 +395,7 @@ func TestAdd_AutoStampExecutor(t *testing.T) {
 			if err := json.Unmarshal([]byte(a.Metadata), &meta); err != nil {
 				t.Fatalf("parse metadata: %v", err)
 			}
-			got, _ := meta["executor"].(string)
+			got, _ := meta[dispatch.MetaKeyExecutor].(string)
 			if got != tc.wantExecutor {
 				t.Errorf("metadata.executor = %q, want %q", got, tc.wantExecutor)
 			}
