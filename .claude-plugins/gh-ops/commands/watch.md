@@ -90,14 +90,14 @@ Co-review actions are discussion-oriented: the dispatched agent must surface con
 ```text
 This action is a co-review discussion with the user. Before taking any action, organize the context below, then use AskUserQuestion to confirm the next step with the user.
 
-## Notification summary
+**Notification summary**
 - Type: <PullRequest / Issue / Discussion / Release>
 - URL: <URL>
 - State: <PR/Issue state, release tag, or discussion category>
 - What happened: <follow-up announcement / mention context / branched into another PR / discussion topic / etc.>
 - Related: <state of follow-up #N, related resources>
 
-## Suggested next-step options
+**Suggested next-step options**
 - (a) Mark this task done (information acknowledged, no further tracking needed)
 - (b) Register follow-up <#N> as a new task to keep tracking
 - (c) <other context-specific proposal>
