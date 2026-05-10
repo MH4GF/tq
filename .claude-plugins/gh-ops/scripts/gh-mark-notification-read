@@ -1,8 +1,11 @@
 #!/bin/bash
-# Mark a GitHub notification thread as read
-# Usage: gh-mark-notification-read <thread_id>
+# Mark one or more GitHub notification threads as read
+# Usage: gh-mark-notification-read <thread_id> [<thread_id>...]
 set -euo pipefail
 
-THREAD_ID="${1:?Usage: gh-mark-notification-read <thread_id>}"
+: "${1:?Usage: gh-mark-notification-read <thread_id> [<thread_id>...]}"
 
-gh api -X PATCH "/notifications/threads/${THREAD_ID}"
+for thread_id in "$@"; do
+  gh api -X PATCH "/notifications/threads/${thread_id}"
+  echo "Marked: ${thread_id}" >&2
+done
