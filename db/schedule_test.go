@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
 
@@ -300,4 +301,127 @@ func TestGetSchedule_NotFound(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for non-existent schedule")
 	}
+}
+
+func TestBulkUpdateScheduleRuns(t *testing.T) {
+	t.Run("empty input is no-op", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		if err := d.BulkUpdateScheduleRuns(nil); err != nil {
+			t.Errorf("nil updates returned err: %v", err)
+		}
+		if err := d.BulkUpdateScheduleRuns([]db.ScheduleRunUpdate{}); err != nil {
+			t.Errorf("empty updates returned err: %v", err)
+		}
+	})
+
+	t.Run("normal: 3 schedules updated atomically", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+
+		var ids []int64
+		for range 3 {
+			id, _ := d.InsertSchedule(taskID, "p", "T", "* * * * *", "{}")
+			ids = append(ids, id)
+		}
+
+		updates := []db.ScheduleRunUpdate{
+			{ID: ids[0], LastRunAt: "2026-01-01 00:00:00", LastError: ""},
+			{ID: ids[1], LastRunAt: "2026-01-01 00:00:00", LastError: "boom"},
+			{ID: ids[2], LastRunAt: "2026-01-01 00:00:00", LastError: ""},
+		}
+		if err := d.BulkUpdateScheduleRuns(updates); err != nil {
+			t.Fatal(err)
+		}
+
+		s0, _ := d.GetSchedule(ids[0])
+		if !s0.LastRunAt.Valid || s0.LastError.Valid {
+			t.Errorf("schedule 0: got run=%v err=%v, want run set + err clear", s0.LastRunAt, s0.LastError)
+		}
+		s1, _ := d.GetSchedule(ids[1])
+		if !s1.LastError.Valid || s1.LastError.String != "boom" {
+			t.Errorf("schedule 1: last_error = %v, want \"boom\"", s1.LastError)
+		}
+		s2, _ := d.GetSchedule(ids[2])
+		if !s2.LastRunAt.Valid {
+			t.Errorf("schedule 2: last_run_at not set")
+		}
+	})
+
+	t.Run("invalid ID does not error (UPDATE matches 0 rows)", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		updates := []db.ScheduleRunUpdate{
+			{ID: 9999, LastRunAt: "2026-01-01 00:00:00", LastError: ""},
+		}
+		if err := d.BulkUpdateScheduleRuns(updates); err != nil {
+			t.Errorf("unexpected err on missing id: %v", err)
+		}
+	})
+}
+
+func TestHasActiveActionsForSchedules(t *testing.T) {
+	t.Run("empty input returns empty map", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		got, err := d.HasActiveActionsForSchedules(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 0 {
+			t.Errorf("len = %d, want 0", len(got))
+		}
+	})
+
+	t.Run("active action present", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		_, _ = d.InsertAction("a1", taskID, `{"schedule_id":"42"}`, "pending", nil)
+
+		got, err := d.HasActiveActionsForSchedules([]int64{42, 99})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !got[42] {
+			t.Errorf("schedule 42 should be active")
+		}
+		if got[99] {
+			t.Errorf("schedule 99 should be absent (no active action)")
+		}
+	})
+
+	t.Run("done/failed/cancelled actions are not active", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		// Insert a done action — should not count as active.
+		aid, _ := d.InsertAction("a1", taskID, `{"schedule_id":"7"}`, "pending", nil)
+		_ = d.MarkDone(aid, "ok")
+
+		got, err := d.HasActiveActionsForSchedules([]int64{7})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got[7] {
+			t.Errorf("done action should not count as active")
+		}
+	})
+
+	t.Run("running and dispatched both count as active", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		_, _ = d.InsertAction("a1", taskID, `{"schedule_id":"1"}`, "running", nil)
+		_, _ = d.InsertAction("a2", taskID, `{"schedule_id":"2"}`, "dispatched", nil)
+
+		got, err := d.HasActiveActionsForSchedules([]int64{1, 2, 3})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !got[1] || !got[2] {
+			t.Errorf("expected schedules 1 and 2 active, got %v", got)
+		}
+		if got[3] {
+			t.Errorf("schedule 3 should be absent")
+		}
+	})
 }

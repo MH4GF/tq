@@ -335,6 +335,39 @@ func (db *DB) GetTask(id int64) (*Task, error) {
 	return t, nil
 }
 
+// GetTasksByIDs returns the requested tasks keyed by ID. Missing IDs are
+// absent from the map (no error).
+func (db *DB) GetTasksByIDs(ids []int64) (map[int64]*Task, error) {
+	result := make(map[int64]*Task, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := "SELECT " + taskColumns + " FROM tasks WHERE id IN (" + strings.Join(placeholders, ", ") + ")"
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get tasks by ids: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var t Task
+		if err := rows.Scan(t.scanFields()...); err != nil {
+			return nil, fmt.Errorf("get tasks by ids: scan: %w", err)
+		}
+		tt := t
+		result[tt.ID] = &tt
+	}
+	return result, rows.Err()
+}
+
 func (db *DB) ListTasks(projectID int64, status string, limit int) ([]Task, error) {
 	query := "SELECT " + taskColumns + " FROM tasks WHERE 1=1"
 	var args []any

@@ -121,6 +121,15 @@ Current status totals are captured after each rule as `current violations: N`. A
 - Verify: `forbidigo` in `.golangci.yml` blocks `\.Set[A-Z][A-Za-z]*ForTest\b` outside `_test.go` files. Run `golangci-lint run ./...`.
 - Current violations: 0.
 
+### N+1 prevention
+
+**Rule 15 [enforced] — `db.Store` methods MUST NOT be invoked inside a `for ... range` loop in `cmd/`, `dispatch/`, or `tui/`.**
+
+- Why: A per-iteration `Store` call against a finite collection is the classic N+1 pattern. On Turso (network-backed) it directly inflates `rows-read` and round-trip latency in ways local SQLite hides. The original incident (`tui/tasks.go:144` `for _, p := range projects { m.database.ListTasksByProject(p.ID) }`) projected to 3.9B reads/month — 7.8x the free tier — before being caught. The fix is always the same: add a bulk method on `db.Store` (e.g. `GetTasksByIDs`, `BulkInsertActions`, `BulkMarkFailed`) and call it once outside the loop.
+- Verify: Go test harness `internal/goldenrules/rule15_test.go` loads `cmd/`, `dispatch/`, `tui/` with `golang.org/x/tools/go/packages` (full type info), walks every `*ast.RangeStmt`, and reports any `*ast.CallExpr` whose `types.Selection` resolves to a method on the `db.Store` interface or any type implementing it. Run `go test ./internal/goldenrules/`.
+- Scope of detection: `RangeStmt` only (collection iteration). Bare `for {}` and `for cond {}` polling loops (e.g. `RunWorker`'s heartbeat tick) are out of scope — each iteration is independent and bulk-batching is meaningless. The original tool considered for this rule was `masibw/goone`; it was rejected after Phase 4 of the introducing action because the upstream is unmaintained (last commit 2022-07) and breaks against modern Go's type internals (`internal error: package "context" without types ...`).
+- Current violations: 0.
+
 ### SQL query shape
 
 **Rule 16 [enforced] — SQL string literals MUST NOT contain leading-wildcard `LIKE '%...'` (or `LIKE '%' || ?`) patterns.**
@@ -172,7 +181,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 **During periodic GC (`/gc-golden-rules`, weekly via tq schedule):**
 
-- Enforced rules (1-6, 8-14, 16-18) are checked by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
+- Enforced rules (1-6, 8-18) are checked by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
 - For each violation found, the GC command creates a tq action via `/tq:create-action` with `claude_args: ["--worktree"]` for isolated execution.
 - The created actions handle the actual fixes — each targeted to a single violation.
 
@@ -209,6 +218,7 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 12 CLI WriteJSON | — | — | — | OK |
 | 13 No dead code | OK | OK | OK | OK |
 | 14 No `*ForTest` in prod | — | OK | OK | OK |
+| 15 No N+1 in for-range | — | OK | OK | OK |
 | 16 No leading-wildcard `LIKE` | 7 | OK | OK | OK |
 | 17 No SCAN in EXPLAIN | 13 | — | — | — |
 | 18 No aggregate hot paths | — | OK | OK | — |

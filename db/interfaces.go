@@ -9,13 +9,16 @@ import (
 type CommandWriter interface {
 	// Action commands
 	InsertAction(title string, taskID int64, metadata, status string, dispatchAfter *string) (int64, error)
+	BulkInsertActions(specs []ActionInsertSpec) ([]int64, error)
 	MarkDone(id int64, result string) error
 	MarkFailed(id int64, result string) error
+	BulkMarkFailed(updates []ActionFailureUpdate) error
 	MarkCancelled(id int64, result string) error
 	MarkDispatched(id int64) error
 	ResetToPending(id int64) error
 	SetTmuxInfo(id int64, tmuxSession, tmuxWindow string) error
 	MergeActionMetadata(id int64, updates map[string]any) error
+	BulkMergeActionMetadata(updates map[int64]map[string]any) error
 	UpdateAction(id int64, title *string, taskID *int64, metadata *string) error
 	NextPending(ctx context.Context) (*Action, error)
 	ClaimPending(ctx context.Context, id int64) (*Action, error)
@@ -43,6 +46,7 @@ type CommandWriter interface {
 	UpdateScheduleEnabled(id int64, enabled bool) error
 	DeleteSchedule(id int64) error
 	UpdateScheduleRun(id int64, lastRunAt, errMsg string) error
+	BulkUpdateScheduleRuns(updates []ScheduleRunUpdate) error
 }
 
 // QueryReader defines all read operations.
@@ -51,7 +55,9 @@ type QueryReader interface {
 	GetAction(id int64) (*Action, error)
 	ListActions(status string, taskID *int64, limit int) ([]Action, error)
 	HasActiveActionWithMeta(taskID int64, metaKey, metaValue string) (bool, error)
+	HasActiveActionsForSchedules(scheduleIDs []int64) (map[int64]bool, error)
 	GetTaskActionCount(taskID int64, statuses []string) (int64, error)
+	GetTasksByIDs(ids []int64) (map[int64]*Task, error)
 	ListRunningInteractive() ([]Action, error)
 	ListRunningNonInteractive() ([]Action, error)
 	CountRunningInteractive() (int, error)
@@ -72,6 +78,7 @@ type QueryReader interface {
 	// Project queries
 	GetProjectByID(id int64) (*Project, error)
 	GetProjectByName(name string) (*Project, error)
+	GetProjectsByIDs(ids []int64) (map[int64]*Project, error)
 	ListProjects(limit int) ([]Project, error)
 	EnsureNotificationsProject() (int64, error)
 	// Schedule queries

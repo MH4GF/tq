@@ -454,6 +454,66 @@ func (db *DB) SetTmuxInfo(id int64, tmuxSession, tmuxWindow string) error {
 	return err
 }
 
+// BulkMergeActionMetadata merges per-action JSON metadata patches in a single
+// transaction. Tx-atomic: any read/parse/write failure rolls back every patch.
+// Empty input is a no-op.
+func (db *DB) BulkMergeActionMetadata(updates map[int64]map[string]any) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("bulk merge action metadata: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	type committed struct {
+		id   int64
+		keys []string
+	}
+	var done []committed
+
+	for id, patch := range updates {
+		if len(patch) == 0 {
+			continue
+		}
+		var existing string
+		if err := tx.QueryRowContext(ctx, "SELECT metadata FROM actions WHERE id = ?", id).Scan(&existing); err != nil {
+			return fmt.Errorf("bulk merge action metadata: get id=%d: %w", id, err)
+		}
+		merged := make(map[string]any)
+		if existing != "" && existing != "{}" {
+			if err := json.Unmarshal([]byte(existing), &merged); err != nil {
+				return fmt.Errorf("bulk merge action metadata: parse id=%d: %w", id, err)
+			}
+		}
+		maps.Copy(merged, patch)
+		data, err := json.Marshal(merged)
+		if err != nil {
+			return fmt.Errorf("bulk merge action metadata: marshal id=%d: %w", id, err)
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE actions SET metadata = ? WHERE id = ?", string(data), id); err != nil {
+			return fmt.Errorf("bulk merge action metadata: update id=%d: %w", id, err)
+		}
+		keys := make([]string, 0, len(patch))
+		for k := range patch {
+			keys = append(keys, k)
+		}
+		done = append(done, committed{id: id, keys: keys})
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("bulk merge action metadata: commit: %w", err)
+	}
+	for _, c := range done {
+		db.emitEvent("action", c.id, "action.metadata_merged", map[string]any{
+			"keys_updated": c.keys,
+		})
+	}
+	return nil
+}
+
 func (db *DB) MergeActionMetadata(id int64, updates map[string]any) error {
 	var existing string
 	err := db.QueryRow("SELECT metadata FROM actions WHERE id = ?", id).Scan(&existing)
@@ -649,4 +709,130 @@ func (db *DB) GetAction(id int64) (*Action, error) {
 		return nil, err
 	}
 	return a, nil
+}
+
+// ActionInsertSpec describes one row to be inserted by BulkInsertActions.
+type ActionInsertSpec struct {
+	Title         string
+	TaskID        int64
+	Metadata      string
+	Status        string
+	DispatchAfter *string
+}
+
+// ActionFailureUpdate describes one stale-action transition for BulkMarkFailed.
+type ActionFailureUpdate struct {
+	ID     int64
+	Reason string
+}
+
+// BulkInsertActions inserts all specs in a single multi-row INSERT and returns
+// the assigned IDs in input order. Tx-atomic: any constraint violation rolls
+// back the entire batch.
+func (db *DB) BulkInsertActions(specs []ActionInsertSpec) ([]int64, error) {
+	if len(specs) == 0 {
+		return nil, nil
+	}
+	for i, s := range specs {
+		if !ValidActionStatuses[s.Status] {
+			return nil, fmt.Errorf("specs[%d]: invalid action status %q", i, s.Status)
+		}
+	}
+
+	var sb strings.Builder
+	sb.WriteString("INSERT INTO actions (title, task_id, metadata, status, dispatch_after) VALUES ")
+	args := make([]any, 0, len(specs)*5)
+	for i, s := range specs {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString("(?, ?, ?, ?, ?)")
+		args = append(args, s.Title, s.TaskID, s.Metadata, s.Status, s.DispatchAfter)
+	}
+	sb.WriteString(" RETURNING id")
+
+	rows, err := db.Query(sb.String(), args...)
+	if err != nil {
+		return nil, fmt.Errorf("bulk insert actions: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	ids := make([]int64, 0, len(specs))
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("bulk insert actions: scan returned id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("bulk insert actions: %w", err)
+	}
+	if len(ids) != len(specs) {
+		return nil, fmt.Errorf("bulk insert actions: expected %d ids, got %d", len(specs), len(ids))
+	}
+
+	for i, id := range ids {
+		evt := map[string]any{
+			"status":  specs[i].Status,
+			"task_id": specs[i].TaskID,
+			"title":   specs[i].Title,
+		}
+		if specs[i].DispatchAfter != nil {
+			evt["dispatch_after"] = *specs[i].DispatchAfter
+		}
+		db.emitEvent("action", id, "action.created", evt)
+	}
+	return ids, nil
+}
+
+// BulkMarkFailed marks every update.ID as failed in one transaction.
+// Already-terminal actions (done/failed/cancelled) are skipped silently so
+// repeat calls are no-ops, mirroring MarkFailed.
+func (db *DB) BulkMarkFailed(updates []ActionFailureUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("bulk mark failed: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	type committed struct {
+		id   int64
+		from string
+	}
+	var done []committed
+
+	for _, u := range updates {
+		var from string
+		if err := tx.QueryRowContext(ctx, "SELECT status FROM actions WHERE id = ?", u.ID).Scan(&from); err != nil {
+			return fmt.Errorf("bulk mark failed: get status for id=%d: %w", u.ID, err)
+		}
+		if from == ActionStatusDone || from == ActionStatusFailed || from == ActionStatusCancelled {
+			continue
+		}
+
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE actions SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ? AND status = ?",
+			ActionStatusFailed, u.Reason, u.ID, from,
+		); err != nil {
+			return fmt.Errorf("bulk mark failed: update id=%d: %w", u.ID, err)
+		}
+
+		done = append(done, committed{id: u.ID, from: from})
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("bulk mark failed: commit: %w", err)
+	}
+
+	for _, c := range done {
+		db.emitEvent("action", c.id, "action.status_changed", map[string]any{
+			"from": c.from, "to": ActionStatusFailed,
+		})
+	}
+	return nil
 }

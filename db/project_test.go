@@ -59,6 +59,45 @@ func TestListProjects(t *testing.T) {
 	}
 }
 
+func TestGetProjectsByIDs(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	tests := []struct {
+		name    string
+		ids     []int64
+		wantIDs []int64
+	}{
+		{name: "all existing", ids: []int64{1, 2, 3}, wantIDs: []int64{1, 2, 3}},
+		{name: "subset", ids: []int64{1, 3}, wantIDs: []int64{1, 3}},
+		{name: "missing IDs absent", ids: []int64{1, 9999}, wantIDs: []int64{1}},
+		{name: "all missing returns empty map", ids: []int64{9998, 9999}, wantIDs: nil},
+		{name: "empty input returns empty map", ids: nil, wantIDs: nil},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := d.GetProjectsByIDs(tc.ids)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != len(tc.wantIDs) {
+				t.Errorf("len(result) = %d, want %d", len(got), len(tc.wantIDs))
+			}
+			for _, id := range tc.wantIDs {
+				p, ok := got[id]
+				if !ok {
+					t.Errorf("missing id %d", id)
+					continue
+				}
+				if p.ID != id {
+					t.Errorf("result[%d].ID = %d, want %d", id, p.ID, id)
+				}
+			}
+		})
+	}
+}
+
 func TestInsertProject(t *testing.T) {
 	d := testutil.NewTestDB(t)
 
