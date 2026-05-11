@@ -1,6 +1,6 @@
 # Queue Worker Dispatch Model
 
-The `tq ui` queue worker (`dispatch.RunWorker`) polls pending actions and dispatches them to mode-specific executors. This document describes the concurrency model, slot caps, and `claude_session_id` discovery paths.
+The `tq ui` queue worker (`dispatch.RunWorker`) polls pending actions and dispatches them to mode-specific executors. This document describes the concurrency model, slot caps, and how `claude_session_id` is captured.
 
 ## Concurrency model
 
@@ -11,8 +11,8 @@ NextPending ─┬─ interactive     ──► sync worker.Execute (tmux: retur
              │   admit if Running ≤ MaxI
              │
              ├─ noninteractive  ──► ┌─ go worker.Execute (claude -p, long-running)
-             │   admit if Running   │   ├ saveClaudeSessionID
-             │     ≤ MaxNI          │   └ MarkDone / markActionFailed
+             │   admit if Running   │   └ MarkDone / markActionFailed
+             │     ≤ MaxNI          │
              │
              └─ remote          ──► sync worker.Execute (returns fast)
 
@@ -36,16 +36,11 @@ A pending action that would exceed its cap is reset to `pending` (`ResetToPendin
 
 `MaxNonInteractive` is not a cognitive-load limit; it exists only to bound memory consumption when many noninteractive actions are queued. Override via `--max-noninteractive` based on available RAM.
 
-## `claude_session_id` discovery paths
+## `claude_session_id` capture
 
-| Mode | Phase | How session ID is captured |
-| --- | --- | --- |
-| Interactive | Running, after `StaleGracePeriod` (30 s) | `reapCheckClaudeSessionLog` runs every poll, saves to `metadata.claude_session_id` while validating heartbeat |
-| Noninteractive | Running, before `staleThreshold` (~20 min) | Not captured (`reapStaleActions` only probes after the threshold) |
-| Noninteractive | Running, at/after `staleThreshold` | `reapCheckClaudeSessionLog` saves to `metadata.claude_session_id` |
-| Noninteractive | Immediately after `worker.Execute` returns | `saveClaudeSessionID` runs inside the executor goroutine using `postExecutionFreshness` (5 min) |
+The Claude Code `SessionStart` hook (`.claude-plugins/tq/`) is the sole writer of `metadata.claude_session_id`. When a tq-dispatched claude session starts, the hook invokes `tq internal claude-session-record` with `TQ_ACTION_ID` set, which merges the session ID into the action's metadata.
 
-The session ID is used for `claude --resume` and for log investigation on failure. Capture is best-effort: a missing session ID does not fail the action.
+The session ID is used for `claude --resume` and for log investigation on failure. Capture is best-effort: a missing session ID does not fail the action. The reaper still probes `~/.claude/projects` session log mtime as a liveness signal (`ClaudeSessionLogChecker.IsClaudeSessionActive`), but no longer writes the session ID itself.
 
 ## Cloud-executed actions are exempt from reaping
 
