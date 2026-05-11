@@ -227,7 +227,9 @@ REASON serves as feedback for improving classification logic. Record why the act
 tq action update <ID> [--title <TITLE>] [--task <ID>] [--meta <JSON>] [--work-dir <PATH>]
 ```
 
-- `--work-dir` — Override or clear the action-level working directory. Pass an empty string (`--work-dir ""`) to clear. Only allowed on actions in `pending` or `failed` status.
+Only actions in `pending` or `failed` status can be updated; running, dispatched, done, or cancelled actions are rejected.
+
+- `--work-dir` — Override or clear the action-level working directory. Pass an empty string (`--work-dir ""`) to clear.
 
 ### `tq action dispatch`
 
