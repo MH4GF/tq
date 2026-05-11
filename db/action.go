@@ -50,6 +50,10 @@ type Action struct {
 
 const actionColumns = "id, title, task_id, metadata, status, result, tmux_session, tmux_window, dispatch_after, work_dir, created_at, started_at, completed_at"
 
+// actionColumnsA is actionColumns with each column prefixed by "a." for JOIN
+// queries that need to disambiguate (e.g. NextPending joins tasks/projects).
+var actionColumnsA = "a." + strings.ReplaceAll(actionColumns, ", ", ", a.")
+
 func (a *Action) scanFields() []any {
 	return []any{&a.ID, &a.Title, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.TmuxSession, &a.TmuxWindow, &a.DispatchAfter, &a.WorkDir, &a.CreatedAt, &a.StartedAt, &a.CompletedAt}
 }
@@ -135,8 +139,7 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 
 	a := &Action{}
 	err = tx.QueryRowContext(ctx,
-		`SELECT a.id, a.title, a.task_id, a.metadata, a.status, a.result,
-		        a.tmux_session, a.tmux_window, a.dispatch_after, a.work_dir, a.created_at, a.started_at, a.completed_at
+		`SELECT `+actionColumnsA+`
 		 FROM actions a
 		 INNER JOIN tasks t ON a.task_id = t.id
 		 INNER JOIN projects p ON t.project_id = p.id
