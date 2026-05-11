@@ -135,6 +135,52 @@ func TestAdd(t *testing.T) {
 	}
 }
 
+func TestAdd_WorkDir(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		wantWorkDir string
+	}{
+		{
+			name:        "flag omitted defaults to empty",
+			args:        []string{"action", "create", "x", "--task", "1", "--title", "t"},
+			wantWorkDir: "",
+		},
+		{
+			name:        "absolute path stored",
+			args:        []string{"action", "create", "x", "--task", "1", "--title", "t", "--work-dir", "/tmp/wt"},
+			wantWorkDir: "/tmp/wt",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+			cmd.SetConfigDir(t.TempDir())
+			d.InsertTask(1, "test task", "{}", "")
+
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs(tc.args)
+
+			if err := root.Execute(); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			a, err := d.GetAction(1)
+			if err != nil {
+				t.Fatalf("get action: %v", err)
+			}
+			if a.WorkDir != tc.wantWorkDir {
+				t.Errorf("action.work_dir = %q, want %q", a.WorkDir, tc.wantWorkDir)
+			}
+		})
+	}
+}
+
 func TestAdd_InvalidInstruction(t *testing.T) {
 	tests := []struct {
 		name        string

@@ -153,8 +153,8 @@ func TestJQFlag(t *testing.T) {
 			cmd.ResetForTest()
 
 			taskID, _ := d.InsertTask(1, "login-bug", "{}", "")
-			d.InsertAction("review-pr", taskID, "{}", db.ActionStatusPending, nil)
-			d.InsertAction("deploy", taskID, "{}", db.ActionStatusRunning, nil)
+			d.InsertAction("review-pr", taskID, "{}", db.ActionStatusPending, nil, "")
+			d.InsertAction("deploy", taskID, "{}", db.ActionStatusRunning, nil, "")
 
 			root := cmd.GetRootCmd()
 			buf := new(bytes.Buffer)

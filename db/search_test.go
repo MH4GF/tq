@@ -123,7 +123,7 @@ func TestSearch(t *testing.T) {
 			keyword: "deploy",
 			setup: func(d *db.DB) {
 				taskID, _ := d.InsertTask(1, "Release", "{}", "")
-				d.InsertAction("deploy to prod", taskID, "{}", db.ActionStatusPending, nil)
+				d.InsertAction("deploy to prod", taskID, "{}", db.ActionStatusPending, nil, "")
 			},
 			wantLen: 1,
 			check: func(t *testing.T, results []db.SearchResult) {
@@ -141,7 +141,7 @@ func TestSearch(t *testing.T) {
 			keyword: "resolved",
 			setup: func(d *db.DB) {
 				taskID, _ := d.InsertTask(1, "Bug fix", "{}", "")
-				actionID, _ := d.InsertAction("fix", taskID, "{}", db.ActionStatusPending, nil)
+				actionID, _ := d.InsertAction("fix", taskID, "{}", db.ActionStatusPending, nil, "")
 				d.MarkDone(actionID, "resolved the login issue")
 			},
 			wantLen: 1,
@@ -157,7 +157,7 @@ func TestSearch(t *testing.T) {
 			keyword: "pr_url",
 			setup: func(d *db.DB) {
 				taskID, _ := d.InsertTask(1, "Review", "{}", "")
-				d.InsertAction("review", taskID, `{"pr_url":"https://github.com/foo/bar/pull/1"}`, db.ActionStatusPending, nil)
+				d.InsertAction("review", taskID, `{"pr_url":"https://github.com/foo/bar/pull/1"}`, db.ActionStatusPending, nil, "")
 			},
 			wantLen: 1,
 			check: func(t *testing.T, results []db.SearchResult) {
@@ -188,7 +188,7 @@ func TestSearch(t *testing.T) {
 			keyword: "auth",
 			setup: func(d *db.DB) {
 				taskID, _ := d.InsertTask(1, "Auth refactor", "{}", "")
-				d.InsertAction("update auth module", taskID, "{}", db.ActionStatusPending, nil)
+				d.InsertAction("update auth module", taskID, "{}", db.ActionStatusPending, nil, "")
 			},
 			wantLen: 2,
 		},
@@ -268,7 +268,7 @@ func TestSearch(t *testing.T) {
 			keyword: "deploy",
 			setup: func(d *db.DB) {
 				taskID, _ := d.InsertTask(2, "Deploy hearable", "{}", "")
-				d.InsertAction("deploy step", taskID, "{}", db.ActionStatusPending, nil)
+				d.InsertAction("deploy step", taskID, "{}", db.ActionStatusPending, nil, "")
 			},
 			wantLen: 2,
 			check: func(t *testing.T, results []db.SearchResult) {

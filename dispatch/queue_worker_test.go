@@ -104,7 +104,7 @@ func TestRunWorker_ProcessesAndStops(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
 
 	worker := &countingWorker{result: `{"ok":true}`}
 
@@ -145,9 +145,9 @@ func TestRunWorker_InteractiveLimitEnforced(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix conflict","mode":"interactive"}`, db.ActionStatusPending, nil)
+	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix conflict","mode":"interactive"}`, db.ActionStatusPending, nil, "")
 
-	d.InsertAction("respond-review", taskID, "{}", db.ActionStatusRunning, nil)
+	d.InsertAction("respond-review", taskID, "{}", db.ActionStatusRunning, nil, "")
 	d.SetActionTmuxInfoForTest(2, ptr("session-1"), nil, nil)
 
 	interactiveWorker := &countingWorker{result: "interactive:session=test"}
@@ -181,7 +181,7 @@ func TestRunWorker_FailureEscalation(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
 
 	worker := &countingWorker{err: context.DeadlineExceeded}
 
@@ -215,7 +215,7 @@ func TestRunWorker_FailureCreatesInvestigateAction(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, "pending", nil)
+	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, "pending", nil, "")
 
 	worker := &countingWorker{err: fmt.Errorf("something went wrong")}
 
@@ -266,7 +266,7 @@ func TestRunWorker_RemoteDispatch(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Remote task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("remote-task", taskID, `{"instruction":"do remote task","mode":"remote"}`, db.ActionStatusPending, nil)
+	d.InsertAction("remote-task", taskID, `{"instruction":"do remote task","mode":"remote"}`, db.ActionStatusPending, nil, "")
 
 	remoteWorker := &countingWorker{result: "remote:session=https://console.anthropic.com/p/abc"}
 
@@ -307,10 +307,10 @@ func TestRunWorker_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("remote-task", taskID, `{"instruction":"do remote task","mode":"remote"}`, db.ActionStatusPending, nil)
-	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix conflict","mode":"interactive"}`, db.ActionStatusPending, nil)
+	d.InsertAction("remote-task", taskID, `{"instruction":"do remote task","mode":"remote"}`, db.ActionStatusPending, nil, "")
+	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix conflict","mode":"interactive"}`, db.ActionStatusPending, nil, "")
 
-	d.InsertAction("respond-review", taskID, `{"instruction":"respond to review","mode":"interactive"}`, db.ActionStatusRunning, nil)
+	d.InsertAction("respond-review", taskID, `{"instruction":"respond to review","mode":"interactive"}`, db.ActionStatusRunning, nil, "")
 	d.SetActionTmuxInfoForTest(3, ptr("session-1"), nil, nil)
 
 	remoteWorker := &countingWorker{result: "remote:session=https://example.com"}
@@ -521,7 +521,7 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			if meta == "" {
 				meta = "{}"
 			}
-			d.InsertAction("fix-conflict", taskID, meta, db.ActionStatusRunning, nil)
+			d.InsertAction("fix-conflict", taskID, meta, db.ActionStatusRunning, nil, "")
 
 			windowName := "tq-action-1"
 			var startedAt *time.Time
@@ -641,7 +641,7 @@ func TestReapStaleActions_NonInteractive(t *testing.T) {
 			if meta == "" {
 				meta = `{"instruction":"check","mode":"noninteractive"}`
 			}
-			d.InsertAction("check-pr", taskID, meta, db.ActionStatusRunning, nil)
+			d.InsertAction("check-pr", taskID, meta, db.ActionStatusRunning, nil, "")
 
 			if !tt.omitStartedAt {
 				started := time.Now().Add(tt.startedOffset)
@@ -680,7 +680,7 @@ func TestReapStaleActions_MultipleStaleInteractiveAllReaped(t *testing.T) {
 	staleAt := time.Now().Add(-5 * time.Minute)
 	const n = 3
 	for i := range n {
-		if _, err := d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil); err != nil {
+		if _, err := d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil, ""); err != nil {
 			t.Fatalf("seed action %d: %v", i, err)
 		}
 	}
@@ -719,7 +719,7 @@ func TestReapStaleActions_MultipleStaleNonInteractiveAllReaped(t *testing.T) {
 	staleAt := time.Now().Add(-25 * time.Minute)
 	const n = 3
 	for i := range n {
-		if _, err := d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil); err != nil {
+		if _, err := d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil, ""); err != nil {
 			t.Fatalf("seed action %d: %v", i, err)
 		}
 	}
@@ -780,8 +780,8 @@ func TestRunWorker_NonInteractiveDoesNotBlockInteractive(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("long-ni", taskID, `{"instruction":"long","mode":"noninteractive"}`, db.ActionStatusPending, nil)
-	d.InsertAction("interactive", taskID, `{"instruction":"fix","mode":"interactive"}`, db.ActionStatusPending, nil)
+	d.InsertAction("long-ni", taskID, `{"instruction":"long","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
+	d.InsertAction("interactive", taskID, `{"instruction":"fix","mode":"interactive"}`, db.ActionStatusPending, nil, "")
 
 	niWorker := newBlockingWorker()
 	defer niWorker.Release()
@@ -828,8 +828,8 @@ func TestRunWorker_NonInteractiveSlotLimit(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("ni-1", taskID, `{"instruction":"ni-1","mode":"noninteractive"}`, db.ActionStatusPending, nil)
-	d.InsertAction("ni-2", taskID, `{"instruction":"ni-2","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+	d.InsertAction("ni-1", taskID, `{"instruction":"ni-1","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
+	d.InsertAction("ni-2", taskID, `{"instruction":"ni-2","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
 
 	niWorker := newBlockingWorker()
 	niWorker.result = `{"ok":true}`
@@ -884,7 +884,7 @@ func TestRunWorker_NonInteractiveFailureDoesNotStopLoop(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("ni-fail", taskID, `{"instruction":"fail","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+	d.InsertAction("ni-fail", taskID, `{"instruction":"fail","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
 
 	failedThenOK := &countingWorker{err: fmt.Errorf("boom")}
 
@@ -911,7 +911,7 @@ func TestRunWorker_NonInteractiveFailureDoesNotStopLoop(t *testing.T) {
 	})
 
 	// Queue another noninteractive after the failure.
-	d.InsertAction("ni-after", taskID, `{"instruction":"after","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+	d.InsertAction("ni-after", taskID, `{"instruction":"after","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
 	failedThenOK.Set(`{"ok":true}`, nil)
 
 	waitFor(t, 1*time.Second, "follow-up noninteractive dispatched after failure", func() bool {
@@ -934,7 +934,7 @@ func TestRunWorker_ShutdownDoesNotMarkInflightFailed(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("long-ni", taskID, `{"instruction":"long","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+	d.InsertAction("long-ni", taskID, `{"instruction":"long","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
 
 	niWorker := newBlockingWorker()
 

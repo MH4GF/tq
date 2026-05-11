@@ -45,7 +45,7 @@ func TestAttach(t *testing.T) {
 			cmd.ResetForTest()
 
 			taskID, _ := d.InsertTask(1, "test", "{}", "")
-			id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusRunning, nil)
+			id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusRunning, nil, "")
 			if tc.sessionID != "" {
 				var windowPtr *string
 				if tc.windowID != "" {

@@ -156,7 +156,7 @@ func TestCheckSchedules(t *testing.T) {
 			createdAt := tt.createdAt
 			d.SetScheduleTimestampsForTest(scheduleID, &createdAt, tt.lastRunAt)
 			if tt.insertDuplicateAction {
-				d.InsertAction("existing", taskID, `{"schedule_id":"1"}`, db.ActionStatusPending, nil)
+				d.InsertAction("existing", taskID, `{"schedule_id":"1"}`, db.ActionStatusPending, nil, "")
 			}
 			if tt.disableSchedule {
 				d.UpdateScheduleEnabled(scheduleID, false)

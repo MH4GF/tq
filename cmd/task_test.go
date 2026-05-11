@@ -575,7 +575,7 @@ func TestTaskGet(t *testing.T) {
 			args := tc.args
 			if tc.setupTask {
 				taskID, _ := d.InsertTask(1, "my task", `{"url":"https://example.com"}`, "")
-				d.InsertAction("review action", taskID, `{"pr":1}`, db.ActionStatusPending, nil)
+				d.InsertAction("review action", taskID, `{"pr":1}`, db.ActionStatusPending, nil, "")
 				args = []string{"task", "get", fmt.Sprintf("%d", taskID)}
 			}
 
@@ -610,8 +610,8 @@ func TestTaskList_WithActions(t *testing.T) {
 
 	taskID1, _ := d.InsertTask(1, "task with actions", "{}", "")
 	taskID2, _ := d.InsertTask(1, "task without actions", "{}", "")
-	d.InsertAction("review-pr", taskID1, `{"pr":1}`, db.ActionStatusPending, nil)
-	d.InsertAction("implement", taskID1, "{}", db.ActionStatusDone, nil)
+	d.InsertAction("review-pr", taskID1, `{"pr":1}`, db.ActionStatusPending, nil, "")
+	d.InsertAction("implement", taskID1, "{}", db.ActionStatusDone, nil, "")
 	_ = taskID2
 
 	root := cmd.GetRootCmd()
@@ -681,7 +681,7 @@ func TestTaskList_ActionsLimit(t *testing.T) {
 
 			taskID, _ := d.InsertTask(1, "task", "{}", "")
 			for i := 1; i <= tc.totalActions; i++ {
-				d.InsertAction(fmt.Sprintf("action-%d", i), taskID, "{}", db.ActionStatusPending, nil)
+				d.InsertAction(fmt.Sprintf("action-%d", i), taskID, "{}", db.ActionStatusPending, nil, "")
 			}
 
 			var args []string
@@ -744,7 +744,7 @@ func TestActionList_NoLimit_ReturnsAll(t *testing.T) {
 	taskID, _ := d.InsertTask(1, "task", "{}", "")
 	const total = 15
 	for i := 1; i <= total; i++ {
-		d.InsertAction(fmt.Sprintf("action-%d", i), taskID, "{}", db.ActionStatusPending, nil)
+		d.InsertAction(fmt.Sprintf("action-%d", i), taskID, "{}", db.ActionStatusPending, nil, "")
 	}
 
 	root := cmd.GetRootCmd()

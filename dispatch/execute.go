@@ -394,7 +394,22 @@ type workDirRecovery struct {
 // It is read-only: when the task's work_dir does not exist on disk, it returns
 // a non-nil recovery descriptor rather than writing to the DB. Callers that
 // want the auto-correction must invoke applyWorkDirRecovery explicitly.
+//
+// Priority: action.WorkDir → task.WorkDir → project.WorkDir → ".".
+// A missing action.WorkDir is logged but never auto-cleared from the DB —
+// the per-action override is treated as explicit user intent.
 func resolveWorkDir(database db.Store, action *db.Action) (string, *workDirRecovery, error) {
+	if action.WorkDir != "" {
+		expanded := expandHome(action.WorkDir)
+		if dirExists(expanded) {
+			return expanded, nil, nil
+		}
+		slog.Warn("action work_dir does not exist, falling back to task chain",
+			"action_id", action.ID,
+			"missing_path", expanded,
+		)
+	}
+
 	task, err := database.GetTask(action.TaskID)
 	if err != nil {
 		return ".", nil, fmt.Errorf("get task: %w", err)

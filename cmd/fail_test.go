@@ -54,7 +54,7 @@ func TestFail(t *testing.T) {
 			var id int64
 			if tc.startStatus != "" {
 				taskID, _ := d.InsertTask(1, "test", "{}", "")
-				id, _ = d.InsertAction("test", taskID, "{}", tc.startStatus, nil)
+				id, _ = d.InsertAction("test", taskID, "{}", tc.startStatus, nil, "")
 			}
 
 			root := cmd.GetRootCmd()
@@ -122,7 +122,7 @@ func TestFail_AlreadyTerminal(t *testing.T) {
 			cmd.ResetForTest()
 
 			taskID, _ := d.InsertTask(1, "test", "{}", "")
-			d.InsertAction("test", taskID, "{}", tc.startStatus, nil)
+			d.InsertAction("test", taskID, "{}", tc.startStatus, nil, "")
 
 			root := cmd.GetRootCmd()
 			root.SetOut(new(bytes.Buffer))

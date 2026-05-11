@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS actions (
   tmux_session    TEXT,
   tmux_window     TEXT,
   dispatch_after  TEXT,
+  work_dir        TEXT NOT NULL DEFAULT '',
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   started_at      TEXT,
   completed_at    TEXT

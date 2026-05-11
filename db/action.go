@@ -42,15 +42,20 @@ type Action struct {
 	TmuxSession   sql.NullString
 	TmuxWindow    sql.NullString
 	DispatchAfter sql.NullString
+	WorkDir       string
 	CreatedAt     string
 	StartedAt     sql.NullString
 	CompletedAt   sql.NullString
 }
 
-const actionColumns = "id, title, task_id, metadata, status, result, tmux_session, tmux_window, dispatch_after, created_at, started_at, completed_at"
+const actionColumns = "id, title, task_id, metadata, status, result, tmux_session, tmux_window, dispatch_after, work_dir, created_at, started_at, completed_at"
+
+// actionColumnsA is actionColumns with each column prefixed by "a." for JOIN
+// queries that need to disambiguate (e.g. NextPending joins tasks/projects).
+var actionColumnsA = "a." + strings.ReplaceAll(actionColumns, ", ", ", a.")
 
 func (a *Action) scanFields() []any {
-	return []any{&a.ID, &a.Title, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.TmuxSession, &a.TmuxWindow, &a.DispatchAfter, &a.CreatedAt, &a.StartedAt, &a.CompletedAt}
+	return []any{&a.ID, &a.Title, &a.TaskID, &a.Metadata, &a.Status, &a.Result, &a.TmuxSession, &a.TmuxWindow, &a.DispatchAfter, &a.WorkDir, &a.CreatedAt, &a.StartedAt, &a.CompletedAt}
 }
 
 func (a Action) MatchesDate(date string) bool {
@@ -66,13 +71,13 @@ func (a Action) MatchesDate(date string) bool {
 	return false
 }
 
-func (db *DB) InsertAction(title string, taskID int64, metadata, status string, dispatchAfter *string) (int64, error) {
+func (db *DB) InsertAction(title string, taskID int64, metadata, status string, dispatchAfter *string, workDir string) (int64, error) {
 	if !ValidActionStatuses[status] {
 		return 0, fmt.Errorf("invalid action status %q: must be one of pending, running, dispatched, done, failed, cancelled", status)
 	}
 	res, err := db.Exec(
-		"INSERT INTO actions (title, task_id, metadata, status, dispatch_after) VALUES (?, ?, ?, ?, ?)",
-		title, taskID, metadata, status, dispatchAfter,
+		"INSERT INTO actions (title, task_id, metadata, status, dispatch_after, work_dir) VALUES (?, ?, ?, ?, ?, ?)",
+		title, taskID, metadata, status, dispatchAfter, workDir,
 	)
 	if err != nil {
 		return 0, err
@@ -86,6 +91,9 @@ func (db *DB) InsertAction(title string, taskID int64, metadata, status string, 
 	}
 	if dispatchAfter != nil {
 		evt["dispatch_after"] = *dispatchAfter
+	}
+	if workDir != "" {
+		evt["work_dir"] = workDir
 	}
 	db.emitEvent("action", id, "action.created", evt)
 	return id, nil
@@ -131,8 +139,7 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 
 	a := &Action{}
 	err = tx.QueryRowContext(ctx,
-		`SELECT a.id, a.title, a.task_id, a.metadata, a.status, a.result,
-		        a.tmux_session, a.tmux_window, a.dispatch_after, a.created_at, a.started_at, a.completed_at
+		`SELECT `+actionColumnsA+`
 		 FROM actions a
 		 INNER JOIN tasks t ON a.task_id = t.id
 		 INNER JOIN projects p ON t.project_id = p.id
@@ -487,7 +494,7 @@ func (db *DB) MergeActionMetadata(id int64, updates map[string]any) error {
 	return err
 }
 
-func (db *DB) UpdateAction(id int64, title *string, taskID *int64, metadata *string) error {
+func (db *DB) UpdateAction(id int64, title *string, taskID *int64, metadata, workDir *string) error {
 	var current Action
 	err := db.QueryRow("SELECT "+actionColumns+" FROM actions WHERE id = ?", id).Scan(current.scanFields()...)
 	if err != nil {
@@ -527,6 +534,10 @@ func (db *DB) UpdateAction(id int64, title *string, taskID *int64, metadata *str
 		}
 		setClauses = append(setClauses, "metadata = ?")
 		args = append(args, string(merged))
+	}
+	if workDir != nil {
+		setClauses = append(setClauses, "work_dir = ?")
+		args = append(args, *workDir)
 	}
 
 	if len(setClauses) == 0 {
@@ -658,6 +669,7 @@ type ActionInsertSpec struct {
 	Metadata      string
 	Status        string
 	DispatchAfter *string
+	WorkDir       string
 }
 
 // ActionFailureUpdate describes one stale-action transition for BulkMarkFailed.
@@ -680,14 +692,14 @@ func (db *DB) BulkInsertActions(specs []ActionInsertSpec) ([]int64, error) {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("INSERT INTO actions (title, task_id, metadata, status, dispatch_after) VALUES ")
-	args := make([]any, 0, len(specs)*5)
+	sb.WriteString("INSERT INTO actions (title, task_id, metadata, status, dispatch_after, work_dir) VALUES ")
+	args := make([]any, 0, len(specs)*6)
 	for i, s := range specs {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
-		sb.WriteString("(?, ?, ?, ?, ?)")
-		args = append(args, s.Title, s.TaskID, s.Metadata, s.Status, s.DispatchAfter)
+		sb.WriteString("(?, ?, ?, ?, ?, ?)")
+		args = append(args, s.Title, s.TaskID, s.Metadata, s.Status, s.DispatchAfter, s.WorkDir)
 	}
 	sb.WriteString(" RETURNING id")
 
@@ -720,6 +732,9 @@ func (db *DB) BulkInsertActions(specs []ActionInsertSpec) ([]int64, error) {
 		}
 		if specs[i].DispatchAfter != nil {
 			evt["dispatch_after"] = *specs[i].DispatchAfter
+		}
+		if specs[i].WorkDir != "" {
+			evt["work_dir"] = specs[i].WorkDir
 		}
 		db.emitEvent("action", id, "action.created", evt)
 	}

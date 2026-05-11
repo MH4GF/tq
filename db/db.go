@@ -257,6 +257,15 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	// Add work_dir column to actions (idempotent)
+	if has, err := db.hasColumn("actions", "work_dir"); err != nil {
+		return fmt.Errorf("migrate actions work_dir: check column: %w", err)
+	} else if !has {
+		if _, err := db.Exec("ALTER TABLE actions ADD COLUMN work_dir TEXT NOT NULL DEFAULT ''"); err != nil {
+			return fmt.Errorf("migrate actions work_dir: alter table: %w", err)
+		}
+	}
+
 	if has, err := db.hasColumn("actions", "session_id"); err != nil {
 		return fmt.Errorf("migrate tmux_session: check column: %w", err)
 	} else if has {
