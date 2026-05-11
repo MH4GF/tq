@@ -144,7 +144,7 @@ Notes with `kind=triage_keep` are surfaced on `tq task list` as `latest_triage_n
 ### `tq action create`
 
 ```
-tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--status <STATUS>] [--after <TIME>]
+tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--status <STATUS>] [--after <TIME>] [--work-dir <PATH>]
 ```
 
 - `--task` — Task ID (**required**). Rejected if the task status is `done` or `archived`; reopen with `tq task update <ID> --status open` first if intentional.
@@ -155,6 +155,7 @@ tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--st
   - `executor` — `"local"` or `"cloud"`. Records where the action's claude session is actually running (orthogonal to `mode`). The reaper skips actions marked `executor=cloud` since local tmux/session-log liveness checks do not apply. Auto-stamped to `cloud` when `--status running` is passed from a Claude Code cloud session (`CLAUDE_CODE_REMOTE=true`); also stamped by the `SessionStart` hook in cloud sessions launched via tq dispatch. Explicit values in `--meta` are preserved.
 - `--status` — Initial status (default: `pending`)
 - `--after` — Dispatch after this time (`YYYY-MM-DD HH:MM`, local timezone)
+- `--work-dir` — Working directory override for this action only (does not modify the parent task's `work_dir`). Dispatch resolves the effective directory as **action.work_dir → task.work_dir → project.work_dir → `.`**. When the override path does not exist on disk at dispatch time, tq logs a warning and falls back to the task chain *without clearing the override*, so the explicit user intent is preserved. Follow-up actions generated for this action (investigate-failure, permission-block, resume) inherit this `work_dir`.
 
 ### `tq action list`
 
@@ -164,7 +165,7 @@ tq action list [--task <ID>] [--status <STATUS>] [--jq <EXPR>] [--limit <N>]
 
 - `--task` — Filter by task ID
 - `--status` — Filter by status (`pending`, `running`, `dispatched`, `done`, `failed`, `cancelled`)
-- `--jq` — Filter JSON output (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `tmux_session`, `tmux_window`, `dispatch_after`, `started_at`, `completed_at`, `created_at`)
+- `--jq` — Filter JSON output (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `tmux_session`, `tmux_window`, `dispatch_after`, `work_dir`, `started_at`, `completed_at`, `created_at`)
 - `--limit` — Limit number of results
 
 ### `tq action get`
@@ -175,7 +176,7 @@ tq action get <ACTION_ID> [--jq <EXPR>]
 
 Print a single action as JSON.
 
-- `--jq` — Filter JSON output using a jq expression (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `tmux_session`, `tmux_window`, `dispatch_after`, `started_at`, `completed_at`, `created_at`)
+- `--jq` — Filter JSON output using a jq expression (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `tmux_session`, `tmux_window`, `dispatch_after`, `work_dir`, `started_at`, `completed_at`, `created_at`)
 
 ### `tq action done`
 
@@ -223,8 +224,10 @@ REASON serves as feedback for improving classification logic. Record why the act
 ### `tq action update`
 
 ```
-tq action update <ID> [--title <TITLE>] [--task <ID>] [--meta <JSON>]
+tq action update <ID> [--title <TITLE>] [--task <ID>] [--meta <JSON>] [--work-dir <PATH>]
 ```
+
+- `--work-dir` — Override or clear the action-level working directory. Pass an empty string (`--work-dir ""`) to clear. Only allowed on actions in `pending` or `failed` status.
 
 ### `tq action dispatch`
 
