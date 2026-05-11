@@ -358,18 +358,17 @@ func (m *mockTmuxChecker) ListWindows(ctx context.Context, session string) ([]st
 }
 
 type mockClaudeSessionLogChecker struct {
-	mu              sync.Mutex
-	active          bool
-	claudeSessionID string
-	err             error
-	calls           int
+	mu     sync.Mutex
+	active bool
+	err    error
+	calls  int
 }
 
-func (m *mockClaudeSessionLogChecker) IsClaudeSessionActive(workDir string, freshnessThreshold time.Duration) (bool, string, error) {
+func (m *mockClaudeSessionLogChecker) IsClaudeSessionActive(workDir string, freshnessThreshold time.Duration) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.calls++
-	return m.active, m.claudeSessionID, m.err
+	return m.active, m.err
 }
 
 func (m *mockClaudeSessionLogChecker) callCount() int {
@@ -440,7 +439,7 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			name:                   "skips on tmux error when session log fresh even past hard timeout",
 			startedOffset:          -2 * time.Hour,
 			tmux:                   &mockTmuxChecker{err: fmt.Errorf("tmux not available")},
-			log:                    &mockClaudeSessionLogChecker{active: true, claudeSessionID: "sess-live"},
+			log:                    &mockClaudeSessionLogChecker{active: true},
 			interactiveHardTimeout: 1 * time.Hour,
 			wantStatus:             db.ActionStatusRunning,
 		},
@@ -460,7 +459,7 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			name:          "skips when session log fresh",
 			startedOffset: -5 * time.Minute,
 			tmux:          &mockTmuxChecker{windows: []string{"zsh"}},
-			log:           &mockClaudeSessionLogChecker{active: true, claudeSessionID: "sess-123"},
+			log:           &mockClaudeSessionLogChecker{active: true},
 			wantStatus:    db.ActionStatusRunning,
 		},
 		{
@@ -588,7 +587,6 @@ func TestReapStaleActions_NonInteractive(t *testing.T) {
 		log                *mockClaudeSessionLogChecker
 		wantStatus         string
 		wantResultContains string
-		wantMetaSessionID  string
 	}{
 		{
 			name:               "reaps when timeout exceeded",
@@ -609,7 +607,7 @@ func TestReapStaleActions_NonInteractive(t *testing.T) {
 		{
 			name:          "skipped by fresh heartbeat",
 			startedOffset: -25 * time.Minute,
-			log:           &mockClaudeSessionLogChecker{active: true, claudeSessionID: "sess-456"},
+			log:           &mockClaudeSessionLogChecker{active: true},
 			wantStatus:    db.ActionStatusRunning,
 		},
 		{
@@ -623,13 +621,6 @@ func TestReapStaleActions_NonInteractive(t *testing.T) {
 			startedOffset: -25 * time.Minute,
 			log:           &mockClaudeSessionLogChecker{err: fmt.Errorf("permission denied")},
 			wantStatus:    db.ActionStatusFailed,
-		},
-		{
-			name:              "saves session id to metadata",
-			startedOffset:     -25 * time.Minute,
-			log:               &mockClaudeSessionLogChecker{active: true, claudeSessionID: "sess-789"},
-			wantStatus:        db.ActionStatusRunning,
-			wantMetaSessionID: "sess-789",
 		},
 		{
 			name:          "skips cloud executor noninteractive even past timeout",
@@ -674,15 +665,6 @@ func TestReapStaleActions_NonInteractive(t *testing.T) {
 			if tt.wantResultContains != "" {
 				if !action.Result.Valid || !strings.Contains(action.Result.String, tt.wantResultContains) {
 					t.Errorf("result = %v, want containing %q", action.Result, tt.wantResultContains)
-				}
-			}
-			if tt.wantMetaSessionID != "" {
-				var meta map[string]any
-				if err := json.Unmarshal([]byte(action.Metadata), &meta); err != nil {
-					t.Fatalf("parse metadata: %v", err)
-				}
-				if meta["claude_session_id"] != tt.wantMetaSessionID {
-					t.Errorf("claude_session_id = %v, want %q", meta["claude_session_id"], tt.wantMetaSessionID)
 				}
 			}
 		})

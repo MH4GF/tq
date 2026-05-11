@@ -124,7 +124,7 @@ func (w *NonInteractiveWorker) Execute(ctx context.Context, instruction string, 
 				if elapsed < minimum {
 					continue
 				}
-				active, _, err := w.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, freshness)
+				active, err := w.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, freshness)
 				if err != nil {
 					slog.Warn("noninteractive heartbeat check failed", "action_id", actionID, "error", err)
 					continue

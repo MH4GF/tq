@@ -298,7 +298,7 @@ func TestNonInteractiveWorker_Execute_HeartbeatFresh_ExtendsBeyondMinimum(t *tes
 		output:     []byte(`{"type":"result","subtype":"success","result":"ok"}`),
 		finishedCh: finishedCh,
 	}
-	checker := &mockClaudeSessionLogChecker{active: true, claudeSessionID: "sess-fresh"}
+	checker := &mockClaudeSessionLogChecker{active: true}
 	w := &NonInteractiveWorker{
 		Runner:                  runner,
 		ClaudeSessionLogChecker: checker,

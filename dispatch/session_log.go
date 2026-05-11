@@ -11,7 +11,7 @@ import (
 
 // ClaudeSessionLogChecker checks if a Claude Code session is actively working.
 type ClaudeSessionLogChecker interface {
-	IsClaudeSessionActive(workDir string, freshnessThreshold time.Duration) (active bool, claudeSessionID string, err error)
+	IsClaudeSessionActive(workDir string, freshnessThreshold time.Duration) (active bool, err error)
 }
 
 // FileClaudeSessionLogChecker implements ClaudeSessionLogChecker by scanning
@@ -29,24 +29,21 @@ type claudeSessionMeta struct {
 	Cwd       string `json:"cwd"`
 }
 
-func (c *FileClaudeSessionLogChecker) IsClaudeSessionActive(workDir string, freshnessThreshold time.Duration) (bool, string, error) {
+func (c *FileClaudeSessionLogChecker) IsClaudeSessionActive(workDir string, freshnessThreshold time.Duration) (bool, error) {
 	homeDir := c.HomeDir
 	if homeDir == "" {
 		var err error
 		homeDir, err = os.UserHomeDir()
 		if err != nil {
-			return false, "", fmt.Errorf("get home dir: %w", err)
+			return false, fmt.Errorf("get home dir: %w", err)
 		}
 	}
 
 	sessionsDir := filepath.Join(homeDir, ".claude", "sessions")
 	entries, err := os.ReadDir(sessionsDir)
 	if err != nil {
-		return false, "", fmt.Errorf("read sessions dir: %w", err)
+		return false, fmt.Errorf("read sessions dir: %w", err)
 	}
-
-	var bestClaudeSessionID string
-	var bestModTime time.Time
 
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
@@ -73,19 +70,12 @@ func (c *FileClaudeSessionLogChecker) IsClaudeSessionActive(workDir string, fres
 			continue
 		}
 
-		modTime := info.ModTime()
-		if time.Since(modTime) < freshnessThreshold {
-			if bestModTime.IsZero() || modTime.After(bestModTime) {
-				bestModTime = modTime
-				bestClaudeSessionID = meta.SessionID
-			}
+		if time.Since(info.ModTime()) < freshnessThreshold {
+			return true, nil
 		}
 	}
 
-	if bestClaudeSessionID != "" {
-		return true, bestClaudeSessionID, nil
-	}
-	return false, "", nil
+	return false, nil
 }
 
 // cwdPrefixMatch handles worktree subdirectories

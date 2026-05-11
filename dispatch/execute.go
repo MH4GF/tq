@@ -9,12 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/MH4GF/tq/db"
 )
-
-const postExecutionFreshness = 5 * time.Minute
 
 // dirExists reports whether the given path exists on disk.
 var dirExists = func(path string) bool {
@@ -300,15 +297,12 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 }
 
 // runNonInteractive executes the noninteractive worker and applies all
-// post-execution side effects (claude_session_id save, MarkDone /
-// markActionFailed, permission-block follow-up). On worker failure, returns
+// post-execution side effects (MarkDone / markActionFailed,
+// permission-block follow-up). On worker failure, returns
 // (nil, *ActionFailedError) so the synchronous path preserves existing
 // caller-visible behavior; the async path swallows the error after logging.
 func runNonInteractive(ctx context.Context, params ExecuteParams, action *db.Action, worker Worker, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
 	result, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
-
-	saveClaudeSessionID(params.DB, params.ClaudeSessionLogChecker, action.ID, workDir)
-
 	if err != nil {
 		// On shutdown, ctx cancel propagates to every in-flight goroutine. Do
 		// not mark them failed (and trigger investigate-failure follow-ups);
@@ -336,25 +330,6 @@ func runNonInteractive(ctx context.Context, params ExecuteParams, action *db.Act
 	}
 
 	return &ExecuteResult{Mode: ModeNonInteractive, Output: result}, nil
-}
-
-func saveClaudeSessionID(store db.Store, checker ClaudeSessionLogChecker, actionID int64, workDir string) {
-	if checker == nil {
-		return
-	}
-	active, claudeSessionID, err := checker.IsClaudeSessionActive(workDir, postExecutionFreshness)
-	if err != nil {
-		slog.Warn("post-execution claude session log check failed", "action_id", actionID, "error", err)
-		return
-	}
-	if !active || claudeSessionID == "" {
-		return
-	}
-	if err := store.MergeActionMetadata(actionID, map[string]any{
-		MetaKeyClaudeSessionID: claudeSessionID,
-	}); err != nil {
-		slog.Warn("failed to save claude_session_id to metadata", "action_id", actionID, "error", err)
-	}
 }
 
 // RenderPrompt builds the wrapped claude prompt for an action: the user-provided

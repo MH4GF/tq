@@ -198,7 +198,6 @@ func reapInteractive(ctx context.Context, cfg WorkerConfig, now time.Time) {
 	}
 
 	var failures []db.ActionFailureUpdate
-	sessionPatches := make(map[int64]map[string]any)
 	for _, a := range actions {
 		if MetadataHasValue(a.Metadata, MetaKeyExecutor, ExecutorCloud) {
 			continue
@@ -223,9 +222,7 @@ func reapInteractive(ctx context.Context, cfg WorkerConfig, now time.Time) {
 			continue
 		}
 
-		active, sessionID := claudeSessionStillActive(cfg, workDir, cfg.HeartbeatFreshness)
-		if active {
-			collectSessionPatch(sessionPatches, &a, sessionID)
+		if claudeSessionStillActive(cfg, workDir, cfg.HeartbeatFreshness) {
 			slog.Info("action claude session log is fresh, skipping stale check", "action_id", a.ID)
 			continue
 		}
@@ -249,11 +246,6 @@ func reapInteractive(ctx context.Context, cfg WorkerConfig, now time.Time) {
 	if len(failures) > 0 {
 		if err := cfg.DB.BulkMarkFailed(failures); err != nil {
 			slog.Error("bulk mark stale interactive actions failed", "error", err, "count", len(failures))
-		}
-	}
-	if len(sessionPatches) > 0 {
-		if err := cfg.DB.BulkMergeActionMetadata(sessionPatches); err != nil {
-			slog.Warn("bulk merge claude_session_id patches failed", "error", err, "count", len(sessionPatches))
 		}
 	}
 }
@@ -280,7 +272,6 @@ func reapNonInteractive(cfg WorkerConfig, now time.Time) {
 	staleThreshold := time.Duration(defaultTimeout*nonInteractiveStaleMultiplier) * time.Second
 
 	var failures []db.ActionFailureUpdate
-	sessionPatches := make(map[int64]map[string]any)
 	for _, a := range niActions {
 		if MetadataHasValue(a.Metadata, MetaKeyExecutor, ExecutorCloud) {
 			continue
@@ -297,9 +288,7 @@ func reapNonInteractive(cfg WorkerConfig, now time.Time) {
 		}
 
 		workDir := workDirFromMaps(&a, taskMap, projectMap)
-		active, sessionID := claudeSessionStillActive(cfg, workDir, cfg.HeartbeatFreshness)
-		if active {
-			collectSessionPatch(sessionPatches, &a, sessionID)
+		if claudeSessionStillActive(cfg, workDir, cfg.HeartbeatFreshness) {
 			slog.Info("noninteractive action claude session log is fresh, skipping stale check", "action_id", a.ID)
 			continue
 		}
@@ -314,24 +303,6 @@ func reapNonInteractive(cfg WorkerConfig, now time.Time) {
 			slog.Error("bulk mark stale noninteractive actions failed", "error", err, "count", len(failures))
 		}
 	}
-	if len(sessionPatches) > 0 {
-		if err := cfg.DB.BulkMergeActionMetadata(sessionPatches); err != nil {
-			slog.Warn("bulk merge claude_session_id patches (NI) failed", "error", err, "count", len(sessionPatches))
-		}
-	}
-}
-
-// collectSessionPatch stages a claude_session_id metadata write for later
-// bulk merge. Skips actions whose metadata already records the same id so
-// the bulk call is a no-op when nothing changed.
-func collectSessionPatch(out map[int64]map[string]any, a *db.Action, sessionID string) {
-	if sessionID == "" {
-		return
-	}
-	if MetadataHasValue(a.Metadata, MetaKeyClaudeSessionID, sessionID) {
-		return
-	}
-	out[a.ID] = map[string]any{MetaKeyClaudeSessionID: sessionID}
 }
 
 // prefetchWorkDirContext bulk-fetches the tasks (and their projects) needed
@@ -413,7 +384,7 @@ func classifyEarlyStale(cfg WorkerConfig, a *db.Action, workDir string, startedA
 	if sinceStart < cfg.EarlyDispatchTimeout {
 		return "", false
 	}
-	active, _, err := cfg.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, sinceStart)
+	active, err := cfg.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, sinceStart)
 	if err != nil {
 		slog.Warn("early-stale watchdog: claude session log check failed", "action_id", a.ID, "error", err)
 		return "", false
@@ -427,19 +398,18 @@ func classifyEarlyStale(cfg WorkerConfig, a *db.Action, workDir string, startedA
 }
 
 // claudeSessionStillActive reports whether the action's session log shows
-// recent activity and surfaces the discovered session id (empty when the
-// checker had nothing to report). Errors and missing checker count as
-// "not active" so callers fall through to other liveness signals.
-func claudeSessionStillActive(cfg WorkerConfig, workDir string, freshness time.Duration) (bool, string) {
+// recent activity. Errors and missing checker count as "not active" so
+// callers fall through to other liveness signals.
+func claudeSessionStillActive(cfg WorkerConfig, workDir string, freshness time.Duration) bool {
 	if cfg.ClaudeSessionLogChecker == nil {
-		return false, ""
+		return false
 	}
-	active, claudeSessionID, err := cfg.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, freshness)
+	active, err := cfg.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, freshness)
 	if err != nil {
 		slog.Warn("claude session log check failed", "error", err)
-		return false, ""
+		return false
 	}
-	return active, claudeSessionID
+	return active
 }
 
 // MetadataHasValue reports whether the action's metadata JSON has the given
