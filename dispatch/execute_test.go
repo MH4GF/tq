@@ -23,7 +23,6 @@ func TestExecuteAction(t *testing.T) {
 		workerResult      string
 		workerErr         error
 		workerDenials     []PermissionDenial
-		sessionID         string // non-empty → install mockClaudeSessionLogChecker
 		beforeInteractive func(*db.Action) error
 		wantMode          string
 		wantStatus        string
@@ -31,7 +30,6 @@ func TestExecuteAction(t *testing.T) {
 		wantErrSubstr     string
 		wantWorkerCount   int
 		wantFollowUps     int
-		wantSessionID     string
 	}{
 		{
 			name:            "noninteractive success",
@@ -123,26 +121,6 @@ func TestExecuteAction(t *testing.T) {
 			wantErrSubstr:   "claude_args cannot include",
 			wantWorkerCount: 0,
 		},
-		{
-			name:            "noninteractive saves claude_session_id on success",
-			promptMode:      "noninteractive",
-			workerResult:    `{"ok":true}`,
-			sessionID:       "sess-noninteractive",
-			wantMode:        ModeNonInteractive,
-			wantStatus:      db.ActionStatusDone,
-			wantWorkerCount: 1,
-			wantSessionID:   "sess-noninteractive",
-		},
-		{
-			name:            "noninteractive saves claude_session_id on failure",
-			promptMode:      "noninteractive",
-			workerErr:       context.DeadlineExceeded,
-			sessionID:       "sess-failed",
-			wantStatus:      db.ActionStatusFailed,
-			wantErrType:     "failed",
-			wantWorkerCount: 1,
-			wantSessionID:   "sess-failed",
-		},
 	}
 
 	for _, tc := range tests {
@@ -180,9 +158,6 @@ func TestExecuteAction(t *testing.T) {
 				NonInteractiveFunc: workerFunc,
 				InteractiveFunc:    workerFunc,
 				RemoteFunc:         workerFunc,
-			}
-			if tc.sessionID != "" {
-				cfg.ClaudeSessionLogChecker = &mockClaudeSessionLogChecker{active: true, claudeSessionID: tc.sessionID}
 			}
 
 			result, err := ExecuteAction(context.Background(), ExecuteParams{
@@ -233,14 +208,6 @@ func TestExecuteAction(t *testing.T) {
 			}
 			if followups != tc.wantFollowUps {
 				t.Errorf("permission-block follow-ups = %d, want %d", followups, tc.wantFollowUps)
-			}
-
-			if tc.wantSessionID != "" {
-				var m map[string]any
-				_ = json.Unmarshal([]byte(a.Metadata), &m)
-				if m["claude_session_id"] != tc.wantSessionID {
-					t.Errorf("claude_session_id = %v, want %q", m["claude_session_id"], tc.wantSessionID)
-				}
 			}
 		})
 	}

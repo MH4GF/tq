@@ -1339,68 +1339,6 @@ func TestBulkInsertActions(t *testing.T) {
 	})
 }
 
-func TestBulkMergeActionMetadata(t *testing.T) {
-	t.Run("empty input is no-op", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		if err := d.BulkMergeActionMetadata(nil); err != nil {
-			t.Errorf("nil updates returned err: %v", err)
-		}
-		if err := d.BulkMergeActionMetadata(map[int64]map[string]any{}); err != nil {
-			t.Errorf("empty updates returned err: %v", err)
-		}
-	})
-
-	t.Run("normal: 3 actions with merged keys", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		id1, _ := d.InsertAction("a", taskID, `{"keep":"yes"}`, db.ActionStatusRunning, nil)
-		id2, _ := d.InsertAction("b", taskID, "{}", db.ActionStatusRunning, nil)
-		id3, _ := d.InsertAction("c", taskID, `{"existing":"v"}`, db.ActionStatusPending, nil)
-
-		updates := map[int64]map[string]any{
-			id1: {"claude_session_id": "s1"},
-			id2: {"claude_session_id": "s2"},
-			id3: {"claude_session_id": "s3", "extra": "x"},
-		}
-		if err := d.BulkMergeActionMetadata(updates); err != nil {
-			t.Fatal(err)
-		}
-
-		a1, _ := d.GetAction(id1)
-		if !strings.Contains(a1.Metadata, `"keep":"yes"`) || !strings.Contains(a1.Metadata, `"claude_session_id":"s1"`) {
-			t.Errorf("a1 metadata = %s", a1.Metadata)
-		}
-		a2, _ := d.GetAction(id2)
-		if !strings.Contains(a2.Metadata, `"claude_session_id":"s2"`) {
-			t.Errorf("a2 metadata = %s", a2.Metadata)
-		}
-		a3, _ := d.GetAction(id3)
-		if !strings.Contains(a3.Metadata, `"existing":"v"`) || !strings.Contains(a3.Metadata, `"claude_session_id":"s3"`) || !strings.Contains(a3.Metadata, `"extra":"x"`) {
-			t.Errorf("a3 metadata = %s", a3.Metadata)
-		}
-	})
-
-	t.Run("missing ID rolls back entire batch", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		id, _ := d.InsertAction("a", taskID, "{}", db.ActionStatusRunning, nil)
-
-		updates := map[int64]map[string]any{
-			id:    {"claude_session_id": "real"},
-			99999: {"claude_session_id": "ghost"},
-		}
-		if err := d.BulkMergeActionMetadata(updates); err == nil {
-			t.Fatal("expected error for missing id")
-		}
-		a, _ := d.GetAction(id)
-		if strings.Contains(a.Metadata, "real") {
-			t.Errorf("real action metadata mutated despite rollback: %s", a.Metadata)
-		}
-	})
-}
-
 func TestBulkMarkFailed(t *testing.T) {
 	t.Run("empty input is no-op", func(t *testing.T) {
 		d := testutil.NewTestDB(t)
