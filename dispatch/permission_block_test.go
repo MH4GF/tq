@@ -78,7 +78,7 @@ func TestCreatePermissionBlockAction(t *testing.T) {
 
 			sources := make([]*db.Action, len(tt.sources))
 			for i, spec := range tt.sources {
-				id, _ := d.InsertAction(fmt.Sprintf("src%d", i), taskID, spec.metadata, spec.status, nil)
+				id, _ := d.InsertAction(fmt.Sprintf("src%d", i), taskID, spec.metadata, spec.status, nil, "")
 				sources[i], _ = d.GetAction(id)
 			}
 
@@ -112,7 +112,7 @@ func TestCreatePermissionBlockAction(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-		actionID, _ := d.InsertAction("watch", taskID, `{}`, db.ActionStatusDone, nil)
+		actionID, _ := d.InsertAction("watch", taskID, `{}`, db.ActionStatusDone, nil, "")
 		action, _ := d.GetAction(actionID)
 
 		longCmd := strings.Repeat("x", 23000)
@@ -157,7 +157,7 @@ func TestCreatePermissionBlockAction(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 
 		taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-		actionID, _ := d.InsertAction("watch", taskID, `{}`, db.ActionStatusDone, nil)
+		actionID, _ := d.InsertAction("watch", taskID, `{}`, db.ActionStatusDone, nil, "")
 		action, _ := d.GetAction(actionID)
 
 		longCmd := strings.Repeat("あ", 300)
@@ -184,6 +184,33 @@ func TestCreatePermissionBlockAction(t *testing.T) {
 			t.Errorf("instruction is not valid UTF-8 after truncation: %q", instr)
 		}
 	})
+}
+
+func TestCreatePermissionBlockAction_InheritsWorkDir(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
+
+	parentID, _ := d.InsertAction("parent", taskID, "{}", db.ActionStatusDone, nil, "/tmp/parent-worktree")
+	parent, _ := d.GetAction(parentID)
+
+	CreatePermissionBlockAction(d, parent, []PermissionDenial{{ToolName: "Bash", Input: map[string]any{"command": "x"}}})
+
+	actions, _ := d.ListActions("", nil, 0)
+	var followUp *db.Action
+	for i := range actions {
+		if actions[i].ID != parentID {
+			a := actions[i]
+			followUp = &a
+			break
+		}
+	}
+	if followUp == nil {
+		t.Fatal("expected permission-block follow-up action")
+	}
+	if followUp.WorkDir != "/tmp/parent-worktree" {
+		t.Errorf("follow-up work_dir = %q, want inherited %q", followUp.WorkDir, "/tmp/parent-worktree")
+	}
 }
 
 func checkInteractiveFollowup(t *testing.T, sources []*db.Action, actions []db.Action, taskID int64) {

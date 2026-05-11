@@ -8,7 +8,7 @@ import (
 // CommandWriter defines all write operations.
 type CommandWriter interface {
 	// Action commands
-	InsertAction(title string, taskID int64, metadata, status string, dispatchAfter *string) (int64, error)
+	InsertAction(title string, taskID int64, metadata, status string, dispatchAfter *string, workDir string) (int64, error)
 	BulkInsertActions(specs []ActionInsertSpec) ([]int64, error)
 	MarkDone(id int64, result string) error
 	MarkFailed(id int64, result string) error
@@ -18,7 +18,7 @@ type CommandWriter interface {
 	ResetToPending(id int64) error
 	SetTmuxInfo(id int64, tmuxSession, tmuxWindow string) error
 	MergeActionMetadata(id int64, updates map[string]any) error
-	UpdateAction(id int64, title *string, taskID *int64, metadata *string) error
+	UpdateAction(id int64, title *string, taskID *int64, metadata, workDir *string) error
 	NextPending(ctx context.Context) (*Action, error)
 	ClaimPending(ctx context.Context, id int64) (*Action, error)
 	ResumeAction(parentID int64, opts ResumeOptions) (int64, error)

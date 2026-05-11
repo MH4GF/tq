@@ -108,7 +108,7 @@ func TestResumeAction(t *testing.T) {
 
 			taskID, _ := d.InsertTask(1, "Test task", "{}", "")
 			metaBytes, _ := json.Marshal(tc.parentMeta)
-			parentID, _ := d.InsertAction("parent", taskID, string(metaBytes), db.ActionStatusPending, nil)
+			parentID, _ := d.InsertAction("parent", taskID, string(metaBytes), db.ActionStatusPending, nil, "")
 
 			// Move parent to desired status. ClaimPending → terminal transitions are valid.
 			if tc.parentStatus != db.ActionStatusPending {
@@ -180,6 +180,25 @@ func TestResumeAction(t *testing.T) {
 	}
 }
 
+func TestResumeAction_InheritsWorkDir(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
+	meta := `{"instruction":"orig","mode":"noninteractive","claude_session_id":"sess-x"}`
+	parentID, _ := d.InsertAction("p", taskID, meta, db.ActionStatusPending, nil, "/tmp/parent-worktree")
+	_, _ = d.ClaimPending(context.Background(), parentID)
+	_ = d.MarkFailed(parentID, "boom")
+
+	newID, err := d.ResumeAction(parentID, db.ResumeOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := d.GetAction(newID)
+	if a.WorkDir != "/tmp/parent-worktree" {
+		t.Errorf("resumed action work_dir = %q, want inherited %q", a.WorkDir, "/tmp/parent-worktree")
+	}
+}
+
 func TestActionResumeCmd(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -196,7 +215,7 @@ func TestActionResumeCmd(t *testing.T) {
 			setup: func(d db.Store) int64 {
 				taskID, _ := d.InsertTask(1, "t", "{}", "")
 				meta := `{"instruction":"orig","mode":"noninteractive","claude_session_id":"sess-1"}`
-				id, _ := d.InsertAction("orig", taskID, meta, db.ActionStatusPending, nil)
+				id, _ := d.InsertAction("orig", taskID, meta, db.ActionStatusPending, nil, "")
 				_, _ = d.ClaimPending(context.Background(), id)
 				_ = d.MarkFailed(id, "boom")
 				return id
@@ -211,7 +230,7 @@ func TestActionResumeCmd(t *testing.T) {
 			setup: func(d db.Store) int64 {
 				taskID, _ := d.InsertTask(1, "t", "{}", "")
 				meta := `{"instruction":"orig","mode":"noninteractive","claude_session_id":"sess-2"}`
-				id, _ := d.InsertAction("orig", taskID, meta, db.ActionStatusPending, nil)
+				id, _ := d.InsertAction("orig", taskID, meta, db.ActionStatusPending, nil, "")
 				_, _ = d.ClaimPending(context.Background(), id)
 				_ = d.MarkFailed(id, "boom")
 				return id
@@ -226,7 +245,7 @@ func TestActionResumeCmd(t *testing.T) {
 			setup: func(d db.Store) int64 {
 				taskID, _ := d.InsertTask(1, "t", "{}", "")
 				meta := `{"instruction":"orig","mode":"noninteractive"}`
-				id, _ := d.InsertAction("orig", taskID, meta, db.ActionStatusPending, nil)
+				id, _ := d.InsertAction("orig", taskID, meta, db.ActionStatusPending, nil, "")
 				_, _ = d.ClaimPending(context.Background(), id)
 				_ = d.MarkFailed(id, "boom")
 				return id
@@ -239,7 +258,7 @@ func TestActionResumeCmd(t *testing.T) {
 			setup: func(d db.Store) int64 {
 				taskID, _ := d.InsertTask(1, "t", "{}", "")
 				meta := `{"instruction":"orig","claude_session_id":"sess-3"}`
-				id, _ := d.InsertAction("orig", taskID, meta, db.ActionStatusPending, nil)
+				id, _ := d.InsertAction("orig", taskID, meta, db.ActionStatusPending, nil, "")
 				return id
 			},
 			args:    func(id int64) []string { return []string{"action", "resume", intToStr(id)} },

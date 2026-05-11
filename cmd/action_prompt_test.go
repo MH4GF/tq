@@ -66,7 +66,7 @@ func TestActionPromptCmd_RendersWrappedPrompt(t *testing.T) {
 			if tc.isResume {
 				meta[dispatch.MetaKeyIsResume] = true
 			}
-			actionID, _ := d.InsertAction("a", taskID, mustMarshal(t, meta), db.ActionStatusPending, nil)
+			actionID, _ := d.InsertAction("a", taskID, mustMarshal(t, meta), db.ActionStatusPending, nil, "")
 
 			out, err := runActionPrompt(t, d, intToStr(actionID))
 			if err != nil {
@@ -125,7 +125,7 @@ func TestActionPromptCmd_EmptyInstruction(t *testing.T) {
 		dispatch.MetaKeyInstruction: "   ",
 		dispatch.MetaKeyMode:        dispatch.ModeInteractive,
 	}
-	actionID, _ := d.InsertAction("a", taskID, mustMarshal(t, meta), db.ActionStatusPending, nil)
+	actionID, _ := d.InsertAction("a", taskID, mustMarshal(t, meta), db.ActionStatusPending, nil, "")
 
 	_, err := runActionPrompt(t, d, intToStr(actionID))
 	if err == nil {

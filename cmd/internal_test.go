@@ -134,7 +134,7 @@ func TestRunClaudeSessionRecord(t *testing.T) {
 			if meta == "" {
 				meta = "{}"
 			}
-			id, err := d.InsertAction("test", taskID, meta, tc.seedStatus, nil)
+			id, err := d.InsertAction("test", taskID, meta, tc.seedStatus, nil, "")
 			if err != nil {
 				t.Fatalf("insert action: %v", err)
 			}
@@ -248,7 +248,7 @@ func TestRunClaudeSessionRecord_ExecutorStamp(t *testing.T) {
 			if meta == "" {
 				meta = "{}"
 			}
-			id, err := d.InsertAction("test", taskID, meta, db.ActionStatusRunning, nil)
+			id, err := d.InsertAction("test", taskID, meta, db.ActionStatusRunning, nil, "")
 			if err != nil {
 				t.Fatalf("insert action: %v", err)
 			}

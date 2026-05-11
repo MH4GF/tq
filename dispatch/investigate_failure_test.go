@@ -29,7 +29,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 			name: "creates investigation action on same task",
 			setupAction: func(d db.Store) int64 {
 				taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-				actionID, _ := d.InsertAction("my-prompt", taskID, "{}", "failed", nil)
+				actionID, _ := d.InsertAction("my-prompt", taskID, "{}", "failed", nil, "")
 				action, _ := d.GetAction(actionID)
 				CreateInvestigateFailureAction(d, action, "worker error: timeout")
 				return actionID
@@ -40,7 +40,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 			name: "skips duplicate for same failed action",
 			setupAction: func(d db.Store) int64 {
 				taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-				actionID, _ := d.InsertAction("my-prompt", taskID, "{}", "failed", nil)
+				actionID, _ := d.InsertAction("my-prompt", taskID, "{}", "failed", nil, "")
 				action, _ := d.GetAction(actionID)
 				CreateInvestigateFailureAction(d, action, "error 1")
 				CreateInvestigateFailureAction(d, action, "error 1")
@@ -52,9 +52,9 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 			name: "creates separate investigations for different failed actions",
 			setupAction: func(d db.Store) int64 {
 				taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-				action1ID, _ := d.InsertAction("prompt-a", taskID, "{}", "failed", nil)
+				action1ID, _ := d.InsertAction("prompt-a", taskID, "{}", "failed", nil, "")
 				action1, _ := d.GetAction(action1ID)
-				action2ID, _ := d.InsertAction("prompt-b", taskID, "{}", "failed", nil)
+				action2ID, _ := d.InsertAction("prompt-b", taskID, "{}", "failed", nil, "")
 				action2, _ := d.GetAction(action2ID)
 				CreateInvestigateFailureAction(d, action1, "error 1")
 				CreateInvestigateFailureAction(d, action2, "error 2")
@@ -66,7 +66,7 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 			name: "title includes action ID",
 			setupAction: func(d db.Store) int64 {
 				taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-				actionID, _ := d.InsertAction("deploy", taskID, "{}", "failed", nil)
+				actionID, _ := d.InsertAction("deploy", taskID, "{}", "failed", nil, "")
 				action, _ := d.GetAction(actionID)
 				CreateInvestigateFailureAction(d, action, "deploy failed")
 				return actionID
@@ -101,6 +101,32 @@ func TestCreateInvestigateFailureAction(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCreateInvestigateFailureAction_InheritsWorkDir(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
+	parentID, _ := d.InsertAction("p", taskID, "{}", "failed", nil, "/tmp/parent-worktree")
+	parent, _ := d.GetAction(parentID)
+
+	CreateInvestigateFailureAction(d, parent, "boom")
+
+	actions, _ := d.ListActions("", nil, 0)
+	var followUp *db.Action
+	for i, a := range actions {
+		if hasMetaKey(a.Metadata, MetaKeyIsInvestigation) {
+			followUp = &actions[i]
+			break
+		}
+	}
+	if followUp == nil {
+		t.Fatal("expected investigate-failure follow-up action")
+	}
+	if followUp.WorkDir != "/tmp/parent-worktree" {
+		t.Errorf("follow-up work_dir = %q, want inherited %q", followUp.WorkDir, "/tmp/parent-worktree")
 	}
 }
 
@@ -179,7 +205,7 @@ func TestCreateInvestigateFailureAction_SkipBehavior(t *testing.T) {
 			testutil.SeedTestProjects(t, d)
 
 			taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-			actionID, _ := d.InsertAction(tt.prompt, taskID, tt.meta, tt.status, nil)
+			actionID, _ := d.InsertAction(tt.prompt, taskID, tt.meta, tt.status, nil, "")
 			if tt.markDoneResult != nil {
 				d.MarkDone(actionID, *tt.markDoneResult)
 			}

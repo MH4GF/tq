@@ -32,7 +32,7 @@ func TestReset(t *testing.T) {
 			cmd.ResetForTest()
 
 			taskID, _ := d.InsertTask(1, "test", "{}", "")
-			d.InsertAction("test", taskID, "{}", tc.status, nil)
+			d.InsertAction("test", taskID, "{}", tc.status, nil, "")
 
 			root := cmd.GetRootCmd()
 			buf := new(bytes.Buffer)
@@ -75,7 +75,7 @@ func TestReset_UnknownStatus(t *testing.T) {
 
 	// Simulate an action with invalid status (e.g. "open") stuck in the DB
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	d.InsertAction("test", taskID, "{}", db.ActionStatusPending, nil)
+	d.InsertAction("test", taskID, "{}", db.ActionStatusPending, nil, "")
 	d.SetActionStatusForTest(1, "open")
 
 	root := cmd.GetRootCmd()
@@ -115,7 +115,7 @@ func TestReset_ActiveStatusGuidesToCancelOrFail(t *testing.T) {
 			cmd.ResetForTest()
 
 			taskID, _ := d.InsertTask(1, "test", "{}", "")
-			d.InsertAction("test", taskID, "{}", tc.status, nil)
+			d.InsertAction("test", taskID, "{}", tc.status, nil, "")
 
 			root := cmd.GetRootCmd()
 			root.SetOut(new(bytes.Buffer))

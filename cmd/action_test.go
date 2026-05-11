@@ -50,7 +50,7 @@ func TestActionUpdate(t *testing.T) {
 			cmd.ResetForTest()
 
 			taskID, _ := d.InsertTask(1, "test task", "{}", "")
-			actionID, _ := d.InsertAction("original", taskID, `{"k":"v"}`, db.ActionStatusPending, nil)
+			actionID, _ := d.InsertAction("original", taskID, `{"k":"v"}`, db.ActionStatusPending, nil, "")
 
 			if tt.markDoneFirst {
 				if err := d.MarkDone(actionID, "done"); err != nil {
@@ -89,6 +89,60 @@ func TestActionUpdate(t *testing.T) {
 				if a.Title != tt.wantTitleAfter {
 					t.Errorf("title = %q, want %q", a.Title, tt.wantTitleAfter)
 				}
+			}
+		})
+	}
+}
+
+func TestActionUpdate_WorkDir(t *testing.T) {
+	tests := []struct {
+		name        string
+		initial     string
+		extraArgs   []string
+		wantWorkDir string
+	}{
+		{
+			name:        "set work_dir",
+			initial:     "",
+			extraArgs:   []string{"--work-dir", "/tmp/wt"},
+			wantWorkDir: "/tmp/wt",
+		},
+		{
+			name:        "clear work_dir with empty value",
+			initial:     "/tmp/old",
+			extraArgs:   []string{"--work-dir", ""},
+			wantWorkDir: "",
+		},
+		{
+			name:        "flag omitted keeps existing value",
+			initial:     "/tmp/keep",
+			extraArgs:   []string{"--title", "renamed"},
+			wantWorkDir: "/tmp/keep",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+
+			taskID, _ := d.InsertTask(1, "test task", "{}", "")
+			actionID, _ := d.InsertAction("orig", taskID, "{}", db.ActionStatusPending, nil, tt.initial)
+
+			root := cmd.GetRootCmd()
+			root.SetOut(new(bytes.Buffer))
+			root.SetErr(new(bytes.Buffer))
+			args := append([]string{"action", "update", fmt.Sprintf("%d", actionID)}, tt.extraArgs...)
+			root.SetArgs(args)
+
+			if err := root.Execute(); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			a, _ := d.GetAction(actionID)
+			if a.WorkDir != tt.wantWorkDir {
+				t.Errorf("work_dir = %q, want %q", a.WorkDir, tt.wantWorkDir)
 			}
 		})
 	}

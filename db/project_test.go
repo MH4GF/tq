@@ -182,7 +182,7 @@ func TestDeleteProject(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := d.InsertAction("act1", tid, "{}", "pending", nil); err != nil {
+				if _, err := d.InsertAction("act1", tid, "{}", "pending", nil, ""); err != nil {
 					t.Fatal(err)
 				}
 				if _, err := d.InsertSchedule(tid, "do stuff", "sched1", "0 * * * *", "{}"); err != nil {

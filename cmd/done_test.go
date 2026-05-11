@@ -51,7 +51,7 @@ func TestDone(t *testing.T) {
 			cmd.ResetForTest()
 
 			taskID, _ := d.InsertTask(1, "test", "{}", "")
-			id, _ := d.InsertAction("test", taskID, "{}", tc.startStatus, nil)
+			id, _ := d.InsertAction("test", taskID, "{}", tc.startStatus, nil, "")
 
 			root := cmd.GetRootCmd()
 			buf := new(bytes.Buffer)
@@ -119,7 +119,7 @@ func TestDone_AlreadyTerminal(t *testing.T) {
 			cmd.ResetForTest()
 
 			taskID, _ := d.InsertTask(1, "test", "{}", "")
-			id, _ := d.InsertAction("test", taskID, "{}", tc.startStatus, nil)
+			id, _ := d.InsertAction("test", taskID, "{}", tc.startStatus, nil, "")
 
 			root := cmd.GetRootCmd()
 			root.SetOut(new(bytes.Buffer))

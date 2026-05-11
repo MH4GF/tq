@@ -142,7 +142,7 @@ func TestExecuteAction(t *testing.T) {
 			meta, _ := json.Marshal(metaMap)
 
 			taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-			d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil)
+			d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil, "")
 
 			action, _ := d.NextPending(context.Background())
 
@@ -520,7 +520,7 @@ func TestResolveWorkDir_Recovery(t *testing.T) {
 			}
 
 			meta, _ := json.Marshal(map[string]any{MetaKeyInstruction: "do something"})
-			actionID, err := d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil)
+			actionID, err := d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil, "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -589,7 +589,7 @@ func TestResolveWorkDir_NoWriteFromReaperPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta, _ := json.Marshal(map[string]any{MetaKeyInstruction: "do something"})
-	actionID, err := d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil)
+	actionID, err := d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -606,6 +606,87 @@ func TestResolveWorkDir_NoWriteFromReaperPath(t *testing.T) {
 	if task.WorkDir != "/gone/worktree" {
 		t.Errorf("task.WorkDir = %q, want unchanged %q",
 			task.WorkDir, "/gone/worktree")
+	}
+}
+
+func TestResolveWorkDir_ActionOverride(t *testing.T) {
+	tests := []struct {
+		name          string
+		actionWorkDir string
+		taskWorkDir   string
+		existingPaths map[string]bool
+		wantWorkDir   string
+		wantRecovery  bool
+	}{
+		{
+			name:          "action work_dir exists, takes precedence over task",
+			actionWorkDir: "/action/worktree",
+			taskWorkDir:   "/task/dir",
+			existingPaths: map[string]bool{"/action/worktree": true, "/task/dir": true},
+			wantWorkDir:   "/action/worktree",
+			wantRecovery:  false,
+		},
+		{
+			name:          "action work_dir missing, falls back to task work_dir",
+			actionWorkDir: "/gone/action",
+			taskWorkDir:   "/task/dir",
+			existingPaths: map[string]bool{"/gone/action": false, "/task/dir": true},
+			wantWorkDir:   "/task/dir",
+			wantRecovery:  false,
+		},
+		{
+			name:          "action work_dir missing AND task work_dir missing, falls through to project",
+			actionWorkDir: "/gone/action",
+			taskWorkDir:   "/gone/task",
+			existingPaths: map[string]bool{"/gone/action": false, "/gone/task": false, "/project/dir": true},
+			wantWorkDir:   "/project/dir",
+			wantRecovery:  true, // task work_dir missing triggers task-side recovery
+		},
+		{
+			name:          "action work_dir empty falls through to task chain",
+			actionWorkDir: "",
+			taskWorkDir:   "/task/dir",
+			existingPaths: map[string]bool{"/task/dir": true},
+			wantWorkDir:   "/task/dir",
+			wantRecovery:  false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			restore := SetDirExists(func(path string) bool {
+				if exists, ok := tc.existingPaths[path]; ok {
+					return exists
+				}
+				return false
+			})
+			defer restore()
+
+			d := testutil.NewTestDB(t)
+			projID, _ := d.InsertProject("p", "/project/dir", "{}")
+			taskID, _ := d.InsertTask(projID, "t", "{}", tc.taskWorkDir)
+			meta, _ := json.Marshal(map[string]any{MetaKeyInstruction: "do"})
+			actionID, _ := d.InsertAction("a", taskID, string(meta), db.ActionStatusPending, nil, tc.actionWorkDir)
+			action, _ := d.GetAction(actionID)
+
+			got, recovery, err := resolveWorkDir(d, action)
+			if err != nil {
+				t.Fatalf("resolveWorkDir() error: %v", err)
+			}
+			if got != tc.wantWorkDir {
+				t.Errorf("resolveWorkDir() = %q, want %q", got, tc.wantWorkDir)
+			}
+			if (recovery != nil) != tc.wantRecovery {
+				t.Errorf("recovery presence = %v, want %v", recovery != nil, tc.wantRecovery)
+			}
+
+			applyWorkDirRecovery(d, recovery)
+			// action.work_dir is never auto-cleared, even when the override path is missing.
+			after, _ := d.GetAction(actionID)
+			if after.WorkDir != tc.actionWorkDir {
+				t.Errorf("action.WorkDir mutated: got %q, want unchanged %q", after.WorkDir, tc.actionWorkDir)
+			}
+		})
 	}
 }
 
@@ -668,7 +749,7 @@ func TestExecuteAction_NoInstruction(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("task", taskID, "{}", db.ActionStatusPending, nil)
+	d.InsertAction("task", taskID, "{}", db.ActionStatusPending, nil, "")
 
 	action, _ := d.NextPending(context.Background())
 
@@ -732,7 +813,7 @@ func TestExecuteAction_MarkFailedErrorIsLogged(t *testing.T) {
 
 			meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": tc.promptMode})
 			taskID, _ := base.InsertTask(1, "Test task", `{}`, "")
-			actionID, _ := base.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil)
+			actionID, _ := base.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil, "")
 
 			action, _ := base.NextPending(context.Background())
 
@@ -781,7 +862,7 @@ func TestExecuteAction_EmptyModeDefaultsToInteractive(t *testing.T) {
 
 	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": ""})
 	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil)
+	d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil, "")
 
 	action, _ := d.NextPending(context.Background())
 
@@ -810,7 +891,7 @@ func TestExecuteAction_NonInteractiveNilCheckerNoError(t *testing.T) {
 
 	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
 	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("check", taskID, string(meta), db.ActionStatusPending, nil)
+	d.InsertAction("check", taskID, string(meta), db.ActionStatusPending, nil, "")
 
 	action, _ := d.NextPending(context.Background())
 
@@ -839,7 +920,7 @@ func TestExecuteAction_InteractiveAcceptsSingleLineInstruction(t *testing.T) {
 	rawInstruction := strings.Repeat("a", 100)
 	meta, _ := json.Marshal(map[string]any{"instruction": rawInstruction, "mode": ModeInteractive})
 	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
-	d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil)
+	d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil, "")
 
 	action, _ := d.NextPending(context.Background())
 

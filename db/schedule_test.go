@@ -375,7 +375,7 @@ func TestHasActiveActionsForSchedules(t *testing.T) {
 		d := testutil.NewTestDB(t)
 		testutil.SeedTestProjects(t, d)
 		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		_, _ = d.InsertAction("a1", taskID, `{"schedule_id":"42"}`, "pending", nil)
+		_, _ = d.InsertAction("a1", taskID, `{"schedule_id":"42"}`, "pending", nil, "")
 
 		got, err := d.HasActiveActionsForSchedules([]int64{42, 99})
 		if err != nil {
@@ -394,7 +394,7 @@ func TestHasActiveActionsForSchedules(t *testing.T) {
 		testutil.SeedTestProjects(t, d)
 		taskID, _ := d.InsertTask(1, "test", "{}", "")
 		// Insert a done action — should not count as active.
-		aid, _ := d.InsertAction("a1", taskID, `{"schedule_id":"7"}`, "pending", nil)
+		aid, _ := d.InsertAction("a1", taskID, `{"schedule_id":"7"}`, "pending", nil, "")
 		_ = d.MarkDone(aid, "ok")
 
 		got, err := d.HasActiveActionsForSchedules([]int64{7})
@@ -410,8 +410,8 @@ func TestHasActiveActionsForSchedules(t *testing.T) {
 		d := testutil.NewTestDB(t)
 		testutil.SeedTestProjects(t, d)
 		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		_, _ = d.InsertAction("a1", taskID, `{"schedule_id":"1"}`, "running", nil)
-		_, _ = d.InsertAction("a2", taskID, `{"schedule_id":"2"}`, "dispatched", nil)
+		_, _ = d.InsertAction("a1", taskID, `{"schedule_id":"1"}`, "running", nil, "")
+		_, _ = d.InsertAction("a2", taskID, `{"schedule_id":"2"}`, "dispatched", nil, "")
 
 		got, err := d.HasActiveActionsForSchedules([]int64{1, 2, 3})
 		if err != nil {

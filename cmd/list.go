@@ -15,7 +15,7 @@ var (
 	listJQ     string
 )
 
-var listFields = []string{"id", "title", "task_id", "metadata", "status", "result", "tmux_session", "tmux_window", "dispatch_after", "started_at", "completed_at", "created_at"}
+var listFields = []string{"id", "title", "task_id", "metadata", "status", "result", "tmux_session", "tmux_window", "dispatch_after", "work_dir", "started_at", "completed_at", "created_at"}
 
 var listCmd = &cobra.Command{
 	Use:   "list",
@@ -51,6 +51,7 @@ func actionToMap(a db.Action) map[string]any {
 		"task_id":    a.TaskID,
 		"metadata":   a.Metadata,
 		"status":     a.Status,
+		"work_dir":   a.WorkDir,
 		"created_at": db.FormatLocal(a.CreatedAt),
 	}
 	if a.Result.Valid {

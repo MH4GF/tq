@@ -74,7 +74,7 @@ func (db *DB) ResumeAction(parentID int64, opts ResumeOptions) (int64, error) {
 	}
 
 	title := fmt.Sprintf("resume #%d", parentID)
-	newID, err := db.InsertAction(title, parent.TaskID, string(metaJSON), ActionStatusPending, nil)
+	newID, err := db.InsertAction(title, parent.TaskID, string(metaJSON), ActionStatusPending, nil, parent.WorkDir)
 	if err != nil {
 		return 0, fmt.Errorf("insert resume action: %w", err)
 	}

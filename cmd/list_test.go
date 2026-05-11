@@ -37,9 +37,9 @@ func TestList(t *testing.T) {
 			seed: func(t *testing.T, d db.Store) {
 				t.Helper()
 				taskID, _ := d.InsertTask(1, "task1", "{}", "")
-				d.InsertAction("review-pr", taskID, "{}", db.ActionStatusPending, nil)
+				d.InsertAction("review-pr", taskID, "{}", db.ActionStatusPending, nil, "")
 				taskID2, _ := d.InsertTask(1, "task2", "{}", "")
-				d.InsertAction("deploy", taskID2, "{}", db.ActionStatusRunning, nil)
+				d.InsertAction("deploy", taskID2, "{}", db.ActionStatusRunning, nil, "")
 			},
 			args: []string{"action", "list"},
 			check: func(t *testing.T, output []byte) {
@@ -58,8 +58,8 @@ func TestList(t *testing.T) {
 			seed: func(t *testing.T, d db.Store) {
 				t.Helper()
 				taskID, _ := d.InsertTask(1, "test", "{}", "")
-				d.InsertAction("a", taskID, "{}", db.ActionStatusPending, nil)
-				d.InsertAction("b", taskID, "{}", db.ActionStatusRunning, nil)
+				d.InsertAction("a", taskID, "{}", db.ActionStatusPending, nil, "")
+				d.InsertAction("b", taskID, "{}", db.ActionStatusRunning, nil, "")
 			},
 			args: []string{"action", "list", "--status", "pending"},
 			check: func(t *testing.T, output []byte) {
@@ -76,8 +76,8 @@ func TestList(t *testing.T) {
 				t.Helper()
 				taskID1, _ := d.InsertTask(1, "task1", "{}", "")
 				taskID2, _ := d.InsertTask(1, "task2", "{}", "")
-				d.InsertAction("a", taskID1, "{}", db.ActionStatusPending, nil)
-				d.InsertAction("b", taskID2, "{}", db.ActionStatusPending, nil)
+				d.InsertAction("a", taskID1, "{}", db.ActionStatusPending, nil, "")
+				d.InsertAction("b", taskID2, "{}", db.ActionStatusPending, nil, "")
 			},
 			args: []string{"action", "list", "--task", "1"},
 			check: func(t *testing.T, output []byte) {
@@ -104,7 +104,7 @@ func TestList(t *testing.T) {
 			seed: func(t *testing.T, d db.Store) {
 				t.Helper()
 				taskID, _ := d.InsertTask(1, "test task", "{}", "")
-				actionID, _ := d.InsertAction("review-pr", taskID, "{}", db.ActionStatusPending, nil)
+				actionID, _ := d.InsertAction("review-pr", taskID, "{}", db.ActionStatusPending, nil, "")
 				d.MarkDone(actionID, longResult)
 			},
 			args: []string{"action", "list", "--task", "1", "--status", "done"},
@@ -133,7 +133,7 @@ func TestList(t *testing.T) {
 			seed: func(t *testing.T, d db.Store) {
 				t.Helper()
 				taskID, _ := d.InsertTask(1, "test", "{}", "")
-				d.InsertAction("implement", taskID, "{}", db.ActionStatusPending, nil)
+				d.InsertAction("implement", taskID, "{}", db.ActionStatusPending, nil, "")
 			},
 			args: []string{"action", "list", "--status", "pending", "--task", "0"},
 			check: func(t *testing.T, output []byte) {
@@ -230,7 +230,7 @@ func TestActionGet(t *testing.T) {
 			args := tc.args
 			if tc.setupAction {
 				taskID, _ := d.InsertTask(1, "test task", "{}", "")
-				actionID, _ := d.InsertAction("review action", taskID, `{"pr":1}`, db.ActionStatusPending, nil)
+				actionID, _ := d.InsertAction("review action", taskID, `{"pr":1}`, db.ActionStatusPending, nil, "")
 				args = []string{"action", "get", fmt.Sprintf("%d", actionID)}
 			}
 

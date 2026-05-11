@@ -16,7 +16,9 @@ var actionUpdateCmd = &cobra.Command{
 	Short: "Update an action",
 	Example: `  tq action update 1 --title "New title"
   tq action update 2 --task 5
-  tq action update 3 --meta '{"key":"value"}'`,
+  tq action update 3 --meta '{"key":"value"}'
+  tq action update 4 --work-dir /path/to/worktree
+  tq action update 5 --work-dir ""`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := parseID(args[0])
@@ -24,7 +26,7 @@ var actionUpdateCmd = &cobra.Command{
 			return err
 		}
 
-		var title, meta *string
+		var title, meta, workDir *string
 		var taskID *int64
 
 		if cmd.Flags().Changed("title") {
@@ -42,12 +44,16 @@ var actionUpdateCmd = &cobra.Command{
 			}
 			meta = &v
 		}
-
-		if title == nil && taskID == nil && meta == nil {
-			return fmt.Errorf("at least one flag (--title, --task, --meta) is required")
+		if cmd.Flags().Changed("work-dir") {
+			v, _ := cmd.Flags().GetString("work-dir")
+			workDir = &v
 		}
 
-		if err := database.UpdateAction(id, title, taskID, meta); err != nil {
+		if title == nil && taskID == nil && meta == nil && workDir == nil {
+			return fmt.Errorf("at least one flag (--title, --task, --meta, --work-dir) is required")
+		}
+
+		if err := database.UpdateAction(id, title, taskID, meta, workDir); err != nil {
 			return err
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d updated\n", id)
@@ -78,6 +84,7 @@ func init() {
 	actionUpdateCmd.Flags().String("title", "", "Action title")
 	actionUpdateCmd.Flags().Int64("task", 0, "Task ID")
 	actionUpdateCmd.Flags().String("meta", "", `JSON metadata for dispatch control (keys: mode, claude_args)`)
+	actionUpdateCmd.Flags().String("work-dir", "", `Working directory override for this action (pass "" to clear)`)
 
 	actionGetCmd.Flags().StringVar(&actionGetJQ, "jq", "", jqFlagUsage(listFields))
 	actionCmd.AddCommand(actionGetCmd)

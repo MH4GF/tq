@@ -76,15 +76,15 @@ func TestTaskActionCounts_TriggersStaySynced(t *testing.T) {
 		t.Fatalf("InsertTask: %v", err)
 	}
 
-	a1, err := d.InsertAction("a1", taskID, "{}", db.ActionStatusPending, nil)
+	a1, err := d.InsertAction("a1", taskID, "{}", db.ActionStatusPending, nil, "")
 	if err != nil {
 		t.Fatalf("InsertAction a1: %v", err)
 	}
-	a2, err := d.InsertAction("a2", taskID, "{}", db.ActionStatusPending, nil)
+	a2, err := d.InsertAction("a2", taskID, "{}", db.ActionStatusPending, nil, "")
 	if err != nil {
 		t.Fatalf("InsertAction a2: %v", err)
 	}
-	a3, err := d.InsertAction("a3", taskID, "{}", db.ActionStatusRunning, nil)
+	a3, err := d.InsertAction("a3", taskID, "{}", db.ActionStatusRunning, nil, "")
 	if err != nil {
 		t.Fatalf("InsertAction a3: %v", err)
 	}
@@ -247,16 +247,16 @@ func TestTaskActionCounts_GetTaskActionCount(t *testing.T) {
 		t.Fatalf("InsertTask: %v", err)
 	}
 	for range 3 {
-		if _, err := d.InsertAction("p", taskID, "{}", db.ActionStatusPending, nil); err != nil {
+		if _, err := d.InsertAction("p", taskID, "{}", db.ActionStatusPending, nil, ""); err != nil {
 			t.Fatalf("InsertAction: %v", err)
 		}
 	}
 	for range 2 {
-		if _, err := d.InsertAction("r", taskID, "{}", db.ActionStatusRunning, nil); err != nil {
+		if _, err := d.InsertAction("r", taskID, "{}", db.ActionStatusRunning, nil, ""); err != nil {
 			t.Fatalf("InsertAction: %v", err)
 		}
 	}
-	if _, err := d.InsertAction("d", taskID, "{}", db.ActionStatusDone, nil); err != nil {
+	if _, err := d.InsertAction("d", taskID, "{}", db.ActionStatusDone, nil, ""); err != nil {
 		t.Fatalf("InsertAction: %v", err)
 	}
 
@@ -294,12 +294,12 @@ func TestTaskActionCounts_BackfillIdempotent(t *testing.T) {
 		t.Fatalf("InsertTask: %v", err)
 	}
 	for range 5 {
-		if _, err := d.InsertAction("p", taskID, "{}", db.ActionStatusPending, nil); err != nil {
+		if _, err := d.InsertAction("p", taskID, "{}", db.ActionStatusPending, nil, ""); err != nil {
 			t.Fatalf("InsertAction: %v", err)
 		}
 	}
 	for range 3 {
-		if _, err := d.InsertAction("d", taskID, "{}", db.ActionStatusDone, nil); err != nil {
+		if _, err := d.InsertAction("d", taskID, "{}", db.ActionStatusDone, nil, ""); err != nil {
 			t.Fatalf("InsertAction: %v", err)
 		}
 	}
@@ -337,12 +337,12 @@ func TestTaskActionCounts_BackfillFromExisting(t *testing.T) {
 
 	// Insert actions with no trigger active.
 	for range 4 {
-		if _, err := d.InsertAction("p", taskID, "{}", db.ActionStatusPending, nil); err != nil {
+		if _, err := d.InsertAction("p", taskID, "{}", db.ActionStatusPending, nil, ""); err != nil {
 			t.Fatalf("InsertAction: %v", err)
 		}
 	}
 	for range 2 {
-		if _, err := d.InsertAction("r", taskID, "{}", db.ActionStatusRunning, nil); err != nil {
+		if _, err := d.InsertAction("r", taskID, "{}", db.ActionStatusRunning, nil, ""); err != nil {
 			t.Fatalf("InsertAction: %v", err)
 		}
 	}

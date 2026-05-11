@@ -47,7 +47,7 @@ func TestDispatchInteractivePersistsSessionInfo(t *testing.T) {
 			cmd.SetConfigDir(t.TempDir())
 
 			taskID, _ := d.InsertTask(1, "t", "{}", "")
-			d.InsertAction("t", taskID, `{"instruction":"x","mode":"interactive"}`, db.ActionStatusPending, nil)
+			d.InsertAction("t", taskID, `{"instruction":"x","mode":"interactive"}`, db.ActionStatusPending, nil, "")
 
 			worker := &mockWorker{result: "tq-action-1"}
 			cmd.SetInteractiveWorkerFactory(func() dispatch.Worker { return worker })
@@ -106,7 +106,7 @@ func TestDispatch(t *testing.T) {
 			name: "success",
 			setup: func(d db.Store) {
 				taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
-				d.InsertAction("review-pr", taskID, `{"instruction":"Review PR for Fix bug.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+				d.InsertAction("review-pr", taskID, `{"instruction":"Review PR for Fix bug.","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
 			},
 			useWorker:       true,
 			workerResult:    `{"review":"approved"}`,
@@ -120,8 +120,8 @@ func TestDispatch(t *testing.T) {
 			name: "with action id",
 			setup: func(d db.Store) {
 				taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
-				d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
-				d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+				d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
+				d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
 			},
 			useWorker:       true,
 			workerResult:    `{"review":"approved"}`,
@@ -142,7 +142,7 @@ func TestDispatch(t *testing.T) {
 			name: "worker error",
 			setup: func(d db.Store) {
 				taskID, _ := d.InsertTask(1, "test", "{}", "")
-				d.InsertAction("test", taskID, `{"instruction":"Do something.","mode":"noninteractive"}`, db.ActionStatusPending, nil)
+				d.InsertAction("test", taskID, `{"instruction":"Do something.","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
 			},
 			useWorker:       true,
 			workerErr:       context.DeadlineExceeded,

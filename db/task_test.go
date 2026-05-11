@@ -426,7 +426,7 @@ func TestUpdateTask_BlockedByActiveActions(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			taskID, _ := d.InsertTask(1, "test", "{}", "")
-			actionID, _ := d.InsertAction(tc.name, taskID, "{}", tc.initialActionStatus, nil)
+			actionID, _ := d.InsertAction(tc.name, taskID, "{}", tc.initialActionStatus, nil, "")
 			if tc.markDispatched {
 				if err := d.MarkDispatched(actionID); err != nil {
 					t.Fatalf("MarkDispatched: %v", err)

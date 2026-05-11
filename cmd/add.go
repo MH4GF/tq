@@ -20,11 +20,12 @@ import (
 const maxActionTitleLength = 100
 
 var (
-	addTitle  string
-	addTask   int64
-	addMeta   string
-	addStatus string
-	addAfter  string
+	addTitle   string
+	addTask    int64
+	addMeta    string
+	addStatus  string
+	addAfter   string
+	addWorkDir string
 )
 
 var addCmd = &cobra.Command{
@@ -107,7 +108,7 @@ Metadata keys for dispatch control:
 			return err
 		}
 
-		id, err := database.InsertAction(addTitle, addTask, merged, status, dispatchAfter)
+		id, err := database.InsertAction(addTitle, addTask, merged, status, dispatchAfter, addWorkDir)
 		if err != nil {
 			return fmt.Errorf("insert action: %w", err)
 		}
@@ -229,5 +230,6 @@ func init() {
 	addCmd.Flags().StringVar(&addMeta, "meta", "{}", `JSON metadata for dispatch control (keys: mode, claude_args)`)
 	addCmd.Flags().StringVar(&addStatus, "status", "", "Initial status (default: pending)")
 	addCmd.Flags().StringVar(&addAfter, "after", "", "Dispatch after this time (YYYY-MM-DD HH:MM, local timezone)")
+	addCmd.Flags().StringVar(&addWorkDir, "work-dir", "", "Working directory override for this action (defaults to task work_dir)")
 	actionCmd.AddCommand(addCmd)
 }
