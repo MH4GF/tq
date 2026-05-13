@@ -8,7 +8,7 @@ Humans give instructions in natural language and monitor progress via TUI. The m
 
 ## Highlights
 
-- **Job queue model** — actions are queued and processed asynchronously by workers, with independent concurrency caps for interactive (default: 3) and noninteractive (default: 5) execution
+- **Job queue model** — actions are queued and processed asynchronously by workers, with independent concurrency caps for user-facing modes (interactive + experimental_bg share the same pool, default: 3) and noninteractive execution (default: 5)
 - **Manager agent** — one Claude Code session manages others; humans just talk to it
 - **Delegates to Claude Code** — no custom workflow language; just runs `claude` in tmux, so skills, sub-agents, worktrees, and remote execution all work as-is
 - **CLI is for agents** — JSON-only output, `--jq` flag, agent-oriented `--help`; humans don't need to learn the CLI
@@ -129,6 +129,7 @@ Controlled via `--meta` on `action create` / `schedule create`. Any value outsid
 | `interactive` (default) | `claude` in tmux — fire-and-forget, worker reports via `tq action done` / `tq action fail`. |
 | `noninteractive` | `claude -p` — captures stdout, auto-completes. Heartbeat-aware: kept alive past the 600s minimum while the session log mtime stays fresh (≤120s old), up to a 60-minute hard cap |
 | `remote` | Dispatched to remote worker |
+| `experimental_bg` | Research preview: dispatches via `claude --bg` so the action appears in `claude agents`. Lifecycle tracked by polling `~/.claude/jobs/<short>/state.json`. Shares the `MaxInteractive` slot pool with `interactive`. Requires Claude Code v2.1.139+ with agent view enabled |
 
 Additional metadata keys:
 - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--permission-mode","plan","--worktree","--max-turns","5"]`)

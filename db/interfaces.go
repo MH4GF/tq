@@ -12,6 +12,7 @@ type CommandWriter interface {
 	BulkInsertActions(specs []ActionInsertSpec) ([]int64, error)
 	MarkDone(id int64, result string) error
 	MarkFailed(id int64, result string) error
+	BulkMarkDone(updates []ActionDoneUpdate) error
 	BulkMarkFailed(updates []ActionFailureUpdate) error
 	MarkCancelled(id int64, result string) error
 	MarkDispatched(id int64) error
@@ -59,8 +60,10 @@ type QueryReader interface {
 	GetTasksByIDs(ids []int64) (map[int64]*Task, error)
 	ListRunningInteractive() ([]Action, error)
 	ListRunningNonInteractive() ([]Action, error)
+	ListRunningBg() ([]Action, error)
 	CountRunningInteractive() (int, error)
 	CountRunningNonInteractive() (int, error)
+	CountRunningInteractiveOrBg() (int, error)
 	CountPendingByDispatch() (PendingCounts, error)
 	IsActionDispatchEnabled(actionID int64) (bool, error)
 	ListActionsByTaskIDs(taskIDs []int64) (map[int64][]Action, error)

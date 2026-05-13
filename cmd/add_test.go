@@ -321,7 +321,7 @@ func TestAdd_InvalidMode(t *testing.T) {
 			name: "claude permission-mode auto",
 			meta: `{"mode":"auto"}`,
 			wantErrSubs: []string{
-				"must be one of: interactive, noninteractive, remote",
+				"must be one of: interactive, noninteractive, remote, experimental_bg",
 				`got "auto"`,
 				"claude_args",
 				"--permission-mode",

@@ -393,13 +393,14 @@ func TestValidateActionMode(t *testing.T) {
 		{name: "interactive", meta: map[string]any{MetaKeyMode: ModeInteractive}, wantErr: false},
 		{name: "noninteractive", meta: map[string]any{MetaKeyMode: ModeNonInteractive}, wantErr: false},
 		{name: "remote", meta: map[string]any{MetaKeyMode: ModeRemote}, wantErr: false},
+		{name: "experimental_bg", meta: map[string]any{MetaKeyMode: ModeBg}, wantErr: false},
 		{name: "empty string treated as unset", meta: map[string]any{MetaKeyMode: ""}, wantErr: false},
 		{
 			name:    "claude permission-mode auto",
 			meta:    map[string]any{MetaKeyMode: "auto"},
 			wantErr: true,
 			wantErrSubstrs: []string{
-				"must be one of: interactive, noninteractive, remote",
+				"must be one of: interactive, noninteractive, remote, experimental_bg",
 				`got "auto"`,
 				"claude_args",
 				"--permission-mode",

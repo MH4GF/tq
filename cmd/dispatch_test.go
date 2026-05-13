@@ -216,3 +216,51 @@ func TestDispatch(t *testing.T) {
 		})
 	}
 }
+
+// TestDispatchBgRecordsDaemonShort exercises the experimental_bg path: the
+// bg worker returns the daemon-assigned short id, the CLI prints it, the
+// action stays running (queue worker reaper drives completion), and
+// metadata.daemon_short is persisted.
+func TestDispatchBgRecordsDaemonShort(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+	cmd.SetConfigDir(t.TempDir())
+
+	taskID, _ := d.InsertTask(1, "t", "{}", "")
+	d.InsertAction("t", taskID, `{"instruction":"x","mode":"experimental_bg"}`, db.ActionStatusPending, nil, "")
+
+	worker := &mockWorker{result: "239007b1"}
+	cmd.SetBgWorkerFactory(func() dispatch.Worker { return worker })
+	t.Cleanup(func() { cmd.SetBgWorkerFactory(nil) })
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"action", "dispatch", "1"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	a, err := d.GetAction(1)
+	if err != nil {
+		t.Fatalf("get action: %v", err)
+	}
+	if a.Status != db.ActionStatusRunning {
+		t.Errorf("status = %q, want %q (bg lifecycle is driven by reaper)", a.Status, db.ActionStatusRunning)
+	}
+
+	meta, err := dispatch.ParseActionMetadata(a.Metadata)
+	if err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+	if got, _ := meta[dispatch.MetaKeyDaemonShort].(string); got != "239007b1" {
+		t.Errorf("metadata.daemon_short = %q, want %q", got, "239007b1")
+	}
+	if out := buf.String(); !bytes.Contains(buf.Bytes(), []byte("239007b1")) {
+		t.Errorf("stdout = %q, want to include daemon short id", out)
+	}
+}

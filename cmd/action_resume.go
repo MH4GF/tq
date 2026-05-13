@@ -62,6 +62,7 @@ claude session restores its own context.`,
 				NonInteractiveFunc:      getWorkerFactory(),
 				InteractiveFunc:         interactiveWorkerForResume(resumeSession),
 				RemoteFunc:              getRemoteWorkerFactory(),
+				BgFunc:                  getBgWorkerFactory(),
 				ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
 				TmuxSession:             resumeSession,
 			},
@@ -82,6 +83,8 @@ claude session restores its own context.`,
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d resumed remotely from #%d (view: %s)\n", action.ID, parentID, url)
 		case dispatch.ModeInteractive:
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d resumed interactively from #%d (%s)\n", action.ID, parentID, result.Output)
+		case dispatch.ModeBg:
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d resumed to claude agent view from #%d (short: %s)\n", action.ID, parentID, result.Output)
 		default:
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d resumed from #%d (done)\n", action.ID, parentID)
 		}
@@ -105,7 +108,7 @@ func init() {
 	actionResumeCmd.Flags().StringVar(&resumeMessage, "message", db.DefaultResumeMessage,
 		"Additional instruction passed as the new prompt for the resumed session")
 	actionResumeCmd.Flags().StringVar(&resumeMode, "mode", "",
-		"Execution mode: interactive | noninteractive | remote (default: parent action's mode)")
+		"Execution mode: interactive | noninteractive | remote | experimental_bg (default: parent action's mode)")
 	actionResumeCmd.Flags().StringVar(&resumeSession, "session", "main",
 		"Target tmux session name (interactive mode only)")
 	actionCmd.AddCommand(actionResumeCmd)

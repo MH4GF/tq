@@ -135,7 +135,7 @@ Notes with `kind=triage_keep` are surfaced on `tq task list` as `latest_triage_n
 | `tq action done <ID> [RESULT]` | Mark action as done |
 | `tq action fail <ID> [REASON]` | Mark action as failed when the goal could not be achieved |
 | `tq action cancel <ID> [REASON]` | Cancel a pending, running, dispatched, or failed action |
-| `tq action attach <ID>` | Attach to a running action's tmux window |
+| `tq action attach <ID>` | Attach to a running action's tmux window (or `claude attach <short>` for experimental_bg mode) |
 | `tq action reset <ID>` | Reset a failed or cancelled action to pending |
 | `tq action dispatch <ID>` | Dispatch a pending action immediately by its ID |
 | `tq action resume <ID>` | Resume the claude session of a closed action |
@@ -150,7 +150,7 @@ tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--st
 - `--task` — Task ID (**required**). Rejected if the task status is `done` or `archived`; reopen with `tq task update <ID> --status open` first if intentional.
 - `--title` — Action title (**required**, max 100 chars)
 - `--meta` — JSON metadata for dispatch control:
-  - `mode` — `"interactive"` (default), `"noninteractive"`, `"remote"`. Any other value is rejected — pass Claude permission-mode (`auto`, `plan`, `acceptEdits`, …) via `claude_args` instead.
+  - `mode` — `"interactive"` (default), `"noninteractive"`, `"remote"`, or `"experimental_bg"` (research preview: dispatches via `claude --bg` so the action appears in `claude agents`; requires Claude Code v2.1.139+). Any other value is rejected — pass Claude permission-mode (`auto`, `plan`, `acceptEdits`, …) via `claude_args` instead.
   - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--permission-mode","plan","--worktree","--max-turns","5"]`)
   - `executor` — `"local"` or `"cloud"`. Records where the action's claude session is actually running (orthogonal to `mode`). The reaper skips actions marked `executor=cloud` since local tmux/session-log liveness checks do not apply. Auto-stamped to `cloud` when `--status running` is passed from a Claude Code cloud session (`CLAUDE_CODE_REMOTE=true`); also stamped by the `SessionStart` hook in cloud sessions launched via tq dispatch. Explicit values in `--meta` are preserved.
 - `--status` — Initial status (default: `pending`)
@@ -252,7 +252,7 @@ The parent must be in `failed` / `cancelled` / `done` status and have a non-empt
 `claude_session_id` is populated by the tq Claude Code plugin's `SessionStart` hook (see `.claude-plugins/tq/`), which records the id whenever a tq-dispatched claude session starts.
 
 - `--message` — Additional instruction passed as the new prompt (default: `"Continue the previous session."`)
-- `--mode` — Execution mode: `interactive` | `noninteractive` | `remote` (default: parent action's mode). Any other value is rejected.
+- `--mode` — Execution mode: `interactive` | `noninteractive` | `remote` | `experimental_bg` (default: parent action's mode). Any other value is rejected.
 - `--session` — Target tmux session name, interactive mode only (default: `main`)
 
 ### `tq action prompt`
@@ -271,7 +271,9 @@ Used internally by interactive dispatch as `claude "$(tq action prompt <id>)"` s
 tq action attach <ACTION_ID>
 ```
 
-Switch the current tmux client to the action's tmux window. Must be run from inside a tmux session, and the action must have a recorded `tmux_session` / `tmux_window` (set when dispatched interactively).
+For interactive-mode actions: switch the current tmux client to the action's tmux window. Must be run from inside a tmux session, and the action must have a recorded `tmux_session` / `tmux_window`.
+
+For `experimental_bg`-mode actions: exec `claude attach <daemon_short>` so the bg session takes over the current terminal. No tmux requirement on this path. Returns an error if the bg dispatch has not yet recorded `metadata.daemon_short`.
 
 ### `tq action reset`
 
@@ -367,7 +369,7 @@ Each subcommand accepts `--no-descriptions` to disable completion descriptions. 
 tq ui [--max-interactive <N>] [--max-noninteractive <N>] [--poll <DURATION>] [--session <NAME>]
 ```
 
-- `--max-interactive` — Maximum concurrent interactive sessions, cognitive-load cap (default: `3`)
+- `--max-interactive` — Maximum concurrent user-facing sessions (interactive tmux + experimental_bg via `claude agents` share this pool), cognitive-load cap (default: `3`)
 - `--max-noninteractive` — Maximum concurrent noninteractive (`claude -p`) processes, OS resource cap (default: `5`)
 - `--poll` — Queue worker poll interval (default: `10s`)
 - `--session` — Target tmux session name (default: `main`)
