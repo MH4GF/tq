@@ -370,6 +370,16 @@ const interactiveModePredicate = "(json_extract(metadata, '$.mode') IS NULL OR j
 // Keep ListRunningNonInteractive and CountRunningNonInteractive in sync.
 const noninteractiveModePredicate = "json_extract(metadata, '$.mode') = 'noninteractive'"
 
+// bgModePredicate matches the experimental_bg dispatch mode. The literal string
+// MUST stay in sync with dispatch.ModeBg — the db package cannot import dispatch
+// (layering constraint), so the value is duplicated intentionally.
+const bgModePredicate = "json_extract(metadata, '$.mode') = 'experimental_bg'"
+
+// interactiveOrBgModePredicate matches actions that compete for the same
+// MaxInteractive slot pool: classic interactive sessions and bg sessions
+// (which the user interacts with via `claude agents`).
+const interactiveOrBgModePredicate = "(" + interactiveModePredicate + " OR " + bgModePredicate + ")"
+
 func (db *DB) ListRunningInteractive() ([]Action, error) {
 	rows, err := db.Query(
 		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND "+interactiveModePredicate+" ORDER BY id",
@@ -412,6 +422,27 @@ func (db *DB) ListRunningNonInteractive() ([]Action, error) {
 	return actions, rows.Err()
 }
 
+func (db *DB) ListRunningBg() ([]Action, error) {
+	rows, err := db.Query(
+		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND "+bgModePredicate+" ORDER BY id",
+		ActionStatusRunning,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var actions []Action
+	for rows.Next() {
+		var a Action
+		if err := rows.Scan(a.scanFields()...); err != nil {
+			return nil, err
+		}
+		actions = append(actions, a)
+	}
+	return actions, rows.Err()
+}
+
 func (db *DB) CountRunningInteractive() (int, error) {
 	var count int
 	err := db.QueryRow(
@@ -425,6 +456,18 @@ func (db *DB) CountRunningNonInteractive() (int, error) {
 	var count int
 	err := db.QueryRow(
 		"SELECT COUNT(*) FROM actions WHERE status = ? AND "+noninteractiveModePredicate,
+		ActionStatusRunning,
+	).Scan(&count)
+	return count, err
+}
+
+// CountRunningInteractiveOrBg returns the total number of running actions that
+// compete for the MaxInteractive concurrency slot pool: classic interactive
+// sessions and experimental_bg sessions combined.
+func (db *DB) CountRunningInteractiveOrBg() (int, error) {
+	var count int
+	err := db.QueryRow(
+		"SELECT COUNT(*) FROM actions WHERE status = ? AND "+interactiveOrBgModePredicate,
 		ActionStatusRunning,
 	).Scan(&count)
 	return count, err
@@ -678,6 +721,12 @@ type ActionFailureUpdate struct {
 	Reason string
 }
 
+// ActionDoneUpdate describes one action-done transition for BulkMarkDone.
+type ActionDoneUpdate struct {
+	ID     int64
+	Result string
+}
+
 // BulkInsertActions inserts all specs in a single multi-row INSERT and returns
 // the assigned IDs in input order. Tx-atomic: any constraint violation rolls
 // back the entire batch.
@@ -787,6 +836,58 @@ func (db *DB) BulkMarkFailed(updates []ActionFailureUpdate) error {
 	for _, c := range done {
 		db.emitEvent("action", c.id, "action.status_changed", map[string]any{
 			"from": c.from, "to": ActionStatusFailed,
+		})
+	}
+	return nil
+}
+
+// BulkMarkDone marks every update.ID as done with its result in one
+// transaction. Already-terminal actions (done/failed/cancelled) are skipped
+// silently so repeat calls are no-ops, mirroring MarkDone.
+func (db *DB) BulkMarkDone(updates []ActionDoneUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("bulk mark done: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	type committed struct {
+		id     int64
+		from   string
+		result string
+	}
+	var done []committed
+
+	for _, u := range updates {
+		var from string
+		if err := tx.QueryRowContext(ctx, "SELECT status FROM actions WHERE id = ?", u.ID).Scan(&from); err != nil {
+			return fmt.Errorf("bulk mark done: get status for id=%d: %w", u.ID, err)
+		}
+		if from == ActionStatusDone || from == ActionStatusFailed || from == ActionStatusCancelled {
+			continue
+		}
+
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE actions SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ? AND status = ?",
+			ActionStatusDone, u.Result, u.ID, from,
+		); err != nil {
+			return fmt.Errorf("bulk mark done: update id=%d: %w", u.ID, err)
+		}
+
+		done = append(done, committed{id: u.ID, from: from, result: u.Result})
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("bulk mark done: commit: %w", err)
+	}
+
+	for _, c := range done {
+		db.emitEvent("action", c.id, "action.status_changed", map[string]any{
+			"from": c.from, "to": ActionStatusDone, "result": c.result,
 		})
 	}
 	return nil

@@ -37,7 +37,9 @@ Instruction is provided as a positional argument.
 --meta passes JSON metadata. The instruction is automatically merged into metadata.
 
 Metadata keys for dispatch control:
-  mode         Execution mode: "interactive" (default), "noninteractive", "remote".
+  mode         Execution mode: "interactive" (default), "noninteractive", "remote",
+               or "experimental_bg" (research preview: dispatches via "claude --bg"
+               so the action appears in "claude agents"; requires Claude Code v2.1.139+).
                Any other value is rejected — pass Claude permission-mode
                (auto, plan, acceptEdits, ...) via claude_args instead.
   claude_args  Additional CLI arguments for claude (JSON array of strings,

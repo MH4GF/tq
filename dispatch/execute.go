@@ -23,6 +23,11 @@ const (
 	ModeRemote         = "remote"
 	ModeInteractive    = "interactive"
 	ModeNonInteractive = "noninteractive"
+	// ModeBg dispatches via `claude --bg`, registering the session with the
+	// daemon supervisor so it appears in `claude agents`. The string value is
+	// `experimental_bg` during the research-preview phase and will be flipped
+	// to `bg` on promotion — keep db/action.go:bgModePredicate in sync.
+	ModeBg = "experimental_bg"
 
 	MetaKeyInstruction       = "instruction"
 	MetaKeyMode              = "mode"
@@ -36,6 +41,10 @@ const (
 	MetaKeyParentActionID    = "parent_action_id"
 	MetaKeyIsResume          = "is_resume"
 	MetaKeyExecutor          = "executor"
+	// MetaKeyDaemonShort holds the 8-char short id returned by `claude --bg`
+	// for ModeBg actions. Used by the queue worker to poll
+	// ~/.claude/jobs/<short>/state.json for lifecycle transitions.
+	MetaKeyDaemonShort = "daemon_short"
 )
 
 // Executor values for metadata.executor. Distinguishes where the action's
@@ -61,6 +70,7 @@ type DispatchConfig struct {
 	NonInteractiveFunc      func() Worker
 	InteractiveFunc         func() Worker
 	RemoteFunc              func() Worker
+	BgFunc                  func() Worker
 	TmuxSession             string
 	ClaudeSessionLogChecker ClaudeSessionLogChecker
 }
@@ -69,6 +79,7 @@ type ExecuteParams struct {
 	DispatchConfig
 	BeforeInteractive    func(action *db.Action) error
 	BeforeNonInteractive func(action *db.Action) error
+	BeforeBg             func(action *db.Action) error
 	// Async, when non-nil, runs noninteractive worker.Execute and its
 	// post-processing in a goroutine so the dispatch loop is not blocked.
 	// When nil (e.g. in unit tests), execution stays synchronous.
@@ -96,6 +107,7 @@ func (e *ActionFailedError) Unwrap() error {
 var (
 	ErrInteractiveDeferred    = errors.New("interactive deferred")
 	ErrNonInteractiveDeferred = errors.New("noninteractive deferred")
+	ErrBgDeferred             = errors.New("bg deferred")
 )
 
 // WindowName returns the tmux window name for an action.
@@ -112,11 +124,13 @@ type ActionConfig struct {
 func (c ActionConfig) IsInteractive() bool    { return c.Mode == ModeInteractive }
 func (c ActionConfig) IsNonInteractive() bool { return c.Mode == ModeNonInteractive }
 func (c ActionConfig) IsRemote() bool         { return c.Mode == ModeRemote }
+func (c ActionConfig) IsBg() bool             { return c.Mode == ModeBg }
 
 var validModes = map[string]bool{
 	ModeInteractive:    true,
 	ModeNonInteractive: true,
 	ModeRemote:         true,
+	ModeBg:             true,
 }
 
 // ValidateActionMode rejects Claude permission-mode values (auto, plan,
@@ -137,10 +151,10 @@ func ValidateActionMode(meta map[string]any) error {
 	}
 	if !validModes[s] {
 		return fmt.Errorf(
-			`metadata "mode" must be one of: %s, %s, %s (got %q). `+
+			`metadata "mode" must be one of: %s, %s, %s, %s (got %q). `+
 				`If you intended Claude permission-mode, use claude_args instead, e.g. `+
 				`{"claude_args":["--permission-mode","%s"]}`,
-			ModeInteractive, ModeNonInteractive, ModeRemote, s, s,
+			ModeInteractive, ModeNonInteractive, ModeRemote, ModeBg, s, s,
 		)
 	}
 	return nil
@@ -205,10 +219,44 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 	if cfg.IsRemote() {
 		return executeRemote(ctx, params, action, instruction, cfg, workDir)
 	}
+	if cfg.IsBg() {
+		return executeBg(ctx, params, action, instruction, cfg, workDir)
+	}
 	if cfg.IsInteractive() {
 		return executeInteractive(ctx, params, action, instruction, cfg, workDir)
 	}
 	return executeNonInteractive(ctx, params, action, instruction, cfg, workDir)
+}
+
+func executeBg(ctx context.Context, params ExecuteParams, action *db.Action, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
+	if params.BeforeBg != nil {
+		if err := params.BeforeBg(action); err != nil {
+			if errors.Is(err, ErrBgDeferred) {
+				if rpErr := params.DB.ResetToPending(action.ID); rpErr != nil {
+					slog.Error("reset to pending", "action_id", action.ID, "error", rpErr)
+				}
+				return nil, ErrBgDeferred
+			}
+			return nil, err
+		}
+	}
+
+	worker := params.BgFunc()
+	short, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
+	if err != nil {
+		if mfErr := markActionFailed(params.DB, action, err.Error()); mfErr != nil {
+			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
+		}
+		return nil, &ActionFailedError{ActionID: action.ID, Err: err}
+	}
+
+	if err := params.DB.MergeActionMetadata(action.ID, map[string]any{
+		MetaKeyDaemonShort: short,
+	}); err != nil {
+		slog.Warn("failed to save bg daemon_short", "action_id", action.ID, "error", err)
+	}
+
+	return &ExecuteResult{Mode: ModeBg, Output: short}, nil
 }
 
 func executeRemote(ctx context.Context, params ExecuteParams, action *db.Action, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {

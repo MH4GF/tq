@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 	"sync"
 	"testing"
@@ -974,5 +975,289 @@ func TestRunWorker_ShutdownDoesNotMarkInflightFailed(t *testing.T) {
 		if hasMetaKey(x.Metadata, MetaKeyIsInvestigation) {
 			t.Errorf("shutdown created spurious investigate-failure action #%d", x.ID)
 		}
+	}
+}
+
+// fakeBgStateReader is an in-memory BgStateReader. Map values are returned
+// verbatim; absence of a key triggers os.ErrNotExist (so the reaper applies
+// its "job dir missing" grace logic).
+type fakeBgStateReader struct {
+	mu    sync.Mutex
+	files map[string][]byte
+	err   error
+}
+
+func (f *fakeBgStateReader) ReadState(short string) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return nil, f.err
+	}
+	data, ok := f.files[short]
+	if !ok {
+		return nil, &fs.PathError{Op: "open", Path: short, Err: fs.ErrNotExist}
+	}
+	return data, nil
+}
+
+func TestReapBg(t *testing.T) {
+	now := time.Now()
+	stateWorking := []byte(`{"state":"working"}`)
+	stateDone := []byte(`{"state":"done","output":{"result":"shipped"}}`)
+	stateFailed := []byte(`{"state":"failed","detail":"daemon abort"}`)
+	stateFailedNoDetail := []byte(`{"state":"failed","output":{"result":"agg"}}`)
+	stateMalformed := []byte(`{not json`)
+	stateUnknown := []byte(`{"state":"banana"}`)
+
+	tests := []struct {
+		name              string
+		metadata          string
+		startedOffset     time.Duration // applied to StartedAt; 0 means "do not set"
+		omitStartedAt     bool
+		files             map[string][]byte
+		short             string
+		wantStatus        string
+		wantResultPiece   string
+		wantNoInvestigate bool
+	}{
+		{
+			name:          "working leaves action untouched",
+			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"aaaaaaaa"}`,
+			startedOffset: -1 * time.Minute,
+			files:         map[string][]byte{"aaaaaaaa": stateWorking},
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:            "done marks action done with output.result",
+			metadata:        `{"instruction":"x","mode":"experimental_bg","daemon_short":"bbbbbbbb"}`,
+			startedOffset:   -1 * time.Minute,
+			files:           map[string][]byte{"bbbbbbbb": stateDone},
+			wantStatus:      db.ActionStatusDone,
+			wantResultPiece: "shipped",
+		},
+		{
+			name:            "failed (with detail) marks failed and prefers detail over result",
+			metadata:        `{"instruction":"x","mode":"experimental_bg","daemon_short":"cccccccc"}`,
+			startedOffset:   -1 * time.Minute,
+			files:           map[string][]byte{"cccccccc": stateFailed},
+			wantStatus:      db.ActionStatusFailed,
+			wantResultPiece: "daemon abort",
+		},
+		{
+			name:            "failed (no detail) falls back to output.result",
+			metadata:        `{"instruction":"x","mode":"experimental_bg","daemon_short":"dddddddd"}`,
+			startedOffset:   -1 * time.Minute,
+			files:           map[string][]byte{"dddddddd": stateFailedNoDetail},
+			wantStatus:      db.ActionStatusFailed,
+			wantResultPiece: "agg",
+		},
+		{
+			name:            "missing state file past grace marks failed",
+			metadata:        `{"instruction":"x","mode":"experimental_bg","daemon_short":"eeeeeeee"}`,
+			startedOffset:   -2 * time.Minute,
+			files:           map[string][]byte{},
+			wantStatus:      db.ActionStatusFailed,
+			wantResultPiece: "daemon job dir missing",
+		},
+		{
+			name:          "missing state file within grace skips",
+			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"ffffffff"}`,
+			startedOffset: -1 * time.Second,
+			files:         map[string][]byte{},
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:          "missing daemon_short skips",
+			metadata:      `{"instruction":"x","mode":"experimental_bg"}`,
+			startedOffset: -1 * time.Minute,
+			files:         map[string][]byte{},
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:          "malformed JSON does not flip status",
+			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"gggggggg"}`,
+			startedOffset: -1 * time.Minute,
+			files:         map[string][]byte{"gggggggg": stateMalformed},
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:          "unknown state value does not flip status",
+			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"hhhhhhhh"}`,
+			startedOffset: -1 * time.Minute,
+			files:         map[string][]byte{"hhhhhhhh": stateUnknown},
+			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:          "blocked state (awaiting user input via claude agents) keeps running",
+			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"iiiiiiii"}`,
+			startedOffset: -1 * time.Minute,
+			files:         map[string][]byte{"iiiiiiii": []byte(`{"state":"blocked","detail":"awaiting reply"}`)},
+			wantStatus:    db.ActionStatusRunning,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+
+			taskID, _ := d.InsertTask(1, "Task", "{}", "")
+			if _, err := d.InsertAction("bg-action", taskID, tt.metadata, db.ActionStatusRunning, nil, ""); err != nil {
+				t.Fatalf("seed action: %v", err)
+			}
+			if !tt.omitStartedAt {
+				started := now.Add(tt.startedOffset)
+				d.SetActionTmuxInfoForTest(1, nil, nil, &started)
+			}
+
+			cfg := WorkerConfig{
+				DispatchConfig:    DispatchConfig{DB: d},
+				BgStateReader:     &fakeBgStateReader{files: tt.files},
+				BgMissingJobGrace: 30 * time.Second,
+			}
+			reapBg(cfg, now)
+
+			action, _ := d.GetAction(1)
+			if action.Status != tt.wantStatus {
+				t.Errorf("status = %q, want %q", action.Status, tt.wantStatus)
+			}
+			if tt.wantResultPiece != "" {
+				if !action.Result.Valid || !strings.Contains(action.Result.String, tt.wantResultPiece) {
+					t.Errorf("result = %v, want containing %q", action.Result, tt.wantResultPiece)
+				}
+			}
+		})
+	}
+}
+
+func TestReapBg_NilStateReaderSkips(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "Task", "{}", "")
+	if _, err := d.InsertAction("bg-action", taskID,
+		`{"instruction":"x","mode":"experimental_bg","daemon_short":"aaaaaaaa"}`,
+		db.ActionStatusRunning, nil, "",
+	); err != nil {
+		t.Fatalf("seed action: %v", err)
+	}
+
+	cfg := WorkerConfig{
+		DispatchConfig:    DispatchConfig{DB: d},
+		BgMissingJobGrace: 30 * time.Second,
+	}
+	reapStaleActions(context.Background(), cfg)
+
+	action, _ := d.GetAction(1)
+	if action.Status != db.ActionStatusRunning {
+		t.Errorf("status = %q, want %q (reaper must no-op when BgStateReader is nil)", action.Status, db.ActionStatusRunning)
+	}
+}
+
+func TestDispatchOne_InteractiveBgShareSlotPool(t *testing.T) {
+	tests := []struct {
+		name              string
+		seededInteractive int
+		seededBg          int
+		newMode           string
+		maxInteractive    int
+		wantDispatched    bool
+		wantClaimedStatus string
+		wantInvocationLog string
+	}{
+		{
+			name:              "interactive 1 + bg 1 with cap 3 admits new bg",
+			seededInteractive: 1,
+			seededBg:          1,
+			newMode:           ModeBg,
+			maxInteractive:    3,
+			wantDispatched:    true,
+			wantClaimedStatus: db.ActionStatusRunning,
+		},
+		{
+			name:              "interactive 2 + bg 1 with cap 3 defers new bg",
+			seededInteractive: 2,
+			seededBg:          1,
+			newMode:           ModeBg,
+			maxInteractive:    3,
+			wantDispatched:    false,
+			wantClaimedStatus: db.ActionStatusPending,
+		},
+		{
+			name:              "interactive 1 + bg 2 with cap 3 defers new interactive",
+			seededInteractive: 1,
+			seededBg:          2,
+			newMode:           ModeInteractive,
+			maxInteractive:    3,
+			wantDispatched:    false,
+			wantClaimedStatus: db.ActionStatusPending,
+		},
+		{
+			name:              "bg alone exceeding cap defers new bg",
+			seededInteractive: 0,
+			seededBg:          3,
+			newMode:           ModeBg,
+			maxInteractive:    3,
+			wantDispatched:    false,
+			wantClaimedStatus: db.ActionStatusPending,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			taskID, _ := d.InsertTask(1, "Task", "{}", "")
+
+			for i := 0; i < tt.seededInteractive; i++ {
+				if _, err := d.InsertAction("seed-int", taskID,
+					`{"instruction":"x","mode":"interactive"}`,
+					db.ActionStatusRunning, nil, "",
+				); err != nil {
+					t.Fatalf("seed interactive %d: %v", i, err)
+				}
+			}
+			for i := 0; i < tt.seededBg; i++ {
+				if _, err := d.InsertAction("seed-bg", taskID,
+					`{"instruction":"x","mode":"experimental_bg","daemon_short":"00000000"}`,
+					db.ActionStatusRunning, nil, "",
+				); err != nil {
+					t.Fatalf("seed bg %d: %v", i, err)
+				}
+			}
+
+			meta := fmt.Sprintf(`{"instruction":"new","mode":%q}`, tt.newMode)
+			newID, err := d.InsertAction("new-action", taskID, meta, db.ActionStatusPending, nil, "")
+			if err != nil {
+				t.Fatalf("seed pending: %v", err)
+			}
+
+			interactiveCalls := &countingWorker{}
+			bgCalls := &countingWorker{result: "1ff90554"}
+
+			cfg := WorkerConfig{
+				DispatchConfig: DispatchConfig{
+					DB:                 d,
+					InteractiveFunc:    func() Worker { return interactiveCalls },
+					NonInteractiveFunc: func() Worker { return interactiveCalls },
+					RemoteFunc:         func() Worker { return interactiveCalls },
+					BgFunc:             func() Worker { return bgCalls },
+					TmuxSession:        "main",
+				},
+				MaxInteractive: tt.maxInteractive,
+			}
+
+			dispatched, err := dispatchOne(context.Background(), cfg)
+			if err != nil {
+				t.Fatalf("dispatchOne: %v", err)
+			}
+			if dispatched != tt.wantDispatched {
+				t.Errorf("dispatched = %v, want %v", dispatched, tt.wantDispatched)
+			}
+
+			action, _ := d.GetAction(newID)
+			if action.Status != tt.wantClaimedStatus {
+				t.Errorf("new action status = %q, want %q", action.Status, tt.wantClaimedStatus)
+			}
+		})
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,10 @@ const (
 	// Must exceed init-hook duration (worktree setup, migrations), not just
 	// claude startup — hooks run before any session log is written.
 	DefaultEarlyDispatchTimeout = 5 * time.Minute
+	// DefaultBgMissingJobGrace is how long we wait after a bg action's dispatch
+	// before deciding that a missing ~/.claude/jobs/<short>/state.json means
+	// the daemon job has disappeared (and we should fail the action).
+	DefaultBgMissingJobGrace = 30 * time.Second
 )
 
 // TmuxChecker checks for the existence of tmux windows.
@@ -59,10 +64,12 @@ type WorkerConfig struct {
 	MaxNonInteractive      int
 	PollInterval           time.Duration
 	TmuxChecker            TmuxChecker
+	BgStateReader          BgStateReader
 	StaleGracePeriod       time.Duration
 	HeartbeatFreshness     time.Duration
 	InteractiveHardTimeout time.Duration
 	EarlyDispatchTimeout   time.Duration
+	BgMissingJobGrace      time.Duration
 	// async, when non-nil, is used to launch noninteractive worker.Execute
 	// in the background so the dispatch loop is not blocked. RunWorker sets
 	// this internally before calling dispatchOne; tests usually leave it nil
@@ -96,6 +103,9 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 	}
 	if cfg.EarlyDispatchTimeout <= 0 {
 		cfg.EarlyDispatchTimeout = DefaultEarlyDispatchTimeout
+	}
+	if cfg.BgMissingJobGrace <= 0 {
+		cfg.BgMissingJobGrace = DefaultBgMissingJobGrace
 	}
 
 	slog.Info("queue worker started",
@@ -163,6 +173,9 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 		reapInteractive(ctx, cfg, now)
 	}
 	reapNonInteractive(cfg, now)
+	if cfg.BgStateReader != nil {
+		reapBg(cfg, now)
+	}
 }
 
 // reapInteractive scans running interactive actions, classifies them in
@@ -305,6 +318,123 @@ func reapNonInteractive(cfg WorkerConfig, now time.Time) {
 	}
 }
 
+// bgStatePayload mirrors the subset of ~/.claude/jobs/<short>/state.json the
+// reaper consumes. Schema confirmed on 2026-05-13; if the daemon changes the
+// shape, update this struct.
+type bgStatePayload struct {
+	State  string `json:"state"`
+	Output struct {
+		Result string `json:"result"`
+	} `json:"output"`
+	Detail string `json:"detail"`
+}
+
+const (
+	bgStateDone   = "done"
+	bgStateFailed = "failed"
+)
+
+// reapBg drives the lifecycle of experimental_bg actions by polling each
+// action's daemon-maintained state.json. Lifecycle decisions are collected
+// during the range loop and applied as bulk operations afterward (Rule 15:
+// no db.Store calls inside the range body).
+func reapBg(cfg WorkerConfig, now time.Time) {
+	actions, err := cfg.DB.ListRunningBg()
+	if err != nil {
+		slog.Error("list running bg for state poll", "error", err)
+		return
+	}
+	if len(actions) == 0 {
+		return
+	}
+
+	var (
+		dones    []db.ActionDoneUpdate
+		failures []db.ActionFailureUpdate
+	)
+
+	for _, a := range actions {
+		meta, err := ParseActionMetadata(a.Metadata)
+		if err != nil {
+			slog.Warn("bg reaper: parse metadata", "action_id", a.ID, "error", err)
+			continue
+		}
+		short, _ := meta[MetaKeyDaemonShort].(string)
+		if short == "" {
+			// Dispatch hasn't recorded daemon_short yet (or the merge failed);
+			// we have no handle to poll, so leave the action alone.
+			continue
+		}
+
+		raw, err := cfg.BgStateReader.ReadState(short)
+		if err != nil {
+			if os.IsNotExist(err) {
+				if bgJobMissingForTooLong(&a, now, cfg.BgMissingJobGrace) {
+					failures = append(failures, db.ActionFailureUpdate{
+						ID:     a.ID,
+						Reason: fmt.Sprintf("daemon job dir missing: ~/.claude/jobs/%s", short),
+					})
+					slog.Warn("bg reaper: marking missing-job action as failed", "action_id", a.ID, "short", short)
+				}
+				continue
+			}
+			slog.Warn("bg reaper: read state.json", "action_id", a.ID, "short", short, "error", err)
+			continue
+		}
+
+		var payload bgStatePayload
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			// Daemon may be mid-write; do not flip the action to failed on a
+			// transient parse error.
+			slog.Warn("bg reaper: decode state.json", "action_id", a.ID, "short", short, "error", err)
+			continue
+		}
+
+		// Only the two terminal states transition the action. Anything else
+		// (working, blocked, queued, future daemon-internal states) keeps the
+		// action running — `blocked` in particular signals "waiting on user
+		// input via claude agents" and must not be flipped to failed.
+		switch payload.State {
+		case bgStateDone:
+			dones = append(dones, db.ActionDoneUpdate{ID: a.ID, Result: payload.Output.Result})
+		case bgStateFailed:
+			msg := payload.Detail
+			if msg == "" {
+				msg = payload.Output.Result
+			}
+			if msg == "" {
+				msg = "bg session reported state=failed"
+			}
+			failures = append(failures, db.ActionFailureUpdate{ID: a.ID, Reason: msg})
+		}
+	}
+
+	if len(dones) > 0 {
+		if err := cfg.DB.BulkMarkDone(dones); err != nil {
+			slog.Error("bg reaper: bulk mark done", "error", err, "count", len(dones))
+		}
+	}
+	if len(failures) > 0 {
+		if err := cfg.DB.BulkMarkFailed(failures); err != nil {
+			slog.Error("bg reaper: bulk mark failed", "error", err, "count", len(failures))
+		}
+	}
+}
+
+// bgJobMissingForTooLong reports whether enough time has passed since the
+// action was claimed (StartedAt) to treat a missing state.json as a real
+// disappearance rather than a race with daemon initialization.
+func bgJobMissingForTooLong(a *db.Action, now time.Time, grace time.Duration) bool {
+	if !a.StartedAt.Valid {
+		return false
+	}
+	started, err := time.Parse(db.TimeLayout, a.StartedAt.String)
+	if err != nil {
+		return false
+	}
+	return now.Sub(started) >= grace
+}
+
 // prefetchWorkDirContext bulk-fetches the tasks (and their projects) needed
 // to resolve work_dir for every action. Returns empty maps on empty input.
 func prefetchWorkDirContext(database db.Store, actions []db.Action) (map[int64]*db.Task, map[int64]*db.Project, error) {
@@ -441,10 +571,13 @@ func dispatchOne(ctx context.Context, cfg WorkerConfig) (bool, error) {
 		BeforeInteractive: func(a *db.Action) error {
 			// NextPending has already marked this action running, so `running`
 			// includes the just-claimed action itself. Compare with `>` so
-			// `MaxInteractive=N` means "up to N concurrent" (inclusive).
-			running, err := cfg.DB.CountRunningInteractive()
+			// `MaxInteractive=N` means "up to N concurrent" (inclusive). The
+			// count combines interactive and bg actions because they share the
+			// MaxInteractive slot pool (bg sessions are interactive via the
+			// `claude agents` view).
+			running, err := cfg.DB.CountRunningInteractiveOrBg()
 			if err != nil {
-				return fmt.Errorf("count running interactive: %w", err)
+				return fmt.Errorf("count running interactive+bg: %w", err)
 			}
 			if running > cfg.MaxInteractive {
 				slog.Debug("interactive limit reached, deferring", "action_id", a.ID, "running", running, "max", cfg.MaxInteractive)
@@ -464,10 +597,21 @@ func dispatchOne(ctx context.Context, cfg WorkerConfig) (bool, error) {
 			}
 			return nil
 		},
+		BeforeBg: func(a *db.Action) error {
+			running, err := cfg.DB.CountRunningInteractiveOrBg()
+			if err != nil {
+				return fmt.Errorf("count running interactive+bg: %w", err)
+			}
+			if running > cfg.MaxInteractive {
+				slog.Debug("interactive+bg limit reached, deferring bg", "action_id", a.ID, "running", running, "max", cfg.MaxInteractive)
+				return ErrBgDeferred
+			}
+			return nil
+		},
 		Async: cfg.async,
 	}, action)
 
-	if errors.Is(err, ErrInteractiveDeferred) || errors.Is(err, ErrNonInteractiveDeferred) {
+	if errors.Is(err, ErrInteractiveDeferred) || errors.Is(err, ErrNonInteractiveDeferred) || errors.Is(err, ErrBgDeferred) {
 		return false, nil
 	}
 	var af *ActionFailedError

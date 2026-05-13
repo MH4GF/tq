@@ -65,6 +65,9 @@ var uiCmd = &cobra.Command{
 							Runner: &dispatch.ExecRunner{},
 						}
 					},
+					BgFunc: func() dispatch.Worker {
+						return &dispatch.BgWorker{Runner: &dispatch.ExecRunner{}}
+					},
 					TmuxSession:             uiSession,
 					ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
 				},
@@ -72,6 +75,7 @@ var uiCmd = &cobra.Command{
 				MaxNonInteractive: effectiveMaxNonInteractive,
 				PollInterval:      uiPollInterval,
 				TmuxChecker:       &dispatch.ExecTmuxChecker{Runner: &dispatch.ExecRunner{}},
+				BgStateReader:     dispatch.FileBgStateReader{},
 			}
 			return dispatch.RunWorker(ctx, cfg)
 		}

@@ -69,6 +69,25 @@ func getRemoteWorkerFactory() func() dispatch.Worker {
 	return defaultRemoteWorkerFactory
 }
 
+var defaultBgWorkerFactory = func() dispatch.Worker {
+	return &dispatch.BgWorker{Runner: &dispatch.ExecRunner{}}
+}
+
+var activeBgWorkerFactory func() dispatch.Worker
+
+func getBgWorkerFactory() func() dispatch.Worker {
+	if activeBgWorkerFactory != nil {
+		return activeBgWorkerFactory
+	}
+	return defaultBgWorkerFactory
+}
+
+// SetBgWorkerFactory overrides the worker used for experimental_bg
+// dispatches. Exposed for tests; production callers leave it unset.
+func SetBgWorkerFactory(f func() dispatch.Worker) {
+	activeBgWorkerFactory = f
+}
+
 var actionDispatchCmd = &cobra.Command{
 	Use:   "dispatch <action_id>",
 	Short: "Dispatch an action immediately (skip queue)",
@@ -94,6 +113,7 @@ var actionDispatchCmd = &cobra.Command{
 				NonInteractiveFunc:      getWorkerFactory(),
 				InteractiveFunc:         getInteractiveWorkerFactory(),
 				RemoteFunc:              getRemoteWorkerFactory(),
+				BgFunc:                  getBgWorkerFactory(),
 				ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
 				TmuxSession:             dispatchSession,
 			},
@@ -114,6 +134,8 @@ var actionDispatchCmd = &cobra.Command{
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched remotely (view: %s)\n", action.ID, url)
 		case dispatch.ModeInteractive:
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched interactively (%s)\n", action.ID, result.Output)
+		case dispatch.ModeBg:
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched to claude agent view (short: %s)\n", action.ID, result.Output)
 		default:
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d done\n", action.ID)
 		}
