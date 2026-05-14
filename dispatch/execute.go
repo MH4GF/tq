@@ -29,14 +29,14 @@ const (
 	// to `bg` on promotion — keep db/action.go:bgModePredicate in sync.
 	ModeBg = "experimental_bg"
 
-	MetaKeyInstruction       = "instruction"
-	MetaKeyMode              = "mode"
-	MetaKeyClaudeArgs        = "claude_args"
-	MetaKeyScheduleID        = "schedule_id"
-	MetaKeyIsInvestigation   = "is_investigate_failure"
-	MetaKeyFailedActionID    = "failed_action_id"
-	MetaKeyIsPermissionBlock = "is_permission_block"
-	MetaKeyBlockedActionID   = "blocked_action_id"
+	MetaKeyInstruction = "instruction"
+	MetaKeyMode        = "mode"
+	MetaKeyClaudeArgs  = "claude_args"
+	MetaKeyScheduleID  = "schedule_id"
+	// MetaKeyPermissionDenials carries the denial summaries reported by
+	// `claude -p` for cross-event analysis by the /tq:investigate-incidents
+	// skill.
+	MetaKeyPermissionDenials = "permission_denials"
 	MetaKeyClaudeSessionID   = "claude_session_id"
 	MetaKeyParentActionID    = "parent_action_id"
 	MetaKeyIsResume          = "is_resume"
@@ -160,24 +160,12 @@ func ValidateActionMode(meta map[string]any) error {
 	return nil
 }
 
-// markActionFailed marks the action as failed and creates a follow-up
-// investigate-failure action. Returns the MarkFailed error wrapped, if any;
-// CreateInvestigateFailureAction logs its own errors and never returns one.
-func markActionFailed(store db.Store, action *db.Action, failMsg string) error {
-	mfErr := store.MarkFailed(action.ID, failMsg)
-	CreateInvestigateFailureAction(store, action, failMsg)
-	if mfErr != nil {
-		return fmt.Errorf("mark failed: %w", mfErr)
-	}
-	return nil
-}
-
 // ExecuteAction reads instruction from metadata and dispatches via the appropriate worker.
 func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action) (*ExecuteResult, error) {
 	actionMeta, err := ParseActionMetadata(action.Metadata)
 	if err != nil {
 		failMsg := fmt.Sprintf("parse action metadata: %v", err)
-		if mfErr := markActionFailed(params.DB, action, failMsg); mfErr != nil {
+		if mfErr := params.DB.MarkFailed(action.ID, failMsg); mfErr != nil {
 			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
 		}
 		return nil, fmt.Errorf("parse action metadata: %w", err)
@@ -244,7 +232,7 @@ func executeBg(ctx context.Context, params ExecuteParams, action *db.Action, ins
 	worker := params.BgFunc()
 	short, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
 	if err != nil {
-		if mfErr := markActionFailed(params.DB, action, err.Error()); mfErr != nil {
+		if mfErr := params.DB.MarkFailed(action.ID, err.Error()); mfErr != nil {
 			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
 		}
 		return nil, &ActionFailedError{ActionID: action.ID, Err: err}
@@ -263,7 +251,7 @@ func executeRemote(ctx context.Context, params ExecuteParams, action *db.Action,
 	worker := params.RemoteFunc()
 	result, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
 	if err != nil {
-		if mfErr := markActionFailed(params.DB, action, err.Error()); mfErr != nil {
+		if mfErr := params.DB.MarkFailed(action.ID, err.Error()); mfErr != nil {
 			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
 		}
 		return nil, &ActionFailedError{ActionID: action.ID, Err: err}
@@ -298,7 +286,7 @@ func executeInteractive(ctx context.Context, params ExecuteParams, action *db.Ac
 	worker := params.InteractiveFunc()
 	result, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
 	if err != nil {
-		if mfErr := markActionFailed(params.DB, action, err.Error()); mfErr != nil {
+		if mfErr := params.DB.MarkFailed(action.ID, err.Error()); mfErr != nil {
 			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
 		}
 		return nil, &ActionFailedError{ActionID: action.ID, Err: err}
@@ -344,23 +332,20 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 	return &ExecuteResult{Mode: ModeNonInteractive}, nil
 }
 
-// runNonInteractive executes the noninteractive worker and applies all
-// post-execution side effects (MarkDone / markActionFailed,
-// permission-block follow-up). On worker failure, returns
-// (nil, *ActionFailedError) so the synchronous path preserves existing
-// caller-visible behavior; the async path swallows the error after logging.
+// runNonInteractive returns (nil, *ActionFailedError) on worker failure so
+// the synchronous path preserves caller-visible behavior; the async path
+// swallows the error after logging.
 func runNonInteractive(ctx context.Context, params ExecuteParams, action *db.Action, worker Worker, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
 	result, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
 	if err != nil {
-		// On shutdown, ctx cancel propagates to every in-flight goroutine. Do
-		// not mark them failed (and trigger investigate-failure follow-ups);
-		// leave them running so the next dispatch cycle's stale reaper can
-		// either find them alive (heartbeat fresh) or reap them legitimately.
+		// Shutdown cancel: leave in-flight running so the next dispatch
+		// cycle's stale reaper can either find them alive (heartbeat fresh)
+		// or reap them legitimately.
 		if errors.Is(err, context.Canceled) {
 			slog.Warn("noninteractive interrupted by shutdown; leaving for reaper", "action_id", action.ID)
 			return nil, err
 		}
-		if mfErr := markActionFailed(params.DB, action, err.Error()); mfErr != nil {
+		if mfErr := params.DB.MarkFailed(action.ID, err.Error()); mfErr != nil {
 			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
 		}
 		return nil, &ActionFailedError{ActionID: action.ID, Err: err}
@@ -368,7 +353,11 @@ func runNonInteractive(ctx context.Context, params ExecuteParams, action *db.Act
 
 	if p, ok := worker.(interface{ LastDenials() []PermissionDenial }); ok {
 		if denials := p.LastDenials(); len(denials) > 0 {
-			CreatePermissionBlockAction(params.DB, action, denials)
+			if err := params.DB.MergeActionMetadata(action.ID, map[string]any{
+				MetaKeyPermissionDenials: denialSummaries(denials),
+			}); err != nil {
+				slog.Error("merge permission_denials metadata", "action_id", action.ID, "error", err)
+			}
 		}
 	}
 

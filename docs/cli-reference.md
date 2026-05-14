@@ -155,7 +155,7 @@ tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--st
   - `executor` — `"local"` or `"cloud"`. Records where the action's claude session is actually running (orthogonal to `mode`). The reaper skips actions marked `executor=cloud` since local tmux/session-log liveness checks do not apply. Auto-stamped to `cloud` when `--status running` is passed from a Claude Code cloud session (`CLAUDE_CODE_REMOTE=true`); also stamped by the `SessionStart` hook in cloud sessions launched via tq dispatch. Explicit values in `--meta` are preserved.
 - `--status` — Initial status (default: `pending`)
 - `--after` — Dispatch after this time (`YYYY-MM-DD HH:MM`, local timezone)
-- `--work-dir` — Working directory override for this action only (does not modify the parent task's `work_dir`). Dispatch resolves the effective directory as **action.work_dir → task.work_dir → project.work_dir → `.`**. When the override path does not exist on disk at dispatch time, tq logs a warning and falls back to the task chain *without clearing the override*, so the explicit user intent is preserved. Follow-up actions generated for this action (investigate-failure, permission-block, resume) inherit this `work_dir`.
+- `--work-dir` — Working directory override for this action only (does not modify the parent task's `work_dir`). Dispatch resolves the effective directory as **action.work_dir → task.work_dir → project.work_dir → `.`**. When the override path does not exist on disk at dispatch time, tq logs a warning and falls back to the task chain *without clearing the override*, so the explicit user intent is preserved. Resume follow-ups inherit this `work_dir`.
 
 ### `tq action list`
 

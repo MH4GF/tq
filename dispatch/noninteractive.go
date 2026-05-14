@@ -218,10 +218,18 @@ func appendOutput(err error, output []byte) error {
 func formatDenialsWarning(denials []PermissionDenial) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n\n⚠️ permission_denials: %d件\n", len(denials))
-	for _, d := range denials {
+	for _, s := range denialSummaries(denials) {
 		b.WriteString("- ")
-		b.WriteString(d.Summary())
+		b.WriteString(s)
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func denialSummaries(denials []PermissionDenial) []string {
+	out := make([]string, 0, len(denials))
+	for _, d := range denials {
+		out = append(out, d.Summary())
+	}
+	return out
 }

@@ -29,7 +29,7 @@ func TestExecuteAction(t *testing.T) {
 		wantErrType       string // "" | "failed" | "deferred"
 		wantErrSubstr     string
 		wantWorkerCount   int
-		wantFollowUps     int
+		wantDenialMeta    bool
 	}{
 		{
 			name:            "noninteractive success",
@@ -83,7 +83,7 @@ func TestExecuteAction(t *testing.T) {
 			wantWorkerCount: 1,
 		},
 		{
-			name:         "noninteractive denials create follow-up",
+			name:         "noninteractive denials stamp metadata",
 			promptMode:   "noninteractive",
 			workerResult: "ok",
 			workerDenials: []PermissionDenial{
@@ -92,17 +92,17 @@ func TestExecuteAction(t *testing.T) {
 			wantMode:        ModeNonInteractive,
 			wantStatus:      db.ActionStatusDone,
 			wantWorkerCount: 1,
-			wantFollowUps:   1,
+			wantDenialMeta:  true,
 		},
 		{
-			name:            "noninteractive no denials no follow-up",
+			name:            "noninteractive no denials no metadata",
 			promptMode:      "noninteractive",
 			workerResult:    "ok",
 			workerDenials:   []PermissionDenial{},
 			wantMode:        ModeNonInteractive,
 			wantStatus:      db.ActionStatusDone,
 			wantWorkerCount: 1,
-			wantFollowUps:   0,
+			wantDenialMeta:  false,
 		},
 		{
 			name:            "valid claude_args",
@@ -199,15 +199,13 @@ func TestExecuteAction(t *testing.T) {
 				t.Errorf("status = %q, want %q", a.Status, tc.wantStatus)
 			}
 
-			actions, _ := d.ListActions("", nil, 0)
-			var followups int
-			for _, x := range actions {
-				if hasMetaKey(x.Metadata, MetaKeyIsPermissionBlock) && x.Status == db.ActionStatusPending {
-					followups++
-				}
+			var sourceMeta map[string]any
+			if a.Metadata != "" {
+				_ = json.Unmarshal([]byte(a.Metadata), &sourceMeta)
 			}
-			if followups != tc.wantFollowUps {
-				t.Errorf("permission-block follow-ups = %d, want %d", followups, tc.wantFollowUps)
+			_, gotDenials := sourceMeta[MetaKeyPermissionDenials]
+			if gotDenials != tc.wantDenialMeta {
+				t.Errorf("permission_denials metadata = %v, want %v", gotDenials, tc.wantDenialMeta)
 			}
 		})
 	}
