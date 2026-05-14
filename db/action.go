@@ -511,11 +511,19 @@ func (db *DB) movePending(id int64, dispatchAfterValid bool, dispatchAfter, requ
 	if dispatchAfterValid {
 		dispatchArg = dispatchAfter
 	}
-	if _, err := db.Exec(
-		"UPDATE actions SET status = ?, started_at = NULL, tmux_session = NULL, tmux_window = NULL, dispatch_after = ? WHERE id = ?",
-		ActionStatusPending, dispatchArg, id,
-	); err != nil {
-		return err
+	res, err := db.Exec(
+		"UPDATE actions SET status = ?, started_at = NULL, tmux_session = NULL, tmux_window = NULL, dispatch_after = ? WHERE id = ? AND status = ?",
+		ActionStatusPending, dispatchArg, id, from,
+	)
+	if err != nil {
+		return fmt.Errorf("move action #%d to pending: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("move action #%d to pending: rows affected: %w", id, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("action #%d status changed concurrently (expected from=%s)", id, from)
 	}
 
 	evt := map[string]any{"from": from, "to": ActionStatusPending}
