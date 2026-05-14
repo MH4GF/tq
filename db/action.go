@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"strings"
+	"time"
 )
 
 const (
@@ -474,21 +475,63 @@ func (db *DB) CountRunningInteractiveOrBg() (int, error) {
 }
 
 func (db *DB) ResetToPending(id int64) error {
+	return db.movePending(id, false, "", "")
+}
+
+// DeferToPending rolls a running action back to pending with a future
+// dispatch_after timestamp so NextPending skips it for retryAfter, preventing
+// head-of-line blocking when a slot pool is full. Errors if the action is not
+// currently running — the defer path always claims first via NextPending, so
+// any other source status indicates a code-level misuse.
+func (db *DB) DeferToPending(id int64, retryAfter time.Duration) error {
+	// SQLite stores datetime to second precision; round up so a sub-second
+	// retryAfter still produces a non-zero window (otherwise NextPending could
+	// re-qualify the action on the very next poll inside the same second).
+	dispatchAfter := time.Now().UTC().Add(retryAfter).Truncate(time.Second)
+	if retryAfter > 0 && retryAfter%time.Second != 0 {
+		dispatchAfter = dispatchAfter.Add(time.Second)
+	}
+	formatted := dispatchAfter.Format(TimeLayout)
+	return db.movePending(id, true, formatted, ActionStatusRunning)
+}
+
+// movePending unifies the two pending-rollback paths. If requireFromStatus is
+// non-empty, the current status must match (DeferToPending uses this to catch
+// code-level misuse). When dispatchAfter is empty, the column is cleared.
+func (db *DB) movePending(id int64, dispatchAfterValid bool, dispatchAfter, requireFromStatus string) error {
 	var from string
 	if err := db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from); err != nil {
 		return fmt.Errorf("get current status: %w", err)
 	}
-
-	_, err := db.Exec(
-		"UPDATE actions SET status = ?, started_at = NULL, tmux_session = NULL, tmux_window = NULL WHERE id = ?",
-		ActionStatusPending, id,
-	)
-	if err == nil {
-		db.emitEvent("action", id, "action.status_changed", map[string]any{
-			"from": from, "to": ActionStatusPending,
-		})
+	if requireFromStatus != "" && from != requireFromStatus {
+		return fmt.Errorf("action #%d is not %s (current: %s), cannot transition", id, requireFromStatus, from)
 	}
-	return err
+
+	var dispatchArg any
+	if dispatchAfterValid {
+		dispatchArg = dispatchAfter
+	}
+	res, err := db.Exec(
+		"UPDATE actions SET status = ?, started_at = NULL, tmux_session = NULL, tmux_window = NULL, dispatch_after = ? WHERE id = ? AND status = ?",
+		ActionStatusPending, dispatchArg, id, from,
+	)
+	if err != nil {
+		return fmt.Errorf("move action #%d to pending: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("move action #%d to pending: rows affected: %w", id, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("move action #%d to pending: status changed concurrently (expected from=%s)", id, from)
+	}
+
+	evt := map[string]any{"from": from, "to": ActionStatusPending}
+	if dispatchAfterValid {
+		evt["dispatch_after"] = dispatchAfter
+	}
+	db.emitEvent("action", id, "action.status_changed", evt)
+	return nil
 }
 
 func (db *DB) SetTmuxInfo(id int64, tmuxSession, tmuxWindow string) error {

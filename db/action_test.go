@@ -583,7 +583,7 @@ func TestResetToPending(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	id, _ := d.InsertAction("a", taskID, "{}", db.ActionStatusRunning, nil, "")
-	d.Exec("UPDATE actions SET tmux_session = 'sess-1', tmux_window = 'tq-action-1' WHERE id = ?", id)
+	d.Exec("UPDATE actions SET tmux_session = 'sess-1', tmux_window = 'tq-action-1', dispatch_after = datetime('now', '+30 seconds') WHERE id = ?", id)
 
 	if err := d.ResetToPending(id); err != nil {
 		t.Fatal(err)
@@ -601,6 +601,127 @@ func TestResetToPending(t *testing.T) {
 	}
 	if a.TmuxWindow.Valid {
 		t.Error("tmux_window should be NULL after reset")
+	}
+	if a.DispatchAfter.Valid {
+		t.Errorf("dispatch_after should be NULL after reset, got %q", a.DispatchAfter.String)
+	}
+
+	events, err := d.ListEvents("action", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 {
+		t.Fatal("no events emitted")
+	}
+	last := events[len(events)-1]
+	if last.EventType != "action.status_changed" {
+		t.Errorf("last event_type = %q, want action.status_changed", last.EventType)
+	}
+	if strings.Contains(last.Payload, `"dispatch_after"`) {
+		t.Errorf("payload should not carry dispatch_after on reset, got %s", last.Payload)
+	}
+}
+
+func TestDeferToPending(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	id, _ := d.InsertAction("a", taskID, "{}", db.ActionStatusRunning, nil, "")
+	d.Exec("UPDATE actions SET tmux_session = 'sess-1', tmux_window = 'tq-action-1' WHERE id = ?", id)
+
+	before := time.Now().UTC()
+	if err := d.DeferToPending(id, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	a, _ := d.GetAction(id)
+	if a.Status != db.ActionStatusPending {
+		t.Errorf("status = %q, want pending", a.Status)
+	}
+	if a.StartedAt.Valid {
+		t.Error("started_at should be NULL after defer")
+	}
+	if a.TmuxSession.Valid || a.TmuxWindow.Valid {
+		t.Error("tmux fields should be NULL after defer")
+	}
+	if !a.DispatchAfter.Valid {
+		t.Fatal("dispatch_after should be set after defer")
+	}
+	got, err := time.Parse(db.TimeLayout, a.DispatchAfter.String)
+	if err != nil {
+		t.Fatalf("parse dispatch_after: %v", err)
+	}
+	expected := before.Add(30 * time.Second)
+	delta := got.Sub(expected)
+	if delta < -2*time.Second || delta > 2*time.Second {
+		t.Errorf("dispatch_after = %v, want ~%v (delta %v)", got, expected, delta)
+	}
+
+	events, _ := d.ListEvents("action", id)
+	last := events[len(events)-1]
+	if last.EventType != "action.status_changed" {
+		t.Errorf("last event_type = %q, want action.status_changed", last.EventType)
+	}
+	if !strings.Contains(last.Payload, `"from":"running"`) || !strings.Contains(last.Payload, `"to":"pending"`) {
+		t.Errorf("payload missing from/to: %s", last.Payload)
+	}
+	if !strings.Contains(last.Payload, `"dispatch_after":`) {
+		t.Errorf("payload missing dispatch_after: %s", last.Payload)
+	}
+}
+
+func TestDeferToPending_RejectsNonRunning(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	id, _ := d.InsertAction("a", taskID, "{}", db.ActionStatusPending, nil, "")
+
+	err := d.DeferToPending(id, 10*time.Second)
+	if err == nil {
+		t.Fatal("expected error for non-running action, got nil")
+	}
+	if !strings.Contains(err.Error(), "not running") {
+		t.Errorf("error = %v, want substring 'not running'", err)
+	}
+
+	a, _ := d.GetAction(id)
+	if a.DispatchAfter.Valid {
+		t.Errorf("dispatch_after should remain NULL on rejected defer, got %q", a.DispatchAfter.String)
+	}
+}
+
+func TestDeferToPending_LastWriteWins(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	id, _ := d.InsertAction("a", taskID, "{}", db.ActionStatusRunning, nil, "")
+
+	if err := d.DeferToPending(id, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	a1, _ := d.GetAction(id)
+	first := a1.DispatchAfter.String
+
+	if err := d.SetActionStatusForTest(id, db.ActionStatusRunning); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.DeferToPending(id, 90*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	a2, _ := d.GetAction(id)
+	second := a2.DispatchAfter.String
+
+	if first == second {
+		t.Errorf("dispatch_after should differ between defers: first=%q second=%q", first, second)
+	}
+	gotFirst, _ := time.Parse(db.TimeLayout, first)
+	gotSecond, _ := time.Parse(db.TimeLayout, second)
+	if !gotSecond.After(gotFirst) {
+		t.Errorf("second dispatch_after (%v) should be after first (%v)", gotSecond, gotFirst)
 	}
 }
 

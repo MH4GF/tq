@@ -472,12 +472,12 @@ func renderStatusStrip(stats actionStats, maxInteractive, width int) string {
 	}
 	if maxInteractive > 0 {
 		slotsColor := colorAccent
-		if stats.runningInteractive >= maxInteractive {
+		if stats.runningInteractiveOrBg >= maxInteractive {
 			slotsColor = colorWarning
 		}
 		parts = append(parts,
 			lipgloss.NewStyle().Foreground(slotsColor).Render("⚡")+
-				styleStatNum.Foreground(slotsColor).Render(fmt.Sprintf("%d/%d", stats.runningInteractive, maxInteractive))+
+				styleStatNum.Foreground(slotsColor).Render(fmt.Sprintf("%d/%d", stats.runningInteractiveOrBg, maxInteractive))+
 				" "+styleStatLabel.Render("slots"))
 	}
 	inner := " " + strings.Join(parts, "   ")

@@ -31,6 +31,12 @@ const (
 	DefaultBgMissingJobGrace = 30 * time.Second
 )
 
+// defaultDeferBackoff is the dispatch_after window applied when an action is
+// deferred because its slot pool is full. Set to ~3× DefaultPollInterval so
+// the worker can attempt 2-3 other pending actions before re-trying the
+// deferred one.
+var defaultDeferBackoff = 30 * time.Second
+
 // TmuxChecker checks for the existence of tmux windows.
 type TmuxChecker interface {
 	ListWindows(ctx context.Context, session string) ([]string, error)

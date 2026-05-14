@@ -17,6 +17,16 @@ import (
 
 func ptr[T any](v T) *T { return &v }
 
+// withShortDeferBackoff shrinks defaultDeferBackoff to the polling-loop scale
+// for slot-defer tests that expect a deferred action to resume promptly after
+// the slot frees. Restored via t.Cleanup.
+func withShortDeferBackoff(t *testing.T) {
+	t.Helper()
+	original := defaultDeferBackoff
+	defaultDeferBackoff = 50 * time.Millisecond
+	t.Cleanup(func() { defaultDeferBackoff = original })
+}
+
 type countingWorker struct {
 	mu      sync.Mutex
 	count   int
@@ -825,6 +835,7 @@ func TestRunWorker_NonInteractiveDoesNotBlockInteractive(t *testing.T) {
 // pending noninteractive actions are deferred (ResetToPending) until a slot
 // frees up.
 func TestRunWorker_NonInteractiveSlotLimit(t *testing.T) {
+	withShortDeferBackoff(t)
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -1258,6 +1269,146 @@ func TestDispatchOne_InteractiveBgShareSlotPool(t *testing.T) {
 			if action.Status != tt.wantClaimedStatus {
 				t.Errorf("new action status = %q, want %q", action.Status, tt.wantClaimedStatus)
 			}
+
+			if tt.wantClaimedStatus == db.ActionStatusPending {
+				if !action.DispatchAfter.Valid {
+					t.Errorf("deferred action should have dispatch_after set, got NULL")
+				} else {
+					got, err := time.Parse(db.TimeLayout, action.DispatchAfter.String)
+					if err != nil {
+						t.Errorf("parse dispatch_after: %v", err)
+					} else if !got.After(time.Now().UTC().Add(-1 * time.Second)) {
+						t.Errorf("dispatch_after = %v, want future", got)
+					}
+				}
+			}
 		})
+	}
+}
+
+// TestRunWorker_DeferredActionYieldsToOtherSlotPool verifies that when the
+// shared interactive+bg slot pool is full, a deferred bg action does not
+// monopolize NextPending — a higher-id pending noninteractive action (separate
+// slot pool) gets a turn within the same poll cycle window thanks to the
+// dispatch_after backoff stamped by DeferToPending.
+func TestRunWorker_DeferredActionYieldsToOtherSlotPool(t *testing.T) {
+	withShortDeferBackoff(t)
+
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "Task", "{}", "")
+
+	for i := range 3 {
+		if _, err := d.InsertAction("seed-bg", taskID,
+			`{"instruction":"x","mode":"experimental_bg","daemon_short":"00000000"}`,
+			db.ActionStatusRunning, nil, ""); err != nil {
+			t.Fatalf("seed bg %d: %v", i, err)
+		}
+	}
+
+	bgPendingID, _ := d.InsertAction("bg-A", taskID,
+		`{"instruction":"bg-A","mode":"experimental_bg"}`, db.ActionStatusPending, nil, "")
+	niPendingID, _ := d.InsertAction("ni-B", taskID,
+		`{"instruction":"ni-B","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
+
+	niWorker := &countingWorker{result: `{"ok":true}`}
+	bgWorker := &countingWorker{result: "1ff90554"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: func() Worker { return niWorker },
+			InteractiveFunc:    func() Worker { return &countingWorker{} },
+			BgFunc:             func() Worker { return bgWorker },
+		},
+		MaxInteractive:    3,
+		MaxNonInteractive: 5,
+		PollInterval:      20 * time.Millisecond,
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- RunWorker(ctx, cfg) }()
+
+	waitFor(t, 1*time.Second, "noninteractive dispatched despite shared slot full", func() bool {
+		return niWorker.Count() >= 1
+	})
+
+	bgA, _ := d.GetAction(bgPendingID)
+	if bgA.Status != db.ActionStatusPending {
+		t.Errorf("bg-A status = %q, want pending (slot still full)", bgA.Status)
+	}
+	if !bgA.DispatchAfter.Valid {
+		t.Error("bg-A should have dispatch_after set after defer")
+	}
+
+	niB, _ := d.GetAction(niPendingID)
+	if niB.Status != db.ActionStatusRunning && niB.Status != db.ActionStatusDone {
+		t.Errorf("ni-B status = %q, want running or done", niB.Status)
+	}
+
+	cancel()
+	<-done
+}
+
+// TestRunWorker_DeferDoesNotProduceEventStorm verifies that a single pending
+// action repeatedly hitting a full slot does not generate one status_changed
+// event per poll cycle. With dispatch_after backoff, events are bounded by
+// elapsed_time / deferBackoff rather than elapsed_time / pollInterval.
+func TestRunWorker_DeferDoesNotProduceEventStorm(t *testing.T) {
+	withShortDeferBackoff(t)
+
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "Task", "{}", "")
+
+	for i := range 3 {
+		if _, err := d.InsertAction("seed-bg", taskID,
+			`{"instruction":"x","mode":"experimental_bg","daemon_short":"00000000"}`,
+			db.ActionStatusRunning, nil, ""); err != nil {
+			t.Fatalf("seed bg %d: %v", i, err)
+		}
+	}
+	bgPendingID, _ := d.InsertAction("bg-A", taskID,
+		`{"instruction":"bg-A","mode":"experimental_bg"}`, db.ActionStatusPending, nil, "")
+
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB:              d,
+			InteractiveFunc: func() Worker { return &countingWorker{} },
+			BgFunc:          func() Worker { return &countingWorker{result: "1ff90554"} },
+		},
+		MaxInteractive: 3,
+		PollInterval:   10 * time.Millisecond,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- RunWorker(ctx, cfg) }()
+	<-done
+
+	events, err := d.ListEvents("action", bgPendingID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var statusChanges int
+	for _, e := range events {
+		if e.EventType == "action.status_changed" {
+			statusChanges++
+		}
+	}
+
+	// 500ms run ÷ 50ms deferBackoff ≈ 10 cycles. Allow generous headroom.
+	// Pre-fix behavior: 500ms ÷ 10ms pollInterval = ~50 cycles. The bound
+	// catches both the storm regression and accidental over-defer.
+	if statusChanges > 20 {
+		t.Errorf("status_changed events = %d, want ≤ 20 (storm regression)", statusChanges)
+	}
+	if statusChanges == 0 {
+		t.Errorf("status_changed events = 0, want ≥ 1 (action should be deferred at least once)")
 	}
 }
