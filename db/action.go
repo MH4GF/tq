@@ -523,7 +523,7 @@ func (db *DB) movePending(id int64, dispatchAfterValid bool, dispatchAfter, requ
 		return fmt.Errorf("move action #%d to pending: rows affected: %w", id, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("action #%d status changed concurrently (expected from=%s)", id, from)
+		return fmt.Errorf("move action #%d to pending: status changed concurrently (expected from=%s)", id, from)
 	}
 
 	evt := map[string]any{"from": from, "to": ActionStatusPending}
