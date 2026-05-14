@@ -75,6 +75,21 @@ tqタスク管理者。「タスク作って」「アクション追加して」
 
 `skills/manager/SKILL.md`
 
+### `tq:investigate-incidents`
+
+tqキューに溜まった失敗actionとpermission denialを横断的に診断する。「インシデント調べて」「最近の失敗まとめて」「permission blockの傾向見せて」「/tq:investigate-incidents」で発動
+
+`skills/investigate-incidents/SKILL.md`
+
+Replaces the per-event auto-generated follow-up actions that previously fired on every failure and every permission denial. Recommended usage is a daily schedule:
+
+```bash
+tq schedule create --instruction '/tq:investigate-incidents' --task <task_id> --cron '0 9 * * *' \
+    --title 'Daily incident review'
+```
+
+Run `tq schedule create --help` for available flags.
+
 ## hooks
 
 ### `SessionStart`

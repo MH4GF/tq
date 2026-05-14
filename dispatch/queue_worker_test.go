@@ -2,7 +2,6 @@ package dispatch
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -211,7 +210,11 @@ func TestRunWorker_FailureEscalation(t *testing.T) {
 	}
 }
 
-func TestRunWorker_FailureCreatesInvestigateAction(t *testing.T) {
+// TestRunWorker_FailureDoesNotCreateFollowUp verifies that worker failure
+// marks the action as failed without spawning a follow-up investigation
+// action. Per-failure auto-investigation was retired 2026-05-14 in favor of
+// the batched /tq:investigate-incidents skill.
+func TestRunWorker_FailureDoesNotCreateFollowUp(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -243,22 +246,13 @@ func TestRunWorker_FailureCreatesInvestigateAction(t *testing.T) {
 	if action.Status != "failed" {
 		t.Errorf("action status = %q, want failed", action.Status)
 	}
+	if action.TaskID != taskID {
+		t.Errorf("action task_id = %d, want %d", action.TaskID, taskID)
+	}
 
 	actions, _ := d.ListActions("", nil, 0)
-	if len(actions) < 2 {
-		t.Fatalf("expected at least 2 actions, got %d", len(actions))
-	}
-
-	investigate := actions[0]
-	var meta map[string]any
-	if err := json.Unmarshal([]byte(investigate.Metadata), &meta); err != nil {
-		t.Fatalf("parse metadata: %v", err)
-	}
-	if _, ok := meta["is_investigate_failure"]; !ok {
-		t.Errorf("metadata missing is_investigate_failure key, got %v", meta)
-	}
-	if investigate.TaskID != taskID {
-		t.Errorf("follow-up task_id = %d, want %d", investigate.TaskID, taskID)
+	if len(actions) != 1 {
+		t.Errorf("expected exactly 1 action (no auto-generated follow-up), got %d", len(actions))
 	}
 }
 
@@ -916,9 +910,10 @@ func TestRunWorker_NonInteractiveFailureDoesNotStopLoop(t *testing.T) {
 	failedThenOK.Set(`{"ok":true}`, nil)
 
 	waitFor(t, 1*time.Second, "follow-up noninteractive dispatched after failure", func() bool {
-		// id 2 is the investigate-failure action created from #1's failure.
-		// id 3 is our manually queued ni-after.
-		a, err := d.GetAction(3)
+		// id 1 was the failed ni-fail; id 2 is our manually queued ni-after
+		// (no auto-generated follow-up exists since per-failure investigation
+		// was retired 2026-05-14).
+		a, err := d.GetAction(2)
 		return err == nil && (a.Status == db.ActionStatusRunning || a.Status == db.ActionStatusDone)
 	})
 
@@ -927,9 +922,9 @@ func TestRunWorker_NonInteractiveFailureDoesNotStopLoop(t *testing.T) {
 }
 
 // TestRunWorker_ShutdownDoesNotMarkInflightFailed verifies that ctx cancel
-// during shutdown does NOT mark in-flight noninteractive actions as failed
-// (and does not create investigate-failure follow-ups). They should remain
-// running so the next worker session's stale reaper can re-evaluate.
+// during shutdown does NOT mark in-flight noninteractive actions as failed.
+// They should remain running so the next worker session's stale reaper can
+// re-evaluate.
 func TestRunWorker_ShutdownDoesNotMarkInflightFailed(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -968,13 +963,6 @@ func TestRunWorker_ShutdownDoesNotMarkInflightFailed(t *testing.T) {
 	a, _ := d.GetAction(1)
 	if a.Status == db.ActionStatusFailed {
 		t.Errorf("action status = %q, want still running (shutdown should not mark in-flight as failed)", a.Status)
-	}
-
-	actions, _ := d.ListActions("", nil, 0)
-	for _, x := range actions {
-		if hasMetaKey(x.Metadata, MetaKeyIsInvestigation) {
-			t.Errorf("shutdown created spurious investigate-failure action #%d", x.ID)
-		}
 	}
 }
 

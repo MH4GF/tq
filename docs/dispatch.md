@@ -11,7 +11,7 @@ NextPending ─┬─ interactive     ──► sync worker.Execute (tmux: retur
              │   admit if Interactive+Bg ≤ MaxI
              │
              ├─ noninteractive  ──► ┌─ go worker.Execute (claude -p, long-running)
-             │   admit if Running   │   └ MarkDone / markActionFailed
+             │   admit if Running   │   └ MarkDone / MarkFailed
              │     ≤ MaxNI          │
              │
              ├─ remote          ──► sync worker.Execute (returns fast)
@@ -83,4 +83,4 @@ For `experimental_bg`, the worker returns the daemon short id immediately (actio
 
 ## Shutdown
 
-`RunWorker` returns when its context is cancelled. Before returning it calls `wg.Wait()` to drain in-flight noninteractive goroutines so their `MarkDone` / `markActionFailed` writes complete. Context cancellation propagates to each `worker.Execute`, which terminates the underlying `claude -p` subprocess via `exec.CommandContext`.
+`RunWorker` returns when its context is cancelled. Before returning it calls `wg.Wait()` to drain in-flight noninteractive goroutines so their `MarkDone` / `MarkFailed` writes complete. Context cancellation propagates to each `worker.Execute`, which terminates the underlying `claude -p` subprocess via `exec.CommandContext`.
