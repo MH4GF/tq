@@ -232,8 +232,8 @@ func executeBg(ctx context.Context, params ExecuteParams, action *db.Action, ins
 	if params.BeforeBg != nil {
 		if err := params.BeforeBg(action); err != nil {
 			if errors.Is(err, ErrBgDeferred) {
-				if rpErr := params.DB.ResetToPending(action.ID); rpErr != nil {
-					slog.Error("reset to pending", "action_id", action.ID, "error", rpErr)
+				if rpErr := params.DB.DeferToPending(action.ID, defaultDeferBackoff); rpErr != nil {
+					slog.Error("defer to pending", "action_id", action.ID, "error", rpErr)
 				}
 				return nil, ErrBgDeferred
 			}
@@ -286,8 +286,8 @@ func executeInteractive(ctx context.Context, params ExecuteParams, action *db.Ac
 	if params.BeforeInteractive != nil {
 		if err := params.BeforeInteractive(action); err != nil {
 			if errors.Is(err, ErrInteractiveDeferred) {
-				if rpErr := params.DB.ResetToPending(action.ID); rpErr != nil {
-					slog.Error("reset to pending", "action_id", action.ID, "error", rpErr)
+				if rpErr := params.DB.DeferToPending(action.ID, defaultDeferBackoff); rpErr != nil {
+					slog.Error("defer to pending", "action_id", action.ID, "error", rpErr)
 				}
 				return nil, ErrInteractiveDeferred
 			}
@@ -318,8 +318,8 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 	if params.BeforeNonInteractive != nil {
 		if err := params.BeforeNonInteractive(action); err != nil {
 			if errors.Is(err, ErrNonInteractiveDeferred) {
-				if rpErr := params.DB.ResetToPending(action.ID); rpErr != nil {
-					slog.Error("reset to pending", "action_id", action.ID, "error", rpErr)
+				if rpErr := params.DB.DeferToPending(action.ID, defaultDeferBackoff); rpErr != nil {
+					slog.Error("defer to pending", "action_id", action.ID, "error", rpErr)
 				}
 				return nil, ErrNonInteractiveDeferred
 			}

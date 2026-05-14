@@ -62,7 +62,7 @@ type TasksModel struct {
 	dateFilter     string
 
 	// Cached stats
-	runningInteractive int
+	runningInteractiveOrBg int
 
 	// Detail view state
 	mode          tasksMode
@@ -96,9 +96,9 @@ type actionResumedMsg struct {
 }
 
 type tasksLoadedMsg struct {
-	trees              []projectTree
-	runningInteractive int
-	err                error
+	trees                  []projectTree
+	runningInteractiveOrBg int
+	err                    error
 }
 
 type dispatchToggledMsg struct {
@@ -107,12 +107,12 @@ type dispatchToggledMsg struct {
 
 // actionStats holds aggregate counts for the status strip and gauge.
 type actionStats struct {
-	running            int
-	runningInteractive int
-	pending            int
-	done               int
-	failed             int
-	pendingLabel       string
+	running                int
+	runningInteractiveOrBg int
+	pending                int
+	done                   int
+	failed                 int
+	pendingLabel           string
 }
 
 func NewTasksModel(database db.Store, dateFilter string) TasksModel {
@@ -185,13 +185,13 @@ func (m TasksModel) loadTasks() tea.Cmd {
 			trees = append(trees, projectTree{project: p, tasks: nodes})
 		}
 		var ri int
-		n, err := m.database.CountRunningInteractive()
+		n, err := m.database.CountRunningInteractiveOrBg()
 		if err != nil {
-			recordErr(fmt.Errorf("count running interactive: %w", err))
+			recordErr(fmt.Errorf("count running interactive+bg: %w", err))
 		} else {
 			ri = n
 		}
-		return tasksLoadedMsg{trees: trees, runningInteractive: ri, err: firstErr}
+		return tasksLoadedMsg{trees: trees, runningInteractiveOrBg: ri, err: firstErr}
 	}
 }
 
@@ -250,7 +250,7 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 			clearCmd = m.setMessage(fmt.Sprintf("load tasks failed: %v", msg.err), true)
 		}
 		m.trees = msg.trees
-		m.runningInteractive = msg.runningInteractive
+		m.runningInteractiveOrBg = msg.runningInteractiveOrBg
 		for _, pt := range m.trees {
 			projKey := fmt.Sprintf("p:%d", pt.project.ID)
 			if _, ok := m.expanded[projKey]; !ok {
@@ -701,7 +701,7 @@ func (m TasksModel) actionStats() actionStats {
 	}
 	stats.pending = pc.Total
 	stats.pendingLabel = pc.Label()
-	stats.runningInteractive = m.runningInteractive
+	stats.runningInteractiveOrBg = m.runningInteractiveOrBg
 	return stats
 }
 

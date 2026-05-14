@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"strings"
+	"time"
 )
 
 const (
@@ -480,15 +481,67 @@ func (db *DB) ResetToPending(id int64) error {
 	}
 
 	_, err := db.Exec(
-		"UPDATE actions SET status = ?, started_at = NULL, tmux_session = NULL, tmux_window = NULL WHERE id = ?",
+		"UPDATE actions SET status = ?, started_at = NULL, tmux_session = NULL, tmux_window = NULL, dispatch_after = NULL WHERE id = ?",
 		ActionStatusPending, id,
 	)
 	if err == nil {
 		db.emitEvent("action", id, "action.status_changed", map[string]any{
-			"from": from, "to": ActionStatusPending,
+			"from": from, "to": ActionStatusPending, "dispatch_after_cleared": true,
 		})
 	}
 	return err
+}
+
+// DeferToPending rolls a running action back to pending with a future
+// dispatch_after timestamp so NextPending skips it for retryAfter, preventing
+// head-of-line blocking when a slot pool is full. Errors if the action is not
+// currently running — the defer path always claims first via NextPending, so
+// any other source status indicates a code-level misuse.
+func (db *DB) DeferToPending(id int64, retryAfter time.Duration) error {
+	var from string
+	if err := db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from); err != nil {
+		return fmt.Errorf("get current status: %w", err)
+	}
+	if from != ActionStatusRunning {
+		return fmt.Errorf("action #%d is not running (current: %s), cannot defer", id, from)
+	}
+
+	// SQLite stores datetime to second precision, so round up: a non-zero
+	// duration must yield at least a 1-second backoff (otherwise the deferred
+	// action immediately re-qualifies for NextPending on the very next poll
+	// inside the same second).
+	seconds := int64(retryAfter / time.Second)
+	if retryAfter > 0 && retryAfter%time.Second != 0 {
+		seconds++
+	}
+	if seconds < 1 && retryAfter > 0 {
+		seconds = 1
+	}
+	if seconds < 0 {
+		seconds = 0
+	}
+	modifier := fmt.Sprintf("+%d seconds", seconds)
+
+	_, err := db.Exec(
+		"UPDATE actions SET status = ?, started_at = NULL, tmux_session = NULL, tmux_window = NULL, dispatch_after = datetime('now', ?) WHERE id = ?",
+		ActionStatusPending, modifier, id,
+	)
+	if err != nil {
+		return err
+	}
+
+	var dispatchAfter sql.NullString
+	if err := db.QueryRow("SELECT dispatch_after FROM actions WHERE id = ?", id).Scan(&dispatchAfter); err != nil {
+		return fmt.Errorf("read dispatch_after: %w", err)
+	}
+	evt := map[string]any{
+		"from": from, "to": ActionStatusPending,
+	}
+	if dispatchAfter.Valid {
+		evt["dispatch_after"] = dispatchAfter.String
+	}
+	db.emitEvent("action", id, "action.status_changed", evt)
+	return nil
 }
 
 func (db *DB) SetTmuxInfo(id int64, tmuxSession, tmuxWindow string) error {

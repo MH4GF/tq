@@ -17,6 +17,7 @@ type CommandWriter interface {
 	MarkCancelled(id int64, result string) error
 	MarkDispatched(id int64) error
 	ResetToPending(id int64) error
+	DeferToPending(id int64, retryAfter time.Duration) error
 	SetTmuxInfo(id int64, tmuxSession, tmuxWindow string) error
 	MergeActionMetadata(id int64, updates map[string]any) error
 	UpdateAction(id int64, title *string, taskID *int64, metadata, workDir *string) error
