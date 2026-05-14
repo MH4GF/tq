@@ -35,7 +35,9 @@ The dispatch loop processes one action per iteration but **does not block on non
 | `MaxInteractive` | 3 | Cognitive-load cap on simultaneous user-facing sessions (interactive tmux + experimental_bg via `claude agents` share this pool) |
 | `MaxNonInteractive` | 5 | OS resource cap (each `claude -p` process plus its MCP servers / hooks ≈ 200-400MB) |
 
-A pending action that would exceed its cap is reset to `pending` (`ResetToPending`) and retried on the next poll. There is no in-memory semaphore — the DB row count is the source of truth, so the cap is correct even if the worker restarts mid-flight.
+A pending action that would exceed its cap is returned to `pending` via `DeferToPending(id, defaultDeferBackoff)`, which also stamps `dispatch_after = now + 30s`. `NextPending`'s WHERE clause then skips the deferred row for that window, letting the worker attempt other pending actions (including actions in a different slot pool) on the next poll. There is no in-memory semaphore — the DB row count is the source of truth, so the cap is correct even if the worker restarts mid-flight.
+
+Manual `tq action reset` calls `ResetToPending`, which also clears `dispatch_after` so the action is immediately eligible for `NextPending` again.
 
 `MaxNonInteractive` is not a cognitive-load limit; it exists only to bound memory consumption when many noninteractive actions are queued. Override via `--max-noninteractive` based on available RAM.
 
@@ -62,8 +64,8 @@ Actions whose `metadata.executor` is `"cloud"` are skipped by `reapStaleActions`
 ```
             ┌──────────┐
             │ pending  │◄────────────────┐
-            └────┬─────┘ ResetToPending  │ (slot cap reached)
-                 │ NextPending           │
+            └────┬─────┘ DeferToPending  │ (slot cap reached;
+                 │ NextPending           │  dispatch_after = now+30s)
                  ▼                       │
             ┌──────────┐                 │
    ┌────────│ running  │─────────────────┘

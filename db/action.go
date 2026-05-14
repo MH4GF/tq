@@ -475,21 +475,7 @@ func (db *DB) CountRunningInteractiveOrBg() (int, error) {
 }
 
 func (db *DB) ResetToPending(id int64) error {
-	var from string
-	if err := db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from); err != nil {
-		return fmt.Errorf("get current status: %w", err)
-	}
-
-	_, err := db.Exec(
-		"UPDATE actions SET status = ?, started_at = NULL, tmux_session = NULL, tmux_window = NULL, dispatch_after = NULL WHERE id = ?",
-		ActionStatusPending, id,
-	)
-	if err == nil {
-		db.emitEvent("action", id, "action.status_changed", map[string]any{
-			"from": from, "to": ActionStatusPending, "dispatch_after_cleared": true,
-		})
-	}
-	return err
+	return db.movePending(id, false, "", "")
 }
 
 // DeferToPending rolls a running action back to pending with a future
@@ -498,47 +484,43 @@ func (db *DB) ResetToPending(id int64) error {
 // currently running — the defer path always claims first via NextPending, so
 // any other source status indicates a code-level misuse.
 func (db *DB) DeferToPending(id int64, retryAfter time.Duration) error {
+	// SQLite stores datetime to second precision; round up so a sub-second
+	// retryAfter still produces a non-zero window (otherwise NextPending could
+	// re-qualify the action on the very next poll inside the same second).
+	dispatchAfter := time.Now().UTC().Add(retryAfter).Truncate(time.Second)
+	if retryAfter > 0 && retryAfter%time.Second != 0 {
+		dispatchAfter = dispatchAfter.Add(time.Second)
+	}
+	formatted := dispatchAfter.Format(TimeLayout)
+	return db.movePending(id, true, formatted, ActionStatusRunning)
+}
+
+// movePending unifies the two pending-rollback paths. If requireFromStatus is
+// non-empty, the current status must match (DeferToPending uses this to catch
+// code-level misuse). When dispatchAfter is empty, the column is cleared.
+func (db *DB) movePending(id int64, dispatchAfterValid bool, dispatchAfter, requireFromStatus string) error {
 	var from string
 	if err := db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&from); err != nil {
 		return fmt.Errorf("get current status: %w", err)
 	}
-	if from != ActionStatusRunning {
-		return fmt.Errorf("action #%d is not running (current: %s), cannot defer", id, from)
+	if requireFromStatus != "" && from != requireFromStatus {
+		return fmt.Errorf("action #%d is not %s (current: %s), cannot transition", id, requireFromStatus, from)
 	}
 
-	// SQLite stores datetime to second precision, so round up: a non-zero
-	// duration must yield at least a 1-second backoff (otherwise the deferred
-	// action immediately re-qualifies for NextPending on the very next poll
-	// inside the same second).
-	seconds := int64(retryAfter / time.Second)
-	if retryAfter > 0 && retryAfter%time.Second != 0 {
-		seconds++
+	var dispatchArg any
+	if dispatchAfterValid {
+		dispatchArg = dispatchAfter
 	}
-	if seconds < 1 && retryAfter > 0 {
-		seconds = 1
-	}
-	if seconds < 0 {
-		seconds = 0
-	}
-	modifier := fmt.Sprintf("+%d seconds", seconds)
-
-	_, err := db.Exec(
-		"UPDATE actions SET status = ?, started_at = NULL, tmux_session = NULL, tmux_window = NULL, dispatch_after = datetime('now', ?) WHERE id = ?",
-		ActionStatusPending, modifier, id,
-	)
-	if err != nil {
+	if _, err := db.Exec(
+		"UPDATE actions SET status = ?, started_at = NULL, tmux_session = NULL, tmux_window = NULL, dispatch_after = ? WHERE id = ?",
+		ActionStatusPending, dispatchArg, id,
+	); err != nil {
 		return err
 	}
 
-	var dispatchAfter sql.NullString
-	if err := db.QueryRow("SELECT dispatch_after FROM actions WHERE id = ?", id).Scan(&dispatchAfter); err != nil {
-		return fmt.Errorf("read dispatch_after: %w", err)
-	}
-	evt := map[string]any{
-		"from": from, "to": ActionStatusPending,
-	}
-	if dispatchAfter.Valid {
-		evt["dispatch_after"] = dispatchAfter.String
+	evt := map[string]any{"from": from, "to": ActionStatusPending}
+	if dispatchAfterValid {
+		evt["dispatch_after"] = dispatchAfter
 	}
 	db.emitEvent("action", id, "action.status_changed", evt)
 	return nil

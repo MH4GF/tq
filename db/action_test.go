@@ -617,8 +617,8 @@ func TestResetToPending(t *testing.T) {
 	if last.EventType != "action.status_changed" {
 		t.Errorf("last event_type = %q, want action.status_changed", last.EventType)
 	}
-	if !strings.Contains(last.Payload, `"dispatch_after_cleared":true`) {
-		t.Errorf("payload should contain dispatch_after_cleared=true, got %s", last.Payload)
+	if strings.Contains(last.Payload, `"dispatch_after"`) {
+		t.Errorf("payload should not carry dispatch_after on reset, got %s", last.Payload)
 	}
 }
 
