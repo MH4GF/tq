@@ -170,6 +170,18 @@ Current status totals are captured after each rule as `current violations: N`. A
 - Current violations: 0.
 - Runtime counterpart: Rules 11/16/18 are PR-time and method-name dependent; the weekly `/turso-query-watch` schedule observes the real metered `rows-read` from `turso db inspect tq --queries` and files an action on regression, catching what slips past these static guards. See `docs/turso-query-watch.md`.
 
+### Test-only-reachable interface methods
+
+**Rule 19 [enforced] — Every `db.Store` interface method (except the intentionally test-only `TestHelper` sub-interface) MUST have at least one non-test caller. A method whose only caller is its own self-test is dead from production.**
+
+- Why: Rule 13 (`deadcode -test`) cannot see this class of dead code. `deadcode` builds an RTA call graph; once `*db.DB` is instantiated and used as `db.Store` in production, RTA conservatively marks every interface-dispatched method reachable, and the `-test` flag additionally keeps any method its self-test exercises "live". So a `db.Store` method that lost its last production caller (incident: `db.Store.ListTasksByProject` after PR #261, whose sole remaining caller was `TestListTasksByProject`; removed by PR #267) stays green under Rule 13. Rule 19 closes that specific blind spot for the `db.Store` contract.
+- Scope: `db.Store` only (the foundational contract every upper layer depends on — Rule 4). Other interfaces are deliberately out of scope to keep the check tight and false-positive-free.
+- Why this mechanism (Go test harness, not a second `deadcode` pass): a `deadcode` run *without* `-test` inherits the exact same RTA interface-dispatch over-approximation as Rule 13 and would NOT report these methods either (verified empirically: `deadcode ./...` flags none of them). A second-pass/diff approach is therefore both noisier and unsound for this question. The type-driven AST scan mirrors Rule 15's proven `go/types` + `golang.org/x/tools/go/packages` pattern (no new dependency). `TestHelper` is excluded structurally: the check resolves the `db.TestHelper` interface via `go/types` and subtracts its method-name set, so test seams never need allowlisting.
+- "Non-test caller" spans the whole module, not just `cmd/`/`dispatch/`/`tui/`/`main.go`: a `db.Store` method invoked internally by another `db/` method (e.g. `GetTaskActionCount` called from `db/task.go`) is exercised in production transitively, so restricting the scan to upper layers would produce false positives. The rule fires only when there is zero non-`_test.go` caller anywhere.
+- Verify: Go test harness `internal/goldenrules/rule19_test.go`. Ceiling-based against `.goldenrules-rule19-allowlist` (deadcode-check discipline): new dead methods AND stale allowlist entries (method regained a non-test caller or was removed from `db.Store`) both fail. Run `go test ./internal/goldenrules/ -run TestRule19_NoTestOnlyStoreMethods`.
+- Allowlist policy: only deliberate seams belong in `.goldenrules-rule19-allowlist` long-term. The current entries are a pre-existing blind-spot backlog surfaced when the rule was introduced; each is tracked by a dedicated burn-down action on task #660 (resolve = delete the dead method or wire a real production caller, then remove the line).
+- Current violations: 8 (allowlisted in `.goldenrules-rule19-allowlist`): `EnsureNotificationsProject`, `GetOrCreateTriageTask`, `GetSchedule`, `HasActiveActionWithMeta`, `IsWorkerRunning`, `ListTasksByStatus`, `SetAllDispatchEnabled`, `UpdateScheduleRun`. These are real test-only-reachable methods Rule 13 could not see; burn-down is tracked as separate actions and is out of scope for the rule-introducing change.
+
 ---
 
 ## How to use this file
@@ -182,7 +194,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 **During periodic GC (`/gc-golden-rules`, weekly via tq schedule):**
 
-- Enforced rules (1-6, 8-18) are checked by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
+- Enforced rules (1-6, 8-19) are checked by CI on every push/PR. The GC command covers only agent-judgment checks: Rule 7 (table-driven tests) and documentation drift.
 - For each violation found, the GC command creates a tq action via `/tq:create-action` with `claude_args: ["--worktree"]` for isolated execution.
 - The created actions handle the actual fixes — each targeted to a single violation.
 
@@ -223,8 +235,9 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 16 No leading-wildcard `LIKE` | 7 | OK | OK | OK |
 | 17 No SCAN in EXPLAIN | 13 | — | — | — |
 | 18 No aggregate hot paths | — | OK | OK | — |
+| 19 No test-only `db.Store` methods | 8 | — | — | — |
 
-Totals: **20** current violations (Rule 16: 7 ceiling-pinned LIKE patterns; Rule 17: 13 SCANs allowlisted in `.goldenrules-rule17-allowlist`; both burn down via FTS5 conversion of `db.Search` and per-query index work tracked as separate actions).
+Totals: **28** current violations (Rule 16: 7 ceiling-pinned LIKE patterns; Rule 17: 13 SCANs allowlisted in `.goldenrules-rule17-allowlist`; Rule 19: 8 test-only-reachable `db.Store` methods allowlisted in `.goldenrules-rule19-allowlist`; all burn down via FTS5 conversion of `db.Search`, per-query index work, and per-method dead-code removal tracked as separate actions).
 
 ---
 
