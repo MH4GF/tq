@@ -749,9 +749,7 @@ func (m TasksModel) HelpKeys() []HelpKey {
 			if actionAttachable(line.action) {
 				keys = append(keys, HelpKey{"o", "attach"})
 			}
-			if line.action.Result.Valid && line.action.Result.String != "" {
-				keys = append(keys, HelpKey{"v", "view result"})
-			}
+			keys = append(keys, HelpKey{"v", "view detail"})
 			if actionResumable(line.action) {
 				keys = append(keys, HelpKey{"r", "resume"})
 			}

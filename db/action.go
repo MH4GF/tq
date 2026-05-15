@@ -72,9 +72,9 @@ func (a Action) MatchesDate(date string) bool {
 	return false
 }
 
-// Instruction extracts the "instruction" field from the action's Metadata
-// JSON. Returns "" if Metadata is empty, not valid JSON, or has no string
-// instruction field.
+// Instruction returns the "instruction" metadata field, or "" if Metadata is
+// empty, malformed, or lacks the field. Parse errors are intentionally
+// swallowed: callers treat absent instruction the same as a parse failure.
 func (a Action) Instruction() string {
 	if a.Metadata == "" {
 		return ""

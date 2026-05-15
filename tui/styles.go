@@ -171,7 +171,6 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 	}
 	b.WriteString(pad + styleBorderChar.Render(strings.Repeat("─", bodyW)) + "\n")
 
-	// Body: Instruction section then Result section, both scrollable together.
 	var lines []string
 	appendSection := func(label, content, placeholder string) {
 		lines = append(lines, styleMuted.Render(label+":"))
