@@ -327,6 +327,15 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 	// inside the goroutine.
 	actionCopy := *action
 	params.Async(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				msg := fmt.Sprintf("dispatch goroutine panic: %v", r)
+				if mfErr := params.DB.MarkFailed(actionCopy.ID, msg); mfErr != nil {
+					slog.Error("mark action failed", "action_id", actionCopy.ID, "error", mfErr)
+				}
+				slog.Error("dispatch goroutine panic recovered", "action_id", actionCopy.ID, "error", r)
+			}
+		}()
 		_, _ = runNonInteractive(ctx, params, &actionCopy, worker, instruction, cfg, workDir)
 	})
 	return &ExecuteResult{Mode: ModeNonInteractive}, nil
