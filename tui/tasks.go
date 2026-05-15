@@ -305,7 +305,7 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 	case key.Matches(msg, key.NewBinding(key.WithKeys("v"))):
 		if m.cursor >= 0 && m.cursor < len(m.lines) {
 			line := m.lines[m.cursor]
-			if a := line.action; a != nil && a.Result.Valid && a.Result.String != "" {
+			if a := line.action; a != nil {
 				m.detailAction = a
 				m.detailScroll = 0
 				m.mode = modeViewDetail
