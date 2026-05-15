@@ -84,6 +84,8 @@ CREATE TABLE IF NOT EXISTS schedules (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE INDEX IF NOT EXISTS idx_schedules_task ON schedules(task_id, enabled);
+
 CREATE TABLE IF NOT EXISTS events (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   entity_type TEXT NOT NULL,
