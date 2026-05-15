@@ -40,6 +40,11 @@ func NewSchedulesModel(database db.Store) SchedulesModel {
 	return SchedulesModel{database: database}
 }
 
+func (m *SchedulesModel) setMessage(msg string, isError bool) {
+	m.message = msg
+	m.messageIsError = isError
+}
+
 func (m SchedulesModel) loadSchedules() tea.Cmd {
 	return func() tea.Msg {
 		schedules, err := m.database.ListSchedules(0)
@@ -62,15 +67,13 @@ func (m SchedulesModel) Update(msg tea.Msg) (SchedulesModel, tea.Cmd) {
 			m.cursor = max(0, len(m.schedules)-1)
 		}
 		if msg.err != nil {
-			m.message = fmt.Sprintf("load schedules failed: %v", msg.err)
-			m.messageIsError = true
+			m.setMessage(fmt.Sprintf("load schedules failed: %v", msg.err), true)
 		}
 	case tea.KeyMsg:
 		if m.mode == schedModeDetail {
 			return m.updateDetail(msg)
 		}
-		m.message = ""
-		m.messageIsError = false
+		m.setMessage("", false)
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("j", "down"))):
 			if m.cursor < len(m.schedules)-1 {
@@ -92,10 +95,9 @@ func (m SchedulesModel) Update(msg tea.Msg) (SchedulesModel, tea.Cmd) {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("d"))):
 			if s := m.selectedSchedule(); s != nil {
 				if err := m.database.DeleteSchedule(s.ID); err != nil {
-					m.message = fmt.Sprintf("schedule #%d delete failed: %v", s.ID, err)
-					m.messageIsError = true
+					m.setMessage(fmt.Sprintf("schedule #%d delete failed: %v", s.ID, err), true)
 				} else {
-					m.message = fmt.Sprintf("schedule #%d deleted", s.ID)
+					m.setMessage(fmt.Sprintf("schedule #%d deleted", s.ID), false)
 				}
 				return m, m.loadSchedules()
 			}
@@ -119,14 +121,13 @@ func (m SchedulesModel) updateDetail(msg tea.KeyMsg) (SchedulesModel, tea.Cmd) {
 func (m SchedulesModel) toggleEnabled(s *db.Schedule) (SchedulesModel, tea.Cmd) {
 	newEnabled := !s.Enabled
 	if err := m.database.UpdateScheduleEnabled(s.ID, newEnabled); err != nil {
-		m.message = fmt.Sprintf("schedule #%d toggle failed: %v", s.ID, err)
-		m.messageIsError = true
+		m.setMessage(fmt.Sprintf("schedule #%d toggle failed: %v", s.ID, err), true)
 	} else {
 		action := "enabled"
 		if !newEnabled {
 			action = "disabled"
 		}
-		m.message = fmt.Sprintf("schedule #%d %s", s.ID, action)
+		m.setMessage(fmt.Sprintf("schedule #%d %s", s.ID, action), false)
 	}
 	return m, m.loadSchedules()
 }
