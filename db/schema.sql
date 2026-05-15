@@ -103,3 +103,75 @@ CREATE TABLE IF NOT EXISTS worker_heartbeats (
   last_heartbeat  TEXT NOT NULL,
   max_interactive INTEGER NOT NULL DEFAULT 3
 );
+
+-- FTS5 search indexes (trigram tokenizer: language-agnostic substring match,
+-- preserves the old LIKE '%kw%' behavior for >=3-character keywords incl. CJK).
+-- rowid mirrors the source row id so Search can join back for the other columns.
+-- Backfill of pre-existing rows is done idempotently in db.go Migrate().
+CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
+  title, metadata, tokenize='trigram'
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS actions_fts USING fts5(
+  title, result, metadata, tokenize='trigram'
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(
+  reason, tokenize='trigram'
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_tasks_fts_insert
+AFTER INSERT ON tasks
+BEGIN
+  INSERT INTO tasks_fts (rowid, title, metadata)
+  VALUES (NEW.id, NEW.title, NEW.metadata);
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_tasks_fts_update
+AFTER UPDATE OF title, metadata ON tasks
+BEGIN
+  DELETE FROM tasks_fts WHERE rowid = OLD.id;
+  INSERT INTO tasks_fts (rowid, title, metadata)
+  VALUES (NEW.id, NEW.title, NEW.metadata);
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_tasks_fts_delete
+AFTER DELETE ON tasks
+BEGIN
+  DELETE FROM tasks_fts WHERE rowid = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_actions_fts_insert
+AFTER INSERT ON actions
+BEGIN
+  INSERT INTO actions_fts (rowid, title, result, metadata)
+  VALUES (NEW.id, NEW.title, COALESCE(NEW.result, ''), NEW.metadata);
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_actions_fts_update
+AFTER UPDATE OF title, result, metadata ON actions
+BEGIN
+  DELETE FROM actions_fts WHERE rowid = OLD.id;
+  INSERT INTO actions_fts (rowid, title, result, metadata)
+  VALUES (NEW.id, NEW.title, COALESCE(NEW.result, ''), NEW.metadata);
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_actions_fts_delete
+AFTER DELETE ON actions
+BEGIN
+  DELETE FROM actions_fts WHERE rowid = OLD.id;
+END;
+
+-- events is append-only (event.go only ever INSERTs). Index only the
+-- task.status_changed reason that db.Search exposes; skip empty reasons so an
+-- empty-reason status change is not searchable (matches prior LIKE behavior).
+CREATE TRIGGER IF NOT EXISTS trg_events_fts_insert
+AFTER INSERT ON events
+WHEN NEW.entity_type = 'task'
+  AND NEW.event_type = 'task.status_changed'
+  AND json_extract(NEW.payload, '$.reason') IS NOT NULL
+  AND json_extract(NEW.payload, '$.reason') != ''
+BEGIN
+  INSERT INTO events_fts (rowid, reason)
+  VALUES (NEW.id, json_extract(NEW.payload, '$.reason'));
+END;
