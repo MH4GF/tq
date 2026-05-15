@@ -151,7 +151,11 @@ func decideSchedules(schedules []db.Schedule, taskMap map[int64]*db.Task, active
 		meta, err := ParseActionMetadata(s.Metadata)
 		if err != nil {
 			slog.Warn("schedule: parse metadata failed", "schedule_id", s.ID, "error", err)
-			meta = make(map[string]any)
+			out = append(out, scheduleDecision{
+				schedule:  s,
+				errUpdate: &db.ScheduleRunUpdate{ID: s.ID, LastRunAt: nowUTC, LastError: fmt.Sprintf("parse metadata: %v", err)},
+			})
+			continue
 		}
 		meta[MetaKeyInstruction] = s.Instruction
 		meta[MetaKeyScheduleID] = fmt.Sprintf("%d", s.ID)
