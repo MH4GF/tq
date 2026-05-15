@@ -20,18 +20,20 @@ const (
 )
 
 type SchedulesModel struct {
-	schedules []db.Schedule
-	cursor    int
-	width     int
-	height    int
-	database  db.Store
-	message   string
-	mode      schedulesMode
-	detailIdx int
+	schedules      []db.Schedule
+	cursor         int
+	width          int
+	height         int
+	database       db.Store
+	message        string
+	messageIsError bool
+	mode           schedulesMode
+	detailIdx      int
 }
 
 type schedulesLoadedMsg struct {
 	schedules []db.Schedule
+	err       error
 }
 
 func NewSchedulesModel(database db.Store) SchedulesModel {
@@ -42,7 +44,7 @@ func (m SchedulesModel) loadSchedules() tea.Cmd {
 	return func() tea.Msg {
 		schedules, err := m.database.ListSchedules(0)
 		if err != nil {
-			return schedulesLoadedMsg{}
+			return schedulesLoadedMsg{err: err}
 		}
 		return schedulesLoadedMsg{schedules: schedules}
 	}
@@ -59,11 +61,16 @@ func (m SchedulesModel) Update(msg tea.Msg) (SchedulesModel, tea.Cmd) {
 		if m.cursor >= len(m.schedules) {
 			m.cursor = max(0, len(m.schedules)-1)
 		}
+		if msg.err != nil {
+			m.message = fmt.Sprintf("load schedules failed: %v", msg.err)
+			m.messageIsError = true
+		}
 	case tea.KeyMsg:
 		if m.mode == schedModeDetail {
 			return m.updateDetail(msg)
 		}
 		m.message = ""
+		m.messageIsError = false
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("j", "down"))):
 			if m.cursor < len(m.schedules)-1 {
@@ -131,6 +138,9 @@ func (m SchedulesModel) View() string {
 	}
 
 	if len(m.schedules) == 0 {
+		if m.messageIsError && m.message != "" {
+			return styleWarning.Render("  " + m.message)
+		}
 		return styleMuted.Render("  No schedules")
 	}
 
@@ -185,7 +195,11 @@ func (m SchedulesModel) View() string {
 	}
 
 	if m.message != "" {
-		b.WriteString("\n  " + styleDone.Render(m.message) + "\n")
+		style := styleDone
+		if m.messageIsError {
+			style = styleWarning
+		}
+		b.WriteString("\n  " + style.Render(m.message) + "\n")
 	}
 
 	return b.String()
