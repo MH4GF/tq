@@ -10,6 +10,15 @@ Run `tq --help` for data model, commands, and usage examples.
 - Lint: `golangci-lint run` (CI also runs `./scripts/deadcode-check.sh` — Rule 13)
 - Install: `go install .`
 
+`tq` CLI subcommands (see `docs/cli-reference.md` for flags and examples):
+
+- `tq project` / `tq task` / `tq action` — manage projects, tasks, and actions
+- `tq schedule` — create and manage scheduled actions
+- `tq event` — query the event log
+- `tq search <keyword>` — full-text search across tasks and actions
+- `tq ui` — launch interactive TUI with queue worker
+- `tq completion` — generate shell autocompletion scripts
+
 ## Style
 
 - Table-driven tests in `*_test.go`; use `testutil.NewTestDB()` for in-memory SQLite
