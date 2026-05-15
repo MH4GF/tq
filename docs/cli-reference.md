@@ -52,7 +52,7 @@ tq project list [--jq <EXPR>] [--limit <N>]
 | Command | Description |
 |---------|-------------|
 | `tq task create <TITLE> --project <ID>` | Create a task |
-| `tq task list` | List tasks (JSON output, includes nested actions) |
+| `tq task list` | List tasks (JSON output, includes latest 10 nested actions) |
 | `tq task get <ID>` | Get a task by ID with latest 10 nested actions and status_history (JSON) |
 | `tq task update <ID>` | Update a task |
 | `tq task note <ID>` | Record a free-form note on a task without changing its status |

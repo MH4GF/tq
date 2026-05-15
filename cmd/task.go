@@ -68,7 +68,7 @@ var taskListFields = append(slices.Clone(taskBaseFields), "latest_triage_note")
 
 var taskListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List tasks (JSON output, includes nested actions)",
+	Short: "List tasks (JSON output, includes latest 10 nested actions)",
 	Example: `  tq task list
   tq task list --project 1
   tq task list --status open
