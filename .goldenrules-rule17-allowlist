@@ -14,6 +14,8 @@
 #   - Bulk-write operations (UPDATE/DELETE without filter)
 #   - FK-cascade or sub-DELETE that scans a referenced table without an index
 #   - Search using leading-wildcard LIKE (separate FTS5 work tracked elsewhere)
+#   - LIMIT-bounded primary-key scan (ORDER BY id DESC LIMIT N — actually
+#     O(N), shows as SCAN in EXPLAIN but not actionable via index)
 
 db/action.go:319 SCAN actions
 db/db.go:142 SCAN tasks
@@ -21,6 +23,8 @@ db/db.go:159 SCAN actions
 db/db.go:312 SCAN CONSTANT
 db/db.go:312 SCAN task_action_counts
 db/db.go:318 SCAN actions
+# db/event.go:69 — ListRecentEvents: LIMIT-bounded PK-order scan
+# (ORDER BY id DESC LIMIT ?), not a real full scan; no index will help.
 db/event.go:69 SCAN events
 db/project.go:222 SCAN projects
 db/project.go:80 SCAN projects
