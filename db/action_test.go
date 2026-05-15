@@ -1652,3 +1652,27 @@ func TestBulkMarkFailed(t *testing.T) {
 		}
 	})
 }
+
+func TestActionInstruction(t *testing.T) {
+	tests := []struct {
+		name     string
+		metadata string
+		want     string
+	}{
+		{"valid", `{"instruction":"do the thing","mode":"x"}`, "do the thing"},
+		{"empty string", "", ""},
+		{"empty object", "{}", ""},
+		{"no instruction key", `{"mode":"x"}`, ""},
+		{"invalid json", `{not json`, ""},
+		{"instruction not string", `{"instruction":42}`, ""},
+		{"multiline", "{\"instruction\":\"line1\\nline2\"}", "line1\nline2"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := db.Action{Metadata: tt.metadata}
+			if got := a.Instruction(); got != tt.want {
+				t.Errorf("Instruction() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

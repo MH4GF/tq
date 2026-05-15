@@ -171,17 +171,27 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 	}
 	b.WriteString(pad + styleBorderChar.Render(strings.Repeat("─", bodyW)) + "\n")
 
-	// Result body with word wrap
+	var lines []string
+	appendSection := func(label, content, placeholder string) {
+		lines = append(lines, styleMuted.Render(label+":"))
+		if content == "" {
+			lines = append(lines, placeholder)
+			return
+		}
+		for rawLine := range strings.SplitSeq(content, "\n") {
+			lines = append(lines, wrapLine(rawLine, bodyW)...)
+		}
+	}
+	appendSection("Instruction", a.Instruction(), "(no instruction)")
+	lines = append(lines, "", styleBorderChar.Render(strings.Repeat("─", bodyW)))
 	result := ""
 	if a.Result.Valid {
 		result = a.Result.String
 	}
-	var lines []string
-	for rawLine := range strings.SplitSeq(result, "\n") {
-		lines = append(lines, wrapLine(rawLine, bodyW)...)
-	}
+	appendSection("Result", result, "(no result yet)")
 
-	// top(1) + header(1) + separator(1) + fields + separator(1) + padding before help(1) = 5 + len(fields)
+	// Chrome outside the scrollable body: top(1) + header(1) + separator(1)
+	// + fields + separator(1) + padding before help(1) = 5 + len(fields)
 	chromeLines := 5 + len(fields)
 	bodyHeight := height - chromeLines
 	if bodyHeight < 1 {

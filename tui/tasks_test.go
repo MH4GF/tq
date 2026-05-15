@@ -363,7 +363,7 @@ func TestTasksModel_DetailView(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
-	id, _ := d.InsertAction("check", taskID, "{}", db.ActionStatusRunning, nil, "")
+	id, _ := d.InsertAction("check", taskID, `{"instruction":"the original instruction"}`, db.ActionStatusRunning, nil, "")
 	d.MarkDone(id, "detailed output\nline 2")
 
 	m := NewTasksModel(d, "")
@@ -397,6 +397,9 @@ func TestTasksModel_DetailView(t *testing.T) {
 	if !strings.Contains(view, "detailed output") {
 		t.Errorf("detail view should contain result, got %q", view)
 	}
+	if !strings.Contains(view, "the original instruction") {
+		t.Errorf("done detail view should also contain instruction, got %q", view)
+	}
 
 	// Press q to return
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -405,12 +408,12 @@ func TestTasksModel_DetailView(t *testing.T) {
 	}
 }
 
-func TestTasksModel_DetailViewNoResultNoOp(t *testing.T) {
+func TestTasksModel_DetailViewPendingOpens(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
 	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
-	d.InsertAction("check", taskID, "{}", db.ActionStatusPending, nil, "")
+	d.InsertAction("check", taskID, `{"instruction":"investigate the bug"}`, db.ActionStatusPending, nil, "")
 
 	m := NewTasksModel(d, "")
 	m = m.SetSize(120, 40)
@@ -425,10 +428,18 @@ func TestTasksModel_DetailViewNoResultNoOp(t *testing.T) {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	}
 
-	// Press v - should be no-op (no result)
+	// Press v - detail view opens even though the action has no result yet.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
-	if m.mode != modeNormal {
-		t.Errorf("v on action with no result should be no-op, mode = %d", m.mode)
+	if m.mode != modeViewDetail {
+		t.Fatalf("v on pending action should open detail, mode = %d", m.mode)
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "investigate the bug") {
+		t.Errorf("detail view should show instruction, got %q", view)
+	}
+	if !strings.Contains(view, "(no result yet)") {
+		t.Errorf("pending action detail should show result placeholder, got %q", view)
 	}
 }
 

@@ -305,7 +305,7 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 	case key.Matches(msg, key.NewBinding(key.WithKeys("v"))):
 		if m.cursor >= 0 && m.cursor < len(m.lines) {
 			line := m.lines[m.cursor]
-			if a := line.action; a != nil && a.Result.Valid && a.Result.String != "" {
+			if a := line.action; a != nil {
 				m.detailAction = a
 				m.detailScroll = 0
 				m.mode = modeViewDetail
@@ -749,9 +749,7 @@ func (m TasksModel) HelpKeys() []HelpKey {
 			if actionAttachable(line.action) {
 				keys = append(keys, HelpKey{"o", "attach"})
 			}
-			if line.action.Result.Valid && line.action.Result.String != "" {
-				keys = append(keys, HelpKey{"v", "view result"})
-			}
+			keys = append(keys, HelpKey{"v", "view detail"})
 			if actionResumable(line.action) {
 				keys = append(keys, HelpKey{"r", "resume"})
 			}

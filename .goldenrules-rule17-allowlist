@@ -15,7 +15,7 @@
 #   - FK-cascade or sub-DELETE that scans a referenced table without an index
 #   - Search using leading-wildcard LIKE (separate FTS5 work tracked elsewhere)
 
-db/action.go:303 SCAN actions
+db/action.go:319 SCAN actions
 db/db.go:142 SCAN tasks
 db/db.go:159 SCAN actions
 db/db.go:312 SCAN CONSTANT

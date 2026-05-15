@@ -72,6 +72,22 @@ func (a Action) MatchesDate(date string) bool {
 	return false
 }
 
+// Instruction returns the "instruction" metadata field, or "" if Metadata is
+// empty, malformed, or lacks the field. Parse errors are intentionally
+// swallowed: callers treat absent instruction the same as a parse failure.
+func (a Action) Instruction() string {
+	if a.Metadata == "" {
+		return ""
+	}
+	var m struct {
+		Instruction string `json:"instruction"`
+	}
+	if err := json.Unmarshal([]byte(a.Metadata), &m); err != nil {
+		return ""
+	}
+	return m.Instruction
+}
+
 func (db *DB) InsertAction(title string, taskID int64, metadata, status string, dispatchAfter *string, workDir string) (int64, error) {
 	if !ValidActionStatuses[status] {
 		return 0, fmt.Errorf("invalid action status %q: must be one of pending, running, dispatched, done, failed, cancelled", status)
