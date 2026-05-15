@@ -91,7 +91,10 @@ func (m SchedulesModel) Update(msg tea.Msg) (SchedulesModel, tea.Cmd) {
 			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("d"))):
 			if s := m.selectedSchedule(); s != nil {
-				if err := m.database.DeleteSchedule(s.ID); err == nil {
+				if err := m.database.DeleteSchedule(s.ID); err != nil {
+					m.message = fmt.Sprintf("schedule #%d delete failed: %v", s.ID, err)
+					m.messageIsError = true
+				} else {
 					m.message = fmt.Sprintf("schedule #%d deleted", s.ID)
 				}
 				return m, m.loadSchedules()
@@ -115,7 +118,10 @@ func (m SchedulesModel) updateDetail(msg tea.KeyMsg) (SchedulesModel, tea.Cmd) {
 
 func (m SchedulesModel) toggleEnabled(s *db.Schedule) (SchedulesModel, tea.Cmd) {
 	newEnabled := !s.Enabled
-	if err := m.database.UpdateScheduleEnabled(s.ID, newEnabled); err == nil {
+	if err := m.database.UpdateScheduleEnabled(s.ID, newEnabled); err != nil {
+		m.message = fmt.Sprintf("schedule #%d toggle failed: %v", s.ID, err)
+		m.messageIsError = true
+	} else {
 		action := "enabled"
 		if !newEnabled {
 			action = "disabled"
