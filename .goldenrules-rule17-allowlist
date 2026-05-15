@@ -13,7 +13,13 @@
 #   - Migration / one-shot maintenance queries (run once, small data)
 #   - Bulk-write operations (UPDATE/DELETE without filter)
 #   - FK-cascade or sub-DELETE that scans a referenced table without an index
-#   - Search using leading-wildcard LIKE (separate FTS5 work tracked elsewhere)
+#   - FTS5 MATCH: reported as `SCAN <fts> VIRTUAL TABLE INDEX` — this IS the
+#     index-backed path (replaces the old leading-wildcard LIKE full scans).
+#   - FTS5 maintenance-trigger expansion on a single-row write: EXPLAIN of
+#     `INSERT INTO tasks` expands the AFTER INSERT trigger; SQLite emits the
+#     parent table's compiled FK-action subprogram (SCAN schedules). The
+#     trigger body only writes tasks_fts — no schedules scan happens per row
+#     at runtime. Same accepted pattern as the trg_actions_count_* triggers.
 #   - LIMIT-bounded primary-key scan (ORDER BY id DESC LIMIT N — actually
 #     O(N), shows as SCAN in EXPLAIN but not actionable via index)
 
@@ -29,6 +35,8 @@ db/event.go:69 SCAN events
 db/project.go:222 SCAN projects
 db/project.go:80 SCAN projects
 db/schedule.go:51 SCAN schedules
-db/search.go:129 SCAN a
-db/search.go:129 SCAN t
+db/search.go:152 SCAN actions_fts
+db/search.go:152 SCAN events_fts
+db/search.go:152 SCAN tasks_fts
 db/task.go:385 SCAN tasks
+db/task.go:59 SCAN schedules
