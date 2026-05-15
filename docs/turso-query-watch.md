@@ -16,7 +16,8 @@ The skill `/turso-query-watch` runs
 2. Parses the top N (default 10) queries by rows-read.
 3. Compares each against the stored baseline.
 4. Files **one** tq action (mode `experimental_bg`) under task #698 when any
-   query regresses, then rewrites the baseline.
+   query regresses. Rewrites the baseline on every non-dry-run run, whether or
+   not a regression fired.
 
 It always prints a JSON summary to stdout. It exits non-zero — never silently
 no-ops — if `turso` is missing, unauthenticated, or the output cannot be parsed.

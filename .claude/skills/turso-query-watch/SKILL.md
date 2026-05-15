@@ -19,10 +19,12 @@ bash .claude/skills/turso-query-watch/scripts/turso-query-watch.sh
 
 The script does all the work deterministically: it captures
 `turso db inspect tq --queries`, parses the top queries by rows-read, compares
-each against `~/.config/tq/turso-query-baseline.json`, prints a JSON summary to
-stdout, and — only when a query clears **both** the +50% and +50M rows-read
-gates — files a tq action under task #698 and rewrites the baseline. Queries
-listed in `~/.config/tq/turso-query-ignore.txt` are excluded.
+each against `~/.config/tq/turso-query-baseline.json`, and prints a JSON summary
+to stdout. It files a tq action under task #698 only when a query clears
+**both** the +50% and +50M rows-read gates. It rewrites the baseline on every
+non-dry-run (regardless of whether a regression fired), so the same regression
+is not re-filed each week. Queries listed in
+`~/.config/tq/turso-query-ignore.txt` are excluded.
 
 Pass `--dry-run` for an ad-hoc human check that neither files an action nor
 touches the baseline.

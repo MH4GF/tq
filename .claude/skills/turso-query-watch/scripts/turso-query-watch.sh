@@ -173,7 +173,7 @@ for sql, now in ranked:
     grew_pct = base == 0 or now >= base * (1.0 + pct)
     grew_abs = delta >= abs_floor
     is_reg = (not skip) and grew_pct and grew_abs
-    report_rows.append({
+    row = {
         "query": sql,
         "rows_read": now,
         "baseline_rows_read": base,
@@ -182,9 +182,10 @@ for sql, now in ranked:
         "new_query": base == 0,
         "ignored": skip,
         "regression": is_reg,
-    })
+    }
+    report_rows.append(row)
     if is_reg:
-        regressions.append(report_rows[-1])
+        regressions.append(row)
 
 summary = {
     "db": db_name,
