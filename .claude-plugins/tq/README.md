@@ -20,7 +20,7 @@ claude plugin install tq@tq-marketplace
 
 ### `/tq:done <action_id> [summary]`
 
-Mark a tq action as done, then judge task-level completion and propose follow-up actions.
+Mark a tq action as done, then judge task-level completion and propose follow-up actions when work remains.
 
 Use this from a Claude Code session launched via the tq interactive worker.
 
@@ -41,7 +41,7 @@ Mark a tq action as failed, then judge task-level completion and propose follow-
 
 ### `/tq:cancel [action_id]`
 
-Cancel a tq action and record improvement suggestions, then judge task-level completion and propose follow-up actions.
+Cancel a tq action with improvement suggestions, then judge task-level completion and propose follow-up actions when work remains.
 
 ```
 /tq:cancel           # auto-detect action_id
@@ -50,11 +50,11 @@ Cancel a tq action and record improvement suggestions, then judge task-level com
 
 ### `/tq:create-action [instruction]`
 
-Create a tq action. The instruction is auto-inferred, or the user can specify it.
+Create a tq action (auto-infer instruction or let user specify).
 
 ### `/tq:triage [project_name]`
 
-Inventory open tasks: review status → propose cleanup → execute.
+Inventory and organize open tasks: review status → propose cleanup → execute.
 
 ## CLI commands used
 
