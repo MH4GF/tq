@@ -1,0 +1,9 @@
+QUERY                                                                                                  ROWS WRITTEN  ROWS READ
+SELECT id, title, task_id, metadata, status FROM actions WHERE task_id IN (?, ?)                        0             120000000
+INSERT INTO events (entity_type, entity_id, event_type, payload) VALUES (?, ?, ?, ?)                    17668         22085
+SELECT id, metadata FROM actions WHERE metadata LIKE '%permission_mode%' OR metadata LIKE '%worktree%'  0             90000000
+SELECT 'task' AS entity_type, t.id, t.project_id FROM tasks t WHERE t.title LIKE '%' || ? || '%'        0             60000000
+		UNION ALL
+		SELECT 'action', a.id, t.project_id FROM actions a JOIN tasks t ON a.task_id = t.id
+		WHERE a.title LIKE '%' || ? || '%'
+COMMIT                                                                                                 0             0
