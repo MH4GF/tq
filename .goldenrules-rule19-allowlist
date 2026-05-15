@@ -1,0 +1,24 @@
+# db.Store methods with NO non-test caller anywhere in the module — reachable
+# solely through their own self-test. See docs/golden-rules.md Rule 19
+# (test-only-reachable interface methods).
+#
+# Format: one Store method name per line. Blank lines and # comments ignored.
+# The check (internal/goldenrules/rule19_test.go) fails on NEW dead methods
+# AND on STALE entries (a method that regained a non-test caller or was
+# removed from db.Store). The db.TestHelper sub-interface is excluded by the
+# check itself and MUST NOT be listed here.
+#
+# Allowlist policy: only deliberate seams belong here long-term. The entries
+# below are the pre-existing blind-spot backlog surfaced when Rule 19 was
+# introduced — each is tracked by a dedicated burn-down action (task #660):
+# resolve (delete the dead method, or wire a real production caller) and then
+# remove the line, NOT keep it allowlisted forever.
+
+EnsureNotificationsProject
+GetOrCreateTriageTask
+GetSchedule
+HasActiveActionWithMeta
+IsWorkerRunning
+ListTasksByStatus
+SetAllDispatchEnabled
+UpdateScheduleRun
