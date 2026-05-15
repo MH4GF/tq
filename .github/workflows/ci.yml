@@ -37,6 +37,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y tmux
       - run: go test ./...
       - run: go build ./...
+      - run: ./.claude/skills/turso-query-watch/scripts/turso-query-watch.test.sh
 
   e2e-libsql:
     runs-on: ubuntu-latest

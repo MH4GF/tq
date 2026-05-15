@@ -168,6 +168,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 - Verify: Go test harness `internal/goldenrules/` scans `tui/`, `dispatch/` for `"...SELECT COUNT|SUM|AVG..."` string literals. Ceiling-based: violations below the ceiling pass, regressions fail. Run `go test ./internal/goldenrules/`.
 - Detection limits (same as Rule 11/16): line-split (`"SELECT " + "COUNT(*)"`) and cross-literal concatenation (`prefix + " COUNT(*)"`) bypass detection. Reviewers MUST reject rewrites that exploit these to hide hot-path aggregates.
 - Current violations: 0.
+- Runtime counterpart: Rules 11/16/18 are PR-time and method-name dependent; the weekly `/turso-query-watch` schedule observes the real metered `rows-read` from `turso db inspect tq --queries` and files an action on regression, catching what slips past these static guards. See `docs/turso-query-watch.md`.
 
 ---
 
