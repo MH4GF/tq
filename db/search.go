@@ -102,7 +102,7 @@ func (db *DB) Search(keyword string, projectID int64) ([]SearchResult, error) {
 	// Build args in branch order; each branch binds its MATCH expression and,
 	// when filtering by project, the project id.
 	var args []any
-	addBranch := func(match any) {
+	addBranch := func(match string) {
 		args = append(args, match)
 		if projectID != 0 {
 			args = append(args, projectID)
