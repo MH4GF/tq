@@ -1,5 +1,6 @@
 ---
 description: tqキューに溜まった失敗actionとpermission denialを横断的に診断する。「インシデント調べて」「最近の失敗まとめて」「permission blockの傾向見せて」「/tq:investigate-incidents」で発動
+context: fork
 allowed-tools: Bash(tq *), Read, Grep, Glob
 ---
 
