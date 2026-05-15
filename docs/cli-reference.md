@@ -350,6 +350,8 @@ tq search <KEYWORD> [--project <ID>] [--jq <EXPR>]
 
 Full-text search across task titles, task metadata, task status change reasons, action titles, action results, and action metadata. Output is JSON.
 
+Substring search is backed by an FTS5 trigram index, so keywords shorter than 3 characters (including 2-character CJK terms) return no results.
+
 - `--project` — Filter by project ID (default: 0 = all projects)
 - `--jq` — Filter JSON output (fields: `entity_type`, `entity_id`, `task_id`, `project_id`, `field`, `snippet`, `status`, `created_at`)
 
