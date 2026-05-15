@@ -962,3 +962,50 @@ func TestExecuteAction_InteractiveAcceptsSingleLineInstruction(t *testing.T) {
 		t.Error("send-keys args must NOT use legacy single-quote shell escape")
 	}
 }
+
+// panicWorker panics inside Execute to simulate an unrecovered crash in the
+// async noninteractive dispatch path.
+type panicWorker struct{ msg string }
+
+func (w *panicWorker) Execute(_ context.Context, _ string, _ ActionConfig, _ string, _, _ int64) (string, error) {
+	panic(w.msg)
+}
+
+func TestExecuteAction_AsyncPanicMarksFailed(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
+	taskID, _ := d.InsertTask(1, "Test task", `{}`, "")
+	d.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil, "")
+	action, _ := d.NextPending(context.Background())
+
+	worker := &panicWorker{msg: "boom in worker"}
+	workerFunc := func() Worker { return worker }
+
+	result, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+		// Run the async closure synchronously so the test can assert the
+		// post-panic DB state deterministically.
+		Async: func(fn func()) { fn() },
+	}, action)
+	if err != nil {
+		t.Fatalf("ExecuteAction returned error: %v", err)
+	}
+	if result.Mode != ModeNonInteractive {
+		t.Errorf("mode = %q, want %q", result.Mode, ModeNonInteractive)
+	}
+
+	a, _ := d.GetAction(action.ID)
+	if a.Status != db.ActionStatusFailed {
+		t.Fatalf("status = %q, want %q", a.Status, db.ActionStatusFailed)
+	}
+	if !strings.Contains(a.Result.String, "boom in worker") {
+		t.Errorf("result = %q, want it to contain panic message %q", a.Result.String, "boom in worker")
+	}
+}

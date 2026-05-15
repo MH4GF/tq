@@ -72,7 +72,8 @@ Actions whose `metadata.executor` is `"cloud"` are skipped by `reapStaleActions`
    │        └────┬─────┘
    │             │ worker.Execute
    │             │   interactive / remote: synchronous
-   │             │   noninteractive: async goroutine (MarkDone in goroutine)
+   │             │   noninteractive: async goroutine (MarkDone / MarkFailed in goroutine,
+   │             │     incl. recover() → MarkFailed on panic)
    │       ┌─────┴─────┐
    ▼       ▼           ▼
 ┌──────┐ ┌──────┐ ┌──────────────┐
