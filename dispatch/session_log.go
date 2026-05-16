@@ -12,6 +12,11 @@ import (
 // ClaudeSessionLogChecker checks if a Claude Code session is actively working.
 type ClaudeSessionLogChecker interface {
 	IsClaudeSessionActive(workDir string, freshnessThreshold time.Duration) (active bool, err error)
+	// SessionLogExists reports whether a session log .jsonl exists anywhere
+	// under ~/.claude/projects for the given claude session id. Unlike
+	// IsClaudeSessionActive it does not depend on ~/.claude/sessions/*.json
+	// (deleted on process exit), so it stays true after the session ends.
+	SessionLogExists(sessionID string) (exists bool, err error)
 }
 
 // FileClaudeSessionLogChecker implements ClaudeSessionLogChecker by scanning
@@ -89,6 +94,22 @@ func pathHasPrefix(path, prefix string) bool {
 		return true
 	}
 	return strings.HasPrefix(path, prefix+"/")
+}
+
+func (c *FileClaudeSessionLogChecker) SessionLogExists(sessionID string) (bool, error) {
+	homeDir := c.HomeDir
+	if homeDir == "" {
+		var err error
+		homeDir, err = os.UserHomeDir()
+		if err != nil {
+			return false, fmt.Errorf("get home dir: %w", err)
+		}
+	}
+	matches, err := filepath.Glob(filepath.Join(homeDir, ".claude", "projects", "*", sessionID+".jsonl"))
+	if err != nil {
+		return false, fmt.Errorf("glob session log: %w", err)
+	}
+	return len(matches) > 0, nil
 }
 
 func encodeCwd(cwd string) string {

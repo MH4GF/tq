@@ -554,10 +554,13 @@ func workDirFromMaps(a *db.Action, taskMap map[int64]*db.Task, projectMap map[in
 }
 
 // classifyEarlyStale evaluates the early-stale watchdog: an action that has
-// exceeded EarlyDispatchTimeout but never produced a session log. Returns
-// (reason, true) to schedule a failure, ("", true) to suppress further checks
-// for this action (session is active), and ("", false) to defer to the next
-// classifier in the chain.
+// exceeded EarlyDispatchTimeout but never produced a session log. If the
+// action's claude_session_id already has a session log .jsonl on disk the
+// session demonstrably started, so it is NOT early-stale — we return
+// ("", false) to defer to the regular stale/liveness classifiers, which reap
+// it with an accurate message. Returns (reason, true) to schedule a failure,
+// ("", true) to suppress further checks for this action (session is active),
+// and ("", false) to defer to the next classifier in the chain.
 func classifyEarlyStale(cfg WorkerConfig, a *db.Action, workDir string, startedAt, now time.Time) (string, bool) {
 	if cfg.ClaudeSessionLogChecker == nil || startedAt.IsZero() {
 		return "", false
@@ -566,6 +569,24 @@ func classifyEarlyStale(cfg WorkerConfig, a *db.Action, workDir string, startedA
 	if sinceStart < cfg.EarlyDispatchTimeout {
 		return "", false
 	}
+
+	// A recorded claude_session_id means the SessionStart hook ran, i.e. the
+	// session started. If its log exists (or the check itself errors) treat
+	// the action as started and defer downstream — never produced a session
+	// log is false here, so an early-stale verdict would be a lie.
+	if meta, err := ParseActionMetadata(a.Metadata); err == nil {
+		if sid, _ := meta[MetaKeyClaudeSessionID].(string); sid != "" {
+			exists, err := cfg.ClaudeSessionLogChecker.SessionLogExists(sid)
+			if err != nil {
+				slog.Warn("early-stale watchdog: session log existence check failed", "action_id", a.ID, "error", err)
+				return "", false
+			}
+			if exists {
+				return "", false
+			}
+		}
+	}
+
 	active, err := cfg.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, sinceStart)
 	if err != nil {
 		slog.Warn("early-stale watchdog: claude session log check failed", "action_id", a.ID, "error", err)

@@ -363,10 +363,11 @@ func (m *mockTmuxChecker) ListWindows(ctx context.Context, session string) ([]st
 }
 
 type mockClaudeSessionLogChecker struct {
-	mu     sync.Mutex
-	active bool
-	err    error
-	calls  int
+	mu        sync.Mutex
+	active    bool
+	logExists bool
+	err       error
+	calls     int
 }
 
 func (m *mockClaudeSessionLogChecker) IsClaudeSessionActive(workDir string, freshnessThreshold time.Duration) (bool, error) {
@@ -374,6 +375,12 @@ func (m *mockClaudeSessionLogChecker) IsClaudeSessionActive(workDir string, fres
 	defer m.mu.Unlock()
 	m.calls++
 	return m.active, m.err
+}
+
+func (m *mockClaudeSessionLogChecker) SessionLogExists(sessionID string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.logExists, m.err
 }
 
 func (m *mockClaudeSessionLogChecker) callCount() int {
@@ -496,6 +503,41 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			tmux:          &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}},
 			log:           &mockClaudeSessionLogChecker{active: false},
 			wantStatus:    db.ActionStatusRunning,
+		},
+		{
+			name:               "started session (log exists) not early-stale, reaped as regular stale",
+			startedOffset:      -90 * time.Minute,
+			metadata:           `{"claude_session_id":"sess-done"}`,
+			tmux:               &mockTmuxChecker{windows: []string{"zsh"}},
+			log:                &mockClaudeSessionLogChecker{active: false, logExists: true},
+			wantStatus:         db.ActionStatusFailed,
+			wantResultContains: "session log not fresh",
+		},
+		{
+			name:               "no session_id and no log within early timeout stays early-stale",
+			startedOffset:      -6 * time.Minute,
+			tmux:               &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}},
+			log:                &mockClaudeSessionLogChecker{active: false},
+			wantStatus:         db.ActionStatusFailed,
+			wantResultContains: "early-stale",
+		},
+		{
+			name:               "session_id set but log absent stays early-stale",
+			startedOffset:      -6 * time.Minute,
+			metadata:           `{"claude_session_id":"sess-x"}`,
+			tmux:               &mockTmuxChecker{windows: []string{"zsh", "tq-action-1"}},
+			log:                &mockClaudeSessionLogChecker{active: false, logExists: false},
+			wantStatus:         db.ActionStatusFailed,
+			wantResultContains: "early-stale",
+		},
+		{
+			name:               "session_id set but SessionLogExists errors defers (Option A)",
+			startedOffset:      -90 * time.Minute,
+			metadata:           `{"claude_session_id":"sess-e"}`,
+			tmux:               &mockTmuxChecker{windows: []string{"zsh"}},
+			log:                &mockClaudeSessionLogChecker{active: false, err: fmt.Errorf("glob failed")},
+			wantStatus:         db.ActionStatusFailed,
+			wantResultContains: "session log not fresh",
 		},
 		{
 			name:               "reaps session_id NULL action when window missing",
