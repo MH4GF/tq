@@ -155,7 +155,7 @@ func (w *NonInteractiveWorker) processRunResult(output []byte, runErr error, kil
 
 	var wrapper claudeJSONOutput
 	if err := json.Unmarshal(output, &wrapper); err != nil {
-		return "", fmt.Errorf("failed to parse claude JSON output: %w", err)
+		return "", appendOutput(fmt.Errorf("failed to parse claude JSON output: %w", err), output)
 	}
 	if wrapper.Subtype != "success" {
 		return "", fmt.Errorf("claude returned subtype %q: %s", wrapper.Subtype, wrapper.Result)
