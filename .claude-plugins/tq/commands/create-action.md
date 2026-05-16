@@ -27,32 +27,25 @@ IMPORTANT: Run !`tq action create --help` first to understand meta format and be
 ### 2. Build instruction
 
 Consult !`tq action create --help` for CLI flag and meta format guidance.
-Use only information from the current session — do not investigate files (that is the worker's job).
 
-The instruction string is the **entire** prompt the worker session sees. It launches cold: no memory of this conversation, no parent-session variables, no follow-up turn to clarify. Write it like a brief to a new teammate.
+The instruction string is the **entire** prompt the worker session sees. It launches cold: no memory of this conversation, no parent-session variables, no follow-up turn to clarify. The worker is Claude Opus 4.7 — give it a goal and it runs its own gather → act → verify loop competently; give it a guessed step list and it follows the wrong steps faithfully and fails.
 
-The worker is Claude Opus 4.7. Two behaviors to design around:
+You have not read the target code in this session, and you must not — that is the worker's job. So write only what you actually know: the desired end state and why it matters. The worker derives everything else by reading the code and planning.
 
-- **Literal instruction following** — wrong paths, wrong function names, and wrong steps get executed wrongly. Under-specified scope causes drift; over-specified steps cause faithful failure.
-- **Goal-directed autonomy** — given a goal + constraints + verification, 4.7 runs its own gather → act → verify loop competently. Trust it to find the right files.
+**Write exactly two things:**
 
-#### Pre-flight: ask first if the goal is ambiguous
+- **Goal — the desired end state and its value.** Describe what is true once the task is done, and who benefits how. Not "fix X" / "add Y" — that is a paraphrased step, not a state. State what is true when it's right and why that matters. The concrete deliverable that ends the task (PR merged, report posted, action created) is part of the end state — name it so "done" is unambiguous.
+- **Background — why now.** The trigger, the prior decision, related action / PR IDs, evidence the worker lacks. Detailed background is good: it lets the worker make judgment calls instead of asking back (it can't). Embed the evidence; don't make it reconstruct your reasoning.
 
-If you cannot write the goal as one sentence — or scope / done condition has multiple plausible readings — run `AskUserQuestion` to confirm goal, scope, and done condition **before** creating the action. Skip the question when the request is already clear; don't add friction.
+**Do NOT write:** scope boundaries, step lists, target file paths, function or type signatures, "the approach". You have not read the code; anything here is a guess that becomes a literal wrong order and bloats the prompt. The worker decides all of this in its plan. The only constraints worth stating are ones the code cannot reveal — compatibility limits, "this is a plugin distributable, no user-specific paths", a sequencing requirement like "migration before code". Fold those into the Goal; don't spin up separate Scope / Constraints / Verification sections that restate each other.
 
-#### Checklist — confirm each before calling `tq action create`
+**Self-contained** — no "as we discussed", "the conversation above", or parent-session variables. The worker has none of it.
 
-1. **Goal first, steps last** — lead with goal + done condition. Only enumerate steps when ordering is genuinely required (e.g. migration must precede code change). 4.7 will invent the right steps from a clear goal; it cannot recover from a wrong step list.
-2. **Why it matters / background** — the trigger, prior decision, related action / PR ID. Lets the worker make judgment calls instead of asking back (which it can't).
-3. **Concrete deliverable** — what artifact ends the task (PR open, file edited, report posted, action created). "Done" must be unambiguous.
-4. **Scope and constraints** — what's in / out, what NOT to touch, compatibility limits. 4.7 respects scope literally.
-5. **Pointers as hints, not commands** — file paths, function names, PR / issue numbers belong as "starting point — verify against current code", not as `path:line` editing orders. Add "if the hint is stale, prefer the actual code" so the worker overrides bad pointers.
-6. **Verification step** — how the worker confirms success (`go test ./...`, CI green, hit a URL, `tq action list`). Without this the worker stops at "looks good".
-7. **Positive framing** — say what to do. "Commit per logical change" beats "don't make giant commits".
-8. **Output format if it matters** — PR description shape, comment template, report sections. Skip when the deliverable already implies format.
-9. **Self-contained** — no references to "the conversation above", "as we discussed", or parent-session variables. The worker has none of it.
+**Never put `## ` markdown headers in the instruction string** — Bash safety (`Newline followed by # inside a quoted argument`) denies the `tq action create` call. Use `**Header**` (bold) for structure, as the example below does.
 
-**Never put `## ` markdown headers inside the instruction string.** Bash's built-in safety (`Newline followed by # inside a quoted argument`) denies the `tq action create` call — use `**Header**` (bold) for structure, as the examples below do.
+#### Ask first if the goal is ambiguous
+
+If you cannot state the goal as one sentence, or it has multiple plausible readings, run `AskUserQuestion` to confirm it **before** creating the action. Skip the question when the request is already clear — don't add friction.
 
 #### Pick effort
 
@@ -65,54 +58,25 @@ Pass via `--meta '{"claude_args":["--effort","<level>"]}'`. Choose by task compl
 | Trivial cleanup, just invokes another slash command | omit (defaults are fine) |
 | Long-horizon deep work, hard refactor | `max` (try it, watch for overthinking) |
 
-#### Examples
+#### Example
 
-**Pair 1 — vague vs goal-clear**
-
-Bad:
+Bad — work-content goal plus guessed steps the author never verified against the code:
 ```text
-Fix the create-action skill.
+Fix the create-action skill. Open `internal/foo/bar.go`, rename `Validate`
+to `ValidateV2` at line 42, update the call site in `cmd/main.go`, then run
+`go test ./internal/foo/`.
 ```
 
-Good:
+Good — end state + value, code-reading and steps left entirely to the worker:
 ```text
 **Goal**
-Improve the "Build instruction" section of `.claude-plugins/tq/commands/create-action.md`
-so generated worker instructions consistently include goal, context, and verification.
+`Validate` no longer exists anywhere in the repo: every caller and test uses
+the renamed symbol and the suite is green. This removes the last name flagged
+in the API review, so downstream teams stop guessing which `Validate` they
+call. No behavior change — pure rename.
 
-**Why**
-Worker sessions currently get terse instructions and waste turns inventing objectives.
-
-**Constraints**
-- Don't change the `CRITICAL` block — its delegation intent is load-bearing.
-- Extend the existing section; don't add new top-level sections.
-
-**Done**
-PR open against `main`, CI green, `/quality-review` recorded.
-```
-
-**Pair 2 — over-prescribed steps vs goal-oriented**
-
-Bad:
-```text
-1. Open `internal/foo/bar.go` and rename `Validate` to `ValidateV2` at line 42.
-2. Open `cmd/main.go` line 88 and update the call site.
-3. Open `internal/foo/bar_test.go` line 15 and rename the test.
-4. Run `go test ./internal/foo/`.
-```
-
-Good:
-```text
-**Goal**
-Rename `Validate` → `ValidateV2` across the repo so all callers and tests follow.
-
-**Hints (verify against current code; prefer real code if stale)**
-- Definition is somewhere under `internal/foo/`.
-- Likely callers in `cmd/` and tests in `internal/foo/*_test.go`.
-
-**Done**
-- Every reference renamed; no `Validate` symbol survives `grep -r '\bValidate\b'`.
-- `go test ./...` green.
+**Background**
+Triggered by API review #1234; the old name collided with a stdlib helper.
 ```
 
 References: [Prompting best practices](https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-4-best-practices) · [Building agents with the Claude Agent SDK](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk) · [Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
