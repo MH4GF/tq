@@ -43,7 +43,12 @@ Metadata keys for dispatch control:
                Any other value is rejected — pass Claude permission-mode
                (auto, plan, acceptEdits, ...) via claude_args instead.
   claude_args  Additional CLI arguments for claude (JSON array of strings,
-               e.g. ["--permission-mode","plan","--worktree","--max-turns","5"])`,
+               e.g. ["--permission-mode","plan","--worktree","--max-turns","5"])
+  executor     "local" or "cloud" — where the claude session actually runs
+               (orthogonal to mode). The reaper skips executor=cloud actions
+               since local liveness checks do not apply. Auto-stamped to "cloud"
+               when --status running is passed from a Claude Code cloud session;
+               explicit values in --meta are preserved.`,
 	Example: `  tq action create "/github-pr review this" --task 1 --title "Review PR"
   tq action create "Add JWT auth middleware" --task 2 --title "Add auth middleware"
   tq action create "/review" --task 3 --title "Plan review" --meta '{"claude_args":["--permission-mode","plan","--worktree"]}'`,
@@ -229,7 +234,7 @@ func init() {
 	if err := addCmd.MarkFlagRequired("task"); err != nil {
 		panic(err)
 	}
-	addCmd.Flags().StringVar(&addMeta, "meta", "{}", `JSON metadata for dispatch control (keys: mode, claude_args)`)
+	addCmd.Flags().StringVar(&addMeta, "meta", "{}", `JSON metadata for dispatch control (keys: mode, claude_args, executor)`)
 	addCmd.Flags().StringVar(&addStatus, "status", "", "Initial status (default: pending)")
 	addCmd.Flags().StringVar(&addAfter, "after", "", "Dispatch after this time (YYYY-MM-DD HH:MM, local timezone)")
 	addCmd.Flags().StringVar(&addWorkDir, "work-dir", "", "Working directory override for this action (defaults to task work_dir)")
