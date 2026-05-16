@@ -43,7 +43,25 @@ Rank surviving findings P1..PN by `frequency × severity to data integrity / UX`
 
 ## Phase 4: Create child actions
 
-For each surviving finding, run `/tq:create-action` against the current session's task.
+Before creating anything, dedup against this task's action history. While an underlying bug stays unfixed, every run legitimately re-discovers it — without this gate the same finding spawns a new action each run.
+
+Fingerprint each surviving finding as `file:symbol` (enclosing function/method/type, e.g. `tui/schedules.go:loadSchedules`) — never `file:line`; line numbers drift between runs.
+
+Run once:
+
+```
+tq action list --task <session-task-id>
+```
+
+Match each finding's fingerprint against existing actions' titles + instructions, then branch on the matched action's status:
+
+- **pending, dispatched, or running** → already tracked. Skip; record `skipped (dup of #N)`.
+- **done, and the concern still reproduces in the code** → the prior fix never landed (action closed but code unchanged — likely an unmerged PR). Create ONE action using the unmerged-fix shape below; do NOT re-describe the finding from scratch and do NOT silently skip.
+- **no match, or matched only cancelled/failed** → genuinely new or retryable. Create normally.
+
+(Findings that no longer reproduce were already dropped in Phase 2, so any surviving finding still reproduces — a done match always means the fix is absent.)
+
+For each finding that passes the gate, run `/tq:create-action` against the current session's task.
 
 <constraints>
 - One action per finding (group only when a single PR would obviously cover both)
@@ -61,4 +79,12 @@ Impact: <user-visible consequence>.
 Required: <fix direction>. Add regression test in <test file>.
 ```
 
-After creating actions, report the count and stop.
+Unmerged-prior-fix shape (when a done action matches but the code is unchanged):
+
+```
+Prior action #N was marked done but its fix is absent from the codebase: <file>:<symbol> still has <verified concern>.
+Likely an unmerged PR. Investigate why #N never landed (look for an open or closed-unmerged PR) and complete the merge — do NOT rewrite the fix from scratch.
+Confirm the concern is gone and a regression test exists before closing.
+```
+
+After creating actions, report counts (created / skipped-as-dup / unmerged-fix) and stop.
