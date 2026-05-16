@@ -184,7 +184,7 @@ Print a single action as JSON.
 tq action done <ACTION_ID> [RESULT]
 ```
 
-Mark a non-terminal action (pending, running, or dispatched) as done. Calling `done` on an action that is already `done`, `failed`, or `cancelled` returns an error.
+Mark a non-terminal action (pending, running, or dispatched) as done. Calling `done` on an action that is already `done`, `failed`, or `cancelled` returns an error that includes a status-specific recovery hint: for a false-positive `failed`/`cancelled` (e.g. stale heartbeat or timeout), `tq action reset <ID>` then re-run `tq action done`; for an already-`done` action, amend the result with `tq action update <ID> --result`.
 
 RESULT is free-form text. Recommended structure:
 
@@ -224,12 +224,13 @@ REASON serves as feedback for improving classification logic. Record why the act
 ### `tq action update`
 
 ```
-tq action update <ID> [--title <TITLE>] [--task <ID>] [--meta <JSON>] [--work-dir <PATH>]
+tq action update <ID> [--title <TITLE>] [--task <ID>] [--meta <JSON>] [--work-dir <PATH>] [--result <TEXT>]
 ```
 
-Only actions in `pending` or `failed` status can be updated; running, dispatched, done, or cancelled actions are rejected.
+Structural fields (`--title` / `--task` / `--meta` / `--work-dir`) can only be changed on `pending` or `failed` actions; running, dispatched, done, or cancelled actions are rejected.
 
 - `--work-dir` — Override or clear the action-level working directory. Pass an empty string (`--work-dir ""`) to clear.
+- `--result` — Amend the recorded result. Allowed on `pending`, `failed`, `done`, or `cancelled` actions (running/dispatched are in-flight and rejected — use `tq action done`/`fail` instead). This is the recovery path for a result wrongly committed on an already-`done` action.
 
 ### `tq action dispatch`
 
