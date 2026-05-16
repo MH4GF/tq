@@ -26,9 +26,12 @@ func TestProjectCreate(t *testing.T) {
 			wantOutContains: []string{"project #1 created", "myapp"},
 			verify: func(t *testing.T, d db.Store) {
 				t.Helper()
-				p, err := d.GetProjectByName("myapp")
+				p, err := d.GetProjectByID(1)
 				if err != nil {
 					t.Fatalf("get project: %v", err)
+				}
+				if p.Name != "myapp" {
+					t.Errorf("name = %q, want %q", p.Name, "myapp")
 				}
 				if p.WorkDir != "/tmp/myapp" {
 					t.Errorf("work_dir = %q, want %q", p.WorkDir, "/tmp/myapp")
