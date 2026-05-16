@@ -155,7 +155,7 @@ Current status totals are captured after each rule as `current violations: N`. A
   - Queries built via `strings.Join` for IN-clauses are checked with a single `?` placeholder substituted in. This is the worst case for the index decision.
   - Queries that fail `EXPLAIN QUERY PLAN` (typically migration queries against post-migration schema, e.g. dropped columns) are skipped with a count logged in the test output.
   - The output of `EXPLAIN QUERY PLAN` is SQLite-version dependent; the test pins itself to the in-memory SQLite shipped with `testutil.NewTestDB(t)` to keep CI deterministic.
-- Current violations: 14 allowlist entries across 11 sites (see `.goldenrules-rule17-allowlist`). `db.Search` is now FTS5 (its scans are the index-backed `SCAN <fts> VIRTUAL TABLE INDEX` path, not full scans). Remaining burndown is tracked as separate follow-up actions.
+- Current violations: 13 allowlist entries across 10 sites (see `.goldenrules-rule17-allowlist`). `db.Search` is now FTS5 (its scans are the index-backed `SCAN <fts> VIRTUAL TABLE INDEX` path, not full scans). Remaining burndown is tracked as separate follow-up actions.
 
 ### Aggregate queries on hot paths
 
@@ -179,7 +179,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 - "Non-test caller" spans the whole module, not just `cmd/`/`dispatch/`/`tui/`/`main.go`: a `db.Store` method invoked internally by another `db/` method (e.g. `GetTaskActionCount` called from `db/task.go`) is exercised in production transitively, so restricting the scan to upper layers would produce false positives. The rule fires only when there is zero non-`_test.go` caller anywhere.
 - Verify: Go test harness `internal/goldenrules/rule19_test.go`. Ceiling-based against `.goldenrules-rule19-allowlist` (deadcode-check discipline): new dead methods AND stale allowlist entries (method regained a non-test caller or was removed from `db.Store`) both fail. Run `go test ./internal/goldenrules/ -run TestRule19_NoTestOnlyStoreMethods`.
 - Allowlist policy: only deliberate seams belong in `.goldenrules-rule19-allowlist` long-term. The current entries are a pre-existing blind-spot backlog surfaced when the rule was introduced; each is tracked by a dedicated burn-down action on task #660 (resolve = delete the dead method or wire a real production caller, then remove the line).
-- Current violations: 5 (allowlisted in `.goldenrules-rule19-allowlist`): `GetOrCreateTriageTask`, `GetSchedule`, `ListTasksByStatus`, `SetAllDispatchEnabled`, `UpdateScheduleRun`. These are real test-only-reachable methods Rule 13 could not see; burn-down is tracked as separate actions and is out of scope for the rule-introducing change.
+- Current violations: 4 (allowlisted in `.goldenrules-rule19-allowlist`): `GetOrCreateTriageTask`, `GetSchedule`, `ListTasksByStatus`, `UpdateScheduleRun`. These are real test-only-reachable methods Rule 13 could not see; burn-down is tracked as separate actions and is out of scope for the rule-introducing change.
 
 ---
 
@@ -232,11 +232,11 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 14 No `*ForTest` in prod | — | OK | OK | OK |
 | 15 No N+1 in for-range | — | OK | OK | OK |
 | 16 No leading-wildcard `LIKE` | OK | OK | OK | OK |
-| 17 No SCAN in EXPLAIN | 14 | — | — | — |
+| 17 No SCAN in EXPLAIN | 13 | — | — | — |
 | 18 No aggregate hot paths | — | OK | OK | — |
-| 19 No test-only `db.Store` methods | 5 | — | — | — |
+| 19 No test-only `db.Store` methods | 4 | — | — | — |
 
-Totals: **19** current violations (Rule 16: 0 — `db.Search` burned down via FTS5 trigram conversion and the `migrateLegacyClaudeFlags` one-shot already removed, so Rule 16 is fully clean; Rule 17: 14 SCANs allowlisted in `.goldenrules-rule17-allowlist`, of which the `db.Search` entries are the index-backed FTS5 virtual-table path; Rule 19: 5 test-only-reachable `db.Store` methods allowlisted in `.goldenrules-rule19-allowlist`; remaining burn down via per-query index work and per-method dead-code removal tracked as separate actions).
+Totals: **17** current violations (Rule 16: 0 — `db.Search` burned down via FTS5 trigram conversion and the `migrateLegacyClaudeFlags` one-shot already removed, so Rule 16 is fully clean; Rule 17: 13 SCANs allowlisted in `.goldenrules-rule17-allowlist`, of which the `db.Search` entries are the index-backed FTS5 virtual-table path; Rule 19: 4 test-only-reachable `db.Store` methods allowlisted in `.goldenrules-rule19-allowlist`; remaining burn down via per-query index work and per-method dead-code removal tracked as separate actions).
 
 ---
 
