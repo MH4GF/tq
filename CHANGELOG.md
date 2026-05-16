@@ -1,5 +1,24 @@
 # Changelog
 
+## [v0.21.24](https://github.com/MH4GF/tq/compare/v0.21.23...v0.21.24) - 2026-05-16
+- docs(create-action): rewrite Build instruction around goal-state + value by @MH4GF in https://github.com/MH4GF/tq/pull/318
+- dispatch: couple schedule insert spec with its success run update by @MH4GF in https://github.com/MH4GF/tq/pull/320
+- docs(tq-plugin): make worker model reference version-agnostic in create-action by @MH4GF in https://github.com/MH4GF/tq/pull/321
+- gc-exploratory: dedup findings against this task's action history by @MH4GF in https://github.com/MH4GF/tq/pull/322
+- feat(triage): add recurring-task exclusion rule to /tq:triage by @MH4GF in https://github.com/MH4GF/tq/pull/323
+- tq:done: gate done on a merged PR for code-change actions by @MH4GF in https://github.com/MH4GF/tq/pull/324
+- db: include failure reason in BulkMarkFailed event payload by @MH4GF in https://github.com/MH4GF/tq/pull/325
+- db: remove dead EnsureNotificationsProject chain (Rule 19 burn-down) by @MH4GF in https://github.com/MH4GF/tq/pull/326
+- feat: completion-dependency dispatch gating for actions by @MH4GF in https://github.com/MH4GF/tq/pull/327
+- db: remove dead Store.IsWorkerRunning method (Rule 19 burn-down) by @MH4GF in https://github.com/MH4GF/tq/pull/329
+- db: remove dead HasActiveActionWithMeta (Rule 19 burn-down) by @MH4GF in https://github.com/MH4GF/tq/pull/330
+- refactor: remove dead db.Store.SetAllDispatchEnabled (Rule 19 burn-down) by @MH4GF in https://github.com/MH4GF/tq/pull/331
+- feat(cmd): add tq schedule get subcommand (Rule 19 burn-down: GetSchedule) by @MH4GF in https://github.com/MH4GF/tq/pull/332
+- cmd: clarify --max-interactive help text covers shared pool by @MH4GF in https://github.com/MH4GF/tq/pull/333
+- Rule 19 burn-down: delete dead db.Store.GetOrCreateTriageTask + EnsureTask by @MH4GF in https://github.com/MH4GF/tq/pull/328
+- test(dispatch): table-drive CheckSchedules metadata-failure tests by @MH4GF in https://github.com/MH4GF/tq/pull/334
+- fix(dispatch): don't misclassify completed long-running actions as early-stale by @MH4GF in https://github.com/MH4GF/tq/pull/337
+
 ## [v0.21.23](https://github.com/MH4GF/tq/compare/v0.21.22...v0.21.23) - 2026-05-16
 - db: trigger-maintained task_action_counts + Rule 18 (no aggregates in hot paths) by @MH4GF in https://github.com/MH4GF/tq/pull/277
 - accept multiple thread_ids in gh-mark-notification-read by @MH4GF in https://github.com/MH4GF/tq/pull/280
