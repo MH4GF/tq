@@ -738,23 +738,17 @@ func TestTasksModel_TaskDetailView_WithNotes(t *testing.T) {
 	}
 
 	view := m.View()
-	if !strings.Contains(view, "Note task") {
-		t.Errorf("detail view should show task title, got %q", view)
-	}
-	if !strings.Contains(view, "status_history") {
-		t.Errorf("detail view should show status_history section, got %q", view)
-	}
-	if !strings.Contains(view, "notes") {
-		t.Errorf("detail view should show notes section, got %q", view)
-	}
-	if !strings.Contains(view, db.NoteKindTriageKeep) {
-		t.Errorf("detail view should show note kind, got %q", view)
-	}
-	if !strings.Contains(view, "PR review pending") {
-		t.Errorf("detail view should show note reason, got %q", view)
-	}
-	if !strings.Contains(view, "snooze_until") {
-		t.Errorf("detail view should show metadata, got %q", view)
+	for _, want := range []string{
+		"Note task",           // task title
+		"status_history",      // status_history section
+		"notes",               // notes section
+		db.NoteKindTriageKeep, // note kind
+		"PR review pending",   // note reason
+		"snooze_until",        // metadata
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("detail view should contain %q, got %q", want, view)
+		}
 	}
 
 	// Press esc — should return to normal mode
