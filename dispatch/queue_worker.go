@@ -184,6 +184,67 @@ func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
 	}
 }
 
+// reapCandidate is an action that survived the in-memory pre-filter, paired
+// with its parsed StartedAt (zero if unset/unparseable) so the classify loop
+// reuses the parse instead of redoing it.
+type reapCandidate struct {
+	action    db.Action
+	startedAt time.Time
+}
+
+// parseStartedAt parses an action's StartedAt; ok is false when StartedAt is
+// unset or unparseable.
+func parseStartedAt(a *db.Action) (started time.Time, ok bool) {
+	if !a.StartedAt.Valid {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(db.TimeLayout, a.StartedAt.String)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
+}
+
+// filterInteractiveCandidates drops cloud-executor and within-grace-period
+// actions so the caller can skip prefetch when nothing is reapable. An action
+// whose StartedAt is unset/unparseable is KEPT (startedAt zero) — unlike
+// filterNonInteractiveCandidates which drops it — because reapInteractive has a
+// tmux-window fallback that can still reap it. Store-free by design so the
+// per-action loop stays clear of db.Store (golden Rule 15).
+func filterInteractiveCandidates(actions []db.Action, now time.Time, grace time.Duration) []reapCandidate {
+	var candidates []reapCandidate
+	for _, a := range actions {
+		if MetadataHasValue(a.Metadata, MetaKeyExecutor, ExecutorCloud) {
+			continue
+		}
+		startedAt, ok := parseStartedAt(&a)
+		if ok && now.Sub(startedAt) < grace {
+			continue
+		}
+		candidates = append(candidates, reapCandidate{action: a, startedAt: startedAt})
+	}
+	return candidates
+}
+
+// filterNonInteractiveCandidates drops cloud-executor actions and any action
+// not yet past staleThreshold. Unlike filterInteractiveCandidates, an action
+// with an unset/unparseable StartedAt is dropped: reapNonInteractive is purely
+// time-threshold based and cannot classify one without a start time.
+func filterNonInteractiveCandidates(actions []db.Action, now time.Time, staleThreshold time.Duration) []reapCandidate {
+	var candidates []reapCandidate
+	for _, a := range actions {
+		if MetadataHasValue(a.Metadata, MetaKeyExecutor, ExecutorCloud) {
+			continue
+		}
+		started, ok := parseStartedAt(&a)
+		if !ok || now.Sub(started) < staleThreshold {
+			continue
+		}
+		candidates = append(candidates, reapCandidate{action: a, startedAt: started})
+	}
+	return candidates
+}
+
 // reapInteractive scans running interactive actions, classifies them in
 // memory against prefetched task/project maps and a single tmux window
 // snapshot, then bulk-marks the stale ones failed.
@@ -197,7 +258,12 @@ func reapInteractive(ctx context.Context, cfg WorkerConfig, now time.Time) {
 		return
 	}
 
-	taskMap, projectMap, err := prefetchWorkDirContext(cfg.DB, actions)
+	candidates := filterInteractiveCandidates(actions, now, cfg.StaleGracePeriod)
+	if len(candidates) == 0 {
+		return
+	}
+
+	taskMap, projectMap, err := prefetchWorkDirContext(cfg.DB, candidates)
 	if err != nil {
 		slog.Error("prefetch work_dir context for interactive reaper", "error", err)
 		return
@@ -217,19 +283,9 @@ func reapInteractive(ctx context.Context, cfg WorkerConfig, now time.Time) {
 	}
 
 	var failures []db.ActionFailureUpdate
-	for _, a := range actions {
-		if MetadataHasValue(a.Metadata, MetaKeyExecutor, ExecutorCloud) {
-			continue
-		}
-		var startedAt time.Time
-		if a.StartedAt.Valid {
-			if s, err := time.Parse(db.TimeLayout, a.StartedAt.String); err == nil {
-				startedAt = s
-				if now.Sub(startedAt) < cfg.StaleGracePeriod {
-					continue
-				}
-			}
-		}
+	for _, c := range candidates {
+		a := c.action
+		startedAt := c.startedAt
 
 		workDir := workDirFromMaps(&a, taskMap, projectMap)
 
@@ -282,29 +338,22 @@ func reapNonInteractive(cfg WorkerConfig, now time.Time) {
 		return
 	}
 
-	taskMap, projectMap, err := prefetchWorkDirContext(cfg.DB, niActions)
+	staleThreshold := time.Duration(defaultTimeout*nonInteractiveStaleMultiplier) * time.Second
+
+	candidates := filterNonInteractiveCandidates(niActions, now, staleThreshold)
+	if len(candidates) == 0 {
+		return
+	}
+
+	taskMap, projectMap, err := prefetchWorkDirContext(cfg.DB, candidates)
 	if err != nil {
 		slog.Error("prefetch work_dir context for noninteractive reaper", "error", err)
 		return
 	}
 
-	staleThreshold := time.Duration(defaultTimeout*nonInteractiveStaleMultiplier) * time.Second
-
 	var failures []db.ActionFailureUpdate
-	for _, a := range niActions {
-		if MetadataHasValue(a.Metadata, MetaKeyExecutor, ExecutorCloud) {
-			continue
-		}
-		if !a.StartedAt.Valid {
-			continue
-		}
-		started, err := time.Parse(db.TimeLayout, a.StartedAt.String)
-		if err != nil {
-			continue
-		}
-		if now.Sub(started) < staleThreshold {
-			continue
-		}
+	for _, c := range candidates {
+		a := c.action
 
 		workDir := workDirFromMaps(&a, taskMap, projectMap)
 		if claudeSessionStillActive(cfg, workDir, cfg.HeartbeatFreshness) {
@@ -431,22 +480,19 @@ func reapBg(cfg WorkerConfig, now time.Time) {
 // action was claimed (StartedAt) to treat a missing state.json as a real
 // disappearance rather than a race with daemon initialization.
 func bgJobMissingForTooLong(a *db.Action, now time.Time, grace time.Duration) bool {
-	if !a.StartedAt.Valid {
-		return false
-	}
-	started, err := time.Parse(db.TimeLayout, a.StartedAt.String)
-	if err != nil {
+	started, ok := parseStartedAt(a)
+	if !ok {
 		return false
 	}
 	return now.Sub(started) >= grace
 }
 
 // prefetchWorkDirContext bulk-fetches the tasks (and their projects) needed
-// to resolve work_dir for every action. Returns empty maps on empty input.
-func prefetchWorkDirContext(database db.Store, actions []db.Action) (map[int64]*db.Task, map[int64]*db.Project, error) {
-	taskIDSet := make(map[int64]struct{}, len(actions))
-	for _, a := range actions {
-		taskIDSet[a.TaskID] = struct{}{}
+// to resolve work_dir for every candidate. Returns empty maps on empty input.
+func prefetchWorkDirContext(database db.Store, candidates []reapCandidate) (map[int64]*db.Task, map[int64]*db.Project, error) {
+	taskIDSet := make(map[int64]struct{}, len(candidates))
+	for _, c := range candidates {
+		taskIDSet[c.action.TaskID] = struct{}{}
 	}
 	taskIDs := make([]int64, 0, len(taskIDSet))
 	for id := range taskIDSet {

@@ -1401,3 +1401,90 @@ func TestRunWorker_DeferDoesNotProduceEventStorm(t *testing.T) {
 		t.Errorf("status_changed events = 0, want ≥ 1 (action should be deferred at least once)")
 	}
 }
+
+// prefetchSpyStore counts the two work_dir-context SELECTs so tests can assert
+// the reaper skips them when the in-memory pre-filter leaves no candidates.
+type prefetchSpyStore struct {
+	db.Store
+	getTasksCalls    int
+	getProjectsCalls int
+}
+
+func (s *prefetchSpyStore) GetTasksByIDs(ids []int64) (map[int64]*db.Task, error) {
+	s.getTasksCalls++
+	return s.Store.GetTasksByIDs(ids)
+}
+
+func (s *prefetchSpyStore) GetProjectsByIDs(ids []int64) (map[int64]*db.Project, error) {
+	s.getProjectsCalls++
+	return s.Store.GetProjectsByIDs(ids)
+}
+
+func TestReapStaleActions_SkipsPrefetchWhenNoCandidates(t *testing.T) {
+	tests := []struct {
+		name          string
+		title         string
+		metadata      string
+		startedOffset time.Duration
+		withTmux      bool
+		wantPrefetch  bool
+	}{
+		{
+			name:          "interactive within grace skips prefetch",
+			title:         "fix-conflict",
+			metadata:      "{}",
+			startedOffset: 0,
+			withTmux:      true,
+			wantPrefetch:  false,
+		},
+		{
+			name:          "noninteractive within threshold skips prefetch",
+			title:         "check-pr",
+			metadata:      `{"instruction":"check","mode":"noninteractive"}`,
+			startedOffset: -5 * time.Minute,
+			wantPrefetch:  false,
+		},
+		{
+			name:          "stale interactive still prefetches (control)",
+			title:         "fix-conflict",
+			metadata:      "{}",
+			startedOffset: -5 * time.Minute,
+			withTmux:      true,
+			wantPrefetch:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+
+			taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
+			d.InsertAction(tt.title, taskID, tt.metadata, db.ActionStatusRunning, nil, "")
+
+			started := time.Now().Add(tt.startedOffset)
+			d.SetActionTmuxInfoForTest(1, ptr("main"), ptr(WindowName(1)), &started)
+
+			spy := &prefetchSpyStore{Store: d}
+			cfg := WorkerConfig{
+				DispatchConfig:         DispatchConfig{DB: spy},
+				StaleGracePeriod:       30 * time.Second,
+				HeartbeatFreshness:     120 * time.Second,
+				InteractiveHardTimeout: DefaultInteractiveHardTimeout,
+				EarlyDispatchTimeout:   DefaultEarlyDispatchTimeout,
+			}
+			if tt.withTmux {
+				// Window list omits tq-action-1 so a stale action is reapable.
+				cfg.TmuxChecker = &mockTmuxChecker{windows: []string{"zsh"}}
+			}
+
+			reapStaleActions(context.Background(), cfg)
+
+			gotPrefetch := spy.getTasksCalls > 0 || spy.getProjectsCalls > 0
+			if gotPrefetch != tt.wantPrefetch {
+				t.Errorf("prefetch called = %v (tasks=%d projects=%d), want %v",
+					gotPrefetch, spy.getTasksCalls, spy.getProjectsCalls, tt.wantPrefetch)
+			}
+		})
+	}
+}
