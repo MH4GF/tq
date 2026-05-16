@@ -424,4 +424,20 @@ func TestHasActiveActionsForSchedules(t *testing.T) {
 			t.Errorf("schedule 3 should be absent")
 		}
 	})
+
+	t.Run("schedule_id stored as JSON number is reported active", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		// metadata.schedule_id as a JSON number, not a string.
+		_, _ = d.InsertAction("a1", taskID, `{"schedule_id":55}`, "pending", nil, "")
+
+		got, err := d.HasActiveActionsForSchedules([]int64{55})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !got[55] {
+			t.Errorf("schedule 55 (JSON number schedule_id) should be active, got %v", got)
+		}
+	})
 }
