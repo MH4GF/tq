@@ -33,6 +33,14 @@ func IsTerminalActionStatus(status string) bool {
 	return status == ActionStatusDone || status == ActionStatusFailed || status == ActionStatusCancelled
 }
 
+// isResultAmendable reports whether an action's result may be edited after the
+// fact. Running/dispatched actions are in-flight, so their result is set by
+// done/fail instead.
+func isResultAmendable(status string) bool {
+	return status == ActionStatusPending || status == ActionStatusFailed ||
+		status == ActionStatusDone || status == ActionStatusCancelled
+}
+
 type Action struct {
 	ID            int64
 	Title         string
@@ -607,11 +615,7 @@ func (db *DB) UpdateAction(id int64, title *string, taskID *int64, metadata, wor
 	if structuralUpdate && current.Status != ActionStatusPending && current.Status != ActionStatusFailed {
 		return fmt.Errorf("action #%d has status %q: only pending or failed actions can be updated", id, current.Status)
 	}
-	if result != nil &&
-		current.Status != ActionStatusPending &&
-		current.Status != ActionStatusFailed &&
-		current.Status != ActionStatusDone &&
-		current.Status != ActionStatusCancelled {
+	if result != nil && !isResultAmendable(current.Status) {
 		return fmt.Errorf("action #%d has status %q: result can only be amended on pending, failed, done, or cancelled actions", id, current.Status)
 	}
 
