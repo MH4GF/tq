@@ -217,36 +217,48 @@ func TestNonInteractiveWorker_Execute_Env(t *testing.T) {
 
 func TestNonInteractiveWorker_Execute_Error(t *testing.T) {
 	tests := []struct {
-		name        string
-		output      string
-		runnerErr   error
-		failAt      int
-		wantErrText string
+		name            string
+		output          string
+		runnerErr       error
+		failAt          int
+		wantErrContains []string
 	}{
 		{
-			name:        "runner error",
-			runnerErr:   errors.New("command failed"),
-			failAt:      0,
-			wantErrText: "command failed",
+			name:            "runner error",
+			runnerErr:       errors.New("command failed"),
+			failAt:          0,
+			wantErrContains: []string{"command failed"},
 		},
 		{
-			name:        "runner error with output",
-			output:      "Error: API key invalid",
-			runnerErr:   errors.New("exit status 1"),
-			failAt:      0,
-			wantErrText: "output: Error: API key invalid",
+			name:            "runner error with output",
+			output:          "Error: API key invalid",
+			runnerErr:       errors.New("exit status 1"),
+			failAt:          0,
+			wantErrContains: []string{"output: Error: API key invalid"},
 		},
 		{
-			name:        "error subtype",
-			output:      `{"type":"result","subtype":"error","result":"model refused"}`,
-			failAt:      -1,
-			wantErrText: `claude returned subtype "error": model refused`,
+			name:            "error subtype",
+			output:          `{"type":"result","subtype":"error","result":"model refused"}`,
+			failAt:          -1,
+			wantErrContains: []string{`claude returned subtype "error": model refused`},
 		},
 		{
-			name:        "malformed JSON",
-			output:      `not json at all`,
-			failAt:      -1,
-			wantErrText: "failed to parse claude JSON output",
+			name:   "malformed JSON",
+			output: `not json at all`,
+			failAt: -1,
+			wantErrContains: []string{
+				"failed to parse claude JSON output",
+				"output: not json at all",
+			},
+		},
+		{
+			name:   "non-JSON stdout (backgrounded notice)",
+			output: "backgrounded · 1db5721b session detached",
+			failAt: -1,
+			wantErrContains: []string{
+				"failed to parse claude JSON output",
+				"output: backgrounded · 1db5721b session detached",
+			},
 		},
 	}
 
@@ -259,8 +271,10 @@ func TestNonInteractiveWorker_Execute_Error(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
-			if !strings.Contains(err.Error(), tc.wantErrText) {
-				t.Errorf("error = %q, want to contain %q", err.Error(), tc.wantErrText)
+			for _, want := range tc.wantErrContains {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want to contain %q", err.Error(), want)
+				}
 			}
 		})
 	}
