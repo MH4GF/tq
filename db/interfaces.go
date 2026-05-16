@@ -45,7 +45,6 @@ type CommandWriter interface {
 	UpdateSchedule(id int64, title, cronExpr, metadata, instruction *string, taskID *int64) error
 	UpdateScheduleEnabled(id int64, enabled bool) error
 	DeleteSchedule(id int64) error
-	UpdateScheduleRun(id int64, lastRunAt, errMsg string) error
 	BulkUpdateScheduleRuns(updates []ScheduleRunUpdate) error
 }
 

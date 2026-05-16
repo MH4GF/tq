@@ -301,7 +301,9 @@ func TestCheckSchedules_LastErrorClearedOnSuccess(t *testing.T) {
 
 	taskID, _ := d.InsertTask(1, "test", "{}", "")
 	scheduleID, _ := d.InsertSchedule(taskID, "my-prompt", "My Prompt", "* * * * *", "{}")
-	if err := d.UpdateScheduleRun(scheduleID, "2026-03-12 09:58:00", "stale failure"); err != nil {
+	if err := d.BulkUpdateScheduleRuns([]db.ScheduleRunUpdate{
+		{ID: scheduleID, LastRunAt: "2026-03-12 09:58:00", LastError: "stale failure"},
+	}); err != nil {
 		t.Fatalf("seed last_error: %v", err)
 	}
 

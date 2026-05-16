@@ -81,23 +81,6 @@ func (db *DB) UpdateScheduleEnabled(id int64, enabled bool) error {
 	return err
 }
 
-// UpdateScheduleRun records one tick of CheckSchedules in a single UPDATE.
-// Pass errMsg="" on a successful action insertion (clears last_error);
-// pass a non-empty string when the action could not be created.
-func (db *DB) UpdateScheduleRun(id int64, lastRunAt, errMsg string) error {
-	_, err := db.Exec(
-		"UPDATE schedules SET last_run_at = ?, last_error = NULLIF(?, '') WHERE id = ?",
-		lastRunAt, errMsg, id,
-	)
-	if err == nil {
-		db.emitEvent("schedule", id, "schedule.ran", map[string]any{
-			"last_run_at": lastRunAt,
-			"last_error":  errMsg,
-		})
-	}
-	return err
-}
-
 func (db *DB) UpdateSchedule(id int64, title, cronExpr, metadata, instruction *string, taskID *int64) error {
 	var setClauses []string
 	var args []any
