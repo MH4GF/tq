@@ -32,7 +32,9 @@ Use this from a Claude Code session launched via the tq interactive worker.
 
 ### `/tq:failed [action_id]`
 
-Mark a tq action as failed, then judge task-level completion and propose follow-up actions (retry or alternative approach when needed). Use for cases that could not be completed (missing permissions, broken environment, external API outage, CI flake, etc.). Failed actions can be returned to pending with `tq action reset` and retried.
+Mark a tq action as failed, then judge task-level completion and propose follow-up actions when retry or alternative approach is needed.
+
+Use for cases that could not be completed (missing permissions, broken environment, external API outage, CI flake, etc.). Failed actions can be returned to pending with `tq action reset` and retried.
 
 ```
 /tq:failed           # auto-detect action_id
