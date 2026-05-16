@@ -12,14 +12,22 @@ import (
 var marshalMeta = json.Marshal
 
 // scheduleDecision is the per-schedule outcome of the in-memory decision pass.
-// Exactly one of insertSpec / errUpdate is set when the schedule contributes
-// to bulk execution; both nil means silent skip (cron not due, task closed,
+// Exactly one of insert / errUpdate is set when the schedule contributes to
+// bulk execution; both nil means silent skip (cron not due, task closed,
 // active action already in flight, etc.).
 type scheduleDecision struct {
-	schedule   db.Schedule
-	insertSpec *db.ActionInsertSpec
-	successRun *db.ScheduleRunUpdate
-	errUpdate  *db.ScheduleRunUpdate
+	schedule  db.Schedule
+	insert    *scheduleInsert
+	errUpdate *db.ScheduleRunUpdate
+}
+
+// scheduleInsert couples a pending action insert with the schedule-run update
+// that must be written iff the insert succeeds. They are constructed and
+// consumed as a unit so a future decideSchedules branch cannot set the insert
+// spec without its paired success run (which would nil-deref the dispatcher).
+type scheduleInsert struct {
+	spec       db.ActionInsertSpec
+	successRun db.ScheduleRunUpdate
 }
 
 func CheckSchedules(database db.Store, now time.Time) error {
@@ -66,10 +74,10 @@ func CheckSchedules(database db.Store, now time.Time) error {
 		if d.errUpdate != nil {
 			errorRunUpdates = append(errorRunUpdates, *d.errUpdate)
 		}
-		if d.insertSpec != nil {
-			inserts = append(inserts, *d.insertSpec)
+		if d.insert != nil {
+			inserts = append(inserts, d.insert.spec)
 			insertDecisions = append(insertDecisions, d)
-			successUpdates = append(successUpdates, *d.successRun)
+			successUpdates = append(successUpdates, d.insert.successRun)
 		}
 	}
 
@@ -180,9 +188,11 @@ func decideSchedules(schedules []db.Schedule, taskMap map[int64]*db.Task, active
 		}
 
 		out = append(out, scheduleDecision{
-			schedule:   s,
-			insertSpec: &db.ActionInsertSpec{Title: s.Title, TaskID: s.TaskID, Metadata: string(metaJSON), Status: db.ActionStatusPending},
-			successRun: &db.ScheduleRunUpdate{ID: s.ID, LastRunAt: nowUTC, LastError: ""},
+			schedule: s,
+			insert: &scheduleInsert{
+				spec:       db.ActionInsertSpec{Title: s.Title, TaskID: s.TaskID, Metadata: string(metaJSON), Status: db.ActionStatusPending},
+				successRun: db.ScheduleRunUpdate{ID: s.ID, LastRunAt: nowUTC, LastError: ""},
+			},
 		})
 	}
 
