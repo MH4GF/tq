@@ -76,6 +76,55 @@ func writeSessionLog(t *testing.T, homeDir, cwd, sessionID string, logAge time.D
 	}
 }
 
+func TestFileClaudeSessionLogChecker_SessionLogExists(t *testing.T) {
+	tests := []struct {
+		name      string
+		logCwd    string // empty → no log written
+		sessionID string
+		query     string
+		want      bool
+	}{
+		{
+			name:      "log exists",
+			logCwd:    "/test/project",
+			sessionID: "sess-abc",
+			query:     "sess-abc",
+			want:      true,
+		},
+		{
+			name:      "no log",
+			sessionID: "sess-abc",
+			query:     "sess-abc",
+			want:      false,
+		},
+		{
+			name:      "log under worktree project dir still found by session id",
+			logCwd:    "/test/project/.claude/worktrees/gentle-wobbling-rossum",
+			sessionID: "sess-wt",
+			query:     "sess-wt",
+			want:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			homeDir := t.TempDir()
+			if tt.logCwd != "" {
+				writeSessionLog(t, homeDir, tt.logCwd, tt.sessionID, 0)
+			}
+
+			checker := &FileClaudeSessionLogChecker{HomeDir: homeDir}
+			got, err := checker.SessionLogExists(tt.query)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("SessionLogExists(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFileClaudeSessionLogChecker(t *testing.T) {
 	tests := []struct {
 		name       string
