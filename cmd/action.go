@@ -18,7 +18,8 @@ var actionUpdateCmd = &cobra.Command{
   tq action update 2 --task 5
   tq action update 3 --meta '{"key":"value"}'
   tq action update 4 --work-dir /path/to/worktree
-  tq action update 5 --work-dir ""`,
+  tq action update 5 --work-dir ""
+  tq action update 6 --result "outcome: recovered after false-positive failure"`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := parseID(args[0])
@@ -26,7 +27,7 @@ var actionUpdateCmd = &cobra.Command{
 			return err
 		}
 
-		var title, meta, workDir *string
+		var title, meta, workDir, result *string
 		var taskID *int64
 
 		if cmd.Flags().Changed("title") {
@@ -48,12 +49,16 @@ var actionUpdateCmd = &cobra.Command{
 			v, _ := cmd.Flags().GetString("work-dir")
 			workDir = &v
 		}
-
-		if title == nil && taskID == nil && meta == nil && workDir == nil {
-			return fmt.Errorf("at least one flag (--title, --task, --meta, --work-dir) is required")
+		if cmd.Flags().Changed("result") {
+			v, _ := cmd.Flags().GetString("result")
+			result = &v
 		}
 
-		if err := database.UpdateAction(id, title, taskID, meta, workDir); err != nil {
+		if title == nil && taskID == nil && meta == nil && workDir == nil && result == nil {
+			return fmt.Errorf("at least one flag (--title, --task, --meta, --work-dir, --result) is required")
+		}
+
+		if err := database.UpdateAction(id, title, taskID, meta, workDir, result); err != nil {
 			return err
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d updated\n", id)
@@ -85,6 +90,7 @@ func init() {
 	actionUpdateCmd.Flags().Int64("task", 0, "Task ID")
 	actionUpdateCmd.Flags().String("meta", "", `JSON metadata for dispatch control (keys: mode, claude_args)`)
 	actionUpdateCmd.Flags().String("work-dir", "", `Working directory override for this action (pass "" to clear)`)
+	actionUpdateCmd.Flags().String("result", "", "Amend the recorded result (allowed on pending, failed, done, or cancelled actions)")
 
 	actionGetCmd.Flags().StringVar(&actionGetJQ, "jq", "", jqFlagUsage(listFields))
 	actionCmd.AddCommand(actionGetCmd)
