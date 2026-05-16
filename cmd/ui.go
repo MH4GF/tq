@@ -90,7 +90,7 @@ var uiCmd = &cobra.Command{
 }
 
 func init() {
-	uiCmd.Flags().IntVar(&uiMaxInteractive, "max-interactive", dispatch.DefaultMaxInteractive, "Maximum concurrent interactive sessions (cognitive-load cap)")
+	uiCmd.Flags().IntVar(&uiMaxInteractive, "max-interactive", dispatch.DefaultMaxInteractive, "Maximum concurrent user-facing sessions (interactive tmux + experimental_bg via 'claude agents' share this pool), cognitive-load cap")
 	uiCmd.Flags().IntVar(&uiMaxNonInteractive, "max-noninteractive", dispatch.DefaultMaxNonInteractive, "Maximum concurrent noninteractive (claude -p) processes (OS resource cap)")
 	uiCmd.Flags().DurationVar(&uiPollInterval, "poll", dispatch.DefaultPollInterval, "Queue worker poll interval")
 	uiCmd.Flags().StringVar(&uiSession, "session", "main", "Target tmux session name")
