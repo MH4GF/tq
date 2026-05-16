@@ -16,7 +16,6 @@
 
 GetOrCreateTriageTask
 GetSchedule
-HasActiveActionWithMeta
 ListTasksByStatus
 SetAllDispatchEnabled
 UpdateScheduleRun
