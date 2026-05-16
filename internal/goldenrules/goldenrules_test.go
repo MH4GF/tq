@@ -2,6 +2,7 @@ package goldenrules_test
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -52,6 +53,14 @@ func projectRoot(t *testing.T) string {
 
 func scanFiles(t *testing.T, root string, cfg scanConfig) []violation {
 	t.Helper()
+	violations, err := scanFilesErr(root, cfg)
+	if err != nil {
+		t.Fatalf("scanning: %v", err)
+	}
+	return violations
+}
+
+func scanFilesErr(root string, cfg scanConfig) ([]violation, error) {
 	var violations []violation
 	for _, dir := range cfg.Dirs {
 		absDir := filepath.Join(root, dir)
@@ -68,7 +77,10 @@ func scanFiles(t *testing.T, root string, cfg scanConfig) []violation {
 				}
 				return nil
 			}
-			matched, _ := filepath.Match(cfg.FilePattern, filepath.Base(path))
+			matched, err := filepath.Match(cfg.FilePattern, filepath.Base(path))
+			if err != nil {
+				return err
+			}
 			if !matched {
 				return nil
 			}
@@ -79,7 +91,10 @@ func scanFiles(t *testing.T, root string, cfg scanConfig) []violation {
 			defer f.Close()
 			scanner := bufio.NewScanner(f)
 			lineNum := 0
-			relPath, _ := filepath.Rel(root, path)
+			relPath, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
 			for scanner.Scan() {
 				lineNum++
 				line := scanner.Text()
@@ -91,13 +106,16 @@ func scanFiles(t *testing.T, root string, cfg scanConfig) []violation {
 					})
 				}
 			}
+			if err := scanner.Err(); err != nil {
+				return err
+			}
 			return nil
 		})
 		if err != nil {
-			t.Fatalf("walking %s: %v", dir, err)
+			return nil, fmt.Errorf("walking %s: %w", dir, err)
 		}
 	}
-	return violations
+	return violations, nil
 }
 
 func reportViolations(t *testing.T, violations []violation) {
@@ -248,7 +266,10 @@ func checkErrorUnwrap(t *testing.T, root string) []violation {
 		defer f.Close()
 		scanner := bufio.NewScanner(f)
 		lineNum := 0
-		relPath, _ := filepath.Rel(root, path)
+		relPath, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
 		for scanner.Scan() {
 			lineNum++
 			if matches := typePattern.FindStringSubmatch(scanner.Text()); matches != nil {
@@ -259,6 +280,9 @@ func checkErrorUnwrap(t *testing.T, root string) []violation {
 					Line:   lineNum,
 				})
 			}
+		}
+		if err := scanner.Err(); err != nil {
+			return err
 		}
 		return nil
 	})
@@ -294,6 +318,9 @@ func checkErrorUnwrap(t *testing.T, root string) []violation {
 				unwrapSet[pkgDir+":"+matches[1]] = true
 			}
 		}
+		if err := scanner.Err(); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
@@ -312,4 +339,35 @@ func checkErrorUnwrap(t *testing.T, root string) []violation {
 		}
 	}
 	return violations
+}
+
+// TestScanFilesFailsOnOversizedLine guards against silent under-enforcement:
+// a line longer than bufio.MaxScanTokenSize used to truncate the scan, so any
+// violation past that line went undetected and golden-rule subtests passed
+// even when the source actually violated them.
+func TestScanFilesFailsOnOversizedLine(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "pkg")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// The oversized first line forces scanner.Err() to report bufio.ErrTooLong;
+	// the violation marker sits on the line that would never be scanned.
+	oversized := strings.Repeat("a", bufio.MaxScanTokenSize+1)
+	content := oversized + "\nVIOLATION_MARKER\n"
+	if err := os.WriteFile(filepath.Join(dir, "big.go"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := scanFilesErr(root, scanConfig{
+		Dirs:        []string{"pkg"},
+		FilePattern: "*.go",
+		LineRegexp:  regexp.MustCompile(`VIOLATION_MARKER`),
+	})
+	if err == nil {
+		t.Fatal("expected scanFilesErr to fail on an oversized line; got nil, meaning a violation past the long line would be silently skipped")
+	}
+	if !errors.Is(err, bufio.ErrTooLong) {
+		t.Fatalf("expected bufio.ErrTooLong, got %v", err)
+	}
 }
