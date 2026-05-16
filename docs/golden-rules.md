@@ -140,8 +140,8 @@ Current status totals are captured after each rule as `current violations: N`. A
 - Detection limits (line-based scanner):
   - Splits across source lines (e.g., `"...LIKE\n'%foo%'..."`) escape detection.
   - Cross-literal concatenation (`"... LIKE " + "'%" + "..."`) escapes detection. Rewriting an existing violation in this shape to bypass the rule is a Rule 16 violation in spirit; reviewers should reject it.
-- Current violations: __RULE16_TBD__.
-  - `db.Search` (all 6 branches) was converted to SQLite FTS5 (`trigram` tokenizer) virtual tables (`tasks_fts`/`actions_fts`/`events_fts`), kept in sync by `AFTER INSERT/UPDATE/DELETE` triggers and an idempotent backfill in `db.go` `Migrate()`. The leading-wildcard `LIKE` is gone; the query is now index-backed (`SCAN <fts> VIRTUAL TABLE INDEX`). trigram preserves substring search for ≥3-rune keywords incl. Japanese; 1–2-rune queries no longer match (proper CJK morphological tokenization is separate follow-up work).
+- Current violations: 0 (ceiling: 0).
+  - `db.Search` (all 6 branches) was converted to SQLite FTS5 (`trigram` tokenizer) virtual tables (`tasks_fts`/`actions_fts`/`events_fts`), kept in sync by `AFTER INSERT/UPDATE/DELETE` triggers and an idempotent backfill in `db.go` `Migrate()`. The leading-wildcard `LIKE` is gone; the query is now index-backed (`SCAN <fts> VIRTUAL TABLE INDEX`). trigram preserves substring search for ≥3-rune keywords incl. Japanese; 1–2-rune queries no longer match (proper CJK morphological tokenization is separate follow-up work). The last remaining offender (`migrateLegacyClaudeFlags` one-shot sweep) was already removed in a prior burndown, so Rule 16 is now fully clean.
 
 ### Query plan invariants
 
@@ -149,7 +149,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 - Why: tq runs against Turso (libsql) in production where `rows-read` is metered. The Turso-recommended way to keep `rows-read` bounded is to verify each query's plan reports `SEARCH ... USING INDEX` rather than `SCAN tablename`. A missing index (e.g. `tasks(project_id)` historically) silently inflates reads; this rule structurally blocks that regression. Rule 16 covers the LIKE shape statically; Rule 17 covers the same concern dynamically (via the planner) and additionally catches cases unrelated to `LIKE` (missing FK indexes, full-table list operations, etc.). Background: `.claude/plans/ok-tq-create-action-refactored-galaxy.md` Action 4.
 - Verify: Go test harness `internal/goldenrules/` (`rule17_explain_test.go`) parses `db/*.go` via `go/ast`, extracts SQL from `*.Query` / `*.QueryRow` / `*.Exec` (and the `*Context` variants), runs `EXPLAIN QUERY PLAN` against `testutil.NewTestDB(t)`, and matches `^SCAN\s+\w+` in the `detail` column. Ceiling-based against `.goldenrules-rule17-allowlist` (deadcode-check pattern): new findings AND stale entries both fail. Run `go test ./internal/goldenrules/`.
-- Allowlist policy: `.goldenrules-rule17-allowlist` records intentional / unavoidable SCAN sites (full-table list with no WHERE, migration one-shots, FK-cascade chains that lack an index, FTS5 `MATCH` virtual-table index scans, FTS5 maintenance-trigger expansion on single-row writes, LIMIT-bounded primary-key scans where `ORDER BY id DESC LIMIT N` is actually O(N) and no index can improve it). Each entry is one line, format `<file>:<line> SCAN <table_or_alias>`. New SCANs MUST be either fixed (add an index, rewrite the query) or, if genuinely unavoidable, added to the allowlist with a category comment block above.
+- Allowlist policy: `.goldenrules-rule17-allowlist` records intentional / unavoidable SCAN sites (full-table list with no WHERE, migration one-shots, FK-cascade chains that lack an index, FTS5 `MATCH` virtual-table index scans, LIMIT-bounded primary-key scans where `ORDER BY id DESC LIMIT N` is actually O(N) and no index can improve it). Each entry is one line, format `<file>:<line> SCAN <table_or_alias>`. New SCANs MUST be either fixed (add an index, rewrite the query) or, if genuinely unavoidable, added to the allowlist with a category comment block above.
 - MVP limits (extend in a follow-up if violated by a real refactor):
   - SQL extractor handles string literals, package-level `const` references, intra-function string variable assignments (first assignment wins), `+` concatenation, and `fmt.Sprintf` format strings (verbs replaced with `?`). It does NOT trace through helpers like `appendOrderLimit` — only the base assignment is checked.
   - Queries built via `strings.Join` for IN-clauses are checked with a single `?` placeholder substituted in. This is the worst case for the index decision.
@@ -231,12 +231,12 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 13 No dead code | OK | OK | OK | OK |
 | 14 No `*ForTest` in prod | — | OK | OK | OK |
 | 15 No N+1 in for-range | — | OK | OK | OK |
-| 16 No leading-wildcard `LIKE` | __RULE16_TBD__ | OK | OK | OK |
-| 17 No SCAN in EXPLAIN | __RULE17_TBD__ | — | — | — |
+| 16 No leading-wildcard `LIKE` | OK | OK | OK | OK |
+| 17 No SCAN in EXPLAIN | 14 | — | — | — |
 | 18 No aggregate hot paths | — | OK | OK | — |
 | 19 No test-only `db.Store` methods | 8 | — | — | — |
 
-Totals: **__TOTALS_TBD__** current violations (Rule 16: __RULE16_TBD__ ceiling-pinned LIKE pattern(s) — `db.Search` burned down via FTS5 trigram conversion; Rule 17: __RULE17_TBD__ SCANs allowlisted in `.goldenrules-rule17-allowlist`, of which the `db.Search` entries are the index-backed FTS5 virtual-table path; Rule 19: 8 test-only-reachable `db.Store` methods allowlisted in `.goldenrules-rule19-allowlist`; remaining burn down via per-query index work and per-method dead-code removal tracked as separate actions).
+Totals: **22** current violations (Rule 16: 0 — `db.Search` burned down via FTS5 trigram conversion and the `migrateLegacyClaudeFlags` one-shot already removed, so Rule 16 is fully clean; Rule 17: 14 SCANs allowlisted in `.goldenrules-rule17-allowlist`, of which the `db.Search` entries are the index-backed FTS5 virtual-table path; Rule 19: 8 test-only-reachable `db.Store` methods allowlisted in `.goldenrules-rule19-allowlist`; remaining burn down via per-query index work and per-method dead-code removal tracked as separate actions).
 
 ---
 
