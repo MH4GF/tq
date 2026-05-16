@@ -218,12 +218,16 @@ func (db *DB) HasActiveActionsForSchedules(scheduleIDs []int64) (map[int64]bool,
 	placeholders := make([]string, len(scheduleIDs))
 	for i, id := range scheduleIDs {
 		placeholders[i] = "?"
-		args = append(args, fmt.Sprintf("%d", id))
+		args = append(args, id)
 	}
 
-	query := "SELECT DISTINCT json_extract(metadata, '$.schedule_id') AS sid " +
+	// schedule_id may be stored in metadata as a JSON string ("42") or a JSON
+	// number (42) depending on the writer; CAST normalizes both sides to
+	// INTEGER so the match does not depend on SQLite's implicit TEXT/INTEGER
+	// coercion (which would break under strict typing).
+	query := "SELECT DISTINCT CAST(json_extract(metadata, '$.schedule_id') AS INTEGER) AS sid " +
 		"FROM actions WHERE status IN (?, ?, ?) " +
-		"AND json_extract(metadata, '$.schedule_id') IN (" + strings.Join(placeholders, ", ") + ")"
+		"AND CAST(json_extract(metadata, '$.schedule_id') AS INTEGER) IN (" + strings.Join(placeholders, ", ") + ")"
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
@@ -232,18 +236,14 @@ func (db *DB) HasActiveActionsForSchedules(scheduleIDs []int64) (map[int64]bool,
 	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
-		var sidStr sql.NullString
-		if err := rows.Scan(&sidStr); err != nil {
+		var sid sql.NullInt64
+		if err := rows.Scan(&sid); err != nil {
 			return nil, fmt.Errorf("has active actions for schedules: scan: %w", err)
 		}
-		if !sidStr.Valid {
+		if !sid.Valid {
 			continue
 		}
-		var sid int64
-		if _, err := fmt.Sscanf(sidStr.String, "%d", &sid); err != nil {
-			continue
-		}
-		result[sid] = true
+		result[sid.Int64] = true
 	}
 	return result, rows.Err()
 }
