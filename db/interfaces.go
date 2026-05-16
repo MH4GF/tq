@@ -38,7 +38,6 @@ type CommandWriter interface {
 	SetDispatchEnabled(projectID int64, enabled bool) error
 	SetWorkDir(projectID int64, workDir string) error
 	SetAllDispatchEnabled(enabled bool) error
-	EnsureProject(name string) (int64, error)
 	// Worker commands
 	UpdateWorkerHeartbeat(maxInteractive int) error
 	// Schedule commands
@@ -80,10 +79,8 @@ type QueryReader interface {
 	LatestTaskNotes(taskIDs []int64, kindFilter string) (map[int64]TaskNoteEntry, error)
 	// Project queries
 	GetProjectByID(id int64) (*Project, error)
-	GetProjectByName(name string) (*Project, error)
 	GetProjectsByIDs(ids []int64) (map[int64]*Project, error)
 	ListProjects(limit int) ([]Project, error)
-	EnsureNotificationsProject() (int64, error)
 	// Schedule queries
 	GetSchedule(id int64) (*Schedule, error)
 	ListSchedules(limit int) ([]Schedule, error)

@@ -1,8 +1,6 @@
 package db
 
 import (
-	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -20,15 +18,6 @@ const projectColumns = "id, name, work_dir, metadata, dispatch_enabled, created_
 
 func (p *Project) scanFields() []any {
 	return []any{&p.ID, &p.Name, &p.WorkDir, &p.Metadata, &p.DispatchEnabled, &p.CreatedAt}
-}
-
-func (db *DB) GetProjectByName(name string) (*Project, error) {
-	p := &Project{}
-	err := db.QueryRow("SELECT "+projectColumns+" FROM projects WHERE name = ?", name).Scan(p.scanFields()...)
-	if err != nil {
-		return nil, err
-	}
-	return p, nil
 }
 
 func (db *DB) GetProjectByID(id int64) (*Project, error) {
@@ -197,21 +186,6 @@ func (db *DB) SetWorkDir(projectID int64, workDir string) error {
 		"work_dir": workDir,
 	})
 	return nil
-}
-
-func (db *DB) EnsureProject(name string) (int64, error) {
-	p, err := db.GetProjectByName(name)
-	if err == nil {
-		return p.ID, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return 0, fmt.Errorf("get %s project: %w", name, err)
-	}
-	return db.InsertProject(name, "", "{}")
-}
-
-func (db *DB) EnsureNotificationsProject() (int64, error) {
-	return db.EnsureProject("notifications")
 }
 
 func (db *DB) SetAllDispatchEnabled(enabled bool) error {

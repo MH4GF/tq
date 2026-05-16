@@ -1,39 +1,12 @@
 package db_test
 
 import (
-	"database/sql"
-	"errors"
 	"strings"
 	"testing"
 
 	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
 )
-
-func TestGetProjectByName(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	p, err := d.GetProjectByName("immedio")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.Name != "immedio" {
-		t.Errorf("expected name immedio, got %s", p.Name)
-	}
-	if p.WorkDir != "~/ghq/github.com/immedioinc/immedio" {
-		t.Errorf("unexpected work_dir: %s", p.WorkDir)
-	}
-}
-
-func TestGetProjectByName_NotFound(t *testing.T) {
-	d := testutil.NewTestDB(t)
-
-	_, err := d.GetProjectByName("nonexistent")
-	if !errors.Is(err, sql.ErrNoRows) {
-		t.Errorf("expected sql.ErrNoRows, got %v", err)
-	}
-}
 
 func TestListProjects(t *testing.T) {
 	d := testutil.NewTestDB(t)
@@ -359,34 +332,6 @@ func TestSetWorkDir_NotFound(t *testing.T) {
 	err := d.SetWorkDir(999, "/tmp/nope")
 	if err == nil {
 		t.Error("expected error for non-existent project")
-	}
-}
-
-func TestEnsureProject(t *testing.T) {
-	d := testutil.NewTestDB(t)
-
-	id1, err := d.EnsureProject("test-proj")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if id1 < 1 {
-		t.Errorf("expected positive id, got %d", id1)
-	}
-
-	id2, err := d.EnsureProject("test-proj")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if id1 != id2 {
-		t.Errorf("EnsureProject returned different IDs: %d vs %d", id1, id2)
-	}
-
-	projects, err := d.ListProjects(0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(projects) != 1 {
-		t.Errorf("expected 1 project, got %d", len(projects))
 	}
 }
 
