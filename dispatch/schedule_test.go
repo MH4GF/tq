@@ -202,6 +202,7 @@ func TestCheckSchedules_MetadataFailureRecordsLastError(t *testing.T) {
 			name: "marshal failure",
 			meta: "{}",
 			setup: func(t *testing.T) {
+				t.Helper()
 				restore := dispatch.SetMarshalMeta(func(any) ([]byte, error) {
 					return nil, errors.New("simulated marshal failure")
 				})
