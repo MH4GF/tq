@@ -15,4 +15,3 @@
 # remove the line, NOT keep it allowlisted forever.
 
 ListTasksByStatus
-UpdateScheduleRun
