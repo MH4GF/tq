@@ -219,7 +219,7 @@ REASON is free-form text. Recommended structure (same as `done`):
 tq action cancel <ACTION_ID> [REASON]
 ```
 
-REASON serves as feedback for improving classification logic. Record why the action was unnecessary and how classification could be improved.
+REASON serves as feedback for improving classification logic. Record why the action was unnecessary and how classification could be improved. If cancelling surfaces residual work someone must still do, file it (`tq action create … --task <id>`) and reference it in the reason (`next: <what to do> → #<id>`); the `/tq:cancel` skill enforces this so the work stays visible.
 
 ### `tq action update`
 

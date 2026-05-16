@@ -60,9 +60,11 @@ Get `<task_id>` from the `## tq action context` heading or
 `/tq:create-action` would — goal-first, self-contained, with verification.
 You only have `Bash(tq *)` here, so call `tq action create` directly.
 
-**If `tq action create` fails**, still mark this action failed (the work was
-already blocked) but state in the reason that the follow-up could not be filed
-and must be re-filed — never leave the retry plan as untracked prose.
+**If `tq action create` fails**, still mark this action failed (unlike
+`/tq:done`, which holds — here the work was already blocked, so failing is
+the honest state regardless), but state in the reason that the follow-up
+could not be filed and must be re-filed — never leave the retry plan as
+untracked prose.
 
 ## Execute
 

@@ -36,7 +36,9 @@ sections (omit any that don't apply):
   decisions:  What was tried and why it did not work
   artifacts:  Partial PRs, files, log excerpts, error messages
   remaining:  What is needed to unblock - env fix, external response,
-              retry conditions, etc.
+              retry conditions, etc. Retry/alternative work a future
+              session must do should reference a filed follow-up action:
+              '- <what to retry> → #<id>' (tq action create … --task <id>).
 
 Do NOT describe process ("I ran grep, then read the file...").
 Session logs already capture that.`,
@@ -45,7 +47,7 @@ Session logs already capture that.`,
   tq action fail 5 'outcome: Could not merge PR #142 - CI stuck on flaky e2e test
   decisions: Retried CI twice; skipping the test locally is not acceptable per project rules
   artifacts: PR #142, CI run 98765
-  remaining: Need e2e flake fix from infra team before retry'`,
+  remaining: Need e2e flake fix from infra team before retry → #88'`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := strconv.ParseInt(args[0], 10, 64)
