@@ -140,8 +140,7 @@ Current status totals are captured after each rule as `current violations: N`. A
 - Detection limits (line-based scanner):
   - Splits across source lines (e.g., `"...LIKE\n'%foo%'..."`) escape detection.
   - Cross-literal concatenation (`"... LIKE " + "'%" + "..."`) escapes detection. Rewriting an existing violation in this shape to bypass the rule is a Rule 16 violation in spirit; reviewers should reject it.
-- Current violations: 7 (ceiling: 7).
-  - `db/db.go:296` — `migrateLegacyClaudeFlags` legacy data sweep (one-shot migration helper; full scan is acceptable here).
+- Current violations: 6 (ceiling: 6).
   - `db/search.go:98,101,104,107,110,118` — `db.Search` keyword search (UNION ALL of `tasks.title`, `tasks.metadata`, `actions.title`, `actions.result`, `actions.metadata`, `events.payload.reason`). FTS5 conversion is a separate task and out of scope for this rule.
 
 ### Query plan invariants
@@ -232,12 +231,12 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 13 No dead code | OK | OK | OK | OK |
 | 14 No `*ForTest` in prod | — | OK | OK | OK |
 | 15 No N+1 in for-range | — | OK | OK | OK |
-| 16 No leading-wildcard `LIKE` | 7 | OK | OK | OK |
+| 16 No leading-wildcard `LIKE` | 6 | OK | OK | OK |
 | 17 No SCAN in EXPLAIN | 13 | — | — | — |
 | 18 No aggregate hot paths | — | OK | OK | — |
 | 19 No test-only `db.Store` methods | 8 | — | — | — |
 
-Totals: **28** current violations (Rule 16: 7 ceiling-pinned LIKE patterns; Rule 17: 13 SCANs allowlisted in `.goldenrules-rule17-allowlist`; Rule 19: 8 test-only-reachable `db.Store` methods allowlisted in `.goldenrules-rule19-allowlist`; all burn down via FTS5 conversion of `db.Search`, per-query index work, and per-method dead-code removal tracked as separate actions).
+Totals: **27** current violations (Rule 16: 6 ceiling-pinned LIKE patterns; Rule 17: 13 SCANs allowlisted in `.goldenrules-rule17-allowlist`; Rule 19: 8 test-only-reachable `db.Store` methods allowlisted in `.goldenrules-rule19-allowlist`; all burn down via FTS5 conversion of `db.Search`, per-query index work, and per-method dead-code removal tracked as separate actions).
 
 ---
 
