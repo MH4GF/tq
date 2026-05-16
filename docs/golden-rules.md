@@ -155,7 +155,7 @@ Current status totals are captured after each rule as `current violations: N`. A
   - Queries built via `strings.Join` for IN-clauses are checked with a single `?` placeholder substituted in. This is the worst case for the index decision.
   - Queries that fail `EXPLAIN QUERY PLAN` (typically migration queries against post-migration schema, e.g. dropped columns) are skipped with a count logged in the test output.
   - The output of `EXPLAIN QUERY PLAN` is SQLite-version dependent; the test pins itself to the in-memory SQLite shipped with `testutil.NewTestDB(t)` to keep CI deterministic.
-- Current violations: 18 allowlist entries across 15 sites (see `.goldenrules-rule17-allowlist`). `db.Search` is now FTS5 (its scans are the index-backed `SCAN <fts> VIRTUAL TABLE INDEX` path, not full scans). Remaining burndown (`schedules(task_id)` index, etc.) is tracked as separate follow-up actions.
+- Current violations: 14 allowlist entries across 11 sites (see `.goldenrules-rule17-allowlist`). `db.Search` is now FTS5 (its scans are the index-backed `SCAN <fts> VIRTUAL TABLE INDEX` path, not full scans). Remaining burndown is tracked as separate follow-up actions.
 
 ### Aggregate queries on hot paths
 
