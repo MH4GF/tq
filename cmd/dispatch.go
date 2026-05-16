@@ -91,7 +91,11 @@ func SetBgWorkerFactory(f func() dispatch.Worker) {
 var actionDispatchCmd = &cobra.Command{
 	Use:   "dispatch <action_id>",
 	Short: "Dispatch an action immediately (skip queue)",
-	Long:  `Dispatch a pending action immediately by its ID.`,
+	Long: `Dispatch a pending action immediately by its ID.
+
+This is a manual override: it bypasses the completion-dependency gate, so an
+action whose blockers are not yet satisfied (including blocked-forever ones)
+is dispatched anyway. The automatic queue worker still respects dependencies.`,
 	Example: `  tq action dispatch 42
   tq action dispatch 42 --session work`,
 	Args: cobra.ExactArgs(1),

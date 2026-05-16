@@ -20,12 +20,14 @@ import (
 const maxActionTitleLength = 100
 
 var (
-	addTitle   string
-	addTask    int64
-	addMeta    string
-	addStatus  string
-	addAfter   string
-	addWorkDir string
+	addTitle      string
+	addTask       int64
+	addMeta       string
+	addStatus     string
+	addAfter      string
+	addWorkDir    string
+	addBlockedAct []int64
+	addBlockedTsk []int64
 )
 
 var addCmd = &cobra.Command{
@@ -51,7 +53,8 @@ Metadata keys for dispatch control:
                explicit values in --meta are preserved.`,
 	Example: `  tq action create "/github-pr review this" --task 1 --title "Review PR"
   tq action create "Add JWT auth middleware" --task 2 --title "Add auth middleware"
-  tq action create "/review" --task 3 --title "Plan review" --meta '{"claude_args":["--permission-mode","plan","--worktree"]}'`,
+  tq action create "/review" --task 3 --title "Plan review" --meta '{"claude_args":["--permission-mode","plan","--worktree"]}'
+  tq action create "deploy" --task 4 --title "Deploy" --blocked-by-action 41 --blocked-by-task 7`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		instruction := args[0]
@@ -119,11 +122,27 @@ Metadata keys for dispatch control:
 		if err != nil {
 			return fmt.Errorf("insert action: %w", err)
 		}
+
+		deps := collectBlockedBy(addBlockedAct, addBlockedTsk)
+		if len(deps) > 0 {
+			if err := database.AddActionDependencies(id, deps); err != nil {
+				return fmt.Errorf("add dependencies: %w", err)
+			}
+		}
+
 		w := cmd.OutOrStdout()
 		if dispatchAfter != nil {
 			_, _ = fmt.Fprintf(w, "action #%d created (status: %s, dispatch after: %s)\n", id, status, db.FormatLocal(*dispatchAfter))
 		} else {
 			_, _ = fmt.Fprintf(w, "action #%d created (status: %s)\n", id, status)
+		}
+		if len(deps) > 0 {
+			labels := make([]string, len(deps))
+			for i, d := range deps {
+				labels[i] = fmt.Sprintf("%s #%d", d.Type, d.ID)
+			}
+			_, _ = fmt.Fprintf(w, "  blocked by: %s\n", strings.Join(labels, ", "))
+			_, _ = fmt.Fprintf(w, "  [agent hint] stays pending until all blockers reach a successful terminal state (action=done, task=done/archived)\n")
 		}
 		if status == db.ActionStatusPending {
 			printQueueStatus(w, id)
@@ -238,5 +257,7 @@ func init() {
 	addCmd.Flags().StringVar(&addStatus, "status", "", "Initial status (default: pending)")
 	addCmd.Flags().StringVar(&addAfter, "after", "", "Dispatch after this time (YYYY-MM-DD HH:MM, local timezone)")
 	addCmd.Flags().StringVar(&addWorkDir, "work-dir", "", "Working directory override for this action (defaults to task work_dir)")
+	addCmd.Flags().Int64SliceVar(&addBlockedAct, "blocked-by-action", nil, "Block until this action reaches done (repeatable)")
+	addCmd.Flags().Int64SliceVar(&addBlockedTsk, "blocked-by-task", nil, "Block until this task reaches done/archived (repeatable)")
 	actionCmd.AddCommand(addCmd)
 }

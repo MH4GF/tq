@@ -1,0 +1,333 @@
+package db_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/MH4GF/tq/db"
+	"github.com/MH4GF/tq/testutil"
+)
+
+// dispatchable reports how many pending actions NextPending would consider
+// runnable right now (dependency- and time-gated).
+func dispatchable(t *testing.T, d *db.DB) int {
+	t.Helper()
+	pc, err := d.CountPendingByDispatch()
+	if err != nil {
+		t.Fatalf("CountPendingByDispatch: %v", err)
+	}
+	return pc.Dispatchable
+}
+
+func TestActionDependency_ActionBlockerStatus(t *testing.T) {
+	tests := []struct {
+		name         string
+		targetStatus string
+		wantUnblock  bool
+	}{
+		{"done unblocks", db.ActionStatusDone, true},
+		{"failed blocks forever", db.ActionStatusFailed, false},
+		{"cancelled blocks forever", db.ActionStatusCancelled, false},
+		{"running blocks", db.ActionStatusRunning, false},
+		{"dispatched blocks", db.ActionStatusDispatched, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+			target, err := d.InsertAction("target", taskID, "{}", db.ActionStatusPending, nil, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := d.SetActionStatusForTest(target, tt.targetStatus); err != nil {
+				t.Fatal(err)
+			}
+			follower, err := d.InsertAction("follower", taskID, "{}", db.ActionStatusPending, nil, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: target}}); err != nil {
+				t.Fatal(err)
+			}
+
+			got := dispatchable(t, d)
+			want := 0
+			if tt.wantUnblock {
+				want = 1
+			}
+			if got != want {
+				t.Errorf("dispatchable = %d, want %d", got, want)
+			}
+		})
+	}
+}
+
+func TestActionDependency_TaskBlockerStatus(t *testing.T) {
+	tests := []struct {
+		name        string
+		taskStatus  string
+		wantUnblock bool
+	}{
+		{"open blocks", db.TaskStatusOpen, false},
+		{"done unblocks", db.TaskStatusDone, true},
+		{"archived unblocks", db.TaskStatusArchived, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			ownTask, _ := d.InsertTask(1, "own", "{}", "")
+			depTask, _ := d.InsertTask(1, "dep", "{}", "")
+
+			follower, err := d.InsertAction("follower", ownTask, "{}", db.ActionStatusPending, nil, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeTask, ID: depTask}}); err != nil {
+				t.Fatal(err)
+			}
+			if tt.taskStatus != db.TaskStatusOpen {
+				if err := d.UpdateTask(depTask, tt.taskStatus, ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			got := dispatchable(t, d)
+			want := 0
+			if tt.wantUnblock {
+				want = 1
+			}
+			if got != want {
+				t.Errorf("dispatchable = %d, want %d", got, want)
+			}
+		})
+	}
+}
+
+func TestActionDependency_MultipleAND(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+	a1, _ := d.InsertAction("dep1", taskID, "{}", db.ActionStatusPending, nil, "")
+	a2, _ := d.InsertAction("dep2", taskID, "{}", db.ActionStatusPending, nil, "")
+	_ = d.SetActionStatusForTest(a1, db.ActionStatusRunning)
+	_ = d.SetActionStatusForTest(a2, db.ActionStatusRunning)
+
+	follower, _ := d.InsertAction("follower", taskID, "{}", db.ActionStatusPending, nil, "")
+	if err := d.AddActionDependencies(follower, []db.ActionDep{
+		{Type: db.DepTypeAction, ID: a1},
+		{Type: db.DepTypeAction, ID: a2},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := dispatchable(t, d); got != 0 {
+		t.Fatalf("both deps unsatisfied: dispatchable = %d, want 0", got)
+	}
+	if err := d.MarkDone(a1, "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if got := dispatchable(t, d); got != 0 {
+		t.Fatalf("one dep still unsatisfied: dispatchable = %d, want 0", got)
+	}
+	if err := d.MarkDone(a2, "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if got := dispatchable(t, d); got != 1 {
+		t.Fatalf("all deps satisfied: dispatchable = %d, want 1", got)
+	}
+}
+
+func TestActionDependency_DispatchAfterAND(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+	target, _ := d.InsertAction("target", taskID, "{}", db.ActionStatusPending, nil, "")
+	_ = d.SetActionStatusForTest(target, db.ActionStatusRunning)
+
+	future := "2999-12-31 23:59:59"
+	follower, _ := d.InsertAction("follower", taskID, "{}", db.ActionStatusPending, &future, "")
+	if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: target}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Dependency unsatisfied AND time not reached.
+	if got := dispatchable(t, d); got != 0 {
+		t.Fatalf("dispatchable = %d, want 0 (dep + time)", got)
+	}
+	// Satisfy the dependency; time gate still blocks.
+	if err := d.MarkDone(target, "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if got := dispatchable(t, d); got != 0 {
+		t.Fatalf("dispatchable = %d, want 0 (time still future)", got)
+	}
+}
+
+func TestActionDependency_NoDepsRegression(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+	if _, err := d.InsertAction("plain", taskID, "{}", db.ActionStatusPending, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := dispatchable(t, d); got != 1 {
+		t.Fatalf("no-deps action: dispatchable = %d, want 1", got)
+	}
+
+	future := "2999-12-31 23:59:59"
+	if _, err := d.InsertAction("later", taskID, "{}", db.ActionStatusPending, &future, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := dispatchable(t, d); got != 1 {
+		t.Fatalf("time-only gate unchanged: dispatchable = %d, want 1", got)
+	}
+}
+
+func TestActionDependency_NextPendingEndToEnd(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+	ctx := context.Background()
+
+	target, _ := d.InsertAction("target", taskID, "{}", db.ActionStatusPending, nil, "")
+	_ = d.SetActionStatusForTest(target, db.ActionStatusRunning)
+	follower, _ := d.InsertAction("follower", taskID, "{}", db.ActionStatusPending, nil, "")
+	if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: target}}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := d.NextPending(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatalf("NextPending returned action #%d, want nil (blocked)", got.ID)
+	}
+
+	if err := d.MarkDone(target, "ok"); err != nil {
+		t.Fatal(err)
+	}
+	got, err = d.NextPending(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.ID != follower {
+		t.Fatalf("NextPending = %v, want action #%d after dep done", got, follower)
+	}
+}
+
+func TestActionDependency_CycleDetection(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+	a1, _ := d.InsertAction("a1", taskID, "{}", db.ActionStatusPending, nil, "")
+	a2, _ := d.InsertAction("a2", taskID, "{}", db.ActionStatusPending, nil, "")
+	a3, _ := d.InsertAction("a3", taskID, "{}", db.ActionStatusPending, nil, "")
+
+	if err := d.AddActionDependencies(a1, []db.ActionDep{{Type: db.DepTypeAction, ID: a1}}); err == nil {
+		t.Error("self-dependency should be rejected")
+	}
+	if err := d.AddActionDependencies(a2, []db.ActionDep{{Type: db.DepTypeAction, ID: a1}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AddActionDependencies(a1, []db.ActionDep{{Type: db.DepTypeAction, ID: a2}}); err == nil {
+		t.Error("A->B then B->A should be rejected as a cycle")
+	}
+	// Multi-hop: a3 depends on a2 (which depends on a1). a1 -> a3 closes it.
+	if err := d.AddActionDependencies(a3, []db.ActionDep{{Type: db.DepTypeAction, ID: a2}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AddActionDependencies(a1, []db.ActionDep{{Type: db.DepTypeAction, ID: a3}}); err == nil {
+		t.Error("A->B->C then C->A should be rejected as a cycle")
+	}
+}
+
+func TestActionDependency_MissingBlocker(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+	a, _ := d.InsertAction("a", taskID, "{}", db.ActionStatusPending, nil, "")
+
+	if err := d.AddActionDependencies(a, []db.ActionDep{{Type: db.DepTypeAction, ID: 99999}}); err == nil {
+		t.Error("non-existent blocker action should be rejected")
+	}
+	if err := d.AddActionDependencies(a, []db.ActionDep{{Type: db.DepTypeTask, ID: 99999}}); err == nil {
+		t.Error("non-existent blocker task should be rejected")
+	}
+}
+
+func TestActionDependency_ClearAndReplace(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+	t1, _ := d.InsertAction("t1", taskID, "{}", db.ActionStatusPending, nil, "")
+	t2, _ := d.InsertAction("t2", taskID, "{}", db.ActionStatusPending, nil, "")
+	_ = d.SetActionStatusForTest(t1, db.ActionStatusFailed)
+	_ = d.SetActionStatusForTest(t2, db.ActionStatusDone)
+
+	follower, _ := d.InsertAction("follower", taskID, "{}", db.ActionStatusPending, nil, "")
+	if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: t1}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := dispatchable(t, d); got != 0 {
+		t.Fatalf("blocked by failed dep: dispatchable = %d, want 0", got)
+	}
+
+	// Clear removes the bad dependency entirely.
+	if err := d.ClearActionDependencies(follower); err != nil {
+		t.Fatal(err)
+	}
+	if got := dispatchable(t, d); got != 1 {
+		t.Fatalf("after clear: dispatchable = %d, want 1", got)
+	}
+
+	// Replace: re-point to a satisfied dependency.
+	if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: t2}}); err != nil {
+		t.Fatal(err)
+	}
+	deps, err := d.ListActionDependencies(follower)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deps) != 1 || deps[0].ID != t2 || !deps[0].Satisfied {
+		t.Fatalf("ListActionDependencies = %+v, want [{action #%d satisfied}]", deps, t2)
+	}
+	if got := dispatchable(t, d); got != 1 {
+		t.Fatalf("after replace with satisfied dep: dispatchable = %d, want 1", got)
+	}
+}
+
+func TestActionDependency_ClaimPendingBypassesGate(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+	ctx := context.Background()
+
+	target, _ := d.InsertAction("target", taskID, "{}", db.ActionStatusPending, nil, "")
+	_ = d.SetActionStatusForTest(target, db.ActionStatusFailed)
+	follower, _ := d.InsertAction("follower", taskID, "{}", db.ActionStatusPending, nil, "")
+	if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: target}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Auto path is blocked.
+	if got := dispatchable(t, d); got != 0 {
+		t.Fatalf("dispatchable = %d, want 0", got)
+	}
+	// Manual override claims it anyway.
+	a, err := d.ClaimPending(ctx, follower)
+	if err != nil {
+		t.Fatalf("ClaimPending should bypass the dependency gate: %v", err)
+	}
+	if a.Status != db.ActionStatusRunning {
+		t.Fatalf("ClaimPending status = %s, want running", a.Status)
+	}
+}

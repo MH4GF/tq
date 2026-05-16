@@ -24,6 +24,8 @@ type CommandWriter interface {
 	NextPending(ctx context.Context) (*Action, error)
 	ClaimPending(ctx context.Context, id int64) (*Action, error)
 	ResumeAction(parentID int64, opts ResumeOptions) (int64, error)
+	AddActionDependencies(actionID int64, deps []ActionDep) error
+	ClearActionDependencies(actionID int64) error
 	// Task commands
 	InsertTask(projectID int64, title, metadata, workDir string) (int64, error)
 	UpdateTask(id int64, status, reason string) error
@@ -68,6 +70,8 @@ type QueryReader interface {
 	IsActionDispatchEnabled(actionID int64) (bool, error)
 	ListActionsByTaskIDs(taskIDs []int64) (map[int64][]Action, error)
 	ListActionsByTaskIDsForView(taskIDs []int64, dateFilter string) (map[int64][]Action, error)
+	ListActionDependencies(actionID int64) ([]ActionDepStatus, error)
+	ListActionDependenciesByActionIDs(ids []int64) (map[int64][]ActionDepStatus, error)
 	// Task queries
 	GetTask(id int64) (*Task, error)
 	ListTasks(projectID int64, status string, limit int) ([]Task, error)

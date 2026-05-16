@@ -1488,3 +1488,79 @@ func TestReapStaleActions_SkipsPrefetchWhenNoCandidates(t *testing.T) {
 		})
 	}
 }
+
+func TestRunWorker_DependencyBlocksThenReleases(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
+	dep, _ := d.InsertAction("dep", taskID, `{"instruction":"x","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
+	_ = d.SetActionStatusForTest(dep, db.ActionStatusRunning)
+	follower, _ := d.InsertAction("follower", taskID, `{"instruction":"y","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
+	if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: dep}}); err != nil {
+		t.Fatal(err)
+	}
+
+	worker := &countingWorker{result: `{"ok":true}`}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: func() Worker { return worker },
+			InteractiveFunc:    func() Worker { return worker },
+		},
+		MaxInteractive: 3,
+		PollInterval:   20 * time.Millisecond,
+	}
+	go func() { _ = RunWorker(ctx, cfg) }()
+
+	// While the dependency is unsatisfied the follower must stay pending.
+	time.Sleep(150 * time.Millisecond)
+	if a, _ := d.GetAction(follower); a.Status != db.ActionStatusPending {
+		t.Fatalf("follower status = %q, want pending while blocked", a.Status)
+	}
+
+	// Satisfy the dependency; the worker should pick the follower up.
+	if err := d.MarkDone(dep, "ok"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, 2*time.Second, "follower dispatched after dep done", func() bool {
+		a, _ := d.GetAction(follower)
+		return a.Status == db.ActionStatusDone
+	})
+}
+
+func TestRunWorker_FailedDependencyBlocksForever(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
+	dep, _ := d.InsertAction("dep", taskID, `{"instruction":"x","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
+	_ = d.SetActionStatusForTest(dep, db.ActionStatusFailed)
+	follower, _ := d.InsertAction("follower", taskID, `{"instruction":"y","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
+	if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: dep}}); err != nil {
+		t.Fatal(err)
+	}
+
+	worker := &countingWorker{result: `{"ok":true}`}
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB:                 d,
+			NonInteractiveFunc: func() Worker { return worker },
+			InteractiveFunc:    func() Worker { return worker },
+		},
+		MaxInteractive: 3,
+		PollInterval:   20 * time.Millisecond,
+	}
+	_ = RunWorker(ctx, cfg)
+
+	if a, _ := d.GetAction(follower); a.Status != db.ActionStatusPending {
+		t.Fatalf("follower status = %q, want pending (blocked forever by failed dep)", a.Status)
+	}
+	if worker.Count() != 0 {
+		t.Fatalf("worker.count = %d, want 0 (follower must never dispatch)", worker.Count())
+	}
+}

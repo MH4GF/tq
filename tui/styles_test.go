@@ -41,7 +41,7 @@ func TestRenderDetailView(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out := RenderDetailView(&tt.action, 0, 100, 40)
+			out := RenderDetailView(&tt.action, nil, 0, 100, 40)
 			for _, want := range tt.wantContain {
 				if !strings.Contains(out, want) {
 					t.Errorf("RenderDetailView output missing %q\ngot:\n%s", want, out)

@@ -171,6 +171,7 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 		 WHERE a.status = ?
 		   AND p.dispatch_enabled = 1
 		   AND (a.dispatch_after IS NULL OR a.dispatch_after <= datetime('now'))
+		   AND `+dependencyGatePredicate+`
 		 ORDER BY a.id ASC LIMIT 1`,
 		ActionStatusPending,
 	).Scan(a.scanFields()...)
@@ -367,7 +368,8 @@ func (db *DB) CountPendingByDispatch() (PendingCounts, error) {
 		INNER JOIN tasks t ON a.task_id = t.id
 		INNER JOIN projects p ON t.project_id = p.id
 		WHERE a.status = ?
-		  AND (a.dispatch_after IS NULL OR a.dispatch_after <= datetime('now'))`,
+		  AND (a.dispatch_after IS NULL OR a.dispatch_after <= datetime('now'))
+		  AND `+dependencyGatePredicate,
 		ActionStatusPending,
 	).Scan(&pc.Dispatchable, &pc.Total)
 	return pc, err

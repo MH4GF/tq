@@ -133,7 +133,30 @@ func truncateResult(s string, maxLen int) string {
 	return s
 }
 
-func RenderDetailView(a *db.Action, scroll, width, height int) string {
+// blockedSuffix renders a compact "⏸ blocked by #N" tag listing the still
+// unsatisfied dependencies of a pending action, or "" when none remain.
+func blockedSuffix(deps []db.ActionDepStatus) string {
+	var ids []string
+	for _, d := range deps {
+		if !d.Satisfied {
+			ids = append(ids, fmt.Sprintf("#%d", d.ID))
+		}
+	}
+	if len(ids) == 0 {
+		return ""
+	}
+	return "⏸ blocked by " + strings.Join(ids, ", ")
+}
+
+// depMark is the satisfied/unsatisfied glyph used in the detail view.
+func depMark(satisfied bool) string {
+	if satisfied {
+		return "✓"
+	}
+	return "⧖"
+}
+
+func RenderDetailView(a *db.Action, deps []db.ActionDepStatus, scroll, width, height int) string {
 	var b strings.Builder
 	pad := "  " // 2-col left margin
 	bodyW := max(0, min(width, 80)-len(pad))
@@ -181,6 +204,18 @@ func RenderDetailView(a *db.Action, scroll, width, height int) string {
 		for rawLine := range strings.SplitSeq(content, "\n") {
 			lines = append(lines, wrapLine(rawLine, bodyW)...)
 		}
+	}
+	if len(deps) > 0 {
+		lines = append(lines, styleMuted.Render("Blocked by:"))
+		for _, d := range deps {
+			st := d.BlockerStatus
+			if st == "" {
+				st = "(missing)"
+			}
+			lines = append(lines, fmt.Sprintf("  %s %s #%d %s",
+				depMark(d.Satisfied), d.Type, d.ID, styleMuted.Render(st)))
+		}
+		lines = append(lines, "", styleBorderChar.Render(strings.Repeat("─", bodyW)))
 	}
 	appendSection("Instruction", a.Instruction(), "(no instruction)")
 	lines = append(lines, "", styleBorderChar.Render(strings.Repeat("─", bodyW)))

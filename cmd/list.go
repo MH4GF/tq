@@ -15,7 +15,7 @@ var (
 	listJQ     string
 )
 
-var listFields = []string{"id", "title", "task_id", "metadata", "status", "result", "tmux_session", "tmux_window", "dispatch_after", "work_dir", "started_at", "completed_at", "created_at"}
+var listFields = []string{"id", "title", "task_id", "metadata", "status", "result", "tmux_session", "tmux_window", "dispatch_after", "work_dir", "started_at", "completed_at", "created_at", "blocked_by"}
 
 var listCmd = &cobra.Command{
 	Use:   "list",
@@ -36,15 +36,30 @@ var listCmd = &cobra.Command{
 			return fmt.Errorf("list actions: %w", err)
 		}
 
+		depsByAction, err := depsForActions(actions)
+		if err != nil {
+			return fmt.Errorf("list action dependencies: %w", err)
+		}
+
 		rows := make([]map[string]any, len(actions))
 		for i, a := range actions {
-			rows[i] = actionToMap(a)
+			rows[i] = actionToMap(a, depsByAction[a.ID])
 		}
 		return WriteJSON(cmd.OutOrStdout(), rows, listJQ, listFields)
 	},
 }
 
-func actionToMap(a db.Action) map[string]any {
+// depsForActions bulk-loads dependencies for the given actions (avoids N+1 in
+// callers that build embedded action views — Rule 15).
+func depsForActions(actions []db.Action) (map[int64][]db.ActionDepStatus, error) {
+	ids := make([]int64, len(actions))
+	for i, a := range actions {
+		ids[i] = a.ID
+	}
+	return database.ListActionDependenciesByActionIDs(ids)
+}
+
+func actionToMap(a db.Action, deps []db.ActionDepStatus) map[string]any {
 	row := map[string]any{
 		"id":         a.ID,
 		"title":      a.Title,
@@ -84,6 +99,16 @@ func actionToMap(a db.Action) map[string]any {
 	} else {
 		row["completed_at"] = nil
 	}
+	blockedBy := make([]map[string]any, 0, len(deps))
+	for _, d := range deps {
+		blockedBy = append(blockedBy, map[string]any{
+			"type":           d.Type,
+			"id":             d.ID,
+			"satisfied":      d.Satisfied,
+			"blocker_status": d.BlockerStatus,
+		})
+	}
+	row["blocked_by"] = blockedBy
 	return row
 }
 
