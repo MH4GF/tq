@@ -85,7 +85,7 @@ func TestTasksModel_LoadAndExpand(t *testing.T) {
 func countSelectableLines(lines []treeLine) int {
 	n := 0
 	for _, l := range lines {
-		if l.lineType != lineCardTop && l.lineType != lineCardBottom && l.lineType != lineCardSep {
+		if !l.lineType.decorative() {
 			n++
 		}
 	}
@@ -135,6 +135,63 @@ func TestTasksModel_Navigation(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 	if m.cursor >= prevCursor {
 		t.Errorf("after k, cursor should move back from %d, got %d", prevCursor, m.cursor)
+	}
+}
+
+func TestTasksModel_SkipDecorativeLines_EdgeFallback(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []lineType
+		start int
+		dir   int
+	}{
+		{
+			name:  "all-decorative prefix, up off top edge",
+			lines: []lineType{lineCardTop, lineCardBottom, lineProject},
+			start: 0,
+			dir:   -1,
+		},
+		{
+			name:  "all-decorative suffix, down off bottom edge",
+			lines: []lineType{lineProject, lineCardSep, lineCardBottom},
+			start: 1,
+			dir:   1,
+		},
+		{
+			name:  "entirely decorative, up",
+			lines: []lineType{lineCardTop, lineCardBottom},
+			start: 0,
+			dir:   -1,
+		},
+		{
+			name:  "entirely decorative, down",
+			lines: []lineType{lineCardTop, lineCardBottom},
+			start: 0,
+			dir:   1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lines := make([]treeLine, len(tt.lines))
+			selectable := false
+			for i, lt := range tt.lines {
+				lines[i] = treeLine{lineType: lt}
+				if !lt.decorative() {
+					selectable = true
+				}
+			}
+			m := &TasksModel{lines: lines, cursor: tt.start}
+			m.skipDecorativeLines(tt.dir)
+
+			if m.cursor < 0 || m.cursor >= len(m.lines) {
+				t.Fatalf("cursor %d out of range [0,%d)", m.cursor, len(m.lines))
+			}
+			if selectable && m.lines[m.cursor].lineType.decorative() {
+				t.Errorf("cursor landed on decorative line %d (lineType=%d) despite a selectable line existing",
+					m.cursor, m.lines[m.cursor].lineType)
+			}
+		})
 	}
 }
 
