@@ -676,77 +676,78 @@ func TestReapStaleActions_NonInteractive(t *testing.T) {
 	}
 }
 
-func TestReapStaleActions_MultipleStaleInteractiveAllReaped(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-
-	staleAt := time.Now().Add(-5 * time.Minute)
-	const n = 3
-	for i := range n {
-		if _, err := d.InsertAction("fix-conflict", taskID, "{}", db.ActionStatusRunning, nil, ""); err != nil {
-			t.Fatalf("seed action %d: %v", i, err)
-		}
-	}
-	for i := int64(1); i <= n; i++ {
-		d.SetActionTmuxInfoForTest(i, ptr("main"), ptr(WindowName(i)), &staleAt)
-	}
-
-	cfg := WorkerConfig{
-		DispatchConfig:         DispatchConfig{DB: d},
-		StaleGracePeriod:       30 * time.Second,
-		HeartbeatFreshness:     120 * time.Second,
-		InteractiveHardTimeout: DefaultInteractiveHardTimeout,
-		EarlyDispatchTimeout:   DefaultEarlyDispatchTimeout,
-		TmuxChecker:            &mockTmuxChecker{windows: []string{"zsh"}},
-	}
-
-	reapStaleActions(context.Background(), cfg)
-
-	for i := int64(1); i <= n; i++ {
-		a, err := d.GetAction(i)
-		if err != nil {
-			t.Fatalf("GetAction(%d): %v", i, err)
-		}
-		if a.Status != db.ActionStatusFailed {
-			t.Errorf("action %d status = %q, want %q", i, a.Status, db.ActionStatusFailed)
-		}
-	}
-}
-
-func TestReapStaleActions_MultipleStaleNonInteractiveAllReaped(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-
-	staleAt := time.Now().Add(-25 * time.Minute)
-	const n = 3
-	for i := range n {
-		if _, err := d.InsertAction("check-pr", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil, ""); err != nil {
-			t.Fatalf("seed action %d: %v", i, err)
-		}
-	}
-	for i := int64(1); i <= n; i++ {
-		d.SetActionTmuxInfoForTest(i, nil, nil, &staleAt)
+func TestReapStaleActions_MultipleStaleAllReaped(t *testing.T) {
+	tests := []struct {
+		name        string
+		actionTitle string
+		metadata    string
+		staleAt     time.Duration
+		tmuxSession *string
+		cfgExtras   func(*WorkerConfig)
+	}{
+		{
+			name:        "interactive",
+			actionTitle: "fix-conflict",
+			metadata:    "{}",
+			staleAt:     -5 * time.Minute,
+			tmuxSession: ptr("main"),
+			cfgExtras: func(c *WorkerConfig) {
+				c.StaleGracePeriod = 30 * time.Second
+				c.InteractiveHardTimeout = DefaultInteractiveHardTimeout
+				c.EarlyDispatchTimeout = DefaultEarlyDispatchTimeout
+				c.TmuxChecker = &mockTmuxChecker{windows: []string{"zsh"}}
+			},
+		},
+		{
+			name:        "noninteractive",
+			actionTitle: "check-pr",
+			metadata:    `{"instruction":"check","mode":"noninteractive"}`,
+			staleAt:     -25 * time.Minute,
+		},
 	}
 
-	cfg := WorkerConfig{
-		DispatchConfig:     DispatchConfig{DB: d},
-		HeartbeatFreshness: 120 * time.Second,
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
 
-	reapStaleActions(context.Background(), cfg)
+			taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
 
-	for i := int64(1); i <= n; i++ {
-		a, err := d.GetAction(i)
-		if err != nil {
-			t.Fatalf("GetAction(%d): %v", i, err)
-		}
-		if a.Status != db.ActionStatusFailed {
-			t.Errorf("action %d status = %q, want %q", i, a.Status, db.ActionStatusFailed)
-		}
+			staleAt := time.Now().Add(tt.staleAt)
+			const n = 3
+			for i := range n {
+				if _, err := d.InsertAction(tt.actionTitle, taskID, tt.metadata, db.ActionStatusRunning, nil, ""); err != nil {
+					t.Fatalf("seed action %d: %v", i, err)
+				}
+			}
+			for i := int64(1); i <= n; i++ {
+				if tt.tmuxSession != nil {
+					d.SetActionTmuxInfoForTest(i, tt.tmuxSession, ptr(WindowName(i)), &staleAt)
+				} else {
+					d.SetActionTmuxInfoForTest(i, nil, nil, &staleAt)
+				}
+			}
+
+			cfg := WorkerConfig{
+				DispatchConfig:     DispatchConfig{DB: d},
+				HeartbeatFreshness: 120 * time.Second,
+			}
+			if tt.cfgExtras != nil {
+				tt.cfgExtras(&cfg)
+			}
+
+			reapStaleActions(context.Background(), cfg)
+
+			for i := int64(1); i <= n; i++ {
+				a, err := d.GetAction(i)
+				if err != nil {
+					t.Fatalf("GetAction(%d): %v", i, err)
+				}
+				if a.Status != db.ActionStatusFailed {
+					t.Errorf("action %d status = %q, want %q", i, a.Status, db.ActionStatusFailed)
+				}
+			}
+		})
 	}
 }
 
