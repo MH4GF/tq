@@ -56,7 +56,7 @@ Create a tq action (auto-infer instruction or let user specify).
 
 ### `/tq:triage [project_name]`
 
-Inventory and organize open tasks: review status → propose cleanup → execute.
+Inventory and organize open tasks - review status, propose cleanup, execute.
 
 ## CLI commands used
 
