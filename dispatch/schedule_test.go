@@ -431,6 +431,34 @@ func TestCheckSchedules_MixedValidAndInvalidMetadataPartialSuccess(t *testing.T)
 	}
 }
 
+func TestDecideSchedules_InsertImpliesSuccessRun(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+
+	createdAt, _ := time.Parse(db.TimeLayout, "2026-03-12 09:58:00")
+	for i := 1; i <= 3; i++ {
+		id, err := d.InsertSchedule(taskID, "prompt", fmt.Sprintf("Title %d", i), "* * * * *", "{}")
+		if err != nil {
+			t.Fatalf("seed schedule %d: %v", i, err)
+		}
+		d.SetScheduleTimestampsForTest(id, &createdAt, nil)
+	}
+
+	now, _ := time.Parse(db.TimeLayout, "2026-03-12 10:00:00")
+	insertCount, ok, err := dispatch.DecideSchedulesInvariant(d, now)
+	if err != nil {
+		t.Fatalf("DecideSchedulesInvariant: %v", err)
+	}
+	if insertCount != 3 {
+		t.Fatalf("insertCount = %d, want 3", insertCount)
+	}
+	if !ok {
+		t.Error("invariant broken: a decision with an action insert lacks its paired success run update")
+	}
+}
+
 type bulkInsertFailingStore struct {
 	db.Store
 	err error
