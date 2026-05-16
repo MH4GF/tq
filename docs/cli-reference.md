@@ -144,7 +144,7 @@ Notes with `kind=triage_keep` are surfaced on `tq task list` as `latest_triage_n
 ### `tq action create`
 
 ```
-tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--status <STATUS>] [--after <TIME>] [--work-dir <PATH>]
+tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--status <STATUS>] [--after <TIME>] [--work-dir <PATH>] [--blocked-by-action <ID>]... [--blocked-by-task <ID>]...
 ```
 
 - `--task` — Task ID (**required**). Rejected if the task status is `done` or `archived`; reopen with `tq task update <ID> --status open` first if intentional.
@@ -156,6 +156,7 @@ tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--st
 - `--status` — Initial status (default: `pending`)
 - `--after` — Dispatch after this time (`YYYY-MM-DD HH:MM`, local timezone)
 - `--work-dir` — Working directory override for this action only (does not modify the parent task's `work_dir`). Dispatch resolves the effective directory as **action.work_dir → task.work_dir → project.work_dir → `.`**. When the override path does not exist on disk at dispatch time, tq logs a warning and falls back to the task chain *without clearing the override*, so the explicit user intent is preserved. Resume follow-ups inherit this `work_dir`.
+- `--blocked-by-action` / `--blocked-by-task` — Completion dependencies (repeatable, AND). The action stays `pending` until **every** blocker reaches a successful terminal state (`action`=`done`, `task`=`done`/`archived`); the queue worker dispatches it automatically the moment the last blocker completes. A blocker that ends `failed`/`cancelled` blocks the action **forever** by design — rescue it with the dependency-triage skill (or `tq action update --clear-deps`). Combines with `--after`: both the time gate and all dependencies must be satisfied. `tq action dispatch <ID>` is a manual override that bypasses this gate.
 
 ### `tq action list`
 
@@ -165,7 +166,7 @@ tq action list [--task <ID>] [--status <STATUS>] [--jq <EXPR>] [--limit <N>]
 
 - `--task` — Filter by task ID
 - `--status` — Filter by status (`pending`, `running`, `dispatched`, `done`, `failed`, `cancelled`)
-- `--jq` — Filter JSON output (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `tmux_session`, `tmux_window`, `dispatch_after`, `work_dir`, `started_at`, `completed_at`, `created_at`)
+- `--jq` — Filter JSON output (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `tmux_session`, `tmux_window`, `dispatch_after`, `work_dir`, `started_at`, `completed_at`, `created_at`, `blocked_by`)
 - `--limit` — Limit number of results
 
 ### `tq action get`
@@ -176,7 +177,7 @@ tq action get <ACTION_ID> [--jq <EXPR>]
 
 Print a single action as JSON.
 
-- `--jq` — Filter JSON output using a jq expression (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `tmux_session`, `tmux_window`, `dispatch_after`, `work_dir`, `started_at`, `completed_at`, `created_at`)
+- `--jq` — Filter JSON output using a jq expression (fields: `id`, `title`, `task_id`, `metadata`, `status`, `result`, `tmux_session`, `tmux_window`, `dispatch_after`, `work_dir`, `started_at`, `completed_at`, `created_at`, `blocked_by`)
 
 ### `tq action done`
 
@@ -224,19 +225,23 @@ REASON serves as feedback for improving classification logic. Record why the act
 ### `tq action update`
 
 ```
-tq action update <ID> [--title <TITLE>] [--task <ID>] [--meta <JSON>] [--work-dir <PATH>] [--result <TEXT>]
+tq action update <ID> [--title <TITLE>] [--task <ID>] [--meta <JSON>] [--work-dir <PATH>] [--result <TEXT>] [--blocked-by-action <ID>]... [--blocked-by-task <ID>]... [--clear-deps]
 ```
 
 Structural fields (`--title` / `--task` / `--meta` / `--work-dir`) can only be changed on `pending` or `failed` actions; running, dispatched, done, or cancelled actions are rejected.
 
 - `--work-dir` — Override or clear the action-level working directory. Pass an empty string (`--work-dir ""`) to clear.
 - `--result` — Amend the recorded result. Allowed on `pending`, `failed`, `done`, or `cancelled` actions (running/dispatched are in-flight and rejected — use `tq action done`/`fail` instead). This is the recovery path for a result wrongly committed on an already-`done` action.
+- `--blocked-by-action` / `--blocked-by-task` — Append completion dependencies (repeatable; same semantics as `tq action create`). Allowed on `pending` or `failed` actions only.
+- `--clear-deps` — Remove all dependencies first. Use alone to unblock a forever-blocked action, or with `--blocked-by-*` to replace the dependency set (e.g. re-point to a resumed blocker). This is the primary recovery path out of a failed-blocker dead end.
 
 ### `tq action dispatch`
 
 ```
 tq action dispatch <ACTION_ID> [--session <NAME>]
 ```
+
+Manual override: dispatches the action immediately, **bypassing the completion-dependency gate** (so an action whose blockers are unsatisfied — including blocked-forever ones — is dispatched anyway). The automatic queue worker still respects dependencies.
 
 - `--session` — Target tmux session name (default: `main`)
 
