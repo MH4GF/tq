@@ -1677,6 +1677,46 @@ func TestBulkMarkFailed(t *testing.T) {
 		}
 	})
 
+	t.Run("emitted event payload carries failure reason", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		var ids []int64
+		for range 2 {
+			id, _ := d.InsertAction("a", taskID, "{}", db.ActionStatusRunning, nil, "")
+			ids = append(ids, id)
+		}
+
+		updates := []db.ActionFailureUpdate{
+			{ID: ids[0], Reason: "boom-0"},
+			{ID: ids[1], Reason: "boom-1"},
+		}
+		if err := d.BulkMarkFailed(updates); err != nil {
+			t.Fatal(err)
+		}
+
+		for i, id := range ids {
+			events, err := d.ListEvents("action", id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(events) == 0 {
+				t.Fatalf("action %d: no events emitted", id)
+			}
+			last := events[len(events)-1]
+			if last.EventType != "action.status_changed" {
+				t.Errorf("action %d: last event_type = %q, want action.status_changed", id, last.EventType)
+			}
+			if !strings.Contains(last.Payload, `"from":"running"`) || !strings.Contains(last.Payload, `"to":"failed"`) {
+				t.Errorf("action %d: payload missing from/to: %s", id, last.Payload)
+			}
+			wantResult := `"result":"` + updates[i].Reason + `"`
+			if !strings.Contains(last.Payload, wantResult) {
+				t.Errorf("action %d: payload missing failure reason %s: %s", id, wantResult, last.Payload)
+			}
+		}
+	})
+
 	t.Run("missing ID rolls back entire batch", func(t *testing.T) {
 		d := testutil.NewTestDB(t)
 		testutil.SeedTestProjects(t, d)

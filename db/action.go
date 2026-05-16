@@ -880,8 +880,9 @@ func (db *DB) BulkMarkFailed(updates []ActionFailureUpdate) error {
 	defer func() { _ = tx.Rollback() }()
 
 	type committed struct {
-		id   int64
-		from string
+		id     int64
+		from   string
+		result string
 	}
 	var done []committed
 
@@ -901,7 +902,7 @@ func (db *DB) BulkMarkFailed(updates []ActionFailureUpdate) error {
 			return fmt.Errorf("bulk mark failed: update id=%d: %w", u.ID, err)
 		}
 
-		done = append(done, committed{id: u.ID, from: from})
+		done = append(done, committed{id: u.ID, from: from, result: u.Reason})
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -910,7 +911,7 @@ func (db *DB) BulkMarkFailed(updates []ActionFailureUpdate) error {
 
 	for _, c := range done {
 		db.emitEvent("action", c.id, "action.status_changed", map[string]any{
-			"from": c.from, "to": ActionStatusFailed,
+			"from": c.from, "to": ActionStatusFailed, "result": c.result,
 		})
 	}
 	return nil
