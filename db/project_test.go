@@ -334,36 +334,3 @@ func TestSetWorkDir_NotFound(t *testing.T) {
 		t.Error("expected error for non-existent project")
 	}
 }
-
-func TestSetAllDispatchEnabled(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	if err := d.SetAllDispatchEnabled(false); err != nil {
-		t.Fatal(err)
-	}
-
-	projects, err := d.ListProjects(0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range projects {
-		if p.DispatchEnabled {
-			t.Errorf("project %s should be disabled", p.Name)
-		}
-	}
-
-	if err := d.SetAllDispatchEnabled(true); err != nil {
-		t.Fatal(err)
-	}
-
-	projects, err = d.ListProjects(0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range projects {
-		if !p.DispatchEnabled {
-			t.Errorf("project %s should be enabled", p.Name)
-		}
-	}
-}

@@ -39,7 +39,6 @@ type CommandWriter interface {
 	DeleteProject(id int64, cascade bool) error
 	SetDispatchEnabled(projectID int64, enabled bool) error
 	SetWorkDir(projectID int64, workDir string) error
-	SetAllDispatchEnabled(enabled bool) error
 	// Worker commands
 	UpdateWorkerHeartbeat(maxInteractive int) error
 	// Schedule commands

@@ -187,12 +187,3 @@ func (db *DB) SetWorkDir(projectID int64, workDir string) error {
 	})
 	return nil
 }
-
-func (db *DB) SetAllDispatchEnabled(enabled bool) error {
-	val := 0
-	if enabled {
-		val = 1
-	}
-	_, err := db.Exec("UPDATE projects SET dispatch_enabled = ?", val)
-	return err
-}

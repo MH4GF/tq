@@ -319,7 +319,15 @@ func TestNextPending_AllDisabled(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	// Disable all projects
-	d.SetAllDispatchEnabled(false)
+	projects, err := d.ListProjects(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range projects {
+		if err := d.SetDispatchEnabled(p.ID, false); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	taskID, _ := d.InsertTask(1, "disabled task", "{}", "")
 	d.InsertAction("disabled-action", taskID, "{}", db.ActionStatusPending, nil, "")
