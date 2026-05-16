@@ -52,6 +52,8 @@ If you cannot write the goal as one sentence — or scope / done condition has m
 8. **Output format if it matters** — PR description shape, comment template, report sections. Skip when the deliverable already implies format.
 9. **Self-contained** — no references to "the conversation above", "as we discussed", or parent-session variables. The worker has none of it.
 
+**Never put `## ` markdown headers inside the instruction string.** Bash's built-in safety (`Newline followed by # inside a quoted argument`) denies the `tq action create` call — use `**Header**` (bold) for structure, as the examples below do.
+
 #### Pick effort
 
 Pass via `--meta '{"claude_args":["--effort","<level>"]}'`. Choose by task complexity:
@@ -74,18 +76,18 @@ Fix the create-action skill.
 
 Good:
 ```text
-## Goal
+**Goal**
 Improve the "Build instruction" section of `.claude-plugins/tq/commands/create-action.md`
 so generated worker instructions consistently include goal, context, and verification.
 
-## Why
+**Why**
 Worker sessions currently get terse instructions and waste turns inventing objectives.
 
-## Constraints
+**Constraints**
 - Don't change the `CRITICAL` block — its delegation intent is load-bearing.
 - Extend the existing section; don't add new top-level sections.
 
-## Done
+**Done**
 PR open against `main`, CI green, `/quality-review` recorded.
 ```
 
@@ -101,14 +103,14 @@ Bad:
 
 Good:
 ```text
-## Goal
+**Goal**
 Rename `Validate` → `ValidateV2` across the repo so all callers and tests follow.
 
-## Hints (verify against current code; prefer real code if stale)
+**Hints (verify against current code; prefer real code if stale)**
 - Definition is somewhere under `internal/foo/`.
 - Likely callers in `cmd/` and tests in `internal/foo/*_test.go`.
 
-## Done
+**Done**
 - Every reference renamed; no `Validate` symbol survives `grep -r '\bValidate\b'`.
 - `go test ./...` green.
 ```
