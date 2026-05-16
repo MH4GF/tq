@@ -124,18 +124,6 @@ func (db *DB) InsertAction(title string, taskID int64, metadata, status string, 
 	return id, nil
 }
 
-func (db *DB) HasActiveActionWithMeta(taskID int64, metaKey, metaValue string) (bool, error) {
-	var count int
-	err := db.QueryRow(
-		"SELECT COUNT(*) FROM actions WHERE task_id = ? AND status IN (?, ?, ?) AND json_extract(metadata, '$.' || ?) = ?",
-		taskID, ActionStatusPending, ActionStatusRunning, ActionStatusDispatched, metaKey, metaValue,
-	).Scan(&count)
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
-}
-
 // GetTaskActionCount reads from the trigger-maintained task_action_counts
 // table — an O(len(statuses)) PK lookup, not a scan of actions.
 func (db *DB) GetTaskActionCount(taskID int64, statuses []string) (int64, error) {
