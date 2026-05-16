@@ -15,6 +15,5 @@
 # remove the line, NOT keep it allowlisted forever.
 
 GetOrCreateTriageTask
-GetSchedule
 ListTasksByStatus
 UpdateScheduleRun

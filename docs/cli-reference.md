@@ -297,6 +297,7 @@ Only `failed` and `cancelled` actions can be reset. `pending` and `done` actions
 |---------|-------------|
 | `tq schedule create` | Create a schedule |
 | `tq schedule list` | List schedules (JSON) |
+| `tq schedule get <ID>` | Get a schedule by ID (JSON) |
 | `tq schedule update <ID>` | Update a schedule |
 | `tq schedule delete <ID>` | Delete a schedule |
 | `tq schedule enable <ID>` | Enable a schedule |
@@ -323,6 +324,14 @@ tq schedule list [--jq <EXPR>] [--limit <N>]
 - `--jq` — Filter JSON output (fields: `id`, `task_id`, `instruction`, `title`, `cron_expr`, `metadata`, `enabled`, `last_run_at`, `last_error`, `created_at`)
 - `last_error` is `null` while the schedule is healthy; it is populated when an action could not be created (e.g. malformed or invalid metadata) and cleared on the next successful run.
 - `--limit` — Limit number of results
+
+### `tq schedule get`
+
+```
+tq schedule get <ID> [--jq <EXPR>]
+```
+
+- `--jq` — Filter JSON output (same fields as `tq schedule list`)
 
 ### `tq schedule update`
 

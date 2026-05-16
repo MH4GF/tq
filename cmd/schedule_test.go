@@ -78,6 +78,60 @@ func TestScheduleCreate(t *testing.T) {
 	}
 }
 
+func TestScheduleGet(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
+	id, _ := d.InsertSchedule(taskID, "/gh-ops:watch", "Watch", "*/10 * * * *", "{}")
+
+	root := cmd.GetRootCmd()
+	out := new(bytes.Buffer)
+	root.SetOut(out)
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"schedule", "get", "1"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("output is not a JSON object: %v\n%s", err, out.String())
+	}
+	if int64(got["id"].(float64)) != id {
+		t.Errorf("id = %v, want %d", got["id"], id)
+	}
+	if got["instruction"] != "/gh-ops:watch" {
+		t.Errorf("instruction = %v, want /gh-ops:watch", got["instruction"])
+	}
+	if got["cron_expr"] != "*/10 * * * *" {
+		t.Errorf("cron_expr = %v, want */10 * * * *", got["cron_expr"])
+	}
+}
+
+func TestScheduleGet_NotFound(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"schedule", "get", "999"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error for missing schedule, got nil")
+	}
+	if !contains(err.Error(), "get schedule") {
+		t.Errorf("error = %q, want to contain 'get schedule'", err.Error())
+	}
+}
+
 func TestScheduleUpdate_Success(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

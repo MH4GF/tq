@@ -11,8 +11,33 @@ import (
 var (
 	scheduleListLimit  int
 	scheduleListJQ     string
+	scheduleGetJQ      string
 	scheduleListFields = []string{"id", "task_id", "instruction", "title", "cron_expr", "metadata", "enabled", "last_run_at", "last_error", "created_at"}
 )
+
+func scheduleToMap(s db.Schedule) map[string]any {
+	row := map[string]any{
+		"id":          s.ID,
+		"task_id":     s.TaskID,
+		"instruction": s.Instruction,
+		"title":       s.Title,
+		"cron_expr":   s.CronExpr,
+		"metadata":    s.Metadata,
+		"enabled":     s.Enabled,
+	}
+	if s.LastRunAt.Valid {
+		row["last_run_at"] = db.FormatLocal(s.LastRunAt.String)
+	} else {
+		row["last_run_at"] = nil
+	}
+	if s.LastError.Valid {
+		row["last_error"] = s.LastError.String
+	} else {
+		row["last_error"] = nil
+	}
+	row["created_at"] = db.FormatLocal(s.CreatedAt)
+	return row
+}
 
 var scheduleCmd = &cobra.Command{
 	Use:   "schedule",
@@ -86,29 +111,26 @@ var scheduleListCmd = &cobra.Command{
 
 		rows := make([]map[string]any, len(schedules))
 		for i, s := range schedules {
-			row := map[string]any{
-				"id":          s.ID,
-				"task_id":     s.TaskID,
-				"instruction": s.Instruction,
-				"title":       s.Title,
-				"cron_expr":   s.CronExpr,
-				"metadata":    s.Metadata,
-				"enabled":     s.Enabled,
-			}
-			if s.LastRunAt.Valid {
-				row["last_run_at"] = db.FormatLocal(s.LastRunAt.String)
-			} else {
-				row["last_run_at"] = nil
-			}
-			if s.LastError.Valid {
-				row["last_error"] = s.LastError.String
-			} else {
-				row["last_error"] = nil
-			}
-			row["created_at"] = db.FormatLocal(s.CreatedAt)
-			rows[i] = row
+			rows[i] = scheduleToMap(s)
 		}
 		return WriteJSON(cmd.OutOrStdout(), rows, scheduleListJQ, scheduleListFields)
+	},
+}
+
+var scheduleGetCmd = &cobra.Command{
+	Use:   "get <ID>",
+	Short: "Get a schedule by ID (JSON output)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := parseID(args[0])
+		if err != nil {
+			return err
+		}
+		s, err := database.GetSchedule(id)
+		if err != nil {
+			return fmt.Errorf("get schedule: %w", err)
+		}
+		return WriteJSON(cmd.OutOrStdout(), scheduleToMap(*s), scheduleGetJQ, scheduleListFields)
 	},
 }
 
@@ -235,9 +257,11 @@ func init() {
 
 	scheduleListCmd.Flags().IntVar(&scheduleListLimit, "limit", 0, "Limit number of results (0 = no limit)")
 	scheduleListCmd.Flags().StringVar(&scheduleListJQ, "jq", "", jqFlagUsage(scheduleListFields))
+	scheduleGetCmd.Flags().StringVar(&scheduleGetJQ, "jq", "", jqFlagUsage(scheduleListFields))
 
 	scheduleCmd.AddCommand(scheduleCreateCmd)
 	scheduleCmd.AddCommand(scheduleListCmd)
+	scheduleCmd.AddCommand(scheduleGetCmd)
 	scheduleCmd.AddCommand(scheduleEnableCmd)
 	scheduleCmd.AddCommand(scheduleDisableCmd)
 	scheduleCmd.AddCommand(scheduleDeleteCmd)
