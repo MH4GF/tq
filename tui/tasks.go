@@ -48,6 +48,11 @@ const (
 	lineCardSep
 )
 
+// decorative reports whether the line is a card border (non-selectable).
+func (lt lineType) decorative() bool {
+	return lt == lineCardTop || lt == lineCardBottom || lt == lineCardSep
+}
+
 type TasksModel struct {
 	trees          []projectTree
 	cursor         int
@@ -339,14 +344,24 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 	return m, nil
 }
 
-// skipDecorativeLines moves cursor past card border lines.
+// skipDecorativeLines moves cursor past card border lines. If the requested
+// direction runs off the end, it falls back to the opposite direction so the
+// cursor never rests on a decorative line when a selectable line exists.
 func (m *TasksModel) skipDecorativeLines(dir int) {
-	for m.cursor >= 0 && m.cursor < len(m.lines) {
-		lt := m.lines[m.cursor].lineType
-		if lt != lineCardTop && lt != lineCardBottom && lt != lineCardSep {
-			break
-		}
+	if len(m.lines) == 0 {
+		m.cursor = 0
+		return
+	}
+	for m.cursor >= 0 && m.cursor < len(m.lines) && m.lines[m.cursor].lineType.decorative() {
 		m.cursor += dir
+	}
+	if m.cursor >= 0 && m.cursor < len(m.lines) {
+		return
+	}
+	// Ran off the end; search back from the clamped edge for a selectable line.
+	m.cursor = max(0, min(m.cursor, len(m.lines)-1))
+	for m.cursor >= 0 && m.cursor < len(m.lines) && m.lines[m.cursor].lineType.decorative() {
+		m.cursor -= dir
 	}
 	m.cursor = max(0, min(m.cursor, len(m.lines)-1))
 }
@@ -569,7 +584,7 @@ func (m TasksModel) View() string {
 		line := m.lines[i]
 
 		// Decorative lines (borders) — render as-is
-		if line.lineType == lineCardTop || line.lineType == lineCardBottom || line.lineType == lineCardSep {
+		if line.lineType.decorative() {
 			b.WriteString(line.text + "\n")
 			continue
 		}
