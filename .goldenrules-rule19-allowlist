@@ -14,6 +14,5 @@
 # resolve (delete the dead method, or wire a real production caller) and then
 # remove the line, NOT keep it allowlisted forever.
 
-GetOrCreateTriageTask
 ListTasksByStatus
 UpdateScheduleRun
