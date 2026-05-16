@@ -32,4 +32,4 @@ db/schedule.go:51 SCAN schedules
 db/search.go:152 SCAN actions_fts
 db/search.go:152 SCAN events_fts
 db/search.go:152 SCAN tasks_fts
-db/task.go:385 SCAN tasks
+db/task.go:384 SCAN tasks

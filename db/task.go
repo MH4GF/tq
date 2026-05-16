@@ -3,7 +3,6 @@ package db
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -429,25 +428,6 @@ func (db *DB) ListTasksByProjectIDs(projectIDs []int64) (map[int64][]Task, error
 		result[t.ProjectID] = append(result[t.ProjectID], t)
 	}
 	return result, rows.Err()
-}
-
-func (db *DB) GetOrCreateTriageTask(projectID int64) (int64, error) {
-	return db.EnsureTask(projectID, "triage")
-}
-
-func (db *DB) EnsureTask(projectID int64, title string) (int64, error) {
-	var id int64
-	err := db.QueryRow(
-		"SELECT id FROM tasks WHERE project_id = ? AND title = ? AND status = ? ORDER BY id ASC LIMIT 1",
-		projectID, title, TaskStatusOpen,
-	).Scan(&id)
-	if err == nil {
-		return id, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return 0, err
-	}
-	return db.InsertTask(projectID, title, "{}", "")
 }
 
 func (db *DB) ListTasksByStatus(status string) ([]Task, error) {
