@@ -137,14 +137,12 @@ Metadata keys for dispatch control:
 			_, _ = fmt.Fprintf(w, "action #%d created (status: %s)\n", id, status)
 		}
 		if len(deps) > 0 {
-			_, _ = fmt.Fprintf(w, "  blocked by: ")
+			labels := make([]string, len(deps))
 			for i, d := range deps {
-				if i > 0 {
-					_, _ = fmt.Fprintf(w, ", ")
-				}
-				_, _ = fmt.Fprintf(w, "%s #%d", d.Type, d.ID)
+				labels[i] = fmt.Sprintf("%s #%d", d.Type, d.ID)
 			}
-			_, _ = fmt.Fprintf(w, "\n  [agent hint] stays pending until all blockers reach a successful terminal state (action=done, task=done/archived)\n")
+			_, _ = fmt.Fprintf(w, "  blocked by: %s\n", strings.Join(labels, ", "))
+			_, _ = fmt.Fprintf(w, "  [agent hint] stays pending until all blockers reach a successful terminal state (action=done, task=done/archived)\n")
 		}
 		if status == db.ActionStatusPending {
 			printQueueStatus(w, id)

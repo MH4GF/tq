@@ -128,6 +128,11 @@ project → task → action
   * cancel/fail/reset only update the DB; tmux panes are not terminated
   * done, failed, and cancelled are terminal; on_done spawns a new action from done only
   * `tq action resume <id>` spawns a new action that resumes the claude session of any terminal action whose metadata captured `claude_session_id` (see `docs/cli-reference.md`)
+  * completion dependencies (`--blocked-by-action`/`--blocked-by-task`) hold a
+    pending action until every blocker reaches a successful terminal state
+    (action=done, task=done/archived); a failed/cancelled blocker holds it
+    forever (rescue via `/tq-dep-triage`). `tq action dispatch` is the manual
+    bypass; the queue worker respects the gate (see `docs/cli-reference.md`)
 ```
 
 ### Worker Types

@@ -33,9 +33,19 @@ type ActionDepStatus struct {
 // unsatisfied dependency: a blocker is satisfied only when it reaches a
 // successful terminal state (action=done / task=done|archived). A blocker that
 // ends failed/cancelled keeps the action pending forever (by design — rescue
-// via the dependency-triage skill). Keep NextPending and
-// CountPendingByDispatch using this so the TUI pending count matches what is
-// actually dispatchable.
+// via the tq-dep-triage skill). Keep NextPending and CountPendingByDispatch
+// using this so the TUI pending count matches what is actually dispatchable.
+//
+// The satisfied-state definition is duplicated here (SQL) and in depSatisfied
+// (Go, used for display); the two MUST stay in lockstep — change both together.
+//
+// Perf: the NOT EXISTS correlation is covered by idx_action_deps_action, and
+// the inner lookups are by primary key, so a no-dependency action (the common
+// case) costs one empty index probe. The known cost is that NextPending's
+// `ORDER BY a.id ASC LIMIT 1` can no longer stop at the first time-ready row —
+// a low-id prefix of blocked-forever actions is walked every poll until
+// triaged away (each step still index-backed; operationally bounded by the
+// tq-dep-triage skill).
 const dependencyGatePredicate = `
 	NOT EXISTS (
 	  SELECT 1 FROM action_dependencies dep
@@ -87,8 +97,7 @@ func (db *DB) AddActionDependencies(actionID int64, deps []ActionDep) error {
 			if d.ID == actionID {
 				return fmt.Errorf("action #%d cannot depend on itself", actionID)
 			}
-			var st string
-			if err := tx.QueryRowContext(ctx, "SELECT status FROM actions WHERE id = ?", d.ID).Scan(&st); err != nil {
+			if err := tx.QueryRowContext(ctx, "SELECT 1 FROM actions WHERE id = ?", d.ID).Scan(&exists); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return fmt.Errorf("blocked-by action #%d not found", d.ID)
 				}
@@ -102,8 +111,7 @@ func (db *DB) AddActionDependencies(actionID int64, deps []ActionDep) error {
 				return fmt.Errorf("circular dependency: action #%d already (transitively) depends on action #%d", d.ID, actionID)
 			}
 		case DepTypeTask:
-			var st string
-			if err := tx.QueryRowContext(ctx, "SELECT status FROM tasks WHERE id = ?", d.ID).Scan(&st); err != nil {
+			if err := tx.QueryRowContext(ctx, "SELECT 1 FROM tasks WHERE id = ?", d.ID).Scan(&exists); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return fmt.Errorf("blocked-by task #%d not found", d.ID)
 				}
@@ -180,25 +188,11 @@ const actionDepStatusSelect = `
 // ListActionDependencies returns the dependency edges of actionID enriched with
 // each blocker's current status and whether it is satisfied.
 func (db *DB) ListActionDependencies(actionID int64) ([]ActionDepStatus, error) {
-	rows, err := db.Query(actionDepStatusSelect+`
-		WHERE d.action_id = ?
-		ORDER BY d.dep_type, d.dep_id`, actionID)
+	byID, err := db.ListActionDependenciesByActionIDs([]int64{actionID})
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-
-	var out []ActionDepStatus
-	for rows.Next() {
-		var aid int64
-		var s ActionDepStatus
-		if err := rows.Scan(&aid, &s.Type, &s.ID, &s.BlockerStatus); err != nil {
-			return nil, err
-		}
-		s.Satisfied = depSatisfied(s.Type, s.BlockerStatus)
-		out = append(out, s)
-	}
-	return out, rows.Err()
+	return byID[actionID], nil
 }
 
 // ListActionDependenciesByActionIDs bulk-loads dependencies for many actions in

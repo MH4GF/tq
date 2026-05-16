@@ -41,7 +41,7 @@ actions (running/dispatched are in-flight; use 'tq action done'/'fail').
 --blocked-by-action / --blocked-by-task (repeatable) append completion
 dependencies: the action stays pending until every blocker reaches a
 successful terminal state (action=done, task=done/archived). A blocker that
-ends failed/cancelled blocks forever — rescue via the dependency-triage skill.
+ends failed/cancelled blocks forever — rescue with the /tq-dep-triage skill.
 --clear-deps removes all dependencies first, so
 '--clear-deps --blocked-by-action <id>' replaces the dependency set.`,
 	Example: `  tq action update 1 --title "New title"

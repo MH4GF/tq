@@ -137,7 +137,7 @@ Notes with `kind=triage_keep` are surfaced on `tq task list` as `latest_triage_n
 | `tq action cancel <ID> [REASON]` | Cancel a pending, running, dispatched, or failed action |
 | `tq action attach <ID>` | Attach to a running action's tmux window (or `claude attach <short>` for experimental_bg mode) |
 | `tq action reset <ID>` | Reset a failed or cancelled action to pending |
-| `tq action dispatch <ID>` | Dispatch a pending action immediately by its ID |
+| `tq action dispatch <ID>` | Dispatch an action immediately (skip queue) |
 | `tq action resume <ID>` | Resume the claude session of a closed action |
 | `tq action prompt <ID>` | Render the wrapped claude prompt for an action (used by interactive dispatch) |
 
@@ -156,7 +156,7 @@ tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--st
 - `--status` — Initial status (default: `pending`)
 - `--after` — Dispatch after this time (`YYYY-MM-DD HH:MM`, local timezone)
 - `--work-dir` — Working directory override for this action only (does not modify the parent task's `work_dir`). Dispatch resolves the effective directory as **action.work_dir → task.work_dir → project.work_dir → `.`**. When the override path does not exist on disk at dispatch time, tq logs a warning and falls back to the task chain *without clearing the override*, so the explicit user intent is preserved. Resume follow-ups inherit this `work_dir`.
-- `--blocked-by-action` / `--blocked-by-task` — Completion dependencies (repeatable, AND). The action stays `pending` until **every** blocker reaches a successful terminal state (`action`=`done`, `task`=`done`/`archived`); the queue worker dispatches it automatically the moment the last blocker completes. A blocker that ends `failed`/`cancelled` blocks the action **forever** by design — rescue it with the dependency-triage skill (or `tq action update --clear-deps`). Combines with `--after`: both the time gate and all dependencies must be satisfied. `tq action dispatch <ID>` is a manual override that bypasses this gate.
+- `--blocked-by-action` / `--blocked-by-task` — Completion dependencies (repeatable, AND). The action stays `pending` until **every** blocker reaches a successful terminal state (`action`=`done`, `task`=`done`/`archived`); the queue worker dispatches it automatically the moment the last blocker completes. A blocker that ends `failed`/`cancelled` blocks the action **forever** by design — rescue it with the `/tq-dep-triage` skill (or `tq action update --clear-deps`). Combines with `--after`: both the time gate and all dependencies must be satisfied. `tq action dispatch <ID>` is a manual override that bypasses this gate.
 
 ### `tq action list`
 
