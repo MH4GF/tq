@@ -79,6 +79,22 @@ Classify each task from the Step 1 output. Inspect `latest.status` and keywords 
 
 If (c) is set and `now < snooze_until`, **skip even if (a) or (b) would re-evaluate** — explicit snooze wins. Otherwise, failing any of (a)/(b)/(c) means the task is re-evaluated normally in Step 6 and the prior reason is shown in option `description` for context.
 
+**Recurring-task exclusion rule** (independent of the triage skip rule; applies even when `latest_triage_note == null`). Fetch the schedule map **once**, reuse in Steps 5/6:
+
+```bash
+tq schedule list --jq '.[] | {id, task_id, enabled}'
+```
+
+A task is **recurring** when it has a schedule-map entry OR any of its actions' `metadata` contains `schedule_id` (check `tq action list --task <id>` when the map is inconclusive). The map is authoritative for `enabled`.
+
+**Exclude** a recurring task from Step 6 (Step 5 only, Phase annotated `(recurring)`) when **both**: `latest.status ∈ {done, pending}` (a `running` action is kept as In progress, not excluded) AND the task is recurring.
+
+**Override — triage normally even when the exclude condition holds**: the backing schedule is absent from the map OR `enabled == false` (disabled/deleted — the recurring task may be orphaned and needs a human decision).
+
+A recurring task whose `latest.status == failed` is never excluded in the first place (the exclude condition requires `done`/`pending`), so persistent scheduled-job failures always fall through to normal Step 6 triage by design — no extra override needed.
+
+Excluded tasks are reported under the **recurring** category in Step 6's pre-report, not the triage-note list. If both rules exclude a task, the recurring category wins.
+
 **Deep-dive condition**: If `latest.status == done` AND `len(result_head) == 300` (truncated) AND none of the keywords `push complete`, `review`, `merged`, `stale`, `blocked`, `failed`, `done` appear in `result_head` (case-insensitive), fetch the latest action's full result:
 
 ```bash
@@ -111,8 +127,9 @@ Present tasks by project in a table. Mark each project's section header with its
 | 157 | Implement feature A | 3d | Awaiting review | #815 implement done — implementation complete, pushed | — |
 | 302 | Refactor parser | 2d | In progress (unfocus: manual dispatch required) | #900 implement pending — queued, will not auto-dispatch | — |
 | 55 | Fix bug B | 5d | Not started | — | 3d ago: awaiting PR review |
+| 88 | Weekly rows-read check | 1d | Likely complete (recurring) | #940 run done — no regression, schedule #12 enabled | — |
 
-The `Latest triage` column shows `Nd ago: <reason>` when `latest_triage_note` is present, otherwise `—`. Tasks skipped by the Step 3 triage skip rule still appear in this table but are excluded from Step 6.
+The `Latest triage` column shows `Nd ago: <reason>` when `latest_triage_note` is present, otherwise `—`. Tasks skipped by the Step 3 triage skip rule still appear in this table but are excluded from Step 6. Tasks excluded by the Step 3 recurring-task exclusion rule also appear here, with `(recurring)` appended to the Phase column (e.g. `Likely complete (recurring)`), and are likewise excluded from Step 6.
 
 Use the post-move `project_id` (tasks moved in Step 2 appear under their new project).
 
@@ -126,9 +143,16 @@ Use the post-move `project_id` (tasks moved in Step 2 appear under their new pro
 
 Each line MUST include the task `id`, `title`, the `latest_triage_note.reason` quoted verbatim in backticks, days since `latest_triage_note.at`, and the gating clause: `snooze_until: YYYY-MM-DD` when `latest_triage_note.snooze_until` is set, otherwise `cooldown active`. If no tasks are skipped, still emit `Skipping 0 tasks — no valid prior triage notes.` so the user can confirm the skip rule was evaluated. Do NOT issue the first `AskUserQuestion` without this report.
 
+**Recurring-task exclusions (separate category, MUST also be emitted)**: list every task excluded by the Step 3 recurring-task exclusion rule. This is distinct from the triage-note list above — a task appears in only one. Use this exact form:
+
+> Skipping M recurring tasks (healthy scheduled ops, latest status done/pending):
+> - Task #<id> (<title>) — schedule #<sid> (enabled), latest action #<aid> <status>
+
+If none, emit `Skipping 0 recurring tasks.`.
+
 After the Step 5 summary and the skipped-task report, triage open tasks **one at a time, in order**. For each task, walk the three sub-steps below — Diagnosis, Guiding Policy, Coherent Actions — modeled on Richard Rumelt's *kernel of strategy* (*Good Strategy, Bad Strategy*): name the situation, choose a direction, then act coherently.
 
-**Skip from this step**: tasks excluded by the **Step 3 triage skip rule** (already enumerated in the report above), and tasks in the **In progress** phase (running — do not interrupt; they appear in Step 5 only). Project moves are already resolved in Step 2.
+**Skip from this step**: tasks excluded by the **Step 3 triage skip rule** or the **Step 3 recurring-task exclusion rule** (both already enumerated in the report above), and tasks in the **In progress** phase (running — do not interrupt; they appear in Step 5 only). Project moves are already resolved in Step 2.
 
 **MUST NOT** batch `AskUserQuestion` across tasks — task IDs and one-line summaries are not enough for a human to judge several cases in parallel. Complete 6-a → 6-b → 6-c → Step 7 execution for one task before starting the next task's 6-a.
 
