@@ -191,7 +191,7 @@ RESULT is free-form text. Recommended structure:
 - **outcome** — What changed (concrete deliverables)
 - **decisions** — What was decided and why
 - **artifacts** — PR numbers, file paths, commit SHAs, URLs
-- **remaining** — Unfinished work, known issues, follow-up needed
+- **remaining** — Unfinished work, known issues, follow-up needed. Each entry that carries future work must reference a filed follow-up action (`- <what remains> → #<id>`); the `/tq:done` skill enforces this so the work stays visible to `tq action list` and `/tq:triage`
 
 ### `tq action fail`
 
@@ -211,7 +211,7 @@ REASON is free-form text. Recommended structure (same as `done`):
 - **outcome** — What could not be achieved (the concrete blocker)
 - **decisions** — What was tried and why it did not work
 - **artifacts** — Partial PRs, files, log excerpts, error messages
-- **remaining** — What is needed to unblock (env fix, external response, retry conditions)
+- **remaining** — What is needed to unblock (env fix, external response, retry conditions). Retry/alternative work that a future session must do should reference a filed follow-up action (`- <what to retry> → #<id>`); the `/tq:failed` skill enforces this
 
 ### `tq action cancel`
 
@@ -219,7 +219,7 @@ REASON is free-form text. Recommended structure (same as `done`):
 tq action cancel <ACTION_ID> [REASON]
 ```
 
-REASON serves as feedback for improving classification logic. Record why the action was unnecessary and how classification could be improved.
+REASON serves as feedback for improving classification logic. Record why the action was unnecessary and how classification could be improved. If cancelling surfaces residual work someone must still do, file it (`tq action create … --task <id>`) and reference it in the reason (`next: <what to do> → #<id>`); the `/tq:cancel` skill enforces this so the work stays visible.
 
 ### `tq action update`
 

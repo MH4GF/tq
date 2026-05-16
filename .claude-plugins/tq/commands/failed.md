@@ -34,12 +34,44 @@ Read each action's result to trace the chain of decisions that led to this actio
 - Is the blocker truly external (vs. a misunderstanding that more effort could resolve)?
 - Would `/tq:done` with a partial-completion summary be more honest?
 
+## Settle `remaining` before failing
+
+Here `remaining` records what is needed to unblock. Same discipline as
+`/tq:done`, adapted to that meaning: a retry plan or alternative approach is a
+promise nobody can keep if it lives only in a closed action's reason text.
+Triage each line into one of two shapes:
+
+1. **Pure external wait — nothing for us to do.** "Blocked until the vendor
+   API recovers", "waiting on a permission grant". No session work is owed,
+   so it is context, not a tracked item. State it plainly in the reason.
+2. **Future session work owed.** Prepare a retry, try a different approach,
+   fix the broken setup. File it as a tracked action and link it:
+
+   ```bash
+   tq action create '<self-contained instruction>' --title '<title>' --task <task_id>
+   ```
+
+   Append the returned id: `- <what to retry / try next> → #<id>`. For
+   time-based blockers (API down, CI flake) put the retry timing in the
+   follow-up's `--meta` as `dispatch_after`.
+
+Get `<task_id>` from the `## tq action context` heading or
+`tq action get <action_id> --jq .task_id`. Write the instruction the way
+`/tq:create-action` would — goal-first, self-contained, with verification.
+You only have `Bash(tq *)` here, so call `tq action create` directly.
+
+**If `tq action create` fails**, still mark this action failed (unlike
+`/tq:done`, which holds — here the work was already blocked, so failing is
+the honest state regardless), but state in the reason that the follow-up
+could not be filed and must be re-filed — never leave the retry plan as
+untracked prose.
+
 ## Execute
 
 `tq action fail <action_id> '<structured reason>'`
 
-Reason MUST use structured sections: outcome, decisions, artifacts, remaining.
-Do NOT describe process steps — session logs capture that.
+Reason uses structured sections: outcome, decisions, artifacts, remaining.
+Describe the blocker and what was tried, not the process — session logs capture that.
 
 ## After failing: task-level follow-up
 
@@ -47,9 +79,20 @@ Always run this flow — do not wait for the user to ask "what's next?".
 
 1. `tq action list --task <task_id>` + re-read the `remaining` you just wrote.
 2. Classify the task:
-   - **Done** — failure revealed the task goal is no longer achievable or relevant (e.g. the feature was removed upstream, the problem no longer exists).
-   - **Follow-up needed** — retry is possible after fixing the blocker, or a different approach should be tried. Propose 1–2 next-action candidates (title + one-line purpose) and ask the user to create via `/tq:create-action`. Do not auto-create. Include `dispatch_after` suggestion for time-based blockers (API down, CI flake).
-   - **External blocker only** — waiting for external resolution (upstream fix, permission grant, review, etc.). State explicitly: "Task #<id> stays open, waiting on <dep>." Optionally propose a tracking action if none is already queued.
+   - **Done** — failure revealed the task goal is no longer achievable or
+     relevant (e.g. the feature was removed upstream, the problem no longer
+     exists).
+   - **Follow-up needed** — speculative task-level next steps not already
+     captured as a `remaining → #<id>` line (a fundamentally different
+     strategy worth its own task, say). Propose 1–2 candidates (title +
+     one-line purpose) and ask the user to create via `/tq:create-action`.
+     Do not auto-create *these* — they are judgment calls, unlike the
+     remaining-entry tracking actions above, which you file yourself because
+     they record retry work you already know is owed.
+   - **External blocker only** — waiting for external resolution (upstream
+     fix, permission grant, review, etc.). State explicitly: "Task #<id>
+     stays open, waiting on <dep>." If that residue carries future work of
+     its own, it is a `remaining` line and must already have its `→ #<id>`.
 3. Close the task only when classification is **Done**:
    `tq task update <task_id> --status done --note "<why>"` (`--note` required with `--status`).
 
