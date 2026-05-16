@@ -147,3 +147,29 @@ func TestActionUpdate_WorkDir(t *testing.T) {
 		})
 	}
 }
+
+func TestActionUpdate_Result(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	taskID, _ := d.InsertTask(1, "test task", "{}", "")
+	actionID, _ := d.InsertAction("orig", taskID, "{}", db.ActionStatusPending, nil, "")
+	if err := d.MarkDone(actionID, "stale"); err != nil {
+		t.Fatalf("MarkDone: %v", err)
+	}
+
+	root := cmd.GetRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"action", "update", fmt.Sprintf("%d", actionID), "--result", "outcome: amended after false positive"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error amending result on done action: %v", err)
+	}
+	a, _ := d.GetAction(actionID)
+	if !a.Result.Valid || a.Result.String != "outcome: amended after false positive" {
+		t.Errorf("result = %v, want amended value", a.Result)
+	}
+}

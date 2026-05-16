@@ -30,7 +30,11 @@ Structure it with these sections (omit any that don't apply):
   remaining:  Unfinished work, known issues, follow-up needed
 
 Do NOT describe process ("I ran grep, then read the file…").
-Session logs already capture that.`,
+Session logs already capture that.
+
+Terminal actions are rejected. If a "failed"/"cancelled" status is a false
+positive, run 'tq action reset ID' then 'tq action done ID "<result>"'. To
+amend an already-"done" action's result, use 'tq action update ID --result'.`,
 	Example: `  tq action done 5
 
   tq action done 5 'outcome: Added JWT auth middleware
@@ -49,8 +53,8 @@ Session logs already capture that.`,
 			return fmt.Errorf("action #%d not found (see: tq action list): %w", id, err)
 		}
 
-		if action.Status == db.ActionStatusDone || action.Status == db.ActionStatusFailed || action.Status == db.ActionStatusCancelled {
-			return fmt.Errorf("action #%d is already %q, cannot mark as done (only pending, running, or dispatched actions can be marked done)", id, action.Status)
+		if db.IsTerminalActionStatus(action.Status) {
+			return terminalDoneError(id, action.Status)
 		}
 
 		result := ""
@@ -77,4 +81,21 @@ Session logs already capture that.`,
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d done\n", id)
 		return nil
 	},
+}
+
+func terminalDoneError(id int64, status string) error {
+	header := fmt.Sprintf("action #%d is already %q, cannot mark as done (only pending, running, or dispatched actions can be marked done)", id, status)
+	if status == db.ActionStatusDone {
+		return fmt.Errorf(`%s
+
+The action is already completed. If you need to amend the recorded result, update it directly:
+
+  tq action update %d --result "<result>"`, header, id)
+	}
+	return fmt.Errorf(`%s
+
+If this status is a false positive (e.g. the worker's heartbeat went stale or it timed out, but the action actually completed) and you want to record the result, reset the action back to pending first, then mark it done:
+
+  tq action reset %d
+  tq action done %d "<result>"`, header, id, id)
 }
