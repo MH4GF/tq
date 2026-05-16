@@ -28,7 +28,7 @@ IMPORTANT: Run !`tq action create --help` first to understand meta format and be
 
 Consult !`tq action create --help` for CLI flag and meta format guidance.
 
-The instruction string is the **entire** prompt the worker session sees. It launches cold: no memory of this conversation, no parent-session variables, no follow-up turn to clarify. The worker is Claude Opus 4.7 — give it a goal and it runs its own gather → act → verify loop competently; give it a guessed step list and it follows the wrong steps faithfully and fails.
+The instruction string is the **entire** prompt the worker session sees. It launches cold: no memory of this conversation, no parent-session variables, no follow-up turn to clarify. The worker runs the configured Claude model — give it a goal and it runs its own gather → act → verify loop competently; give it a guessed step list and it follows the wrong steps faithfully and fails.
 
 You have not read the target code in this session, and you must not — that is the worker's job. So write only what you actually know: the desired end state and why it matters. The worker derives everything else by reading the code and planning.
 
