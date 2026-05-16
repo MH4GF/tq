@@ -68,6 +68,7 @@ type TasksModel struct {
 
 	// Cached stats
 	runningInteractiveOrBg int
+	depsByAction           map[int64][]db.ActionDepStatus
 
 	// Detail view state
 	mode          tasksMode
@@ -103,6 +104,7 @@ type actionResumedMsg struct {
 type tasksLoadedMsg struct {
 	trees                  []projectTree
 	runningInteractiveOrBg int
+	depsByAction           map[int64][]db.ActionDepStatus
 	err                    error
 }
 
@@ -196,7 +198,18 @@ func (m TasksModel) loadTasks() tea.Cmd {
 		} else {
 			ri = n
 		}
-		return tasksLoadedMsg{trees: trees, runningInteractiveOrBg: ri, err: firstErr}
+		var actionIDs []int64
+		for _, as := range actionsByTask {
+			for _, a := range as {
+				actionIDs = append(actionIDs, a.ID)
+			}
+		}
+		depsByAction, err := m.database.ListActionDependenciesByActionIDs(actionIDs)
+		if err != nil {
+			recordErr(fmt.Errorf("list action dependencies: %w", err))
+			depsByAction = map[int64][]db.ActionDepStatus{}
+		}
+		return tasksLoadedMsg{trees: trees, runningInteractiveOrBg: ri, depsByAction: depsByAction, err: firstErr}
 	}
 }
 
@@ -256,6 +269,7 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 		}
 		m.trees = msg.trees
 		m.runningInteractiveOrBg = msg.runningInteractiveOrBg
+		m.depsByAction = msg.depsByAction
 		for _, pt := range m.trees {
 			projKey := fmt.Sprintf("p:%d", pt.project.ID)
 			if _, ok := m.expanded[projKey]; !ok {
@@ -539,6 +553,11 @@ func (m *TasksModel) buildLines() {
 					actionText = fmt.Sprintf("     %s %s %s", ds.Render(icon), idStr, ds.Render(a.Title))
 				} else {
 					actionText = fmt.Sprintf("     %s %s %s", StatusStyle(a.Status).Render(icon), idStr, a.Title)
+					if a.Status == db.ActionStatusPending {
+						if s := blockedSuffix(m.depsByAction[a.ID]); s != "" {
+							actionText += " " + stylePending.Render(s)
+						}
+					}
 				}
 
 				m.lines = append(m.lines, treeLine{
@@ -566,7 +585,7 @@ func (m TasksModel) visibleRange() visibleRange {
 
 func (m TasksModel) View() string {
 	if m.mode == modeViewDetail && m.detailAction != nil {
-		return RenderDetailView(m.detailAction, m.detailScroll, m.width, m.height)
+		return RenderDetailView(m.detailAction, m.depsByAction[m.detailAction.ID], m.detailScroll, m.width, m.height)
 	}
 
 	if m.mode == modeViewTaskDetail && m.detailTask != nil {

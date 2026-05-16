@@ -90,10 +90,18 @@ var taskListCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("latest task notes: %w", err)
 		}
+		var allActions []db.Action
+		for _, as := range actionsByTask {
+			allActions = append(allActions, as...)
+		}
+		depsByAction, err := depsForActions(allActions)
+		if err != nil {
+			return fmt.Errorf("list action dependencies: %w", err)
+		}
 
 		rows := make([]map[string]any, len(tasks))
 		for i, t := range tasks {
-			row := taskToMap(t, actionsByTask[t.ID])
+			row := taskToMap(t, actionsByTask[t.ID], depsByAction)
 			if note, ok := latestNotes[t.ID]; ok {
 				row["latest_triage_note"] = triageNoteSummary(note)
 			} else {
@@ -189,7 +197,7 @@ At least one of --status, --project, --work-dir, or --meta is required.
 
 const maxActionsInTaskView = 10
 
-func taskToMap(t db.Task, actions []db.Action) map[string]any {
+func taskToMap(t db.Task, actions []db.Action, depsByAction map[int64][]db.ActionDepStatus) map[string]any {
 	row := map[string]any{
 		"id":         t.ID,
 		"project_id": t.ProjectID,
@@ -209,7 +217,7 @@ func taskToMap(t db.Task, actions []db.Action) map[string]any {
 	}
 	actionRows := make([]map[string]any, len(actions))
 	for i, a := range actions {
-		actionRows[i] = actionToMap(a)
+		actionRows[i] = actionToMap(a, depsByAction[a.ID])
 	}
 	row["actions"] = actionRows
 	return row
@@ -256,7 +264,11 @@ var taskGetCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("task notes: %w", err)
 		}
-		row := taskToMap(*task, actions)
+		depsByAction, err := depsForActions(actions)
+		if err != nil {
+			return fmt.Errorf("list action dependencies: %w", err)
+		}
+		row := taskToMap(*task, actions, depsByAction)
 		row["status_history"] = history
 		row["notes"] = notes
 		return WriteJSON(cmd.OutOrStdout(), row, taskGetJQ, taskGetFields)

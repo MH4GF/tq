@@ -38,6 +38,16 @@ CREATE INDEX IF NOT EXISTS idx_actions_dispatch ON actions(status, id ASC);
 CREATE INDEX IF NOT EXISTS idx_actions_task ON actions(task_id, id ASC);
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id, id DESC);
 
+CREATE TABLE IF NOT EXISTS action_dependencies (
+  action_id  INTEGER NOT NULL REFERENCES actions(id) ON DELETE CASCADE,
+  dep_type   TEXT NOT NULL CHECK (dep_type IN ('action','task')),
+  dep_id     INTEGER NOT NULL,
+  PRIMARY KEY (action_id, dep_type, dep_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_action_deps_action ON action_dependencies(action_id);
+CREATE INDEX IF NOT EXISTS idx_action_deps_dep ON action_dependencies(dep_type, dep_id);
+
 CREATE TABLE IF NOT EXISTS task_action_counts (
   task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   status  TEXT NOT NULL,
