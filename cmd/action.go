@@ -14,6 +14,13 @@ var actionCmd = &cobra.Command{
 var actionUpdateCmd = &cobra.Command{
 	Use:   "update <ID>",
 	Short: "Update an action",
+	Long: `Update an action.
+
+Structural fields (--title, --task, --meta, --work-dir) can only be changed
+on pending or failed actions.
+
+--result amends the recorded result and is also allowed on done or cancelled
+actions (running/dispatched are in-flight; use 'tq action done'/'fail').`,
 	Example: `  tq action update 1 --title "New title"
   tq action update 2 --task 5
   tq action update 3 --meta '{"key":"value"}'
