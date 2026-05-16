@@ -185,5 +185,8 @@ func loadRule19Allowlist(t *testing.T, root string) map[string]bool {
 		}
 		out[line] = true
 	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("reading rule19 allowlist: %v", err)
+	}
 	return out
 }
