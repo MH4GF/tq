@@ -46,14 +46,3 @@ func (db *DB) GetWorkerMaxInteractive(staleThreshold time.Duration) (int, error)
 	}
 	return w.MaxInteractive, nil
 }
-
-func (db *DB) IsWorkerRunning(staleThreshold time.Duration) (bool, error) {
-	_, err := db.getActiveWorker(staleThreshold)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
