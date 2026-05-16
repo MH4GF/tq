@@ -1,7 +1,7 @@
 ---
 description: Mark a tq action as done, then judge task-level completion and propose follow-up actions when work remains
 argument-hint: "<action_id> [summary]"
-allowed-tools: Bash(tq *)
+allowed-tools: Bash(tq *), Bash(gh pr view *), Bash(git status *), Bash(git log *)
 ---
 
 # tq action done
@@ -56,6 +56,50 @@ the create failure as the blocker via `/tq:failed` instead.
 
 After this step, `remaining` is either empty (all done) or every line ends in
 `→ #<id>`. No bare prose survives.
+
+## Merge guard — a code-change action needs a merged PR
+
+Run this before `tq action done`. It is a mechanical gate, not a reminder:
+an action that produced code changes is **not done until its PR is merged**
+(auto-memory `feedback_task_done_after_merge`). #4666 marked done with a
+permission-denied `gh pr create` and no PR — the fix never landed and was
+re-discovered three times. This gate prevents that.
+
+**1. Decide whether this is a code-change action.** Treat it as code-change
+if **any** of these hold (when in doubt, treat it as code-change — a spurious
+prompt on a borderline doc PR is cheaper than a silently-lost fix):
+
+- the drafted result mentions a PR, pull request, branch, merge, or commit
+- the result names an edited source/config file (`.go`, `go.mod`,
+  `*.yml`, scripts, plugin/command/skill markdown, etc.)
+- `git status --porcelain` shows tracked modifications, or
+  `git log origin/main..HEAD --oneline` lists commits not on `main`
+
+Not a code-change action: reports, investigations, triage, or deliverables
+whose only output is created/updated tq actions. These have no PR by
+design — skip the rest of this gate and go to **Execute**.
+
+**2. Require a merged PR.** For a code-change action, the `artifacts:`
+section MUST carry a PR reference (`#<n>` or a PR URL). Verify it is merged:
+
+```bash
+gh pr view <n> --json state,mergedAt
+```
+
+Proceed to **Execute** only when `state` is `MERGED` and `mergedAt` is
+non-null.
+
+**3. If there is no merged PR, do NOT run `tq action done`.** Surface the
+gap explicitly and route to recovery instead:
+
+- PR open / CI pending / not yet merged → finish the merge (resolve CI,
+  merge per repo policy), then re-run `/tq:done`. The task is not done
+  until the PR is merged.
+- A real blocker prevented the PR — e.g. `gh pr create` was
+  permission-denied, the environment is broken, CI is irrecoverably red.
+  This is a **blocker, not a done**: run `/tq:failed` (retry possible) or
+  `/tq:cancel` (work no longer needed). A permission-denied `gh pr create`
+  is explicitly `/tq:failed`, never `/tq:done`.
 
 ## Execute
 
