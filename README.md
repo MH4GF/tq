@@ -94,25 +94,35 @@ project → task → action
 ### Action State Machine
 
 ```
-         dispatch        worker claim       worker report
- pending ────────► running ───────────► dispatched ─────────► done
-    ▲                                       │
-    │                                       │ fail
-    │                                       ▼
-    │              reset                ┌────────┐
-    └────────────────────────────────── │ failed │
-                                        └────────┘
+         dispatch        worker claim
+ pending ────────► running ───────────► dispatched
 
-                            cancel
-              (from pending, running, dispatched, or failed)
+  Terminal transitions (each reachable from the states noted):
+
+  done   (from pending, running, or dispatched)
+                              │
+                              ▼
+                        ┌────────┐
+                        │  done  │
+                        └────────┘
+
+  fail   (from pending, running, or dispatched)
+                              │
+                              ▼
+              reset       ┌────────┐
+    pending ◄──────────── │ failed │
+                          └────────┘
+
+  cancel (from pending, running, dispatched, or failed)
                               │
                               ▼
                         ┌───────────┐
                         │ cancelled │
                         └───────────┘
 
-  * cancel can be issued from pending, running, dispatched, or failed (terminal: cancelled)
+  * done can be issued from any non-terminal state (pending, running, or dispatched)
   * fail can be issued from any non-terminal state (pending, running, or dispatched)
+  * cancel can be issued from pending, running, dispatched, or failed (terminal: cancelled)
   * reset returns failed or cancelled actions to pending; running and dispatched
     must be cancelled or failed first (reset is rejected to avoid spawning a duplicate worker)
   * cancel/fail/reset only update the DB; tmux panes are not terminated
