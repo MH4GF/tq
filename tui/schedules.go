@@ -115,12 +115,16 @@ func (m SchedulesModel) updateDetail(msg tea.KeyMsg) (SchedulesModel, tea.Cmd) {
 
 func (m SchedulesModel) toggleEnabled(s *db.Schedule) (SchedulesModel, tea.Cmd) {
 	newEnabled := !s.Enabled
-	if err := m.database.UpdateScheduleEnabled(s.ID, newEnabled); err == nil {
+	if err := m.database.UpdateScheduleEnabled(s.ID, newEnabled); err != nil {
+		m.message = fmt.Sprintf("schedule #%d toggle failed: %v", s.ID, err)
+		m.messageIsError = true
+	} else {
 		action := "enabled"
 		if !newEnabled {
 			action = "disabled"
 		}
 		m.message = fmt.Sprintf("schedule #%d %s", s.ID, action)
+		m.messageIsError = false
 	}
 	return m, m.loadSchedules()
 }
