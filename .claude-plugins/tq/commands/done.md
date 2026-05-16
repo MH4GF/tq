@@ -6,6 +6,11 @@ allowed-tools: Bash(tq *)
 
 # tq action done
 
+Before you run `tq action done`, settle every `remaining` line — see
+**Settle `remaining` before done** below. A `done` whose `remaining` still
+holds bare prose is the failure this skill exists to prevent: that work
+becomes invisible to `tq action list` and `/tq:triage`, so nobody picks it up.
+
 ## Find action_id
 
 1. `$ARGUMENTS` if numeric
@@ -13,14 +18,65 @@ allowed-tools: Bash(tq *)
 3. Search non-terminal actions: `tq action list --status running` or `tq action list --status dispatched`
 4. If none works, ask the user
 
+## Settle `remaining` before done
+
+Draft the `remaining` section first, then triage each line. A `remaining`
+entry is a promise that something still needs doing — a promise nobody can
+keep if it lives only inside a closed action's result text. So every line
+must leave this step in one of two shapes:
+
+1. **Info-only — no future work.** Context, a known limitation, a design
+   note someone might want later. There is nothing to *do*, so it does not
+   belong in `remaining`. Move it into `decisions` or `outcome` and drop the
+   line.
+2. **Work still owed.** A concrete next step (post-merge `terraform apply`,
+   an unaddressed review thread, a follow-up refactor). File it as a tracked
+   action now and link it:
+
+   ```bash
+   tq action create '<self-contained instruction>' --title '<title>' --task <task_id>
+   ```
+
+   Then append the returned id to the line: `- <what remains> → #<id>`.
+
+Get `<task_id>` from the `## tq action context` heading, or
+`tq action get <action_id> --jq .task_id`. The parent task is still open
+(work remains), so `tq action create` accepts it.
+
+Write the follow-up instruction the way `/tq:create-action` would: lead with
+the goal and the done condition, say why it matters, name the concrete
+deliverable and verification, and keep it self-contained — the worker starts
+cold with no memory of this session. You only have `Bash(tq *)` here, so call
+`tq action create` directly rather than the `/tq:create-action` skill.
+
+**If `tq action create` fails** (e.g. parent task unexpectedly closed, DB
+error): do not run `tq action done`. The whole point is that no work goes
+untracked, and a `done` with an unfiled remaining entry breaks that. Record
+the create failure as the blocker via `/tq:failed` instead.
+
+After this step, `remaining` is either empty (all done) or every line ends in
+`→ #<id>`. No bare prose survives.
+
 ## Execute
 
 IMPORTANT: Run !`tq action done --help` for the full result format guidance.
 
 `tq action done <action_id> '<result>'`
 
-Result must use structured sections: outcome, decisions, artifacts, remaining.
-Do NOT describe process steps — session logs capture that.
+Result uses structured sections: outcome, decisions, artifacts, remaining.
+Describe what changed, not the process steps — session logs already capture that.
+
+Example of a compliant result with work still owed:
+
+```
+outcome: Added Terraform module for the new SQS queue; PR #142 open
+decisions: Chose SQS over SNS — consumers need at-least-once with replay
+artifacts: PR #142, infra/sqs/main.tf
+remaining:
+  - terraform apply after PR #142 merges → #4930
+```
+
+If nothing remains, omit the `remaining` section entirely.
 
 ## After marking done: task-level follow-up
 
@@ -29,8 +85,18 @@ Always run this flow — do not wait for the user to ask "what's next?".
 1. `tq action list --task <task_id>` + re-read the `remaining` you just wrote.
 2. Classify the task:
    - **Done** — no remaining work, no external dependency.
-   - **Follow-up needed** — local work still required (address review comments, extract improvement TODOs, etc.). Propose 1–2 next-action candidates (title + one-line purpose) and ask the user to create via `/tq:create-action`. Do not auto-create.
-   - **External blocker only** — the residue is a PR merge, review reply, upstream release, or another task. State explicitly: "Task #<id> stays open, waiting on <dep>." Optionally propose a tracking action (e.g. PR-merge follow-up) if none is already queued.
+   - **Follow-up needed** — speculative task-level next steps not already
+     captured as a `remaining → #<id>` line (e.g. an improvement idea worth
+     a separate task, a broader refactor). Propose 1–2 candidates (title +
+     one-line purpose) and ask the user to create via `/tq:create-action`.
+     Do not auto-create *these* — they are judgment calls, unlike the
+     remaining-entry tracking actions above, which you file yourself because
+     they record work you already know is owed.
+   - **External blocker only** — the residue is a PR merge, review reply,
+     upstream release, or another task. State explicitly: "Task #<id> stays
+     open, waiting on <dep>." If that residue carries future work of its own
+     (e.g. a post-merge apply), it is a `remaining` line and must already
+     have its `→ #<id>` from the step above.
 3. Close the task only when classification is **Done**:
    `tq task update <task_id> --status done --note "<why>"` (`--note` required with `--status`).
 
