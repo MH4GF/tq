@@ -1,5 +1,46 @@
 # Changelog
 
+## [v0.21.23](https://github.com/MH4GF/tq/compare/v0.21.22...v0.21.23) - 2026-05-16
+- db: trigger-maintained task_action_counts + Rule 18 (no aggregates in hot paths) by @MH4GF in https://github.com/MH4GF/tq/pull/277
+- accept multiple thread_ids in gh-mark-notification-read by @MH4GF in https://github.com/MH4GF/tq/pull/280
+- golden-rules: add Rule 15 (no db.Store calls in for-range loops) by @MH4GF in https://github.com/MH4GF/tq/pull/281
+- dispatch: phase 2 — remove polling-based claude_session_id capture by @MH4GF in https://github.com/MH4GF/tq/pull/282
+- feat(action): support per-action --work-dir override by @MH4GF in https://github.com/MH4GF/tq/pull/283
+- dispatch: add experimental_bg mode (research preview) by @MH4GF in https://github.com/MH4GF/tq/pull/284
+- dispatch: defer slot-capped actions with dispatch_after backoff and fix TUI slot gauge by @MH4GF in https://github.com/MH4GF/tq/pull/285
+- dispatch: retire per-event investigate/permission-block auto-gen, route to /tq:investigate-incidents skill by @MH4GF in https://github.com/MH4GF/tq/pull/286
+- tui: open action detail for any status (instruction + result) by @MH4GF in https://github.com/MH4GF/tq/pull/288
+- docs(tq-plugin): sync README command descriptions to frontmatter by @MH4GF in https://github.com/MH4GF/tq/pull/289
+- dispatch: mark action FAILED on async goroutine panic by @MH4GF in https://github.com/MH4GF/tq/pull/290
+- tui(schedules): surface ListSchedules error instead of silent empty list by @MH4GF in https://github.com/MH4GF/tq/pull/291
+- db: add idx_schedules_task to eliminate 3 Rule 17 SCANs by @MH4GF in https://github.com/MH4GF/tq/pull/292
+- Add weekly Turso rows-read regression watch by @MH4GF in https://github.com/MH4GF/tq/pull/293
+- goldenrules: add Rule 19 detecting test-only-reachable db.Store methods by @MH4GF in https://github.com/MH4GF/tq/pull/294
+- docs(rule17): annotate db/event.go:69 as LIMIT-bounded PK scan by @MH4GF in https://github.com/MH4GF/tq/pull/296
+- docs(tq-plugin): align /tq:done /tq:cancel /tq:triage README with frontmatter by @MH4GF in https://github.com/MH4GF/tq/pull/295
+- dispatch: record last_error on schedule metadata parse failure by @MH4GF in https://github.com/MH4GF/tq/pull/297
+- tui: surface schedule toggle/delete DB errors instead of silently swallowing by @MH4GF in https://github.com/MH4GF/tq/pull/298
+- docs: align tq task list help with docs (latest 10 nested actions) by @MH4GF in https://github.com/MH4GF/tq/pull/299
+- docs(CLAUDE.md): list top-level tq subcommands by @MH4GF in https://github.com/MH4GF/tq/pull/253
+- Add context: fork to investigate-incidents skill by @MH4GF in https://github.com/MH4GF/tq/pull/287
+- test: collapse MultipleStale reap tests into table-driven test by @MH4GF in https://github.com/MH4GF/tq/pull/301
+- docs(tq-plugin): match /tq:failed README desc to frontmatter verbatim by @MH4GF in https://github.com/MH4GF/tq/pull/303
+- docs: surface executor --meta key in tq action create help by @MH4GF in https://github.com/MH4GF/tq/pull/304
+- db: delete legacy claude-flags migration to burn down Rule 16 by @MH4GF in https://github.com/MH4GF/tq/pull/305
+- cmd/action: include recovery hint in done error message by @MH4GF in https://github.com/MH4GF/tq/pull/306
+- test(tui): table-drive TaskDetailView_WithNotes substring assertions by @MH4GF in https://github.com/MH4GF/tq/pull/307
+- docs(tq-plugin): sync /tq:triage README desc to frontmatter by @MH4GF in https://github.com/MH4GF/tq/pull/308
+- perf(dispatch): skip reaper prefetch when no action is reapable by @MH4GF in https://github.com/MH4GF/tq/pull/309
+- docs(skill): use bold instead of h2 in create-action instruction examples by @MH4GF in https://github.com/MH4GF/tq/pull/310
+- fix(goldenrules): check scanner/path errors so violations are not silently skipped by @MH4GF in https://github.com/MH4GF/tq/pull/311
+- docs(tq:done): require follow-up action for remaining entries by @MH4GF in https://github.com/MH4GF/tq/pull/312
+- docs(tq-plugin): sync tq search README desc to CLI help wording by @MH4GF in https://github.com/MH4GF/tq/pull/313
+- fix(db): normalize schedule_id to INTEGER in HasActiveActionsForSchedules by @MH4GF in https://github.com/MH4GF/tq/pull/314
+- fix(tui): keep cursor off decorative lines at list edges by @MH4GF in https://github.com/MH4GF/tq/pull/316
+- docs(readme): align action state machine diagram with done/fail semantics by @MH4GF in https://github.com/MH4GF/tq/pull/315
+- docs(claude): unify architecture-layer arrow notation with golden-rules by @MH4GF in https://github.com/MH4GF/tq/pull/317
+- db: convert db.Search to FTS5 trigram, burn Rule 16 ceiling 7→1 by @MH4GF in https://github.com/MH4GF/tq/pull/300
+
 ## [v0.21.22](https://github.com/MH4GF/tq/compare/v0.21.21...v0.21.22) - 2026-05-09
 - Cut Turso rows-read by date-aware action view + bulk task fetch + 30s tick by @MH4GF in https://github.com/MH4GF/tq/pull/261
 - fix(cmd): print 'queue: status unavailable' on DB error in printQueueStatus by @MH4GF in https://github.com/MH4GF/tq/pull/263
