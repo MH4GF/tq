@@ -113,7 +113,7 @@ func TestUpdateAction_WorkDir(t *testing.T) {
 				v := "t"
 				title = &v
 			}
-			if err := d.UpdateAction(id, title, nil, nil, tt.updateValue); err != nil {
+			if err := d.UpdateAction(id, title, nil, nil, tt.updateValue, nil); err != nil {
 				t.Fatal(err)
 			}
 			a, _ := d.GetAction(id)
@@ -1275,7 +1275,7 @@ func TestUpdateAction(t *testing.T) {
 			if tt.markFailed {
 				d.MarkFailed(id, "err")
 			}
-			if err := d.UpdateAction(id, tt.title, tt.taskID, tt.metadata, nil); err != nil {
+			if err := d.UpdateAction(id, tt.title, tt.taskID, tt.metadata, nil, nil); err != nil {
 				t.Fatal(err)
 			}
 			a, _ := d.GetAction(id)
@@ -1314,12 +1314,56 @@ func TestUpdateAction_StatusRestriction(t *testing.T) {
 			id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending, nil, "")
 			tt.setup(id)
 			title := "nope"
-			err := d.UpdateAction(id, &title, nil, nil, nil)
+			err := d.UpdateAction(id, &title, nil, nil, nil, nil)
 			if err == nil {
 				t.Fatalf("expected error for %s action", tt.status)
 			}
 			if !strings.Contains(err.Error(), "only pending or failed") {
 				t.Errorf("error = %q, want mention of status restriction", err.Error())
+			}
+		})
+	}
+}
+
+func TestUpdateAction_Result(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+	tests := []struct {
+		name      string
+		setup     func(int64)
+		wantError bool
+	}{
+		{"pending", func(int64) {}, false},
+		{"failed", func(id int64) { d.MarkFailed(id, "old") }, false},
+		{"done", func(id int64) { d.MarkDone(id, "old") }, false},
+		{"cancelled", func(id int64) { d.MarkCancelled(id, "old") }, false},
+		{"running", func(id int64) { d.ClaimPending(context.Background(), id) }, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusPending, nil, "")
+			tt.setup(id)
+
+			amended := "outcome: recovered"
+			err := d.UpdateAction(id, nil, nil, nil, nil, &amended)
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("expected error amending result on %s action", tt.name)
+				}
+				if !strings.Contains(err.Error(), "result can only be amended") {
+					t.Errorf("error = %q, want mention of result amend restriction", err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			a, _ := d.GetAction(id)
+			if !a.Result.Valid || a.Result.String != amended {
+				t.Errorf("result = %v, want %q", a.Result, amended)
 			}
 		})
 	}
@@ -1372,7 +1416,7 @@ func TestUpdateAction_NotFound(t *testing.T) {
 	testutil.SeedTestProjects(t, d)
 
 	title := "nope"
-	err := d.UpdateAction(999, &title, nil, nil, nil)
+	err := d.UpdateAction(999, &title, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for non-existent action")
 	}

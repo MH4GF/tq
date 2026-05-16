@@ -104,12 +104,13 @@ func TestDone_UnknownID(t *testing.T) {
 
 func TestDone_AlreadyTerminal(t *testing.T) {
 	tests := []struct {
-		name        string
-		startStatus string
+		name         string
+		startStatus  string
+		wantContains []string
 	}{
-		{"done", db.ActionStatusDone},
-		{"failed", db.ActionStatusFailed},
-		{"cancelled", db.ActionStatusCancelled},
+		{"done", db.ActionStatusDone, []string{"already", "tq action update", "--result"}},
+		{"failed", db.ActionStatusFailed, []string{"already", "false positive", "tq action reset", "tq action done"}},
+		{"cancelled", db.ActionStatusCancelled, []string{"already", "false positive", "tq action reset", "tq action done"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -130,8 +131,10 @@ func TestDone_AlreadyTerminal(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected error when marking %s action as done", tc.startStatus)
 			}
-			if !contains(err.Error(), "already") {
-				t.Errorf("error = %q, want to contain 'already'", err.Error())
+			for _, want := range tc.wantContains {
+				if !contains(err.Error(), want) {
+					t.Errorf("error = %q, want to contain %q", err.Error(), want)
+				}
 			}
 
 			a, err := d.GetAction(id)
