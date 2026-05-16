@@ -233,6 +233,35 @@ func TestSearch(t *testing.T) {
 			wantLen: 1,
 		},
 		{
+			// FTS5 trigram is language-agnostic: Japanese substrings of >=3
+			// runes match just like the old substring search did. (Most tq
+			// content is Japanese, so this is the primary correctness guard.)
+			name:    "match japanese task title substring",
+			keyword: "バグを修正",
+			setup: func(d *db.DB) {
+				d.InsertTask(1, "ログイン機能のバグを修正する", "{}", "")
+			},
+			wantLen: 1,
+			check: func(t *testing.T, results []db.SearchResult) {
+				t.Helper()
+				if results[0].Field != "title" {
+					t.Errorf("field = %q, want title", results[0].Field)
+				}
+			},
+		},
+		{
+			// Known regression vs the old substring LIKE: the trigram
+			// tokenizer cannot match keywords shorter than 3 runes, so
+			// 1-2 character / 2-kanji-熟語 queries return nothing. Proper CJK
+			// morphological tokenization is tracked as a separate task.
+			name:    "sub-3-rune keyword returns empty (trigram limitation)",
+			keyword: "バグ",
+			setup: func(d *db.DB) {
+				d.InsertTask(1, "ログイン機能のバグを修正する", "{}", "")
+			},
+			wantLen: 0,
+		},
+		{
 			name:    "match task status_changed reason",
 			keyword: "CSRF",
 			setup: func(d *db.DB) {
@@ -334,5 +363,69 @@ func TestSearch(t *testing.T) {
 				tt.check(t, results)
 			}
 		})
+	}
+}
+
+func TestFTSMatch(t *testing.T) {
+	tests := []struct {
+		name    string
+		keyword string
+		column  string
+		want    string
+	}{
+		{"plain", "login bug", "title", `{title} : "login bug"`},
+		{"japanese", "バグを修正", "title", `{title} : "バグを修正"`},
+		{"double quote escaped", `say "hi"`, "metadata", `{metadata} : "say ""hi"""`},
+		{"column result", "resolved", "result", `{result} : "resolved"`},
+		{"column reason", "CSRF fix", "reason", `{reason} : "CSRF fix"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := db.ExportFTSMatch(tt.keyword, tt.column); got != tt.want {
+				t.Errorf("ftsMatch(%q,%q) = %q, want %q", tt.keyword, tt.column, got, tt.want)
+			}
+		})
+	}
+}
+
+// Calling Migrate() again must not duplicate FTS rows (the backfill is
+// guarded by `id NOT IN (SELECT rowid FROM <fts>)` and triggers keep new
+// writes in sync), so search results stay stable across re-migration.
+func TestSearchMigrationIdempotent(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Fix login bug", "{}", "")
+	actionID, _ := d.InsertAction("deploy to prod", taskID, "{}", db.ActionStatusPending, nil, "")
+	d.MarkDone(actionID, "done")
+	// UpdateTask→done is rejected while actions are pending, so close the
+	// action above first; this emits the task.status_changed event the
+	// events_fts trigger indexes.
+	if err := d.UpdateTask(taskID, db.TaskStatusDone, "resolved the CSRF issue"); err != nil {
+		t.Fatalf("UpdateTask: %v", err)
+	}
+
+	before, err := d.Search("login", 0)
+	if err != nil {
+		t.Fatalf("Search before: %v", err)
+	}
+
+	for i := range 2 {
+		if err := d.Migrate(); err != nil {
+			t.Fatalf("re-Migrate #%d: %v", i, err)
+		}
+	}
+
+	for _, kw := range []string{"login", "deploy", "CSRF"} {
+		res, err := d.Search(kw, 0)
+		if err != nil {
+			t.Fatalf("Search(%q) after re-migrate: %v", kw, err)
+		}
+		if kw == "login" && len(res) != len(before) {
+			t.Errorf("Search(%q) returned %d results after re-migrate, want %d (no duplicates)", kw, len(res), len(before))
+		}
+		if len(res) == 0 {
+			t.Errorf("Search(%q) returned 0 results after re-migrate, want >=1", kw)
+		}
 	}
 }

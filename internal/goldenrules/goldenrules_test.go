@@ -189,7 +189,7 @@ func TestGoldenRules(t *testing.T) {
 	})
 
 	t.Run("rule-16-no-leading-wildcard-like", func(t *testing.T) {
-		const ceiling = 6
+		const ceiling = 0
 		violations := scanFiles(t, root, scanConfig{
 			Dirs:        []string{"db", "cmd", "dispatch", "tui"},
 			FilePattern: "*.go",

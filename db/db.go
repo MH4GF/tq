@@ -294,6 +294,39 @@ func (db *DB) Migrate() error {
 		return fmt.Errorf("backfill task_action_counts: %w", err)
 	}
 
+	if err := db.backfillSearchFTS(); err != nil {
+		return fmt.Errorf("backfill search FTS: %w", err)
+	}
+
+	return nil
+}
+
+// backfillSearchFTS populates tasks_fts/actions_fts/events_fts from rows that
+// predate the FTS schema. Idempotent and self-healing: only rows whose id is
+// not already an FTS rowid are inserted, so repeated Migrate() calls and
+// interrupted backfills converge without duplicates. New writes after this
+// point are kept in sync by the schema triggers.
+func (db *DB) backfillSearchFTS() error {
+	stmts := []string{
+		`INSERT INTO tasks_fts(rowid, title, metadata)
+		 SELECT id, title, metadata FROM tasks
+		 WHERE id NOT IN (SELECT rowid FROM tasks_fts)`,
+		`INSERT INTO actions_fts(rowid, title, result, metadata)
+		 SELECT id, title, COALESCE(result, ''), metadata FROM actions
+		 WHERE id NOT IN (SELECT rowid FROM actions_fts)`,
+		`INSERT INTO events_fts(rowid, reason)
+		 SELECT id, json_extract(payload, '$.reason') FROM events
+		 WHERE entity_type = 'task'
+		   AND event_type = 'task.status_changed'
+		   AND json_extract(payload, '$.reason') IS NOT NULL
+		   AND json_extract(payload, '$.reason') != ''
+		   AND id NOT IN (SELECT rowid FROM events_fts)`,
+	}
+	for _, s := range stmts {
+		if _, err := db.Exec(s); err != nil {
+			return fmt.Errorf("exec: %w", err)
+		}
+	}
 	return nil
 }
 
