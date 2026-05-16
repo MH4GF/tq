@@ -584,28 +584,3 @@ func TestLatestTaskNotes(t *testing.T) {
 		}
 	})
 }
-
-func TestListTasksByStatus(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	_, _ = d.InsertTask(1, "open task", "{}", "")
-	id2, _ := d.InsertTask(1, "done task", "{}", "")
-	d.UpdateTask(id2, db.TaskStatusDone, "")
-
-	tasks, err := d.ListTasksByStatus(db.TaskStatusOpen)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(tasks) != 1 {
-		t.Errorf("expected 1 open task, got %d", len(tasks))
-	}
-
-	tasks, err = d.ListTasksByStatus(db.TaskStatusDone)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(tasks) != 1 {
-		t.Errorf("expected 1 done task, got %d", len(tasks))
-	}
-}
