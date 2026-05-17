@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.21.25](https://github.com/MH4GF/tq/compare/v0.21.24...v0.21.25) - 2026-05-16
+- refactor: remove dead db.Store.UpdateScheduleRun by @MH4GF in https://github.com/MH4GF/tq/pull/336
+- noninteractive: attach raw output on JSON parse failure by @MH4GF in https://github.com/MH4GF/tq/pull/339
+
 ## [v0.21.24](https://github.com/MH4GF/tq/compare/v0.21.23...v0.21.24) - 2026-05-16
 - docs(create-action): rewrite Build instruction around goal-state + value by @MH4GF in https://github.com/MH4GF/tq/pull/318
 - dispatch: couple schedule insert spec with its success run update by @MH4GF in https://github.com/MH4GF/tq/pull/320
