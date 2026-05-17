@@ -429,7 +429,3 @@ func (db *DB) ListTasksByProjectIDs(projectIDs []int64) (map[int64][]Task, error
 	}
 	return result, rows.Err()
 }
-
-func (db *DB) ListTasksByStatus(status string) ([]Task, error) {
-	return db.ListTasks(0, status, 0)
-}

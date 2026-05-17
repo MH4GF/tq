@@ -72,7 +72,6 @@ type QueryReader interface {
 	GetTask(id int64) (*Task, error)
 	ListTasks(projectID int64, status string, limit int) ([]Task, error)
 	ListTasksByProjectIDs(projectIDs []int64) (map[int64][]Task, error)
-	ListTasksByStatus(status string) ([]Task, error)
 	TaskStatusHistory(taskID int64) ([]TaskStatusHistoryEntry, error)
 	TaskNotes(taskID int64, kindFilter string) ([]TaskNoteEntry, error)
 	LatestTaskNotes(taskIDs []int64, kindFilter string) (map[int64]TaskNoteEntry, error)
