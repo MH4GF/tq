@@ -120,6 +120,7 @@ func init() {
 	rootCmd.AddCommand(projectCmd)
 	rootCmd.AddCommand(scheduleCmd)
 	rootCmd.AddCommand(searchCmd)
+	rootCmd.AddCommand(configCmd)
 }
 
 func Execute() error {

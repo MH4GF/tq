@@ -131,6 +131,14 @@ CREATE TABLE IF NOT EXISTS worker_heartbeats (
   max_interactive INTEGER NOT NULL DEFAULT 3
 );
 
+-- Global key-value settings (e.g. default dispatch mode). Travels with the DB
+-- so the configuration follows libsql/Turso endpoints, not a local file.
+CREATE TABLE IF NOT EXISTS settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- FTS5 search indexes (trigram tokenizer: language-agnostic substring match,
 -- preserves the old LIKE '%kw%' behavior for >=3-character keywords incl. CJK).
 -- rowid mirrors the source row id so Search can join back for the other columns.

@@ -29,6 +29,8 @@ db/db.go:344 SCAN actions
 db/event.go:72 SCAN events
 db/project.go:69 SCAN projects
 db/schedule.go:51 SCAN schedules
+# db/settings.go — ListSettings: full-table list of a tiny KV table, no WHERE
+db/settings.go:28 SCAN settings
 db/search.go:152 SCAN actions_fts
 db/search.go:152 SCAN events_fts
 db/search.go:152 SCAN tasks_fts

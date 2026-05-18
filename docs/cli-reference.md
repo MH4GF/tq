@@ -150,7 +150,7 @@ tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--st
 - `--task` — Task ID (**required**). Rejected if the task status is `done` or `archived`; reopen with `tq task update <ID> --status open` first if intentional.
 - `--title` — Action title (**required**, max 100 chars)
 - `--meta` — JSON metadata for dispatch control:
-  - `mode` — `"interactive"` (default), `"noninteractive"`, `"remote"`, or `"experimental_bg"` (research preview: dispatches via `claude --bg` so the action appears in `claude agents`; requires Claude Code v2.1.139+). Any other value is rejected — pass Claude permission-mode (`auto`, `plan`, `acceptEdits`, …) via `claude_args` instead.
+  - `mode` — `"interactive"`, `"noninteractive"`, `"remote"`, or `"experimental_bg"` (research preview: dispatches via `claude --bg` so the action appears in `claude agents`; requires Claude Code v2.1.139+). When omitted, the global default from `tq config get default_mode` is stamped into the action's metadata; if that is also unset it falls back to `"interactive"`. An explicit value here always wins. Any other value is rejected — pass Claude permission-mode (`auto`, `plan`, `acceptEdits`, …) via `claude_args` instead.
   - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--permission-mode","plan","--worktree","--max-turns","5"]`)
   - `executor` — `"local"` or `"cloud"`. Records where the action's claude session is actually running (orthogonal to `mode`). The reaper skips actions marked `executor=cloud` since local tmux/session-log liveness checks do not apply. Auto-stamped to `cloud` when `--status running` is passed from a Claude Code cloud session (`CLAUDE_CODE_REMOTE=true`); also stamped by the `SessionStart` hook in cloud sessions launched via tq dispatch. Explicit values in `--meta` are preserved.
 - `--status` — Initial status (default: `pending`)
@@ -368,6 +368,22 @@ Substring search is backed by an FTS5 trigram index, so keywords shorter than 3 
 
 - `--project` — Filter by project ID (default: 0 = all projects)
 - `--jq` — Filter JSON output (fields: `entity_type`, `entity_id`, `task_id`, `project_id`, `field`, `snippet`, `status`, `created_at`)
+
+## config
+
+Global key-value settings stored in the DB, so configuration travels with libsql/Turso endpoints rather than a local file.
+
+```
+tq config set <KEY> <VALUE>
+tq config get <KEY>
+tq config list [--jq <EXPR>]
+```
+
+| Key | Description |
+|-----|-------------|
+| `default_mode` | Default execution mode (`interactive`, `noninteractive`, `remote`, `experimental_bg`) stamped into a new action's metadata when `tq action create --meta` does not specify one. An explicit `--meta '{"mode":...}'` always overrides it. When unset, actions fall back to `interactive` at dispatch time. |
+
+Only recognized keys are accepted; unknown keys and invalid values are rejected. `tq config get` prints an empty line when the key is unset. `tq config list` outputs JSON (fields: `key`, `value`).
 
 ## completion
 

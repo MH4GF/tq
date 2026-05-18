@@ -37,6 +37,8 @@ type CommandWriter interface {
 	SetWorkDir(projectID int64, workDir string) error
 	// Worker commands
 	UpdateWorkerHeartbeat(maxInteractive int) error
+	// Settings commands
+	SetSetting(key, value string) error
 	// Schedule commands
 	InsertSchedule(taskID int64, instruction, title, cronExpr, metadata string) (int64, error)
 	UpdateSchedule(id int64, title, cronExpr, metadata, instruction *string, taskID *int64) error
@@ -82,6 +84,9 @@ type QueryReader interface {
 	EnabledScheduleIDs(taskID int64) ([]int64, error)
 	// Worker queries
 	GetWorkerMaxInteractive(staleThreshold time.Duration) (int, error)
+	// Settings queries
+	GetSetting(key string) (string, error)
+	ListSettings() (map[string]string, error)
 	// Event queries
 	ListEvents(entityType string, entityID int64) ([]Event, error)
 	ListRecentEvents(limit int) ([]Event, error)

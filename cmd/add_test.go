@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/dispatch"
 	"github.com/MH4GF/tq/testutil"
 )
@@ -444,6 +445,105 @@ func TestAdd_AutoStampExecutor(t *testing.T) {
 			got, _ := meta[dispatch.MetaKeyExecutor].(string)
 			if got != tc.wantExecutor {
 				t.Errorf("metadata.executor = %q, want %q", got, tc.wantExecutor)
+			}
+		})
+	}
+}
+
+func TestAdd_ApplyDefaultMode(t *testing.T) {
+	tests := []struct {
+		name         string
+		globalMode   string // "" = leave settings unset
+		meta         string // "" = no --meta flag
+		wantMode     string // "" = metadata.mode key must be absent
+		wantErrSub   string // non-empty = expect error, action not created
+		wantPreserve map[string]string
+	}{
+		{
+			name:     "global unset, no meta → mode absent",
+			wantMode: "",
+		},
+		{
+			name:       "global set, no meta → stamped",
+			globalMode: "experimental_bg",
+			wantMode:   "experimental_bg",
+		},
+		{
+			name:       "explicit meta mode overrides global",
+			globalMode: "experimental_bg",
+			meta:       `{"mode":"interactive"}`,
+			wantMode:   "interactive",
+		},
+		{
+			name:         "stamp preserves other metadata keys",
+			globalMode:   "noninteractive",
+			meta:         `{"claude_args":["--effort","high"]}`,
+			wantMode:     "noninteractive",
+			wantPreserve: map[string]string{"claude_args": `["high"]`},
+		},
+		{
+			name:       "invalid configured mode fails create",
+			globalMode: "bogus",
+			wantErrSub: `configured default mode "bogus" is invalid`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+			cmd.SetConfigDir(t.TempDir())
+			d.InsertTask(1, "test task", "{}", "")
+			if tc.globalMode != "" {
+				if err := d.SetSetting(db.SettingDefaultMode, tc.globalMode); err != nil {
+					t.Fatalf("seed setting: %v", err)
+				}
+			}
+
+			args := []string{"action", "create", "x", "--task", "1", "--title", "t"}
+			if tc.meta != "" {
+				args = append(args, "--meta", tc.meta)
+			}
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			root.SetArgs(args)
+
+			err := root.Execute()
+			if tc.wantErrSub != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tc.wantErrSub)
+				}
+				if !contains(err.Error(), tc.wantErrSub) {
+					t.Errorf("error = %q, want to contain %q", err.Error(), tc.wantErrSub)
+				}
+				if _, gerr := d.GetAction(1); gerr == nil {
+					t.Error("action should NOT have been created on invalid configured mode")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("execute: %v (output: %s)", err, buf.String())
+			}
+
+			a, err := d.GetAction(1)
+			if err != nil {
+				t.Fatalf("get action: %v", err)
+			}
+			var meta map[string]any
+			if err := json.Unmarshal([]byte(a.Metadata), &meta); err != nil {
+				t.Fatalf("parse metadata: %v", err)
+			}
+			got, _ := meta[dispatch.MetaKeyMode].(string)
+			if got != tc.wantMode {
+				t.Errorf("metadata.mode = %q, want %q", got, tc.wantMode)
+			}
+			if tc.wantPreserve != nil {
+				if _, ok := meta["claude_args"]; !ok {
+					t.Errorf("claude_args dropped during default-mode stamp; metadata=%s", a.Metadata)
+				}
 			}
 		})
 	}

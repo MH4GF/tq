@@ -39,9 +39,11 @@ Instruction is provided as a positional argument.
 --meta passes JSON metadata. The instruction is automatically merged into metadata.
 
 Metadata keys for dispatch control:
-  mode         Execution mode: "interactive" (default), "noninteractive", "remote",
+  mode         Execution mode: "interactive", "noninteractive", "remote",
                or "experimental_bg" (research preview: dispatches via "claude --bg"
                so the action appears in "claude agents"; requires Claude Code v2.1.139+).
+               When omitted, the global default from 'tq config get default_mode'
+               is stamped in; if that is unset too, it falls back to "interactive".
                Any other value is rejected — pass Claude permission-mode
                (auto, plan, acceptEdits, ...) via claude_args instead.
   claude_args  Additional CLI arguments for claude (JSON array of strings,
@@ -117,6 +119,10 @@ Metadata keys for dispatch control:
 		if err != nil {
 			return err
 		}
+		merged, err = applyDefaultMode(merged)
+		if err != nil {
+			return err
+		}
 
 		id, err := database.InsertAction(addTitle, addTask, merged, status, dispatchAfter, addWorkDir)
 		if err != nil {
@@ -152,13 +158,41 @@ Metadata keys for dispatch control:
 }
 
 func mergeInstruction(metaJSON, instruction string) (string, error) {
-	m := make(map[string]any)
-	if metaJSON != "" && metaJSON != "{}" {
-		if err := json.Unmarshal([]byte(metaJSON), &m); err != nil {
-			return "", fmt.Errorf("parse metadata for instruction merge: %w", err)
-		}
+	m, err := dispatch.ParseActionMetadata(metaJSON)
+	if err != nil {
+		return "", fmt.Errorf("parse metadata for instruction merge: %w", err)
 	}
 	m[dispatch.MetaKeyInstruction] = instruction
+	data, err := json.Marshal(m)
+	if err != nil {
+		return "", fmt.Errorf("marshal metadata: %w", err)
+	}
+	return string(data), nil
+}
+
+// applyDefaultMode stamps metadata.mode from the global default_mode setting
+// when --meta did not specify a mode. Stamping at creation time (rather than
+// defaulting at dispatch time) keeps a single source of truth: metadata always
+// carries an explicit mode, so the SQL mode predicates, slot accounting, and
+// reaper stay consistent without change. An explicit metadata.mode is
+// preserved; a misconfigured default mode fails the create loudly.
+func applyDefaultMode(metaJSON string) (string, error) {
+	globalDefault, err := database.GetSetting(db.SettingDefaultMode)
+	if err != nil {
+		return "", fmt.Errorf("get default mode setting: %w", err)
+	}
+	m, err := dispatch.ParseActionMetadata(metaJSON)
+	if err != nil {
+		return "", fmt.Errorf("parse metadata for default mode stamp: %w", err)
+	}
+	mode, err := dispatch.ResolveDefaultMode(m, globalDefault)
+	if err != nil {
+		return "", err
+	}
+	if mode == "" {
+		return metaJSON, nil
+	}
+	m[dispatch.MetaKeyMode] = mode
 	data, err := json.Marshal(m)
 	if err != nil {
 		return "", fmt.Errorf("marshal metadata: %w", err)
@@ -179,11 +213,9 @@ func autoStampExecutor(metaJSON, status string) (string, error) {
 	if !dispatch.IsCloudExecution() {
 		return metaJSON, nil
 	}
-	m := make(map[string]any)
-	if metaJSON != "" && metaJSON != "{}" {
-		if err := json.Unmarshal([]byte(metaJSON), &m); err != nil {
-			return "", fmt.Errorf("parse metadata for executor stamp: %w", err)
-		}
+	m, err := dispatch.ParseActionMetadata(metaJSON)
+	if err != nil {
+		return "", fmt.Errorf("parse metadata for executor stamp: %w", err)
 	}
 	if _, ok := m[dispatch.MetaKeyExecutor]; ok {
 		return metaJSON, nil
