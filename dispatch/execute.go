@@ -508,7 +508,8 @@ func applyWorkDirRecovery(database db.Store, recovery *workDirRecovery) {
 		"missing_path", recovery.MissingPath,
 		"fallback_path", recovery.Fallback,
 	)
-	if err := database.UpdateTaskWorkDir(recovery.TaskID, ""); err != nil {
+	emptyWorkDir := ""
+	if err := database.UpdateTaskFields(recovery.TaskID, db.TaskFieldChanges{WorkDir: &emptyWorkDir}); err != nil {
 		slog.Warn("work_dir auto-recovery: failed to clear task work_dir",
 			"task_id", recovery.TaskID,
 			"error", err,

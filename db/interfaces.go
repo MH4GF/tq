@@ -28,10 +28,7 @@ type CommandWriter interface {
 	ClearActionDependencies(actionID int64) error
 	// Task commands
 	InsertTask(projectID int64, title, metadata, workDir string) (int64, error)
-	UpdateTask(id int64, status, reason string) error
-	UpdateTaskProject(id, projectID int64) error
-	UpdateTaskWorkDir(id int64, workDir string) error
-	MergeTaskMetadata(id int64, updates map[string]any) error
+	UpdateTaskFields(id int64, c TaskFieldChanges) error
 	RecordTaskNote(taskID int64, kind, reason string, metadata map[string]any) error
 	// Project commands
 	InsertProject(name, workDir, metadata string) (int64, error)

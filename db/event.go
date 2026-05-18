@@ -7,8 +7,11 @@ import (
 )
 
 const (
-	EventTaskStatusChanged = "task.status_changed"
-	EventTaskNote          = "task.note"
+	EventTaskStatusChanged  = "task.status_changed"
+	EventTaskNote           = "task.note"
+	EventTaskProjectChanged = "task.project_changed"
+	EventTaskWorkDirChanged = "task.workdir_changed"
+	EventTaskMetadataMerged = "task.metadata_merged"
 )
 
 type Event struct {

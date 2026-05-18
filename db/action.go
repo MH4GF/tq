@@ -568,25 +568,13 @@ func (db *DB) MergeActionMetadata(id int64, updates map[string]any) error {
 		return err
 	}
 
-	merged := make(map[string]any)
-	if existing != "" && existing != "{}" {
-		if err := json.Unmarshal([]byte(existing), &merged); err != nil {
-			return fmt.Errorf("parse existing metadata: %w", err)
-		}
-	}
-	maps.Copy(merged, updates)
-
-	data, err := json.Marshal(merged)
+	data, keys, err := mergeMetadataJSON(existing, updates)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return err
 	}
 
-	_, err = db.Exec("UPDATE actions SET metadata = ? WHERE id = ?", string(data), id)
+	_, err = db.Exec("UPDATE actions SET metadata = ? WHERE id = ?", data, id)
 	if err == nil {
-		keys := make([]string, 0, len(updates))
-		for k := range updates {
-			keys = append(keys, k)
-		}
 		db.emitEvent("action", id, "action.metadata_merged", map[string]any{
 			"keys_updated": keys,
 		})
