@@ -305,6 +305,104 @@ func TestActionDependency_ClearAndReplace(t *testing.T) {
 	}
 }
 
+// TestActionDependency_GateGoParity locks the two independent encodings of the
+// dependency-satisfaction rule together: dependencyGatePredicate (SQL, drives
+// dispatch via NextPending/CountPendingByDispatch) and depSatisfied (Go, drives
+// the displayed Satisfied flag). For the full dep_type x blocker-status matrix
+// it asserts the two verdicts are identical, so any future edit to one without
+// the other fails CI. It does not hardcode per-case expectations beyond a
+// sanity check — the lock is the SQL==Go equality itself.
+func TestActionDependency_GateGoParity(t *testing.T) {
+	// Action blockers go through SetActionStatusForTest (raw UPDATE, no
+	// validation) so an unknown status exercises depSatisfied's default branch.
+	actionStatuses := []string{
+		db.ActionStatusPending,
+		db.ActionStatusRunning,
+		db.ActionStatusDispatched,
+		db.ActionStatusDone,
+		db.ActionStatusFailed,
+		db.ActionStatusCancelled,
+		"weird-unknown-status",
+	}
+	// open/done/archived are the only valid task statuses (db/task.go), enforced
+	// by UpdateTask validation — this matrix is therefore exhaustive for tasks.
+	taskStatuses := []string{
+		db.TaskStatusOpen,
+		db.TaskStatusDone,
+		db.TaskStatusArchived,
+	}
+
+	for _, st := range actionStatuses {
+		t.Run("action blocker "+st, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			blockerTask, _ := d.InsertTask(1, "blocker", "{}", "")
+			followerTask, _ := d.InsertTask(1, "follower", "{}", "")
+
+			blocker, err := d.InsertAction("blocker", blockerTask, "{}", db.ActionStatusPending, nil, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := d.SetActionStatusForTest(blocker, st); err != nil {
+				t.Fatal(err)
+			}
+			follower, err := d.InsertAction("follower", followerTask, "{}", db.ActionStatusPending, nil, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: blocker}}); err != nil {
+				t.Fatal(err)
+			}
+
+			gate, err := db.ExportDependencyGateAllows(d, follower)
+			if err != nil {
+				t.Fatalf("ExportDependencyGateAllows: %v", err)
+			}
+			goSat := db.ExportDepSatisfied(db.DepTypeAction, st)
+			if gate != goSat {
+				t.Errorf("parity drift for action blocker status %q: SQL gate allows=%v, Go depSatisfied=%v", st, gate, goSat)
+			}
+			if want := st == db.ActionStatusDone; gate != want {
+				t.Errorf("action blocker status %q: verdict=%v, want %v", st, gate, want)
+			}
+		})
+	}
+
+	for _, st := range taskStatuses {
+		t.Run("task blocker "+st, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			blockerTask, _ := d.InsertTask(1, "blocker", "{}", "")
+			followerTask, _ := d.InsertTask(1, "follower", "{}", "")
+
+			if st != db.TaskStatusOpen {
+				if err := d.UpdateTask(blockerTask, st, ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+			follower, err := d.InsertAction("follower", followerTask, "{}", db.ActionStatusPending, nil, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeTask, ID: blockerTask}}); err != nil {
+				t.Fatal(err)
+			}
+
+			gate, err := db.ExportDependencyGateAllows(d, follower)
+			if err != nil {
+				t.Fatalf("ExportDependencyGateAllows: %v", err)
+			}
+			goSat := db.ExportDepSatisfied(db.DepTypeTask, st)
+			if gate != goSat {
+				t.Errorf("parity drift for task blocker status %q: SQL gate allows=%v, Go depSatisfied=%v", st, gate, goSat)
+			}
+			if want := st == db.TaskStatusDone || st == db.TaskStatusArchived; gate != want {
+				t.Errorf("task blocker status %q: verdict=%v, want %v", st, gate, want)
+			}
+		})
+	}
+}
+
 func TestActionDependency_ClaimPendingBypassesGate(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
