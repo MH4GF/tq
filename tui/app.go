@@ -25,6 +25,10 @@ const (
 // It receives a context that is cancelled when the TUI exits.
 type BackgroundFunc func(ctx context.Context) error
 
+// DispatchFunc dispatches a pending action by ID and returns a
+// human-readable result line for the status message.
+type DispatchFunc func(ctx context.Context, actionID int64) (string, error)
+
 type Model struct {
 	activeTab      tab
 	tasks          TasksModel
@@ -68,12 +72,14 @@ type clearStatusLineMsg struct {
 	gen int
 }
 
-func New(database db.Store, logCh <-chan LogEntry, maxInteractive int, backgrounds ...BackgroundFunc) Model {
+func New(database db.Store, logCh <-chan LogEntry, maxInteractive int, dispatchFn DispatchFunc, backgrounds ...BackgroundFunc) Model {
 	today := time.Now().Format("2006-01-02")
 	ctx, cancel := context.WithCancel(context.Background())
+	tasksModel := NewTasksModel(database, today)
+	tasksModel.dispatchFn = dispatchFn
 	return Model{
 		activeTab:      tabTasks,
-		tasks:          NewTasksModel(database, today),
+		tasks:          tasksModel,
 		schedules:      NewSchedulesModel(database),
 		backgrounds:    backgrounds,
 		logCh:          logCh,

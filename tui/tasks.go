@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -54,13 +55,16 @@ func (lt lineType) decorative() bool {
 }
 
 type TasksModel struct {
-	trees          []projectTree
-	cursor         int
-	expanded       map[string]bool
-	lines          []treeLine
-	width          int
-	height         int
-	database       db.Store
+	trees    []projectTree
+	cursor   int
+	expanded map[string]bool
+	lines    []treeLine
+	width    int
+	height   int
+	database db.Store
+	// dispatchFn is optional: nil disables the 'd' keybinding and its help
+	// entry. Set by New; NewTasksModel callers (tests) leave it nil.
+	dispatchFn     DispatchFunc
 	message        string
 	messageGen     int
 	messageIsError bool
@@ -110,6 +114,12 @@ type tasksLoadedMsg struct {
 
 type dispatchToggledMsg struct {
 	err error
+}
+
+type actionDispatchedMsg struct {
+	id     int64
+	output string
+	err    error
 }
 
 // actionStats holds aggregate counts for the status strip and gauge.
@@ -250,6 +260,15 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 			text = fmt.Sprintf("resume action #%d created from #%d", msg.newID, msg.parentID)
 		}
 		return m, tea.Batch(reload, m.setMessage(text, msg.err != nil))
+	case actionDispatchedMsg:
+		reload := m.loadTasks()
+		var text string
+		if msg.err != nil {
+			text = fmt.Sprintf("dispatch failed: %v", msg.err)
+		} else {
+			text = msg.output
+		}
+		return m, tea.Batch(reload, m.setMessage(text, msg.err != nil))
 	case clearTasksMessageMsg:
 		if msg.gen == m.messageGen {
 			m.message = ""
@@ -342,6 +361,13 @@ func (m TasksModel) updateNormal(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 		if m.cursor >= 0 && m.cursor < len(m.lines) {
 			if a := m.lines[m.cursor].action; a != nil && actionResumable(a) {
 				return m, m.resumeAction(a)
+			}
+		}
+	case key.Matches(msg, key.NewBinding(key.WithKeys("d"))):
+		if m.dispatchFn != nil && m.cursor >= 0 && m.cursor < len(m.lines) {
+			if a := m.lines[m.cursor].action; a != nil && a.Status == db.ActionStatusPending {
+				progress := m.setMessage(fmt.Sprintf("dispatching #%d...", a.ID), false)
+				return m, tea.Batch(progress, m.dispatchAction(a))
 			}
 		}
 	case key.Matches(msg, key.NewBinding(key.WithKeys("f"))):
@@ -693,6 +719,15 @@ func (m TasksModel) resumeAction(a *db.Action) tea.Cmd {
 	}
 }
 
+func (m TasksModel) dispatchAction(a *db.Action) tea.Cmd {
+	id := a.ID
+	fn := m.dispatchFn
+	return func() tea.Msg {
+		out, err := fn(context.Background(), id)
+		return actionDispatchedMsg{id: id, output: out, err: err}
+	}
+}
+
 func actionAttachable(a *db.Action) bool {
 	return a != nil && a.TmuxSession.Valid && a.TmuxWindow.Valid
 }
@@ -786,6 +821,9 @@ func (m TasksModel) HelpKeys() []HelpKey {
 			keys = append(keys, HelpKey{"v", "view detail"})
 			if actionResumable(line.action) {
 				keys = append(keys, HelpKey{"r", "resume"})
+			}
+			if m.dispatchFn != nil && line.action.Status == db.ActionStatusPending {
+				keys = append(keys, HelpKey{"d", "dispatch"})
 			}
 		}
 		if line.lineType == lineTask && line.taskID > 0 {

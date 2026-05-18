@@ -89,7 +89,7 @@ project → task → action
 - **SQLite is SSOT** — the database is the canonical state store
 - **Queue Worker** — interactive actions dispatch into tmux (one at a time per slot); noninteractive actions run concurrently in goroutines so a long-running `claude -p` does not block the dispatch loop
 - **AI is hands only** — Go handles orchestration; AI executes as a `claude` worker
-- **TUI is read-only** — humans observe via TUI; operations are issued through CLI
+- **TUI is observation-first** — humans monitor via TUI; mutations are issued through the CLI, with a few in-TUI convenience shortcuts (`f` toggle focus, `r` resume, `d` dispatch a pending action) that delegate to the same operations
 
 ### Action State Machine
 

@@ -44,33 +44,35 @@ var uiCmd = &cobra.Command{
 			effectiveMaxNonInteractive = dispatch.DefaultMaxNonInteractive
 		}
 
+		dispatchCfg := dispatch.DispatchConfig{
+			DB: database,
+			NonInteractiveFunc: func() dispatch.Worker {
+				return &dispatch.NonInteractiveWorker{
+					Runner:                  &dispatch.ExecRunner{},
+					ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
+				}
+			},
+			InteractiveFunc: func() dispatch.Worker {
+				return &dispatch.InteractiveWorker{
+					Runner:  &dispatch.ExecRunner{},
+					Session: uiSession,
+				}
+			},
+			RemoteFunc: func() dispatch.Worker {
+				return &dispatch.RemoteWorker{
+					Runner: &dispatch.ExecRunner{},
+				}
+			},
+			BgFunc: func() dispatch.Worker {
+				return &dispatch.BgWorker{Runner: &dispatch.ExecRunner{}}
+			},
+			TmuxSession:             uiSession,
+			ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
+		}
+
 		workerBg := func(ctx context.Context) error {
 			cfg := dispatch.WorkerConfig{
-				DispatchConfig: dispatch.DispatchConfig{
-					DB: database,
-					NonInteractiveFunc: func() dispatch.Worker {
-						return &dispatch.NonInteractiveWorker{
-							Runner:                  &dispatch.ExecRunner{},
-							ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
-						}
-					},
-					InteractiveFunc: func() dispatch.Worker {
-						return &dispatch.InteractiveWorker{
-							Runner:  &dispatch.ExecRunner{},
-							Session: uiSession,
-						}
-					},
-					RemoteFunc: func() dispatch.Worker {
-						return &dispatch.RemoteWorker{
-							Runner: &dispatch.ExecRunner{},
-						}
-					},
-					BgFunc: func() dispatch.Worker {
-						return &dispatch.BgWorker{Runner: &dispatch.ExecRunner{}}
-					},
-					TmuxSession:             uiSession,
-					ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
-				},
+				DispatchConfig:    dispatchCfg,
 				MaxInteractive:    effectiveMaxInteractive,
 				MaxNonInteractive: effectiveMaxNonInteractive,
 				PollInterval:      uiPollInterval,
@@ -80,7 +82,11 @@ var uiCmd = &cobra.Command{
 			return dispatch.RunWorker(ctx, cfg)
 		}
 
-		m := tui.New(database, logCh, effectiveMaxInteractive, workerBg)
+		dispatchFn := func(ctx context.Context, id int64) (string, error) {
+			return dispatch.DispatchByID(ctx, dispatchCfg, id)
+		}
+
+		m := tui.New(database, logCh, effectiveMaxInteractive, dispatchFn, workerBg)
 		p := tea.NewProgram(m, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("tui: %w", err)
