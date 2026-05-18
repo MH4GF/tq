@@ -158,11 +158,9 @@ Metadata keys for dispatch control:
 }
 
 func mergeInstruction(metaJSON, instruction string) (string, error) {
-	m := make(map[string]any)
-	if metaJSON != "" && metaJSON != "{}" {
-		if err := json.Unmarshal([]byte(metaJSON), &m); err != nil {
-			return "", fmt.Errorf("parse metadata for instruction merge: %w", err)
-		}
+	m, err := dispatch.ParseActionMetadata(metaJSON)
+	if err != nil {
+		return "", fmt.Errorf("parse metadata for instruction merge: %w", err)
 	}
 	m[dispatch.MetaKeyInstruction] = instruction
 	data, err := json.Marshal(m)
@@ -183,11 +181,9 @@ func applyDefaultMode(metaJSON string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("get default mode setting: %w", err)
 	}
-	m := make(map[string]any)
-	if metaJSON != "" && metaJSON != "{}" {
-		if err := json.Unmarshal([]byte(metaJSON), &m); err != nil {
-			return "", fmt.Errorf("parse metadata for default mode stamp: %w", err)
-		}
+	m, err := dispatch.ParseActionMetadata(metaJSON)
+	if err != nil {
+		return "", fmt.Errorf("parse metadata for default mode stamp: %w", err)
 	}
 	mode, err := dispatch.ResolveDefaultMode(m, globalDefault)
 	if err != nil {
@@ -217,11 +213,9 @@ func autoStampExecutor(metaJSON, status string) (string, error) {
 	if !dispatch.IsCloudExecution() {
 		return metaJSON, nil
 	}
-	m := make(map[string]any)
-	if metaJSON != "" && metaJSON != "{}" {
-		if err := json.Unmarshal([]byte(metaJSON), &m); err != nil {
-			return "", fmt.Errorf("parse metadata for executor stamp: %w", err)
-		}
+	m, err := dispatch.ParseActionMetadata(metaJSON)
+	if err != nil {
+		return "", fmt.Errorf("parse metadata for executor stamp: %w", err)
 	}
 	if _, ok := m[dispatch.MetaKeyExecutor]; ok {
 		return metaJSON, nil

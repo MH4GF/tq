@@ -17,23 +17,25 @@ var knownConfigKeys = map[string]func(string) error{
 	db.SettingDefaultMode: func(v string) error {
 		if !dispatch.IsValidMode(v) {
 			return fmt.Errorf(
-				"invalid value %q for %s: must be one of %s, %s, %s, %s",
-				v, db.SettingDefaultMode,
-				dispatch.ModeInteractive, dispatch.ModeNonInteractive,
-				dispatch.ModeRemote, dispatch.ModeBg,
+				"invalid value %q for %s: must be one of %s",
+				v, db.SettingDefaultMode, dispatch.ValidModesList(),
 			)
 		}
 		return nil
 	},
 }
 
-func knownConfigKeyList() string {
+func sortedConfigKeys() []string {
 	keys := make([]string, 0, len(knownConfigKeys))
 	for k := range knownConfigKeys {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	return strings.Join(keys, ", ")
+	return keys
+}
+
+func knownConfigKeyList() string {
+	return strings.Join(sortedConfigKeys(), ", ")
 }
 
 var configCmd = &cobra.Command{
@@ -103,12 +105,7 @@ var configListCmd = &cobra.Command{
 			return fmt.Errorf("list settings: %w", err)
 		}
 
-		keys := make([]string, 0, len(knownConfigKeys))
-		for k := range knownConfigKeys {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-
+		keys := sortedConfigKeys()
 		rows := make([]map[string]any, len(keys))
 		for i, k := range keys {
 			rows[i] = map[string]any{"key": k, "value": stored[k]}

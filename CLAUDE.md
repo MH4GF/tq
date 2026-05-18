@@ -16,6 +16,7 @@ Run `tq --help` for data model, commands, and usage examples.
 - `tq schedule` — create and manage scheduled actions
 - `tq event` — query the event log
 - `tq search <keyword>` — full-text search across tasks and actions
+- `tq config` — get/set global settings stored in the DB (e.g. `default_mode`)
 - `tq ui` — launch interactive TUI with queue worker
 - `tq completion` — generate shell autocompletion scripts
 

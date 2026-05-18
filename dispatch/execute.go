@@ -126,15 +126,30 @@ func (c ActionConfig) IsNonInteractive() bool { return c.Mode == ModeNonInteract
 func (c ActionConfig) IsRemote() bool         { return c.Mode == ModeRemote }
 func (c ActionConfig) IsBg() bool             { return c.Mode == ModeBg }
 
-var validModes = map[string]bool{
-	ModeInteractive:    true,
-	ModeNonInteractive: true,
-	ModeRemote:         true,
-	ModeBg:             true,
-}
+// validModeList is the canonical ordered set of tq dispatch modes; validModes
+// is derived from it. ValidModesList renders it for error messages so adding a
+// mode updates every message in one place.
+var validModeList = []string{ModeInteractive, ModeNonInteractive, ModeRemote, ModeBg}
+
+var validModes = func() map[string]bool {
+	m := make(map[string]bool, len(validModeList))
+	for _, mode := range validModeList {
+		m[mode] = true
+	}
+	return m
+}()
+
+// SettingKeyDefaultMode is the global setting key for the default dispatch
+// mode. Keep in sync with db.SettingDefaultMode (db cannot import dispatch and
+// dispatch cannot import db, so the constant is duplicated by layer).
+const SettingKeyDefaultMode = "default_mode"
 
 // IsValidMode reports whether s is one of tq's dispatch modes.
 func IsValidMode(s string) bool { return validModes[s] }
+
+// ValidModesList returns the valid modes as a comma-separated string for
+// error messages, e.g. "interactive, noninteractive, remote, experimental_bg".
+func ValidModesList() string { return strings.Join(validModeList, ", ") }
 
 // ResolveDefaultMode decides the mode to stamp into a new action's metadata
 // when --meta did not specify one. It returns "" when nothing should be
@@ -152,10 +167,9 @@ func ResolveDefaultMode(actionMeta map[string]any, globalDefault string) (string
 	}
 	if !IsValidMode(globalDefault) {
 		return "", fmt.Errorf(
-			`configured default mode %q is invalid: must be one of %s, %s, %s, %s `+
+			`configured default mode %q is invalid: must be one of %s `+
 				`(fix with 'tq config set %s <mode>')`,
-			globalDefault, ModeInteractive, ModeNonInteractive, ModeRemote, ModeBg,
-			"default_mode",
+			globalDefault, ValidModesList(), SettingKeyDefaultMode,
 		)
 	}
 	return globalDefault, nil
@@ -179,10 +193,10 @@ func ValidateActionMode(meta map[string]any) error {
 	}
 	if !validModes[s] {
 		return fmt.Errorf(
-			`metadata "mode" must be one of: %s, %s, %s, %s (got %q). `+
+			`metadata "mode" must be one of: %s (got %q). `+
 				`If you intended Claude permission-mode, use claude_args instead, e.g. `+
 				`{"claude_args":["--permission-mode","%s"]}`,
-			ModeInteractive, ModeNonInteractive, ModeRemote, ModeBg, s, s,
+			ValidModesList(), s, s,
 		)
 	}
 	return nil
