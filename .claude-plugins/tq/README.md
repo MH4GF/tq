@@ -102,5 +102,5 @@ Runs `tq internal claude-session-record` to record the `session_id` issued by Cl
 
 - The startup env variable `TQ_ACTION_ID` identifies the target action 1:1. Only Claude sessions launched via tq dispatch are recorded.
 - No side effects on manual claude launches without `TQ_ACTION_ID` (silent exit).
-- When `CLAUDE_CODE_REMOTE=true` (Claude Code on the web / Cloud Routines) is set, `executor=cloud` is also recorded into metadata. The reaper uses this value to unconditionally skip cloud-executed actions (local tmux/session log liveness checks do not apply to them).
+- When `CLAUDE_CODE_REMOTE=true` (Claude Code on the web / Cloud Routines) is set, `executor=cloud` is also recorded into metadata. The reaper uses this value to unconditionally skip cloud-executed actions (local session log liveness checks do not apply to them).
 - Hook failures never disrupt the Claude session (always exits 0).
