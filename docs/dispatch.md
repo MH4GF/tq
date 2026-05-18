@@ -49,9 +49,13 @@ The Claude Code `SessionStart` hook (`.claude-plugins/tq/`) is the sole writer o
 
 The session ID is used for `claude --resume` and for log investigation on failure. Capture is best-effort: a missing session ID does not fail the action. The reaper still probes `~/.claude/projects` session log mtime as a liveness signal (`ClaudeSessionLogChecker.IsClaudeSessionActive`), but no longer writes the session ID itself.
 
+## Interactive liveness contract
+
+`reapInteractive` judges an interactive action's liveness solely by its claude session log. A fresh log keeps the action running; a non-fresh log only fails the action via the early-stale watchdog (a session that never produced a log within `EarlyDispatchTimeout`) or, for a session that did start, once it has exceeded `InteractiveHardTimeout`. There is deliberately no tmux-window probe: tmux `automatic-rename` renames a live session's window away from `tq-action-<id>`, so an exact-name existence check misreported live sessions as gone and reaped genuinely-working actions. A dead session that never reports `done`/`fail` instead lingers until the hard timeout, which loses no work and self-heals — strictly safer than a false failure that strands dependents.
+
 ## Cloud-executed actions are exempt from reaping
 
-Actions whose `metadata.executor` is `"cloud"` are skipped by `reapStaleActions` in both interactive and noninteractive loops. Such actions run in Claude Code on the web (including Cloud Routines) and have no local tmux window or session log for the reaper to probe — liveness is the responsibility of the cloud session that opened the action, which closes it via `tq action done|fail`.
+Actions whose `metadata.executor` is `"cloud"` are skipped by `reapStaleActions` in both interactive and noninteractive loops. Such actions run in Claude Code on the web (including Cloud Routines) and have no local session log for the reaper to probe — liveness is the responsibility of the cloud session that opened the action, which closes it via `tq action done|fail`.
 
 `executor` is stamped:
 - by `tq action create --status running` when invoked from a cloud session (`CLAUDE_CODE_REMOTE=true`)

@@ -74,7 +74,6 @@ var uiCmd = &cobra.Command{
 				MaxInteractive:    effectiveMaxInteractive,
 				MaxNonInteractive: effectiveMaxNonInteractive,
 				PollInterval:      uiPollInterval,
-				TmuxChecker:       &dispatch.ExecTmuxChecker{Runner: &dispatch.ExecRunner{}},
 				BgStateReader:     dispatch.FileBgStateReader{},
 			}
 			return dispatch.RunWorker(ctx, cfg)

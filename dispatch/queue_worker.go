@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -37,39 +36,12 @@ const (
 // deferred one.
 var defaultDeferBackoff = 30 * time.Second
 
-// TmuxChecker checks for the existence of tmux windows.
-type TmuxChecker interface {
-	ListWindows(ctx context.Context, session string) ([]string, error)
-}
-
-// ExecTmuxChecker implements TmuxChecker using real tmux commands.
-type ExecTmuxChecker struct {
-	Runner CommandRunner
-}
-
-func (c *ExecTmuxChecker) ListWindows(ctx context.Context, session string) ([]string, error) {
-	out, err := c.Runner.Run(ctx, "tmux", []string{
-		"list-windows", "-t", session, "-F", "#{window_name}",
-	}, "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("tmux list-windows: %w (output: %s)", err, string(out))
-	}
-	var names []string
-	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
-		if line != "" {
-			names = append(names, line)
-		}
-	}
-	return names, nil
-}
-
 // WorkerConfig configures the queue worker.
 type WorkerConfig struct {
 	DispatchConfig
 	MaxInteractive         int
 	MaxNonInteractive      int
 	PollInterval           time.Duration
-	TmuxChecker            TmuxChecker
 	BgStateReader          BgStateReader
 	StaleGracePeriod       time.Duration
 	HeartbeatFreshness     time.Duration
@@ -151,7 +123,7 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 			lastHeartbeat = time.Now()
 		}
 
-		reapStaleActions(ctx, cfg)
+		reapStaleActions(cfg)
 
 		if err := CheckSchedules(cfg.DB, time.Now()); err != nil {
 			slog.Error("schedule check error", "error", err)
@@ -172,11 +144,11 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 	}
 }
 
-func reapStaleActions(ctx context.Context, cfg WorkerConfig) {
+func reapStaleActions(cfg WorkerConfig) {
 	now := time.Now()
 
-	if cfg.ClaudeSessionLogChecker != nil || cfg.TmuxChecker != nil {
-		reapInteractive(ctx, cfg, now)
+	if cfg.ClaudeSessionLogChecker != nil {
+		reapInteractive(cfg, now)
 	}
 	reapNonInteractive(cfg, now)
 	if cfg.BgStateReader != nil {
@@ -207,10 +179,11 @@ func parseStartedAt(a *db.Action) (started time.Time, ok bool) {
 
 // filterInteractiveCandidates drops cloud-executor and within-grace-period
 // actions so the caller can skip prefetch when nothing is reapable. An action
-// whose StartedAt is unset/unparseable is KEPT (startedAt zero) — unlike
-// filterNonInteractiveCandidates which drops it — because reapInteractive has a
-// tmux-window fallback that can still reap it. Store-free by design so the
-// per-action loop stays clear of db.Store (golden Rule 15).
+// whose StartedAt is unset/unparseable is KEPT (startedAt zero) so the
+// early-stale watchdog can still classify it; the hard-timeout backstop cannot
+// fire without a start time, so such an action lingers until it reports done
+// or its session log goes fresh again. Store-free by design so the per-action
+// loop stays clear of db.Store (golden Rule 15).
 func filterInteractiveCandidates(actions []db.Action, now time.Time, grace time.Duration) []reapCandidate {
 	var candidates []reapCandidate
 	for _, a := range actions {
@@ -245,10 +218,17 @@ func filterNonInteractiveCandidates(actions []db.Action, now time.Time, staleThr
 	return candidates
 }
 
-// reapInteractive scans running interactive actions, classifies them in
-// memory against prefetched task/project maps and a single tmux window
-// snapshot, then bulk-marks the stale ones failed.
-func reapInteractive(ctx context.Context, cfg WorkerConfig, now time.Time) {
+// reapInteractive scans running interactive actions and classifies them in
+// memory against prefetched task/project maps, then bulk-marks the stale ones
+// failed. Liveness is judged purely by the claude session log: a fresh log
+// keeps the action running, and a non-fresh log only fails the action once it
+// has exceeded InteractiveHardTimeout. There is deliberately no tmux-window
+// probe — tmux `automatic-rename` renames a live session's window away from
+// tq-action-<id>, which made an exact-name check misreport live sessions as
+// gone and reap genuinely-working actions. A dead session that never reports
+// done/fail instead lingers until the hard timeout, which loses no work and
+// self-heals, unlike a false failure.
+func reapInteractive(cfg WorkerConfig, now time.Time) {
 	actions, err := cfg.DB.ListRunningInteractive()
 	if err != nil {
 		slog.Error("list running interactive for stale check", "error", err)
@@ -267,19 +247,6 @@ func reapInteractive(ctx context.Context, cfg WorkerConfig, now time.Time) {
 	if err != nil {
 		slog.Error("prefetch work_dir context for interactive reaper", "error", err)
 		return
-	}
-
-	var windowSet map[string]struct{}
-	if cfg.TmuxChecker != nil {
-		windows, err := cfg.TmuxChecker.ListWindows(ctx, cfg.TmuxSession)
-		if err != nil {
-			slog.Warn("tmux list-windows failed", "error", err)
-		} else {
-			windowSet = make(map[string]struct{}, len(windows))
-			for _, w := range windows {
-				windowSet[w] = struct{}{}
-			}
-		}
 	}
 
 	var failures []db.ActionFailureUpdate
@@ -302,20 +269,11 @@ func reapInteractive(ctx context.Context, cfg WorkerConfig, now time.Time) {
 			continue
 		}
 
-		if windowSet == nil {
-			if !startedAt.IsZero() && now.Sub(startedAt) >= cfg.InteractiveHardTimeout {
-				reason := fmt.Sprintf("stale: tmux unavailable and action exceeded hard timeout (%v)", cfg.InteractiveHardTimeout)
-				failures = append(failures, db.ActionFailureUpdate{ID: a.ID, Reason: reason})
-				slog.Warn("reaped stale action via hard timeout", "action_id", a.ID, "hard_timeout", cfg.InteractiveHardTimeout)
-			}
-			continue
+		if !startedAt.IsZero() && now.Sub(startedAt) >= cfg.InteractiveHardTimeout {
+			reason := fmt.Sprintf("stale: session log not fresh and action exceeded hard timeout (%v)", cfg.InteractiveHardTimeout)
+			failures = append(failures, db.ActionFailureUpdate{ID: a.ID, Reason: reason})
+			slog.Warn("reaped stale action via hard timeout", "action_id", a.ID, "hard_timeout", cfg.InteractiveHardTimeout)
 		}
-		if _, exists := windowSet[WindowName(a.ID)]; exists {
-			continue
-		}
-		reason := fmt.Sprintf("stale: session log not fresh and tmux window %q no longer exists", WindowName(a.ID))
-		failures = append(failures, db.ActionFailureUpdate{ID: a.ID, Reason: reason})
-		slog.Warn("reaped stale action", "action_id", a.ID)
 	}
 
 	if len(failures) > 0 {
