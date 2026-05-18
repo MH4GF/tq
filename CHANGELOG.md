@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.21.27](https://github.com/MH4GF/tq/compare/v0.21.26...v0.21.27) - 2026-05-18
+- docs: reconcile tq search description with CLI help by @MH4GF in https://github.com/MH4GF/tq/pull/342
+- docs: reconcile action subcommand table with live CLI help by @MH4GF in https://github.com/MH4GF/tq/pull/343
+- test(db): lock SQL/Go dependency-satisfaction parity by @MH4GF in https://github.com/MH4GF/tq/pull/345
+- fix(dispatch): strip ANSI before parsing claude --bg short id by @MH4GF in https://github.com/MH4GF/tq/pull/347
+- Make tq task update atomic via single UpdateTaskFields transaction by @MH4GF in https://github.com/MH4GF/tq/pull/346
+- feat(config): DB-backed global default dispatch mode by @MH4GF in https://github.com/MH4GF/tq/pull/348
+
 ## [v0.21.26](https://github.com/MH4GF/tq/compare/v0.21.25...v0.21.26) - 2026-05-18
 - db: remove dead ListTasksByStatus (Rule 19 burn-down) by @MH4GF in https://github.com/MH4GF/tq/pull/335
 - fix(db): purge dangling action_dependencies on task/action delete by @MH4GF in https://github.com/MH4GF/tq/pull/341
