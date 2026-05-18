@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -1283,5 +1284,150 @@ func TestTasksModel_ProjectWorkDir(t *testing.T) {
 	view := m.View()
 	if !strings.Contains(view, "~/ghq/github.com/immedioinc/immedio") {
 		t.Errorf("project line should show work_dir, got %q", view)
+	}
+}
+
+func navigateToAction(m TasksModel) TasksModel {
+	for m.cursor < len(m.lines) && m.lines[m.cursor].action == nil {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	}
+	return m
+}
+
+func collectDispatchedMsg(t *testing.T, cmd tea.Cmd) actionDispatchedMsg {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("cmd is nil, expected a dispatch cmd")
+	}
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c == nil {
+				continue
+			}
+			if dm, ok := c().(actionDispatchedMsg); ok {
+				return dm
+			}
+		}
+		t.Fatal("no actionDispatchedMsg in batch")
+	}
+	if dm, ok := msg.(actionDispatchedMsg); ok {
+		return dm
+	}
+	t.Fatalf("unexpected msg %T", msg)
+	return actionDispatchedMsg{}
+}
+
+func TestTasksModel_DispatchPendingAction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
+	aid, _ := d.InsertAction("check", taskID, `{"instruction":"do it"}`, db.ActionStatusPending, nil, "")
+
+	var gotID int64
+	m := NewTasksModel(d, "")
+	m.dispatchFn = func(_ context.Context, id int64) (string, error) {
+		gotID = id
+		return fmt.Sprintf("action #%d dispatched (stub)", id), nil
+	}
+	m = m.SetSize(120, 40)
+	m, _ = m.Update(m.Init()())
+	m = navigateToAction(m)
+
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if want := fmt.Sprintf("dispatching #%d...", aid); m.message != want {
+		t.Errorf("progress message = %q, want %q", m.message, want)
+	}
+
+	dm := collectDispatchedMsg(t, cmd)
+	if gotID != aid {
+		t.Errorf("dispatchFn called with id %d, want %d", gotID, aid)
+	}
+	m, _ = m.Update(dm)
+	if m.messageIsError {
+		t.Error("success dispatch should not set error flag")
+	}
+	if !strings.Contains(m.message, "dispatched (stub)") {
+		t.Errorf("result message = %q, want it to contain stub output", m.message)
+	}
+}
+
+func TestTasksModel_DispatchNonPendingNoop(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
+	d.InsertAction("check", taskID, "{}", db.ActionStatusRunning, nil, "")
+
+	called := false
+	m := NewTasksModel(d, "")
+	m.dispatchFn = func(_ context.Context, _ int64) (string, error) {
+		called = true
+		return "", nil
+	}
+	m = m.SetSize(120, 40)
+	m, _ = m.Update(m.Init()())
+	m = navigateToAction(m)
+
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if cmd != nil {
+		t.Error("d on a running action should be a no-op (nil cmd)")
+	}
+	if called {
+		t.Error("dispatchFn must not be called for non-pending action")
+	}
+	if m.message != "" {
+		t.Errorf("no-op should not set a message, got %q", m.message)
+	}
+}
+
+func TestTasksModel_DispatchNilFuncNoop(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
+	d.InsertAction("check", taskID, "{}", db.ActionStatusPending, nil, "")
+
+	m := NewTasksModel(d, "") // dispatchFn left nil
+	m = m.SetSize(120, 40)
+	m, _ = m.Update(m.Init()())
+	m = navigateToAction(m)
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if cmd != nil {
+		t.Error("d with nil dispatchFn should be a no-op (nil cmd)")
+	}
+}
+
+func TestTasksModel_DispatchError(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	m := NewTasksModel(d, "")
+	m, _ = m.Update(actionDispatchedMsg{id: 7, err: errors.New("not pending")})
+	if !m.messageIsError {
+		t.Error("dispatch error should set error flag")
+	}
+	if !strings.Contains(m.message, "dispatch failed: not pending") {
+		t.Errorf("error message = %q, want it to contain the failure", m.message)
+	}
+}
+
+func TestTasksModel_DispatchHelpKeyOnlyWhenPending(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
+	d.InsertAction("check", taskID, "{}", db.ActionStatusPending, nil, "")
+
+	m := NewTasksModel(d, "")
+	m.dispatchFn = func(_ context.Context, _ int64) (string, error) { return "", nil }
+	m = m.SetSize(120, 40)
+	m, _ = m.Update(m.Init()())
+	m = navigateToAction(m)
+
+	found := false
+	for _, k := range m.HelpKeys() {
+		if k.Key == "d" && k.Desc == "dispatch" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("pending action with dispatchFn should expose 'd dispatch' help key")
 	}
 }

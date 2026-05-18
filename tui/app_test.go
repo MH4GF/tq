@@ -14,7 +14,7 @@ func TestNew(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil, 3)
+	m := New(d, nil, 3, nil)
 	if m.ActiveTab() != tabTasks {
 		t.Errorf("initial tab = %d, want tabTasks(0)", m.ActiveTab())
 	}
@@ -27,7 +27,7 @@ func TestTabSwitch(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil, 3)
+	m := New(d, nil, 3, nil)
 
 	steps := []struct {
 		name    string
@@ -52,7 +52,7 @@ func TestQuit(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil, 3)
+	m := New(d, nil, 3, nil)
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	m = updated.(Model)
 
@@ -71,7 +71,7 @@ func TestWindowResize(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil, 3)
+	m := New(d, nil, 3, nil)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updated.(Model)
 
@@ -84,7 +84,7 @@ func TestInit(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil, 3)
+	m := New(d, nil, 3, nil)
 	cmd := m.Init()
 	if cmd == nil {
 		t.Error("Init should return a batch command")
@@ -95,7 +95,7 @@ func TestViewContainsTabs(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil, 3)
+	m := New(d, nil, 3, nil)
 	view := m.View()
 	if !strings.Contains(view, "Tasks") {
 		t.Errorf("view should contain 'Tasks', got %q", view)
@@ -109,7 +109,7 @@ func TestApp_DateFilterDefault(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil, 3)
+	m := New(d, nil, 3, nil)
 
 	if m.tasks.dateFilter == "" {
 		t.Error("initial tasks dateFilter should be today's date, got empty")
@@ -120,7 +120,7 @@ func TestBackgroundStatusError_TTLClear(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil, 3)
+	m := New(d, nil, 3, nil)
 
 	updated, cmd := m.Update(backgroundStatusMsg{err: errors.New("boom")})
 	m = updated.(Model)
@@ -144,7 +144,7 @@ func TestBackgroundStatusError_StaleTimerIgnored(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil, 3)
+	m := New(d, nil, 3, nil)
 
 	updated, _ := m.Update(backgroundStatusMsg{err: errors.New("first")})
 	m = updated.(Model)
@@ -173,7 +173,7 @@ func TestHelpText(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
-	m := New(d, nil, 3)
+	m := New(d, nil, 3, nil)
 
 	// Tasks tab help (default tab)
 	view := m.View()

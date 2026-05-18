@@ -408,3 +408,5 @@ tq ui [--max-interactive <N>] [--max-noninteractive <N>] [--poll <DURATION>] [--
 - `--session` — Target tmux session name (default: `main`)
 
 The two caps are independent slots. Noninteractive execution runs in goroutines so a long-running `claude -p` does not block the dispatch loop from starting new actions. See [`docs/dispatch.md`](dispatch.md) for the concurrency model.
+
+In the task list, pressing `d` on a selected `pending` action dispatches it immediately — equivalent to `tq action dispatch <ID>` (bypasses the completion-dependency gate). The help bar shows `d: dispatch` only when the cursor is on a pending action.

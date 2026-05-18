@@ -2,10 +2,8 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -106,43 +104,20 @@ is dispatched anyway. The automatic queue worker still respects dependencies.`,
 		if parseErr != nil {
 			return fmt.Errorf("invalid action ID %q: %w", args[0], parseErr)
 		}
-		action, err := database.ClaimPending(ctx, id)
+		cfg := dispatch.DispatchConfig{
+			DB:                      database,
+			NonInteractiveFunc:      getWorkerFactory(),
+			InteractiveFunc:         getInteractiveWorkerFactory(),
+			RemoteFunc:              getRemoteWorkerFactory(),
+			BgFunc:                  getBgWorkerFactory(),
+			ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
+			TmuxSession:             dispatchSession,
+		}
+		msg, err := dispatch.DispatchByID(ctx, cfg, id)
 		if err != nil {
 			return err
 		}
-
-		result, err := dispatch.ExecuteAction(ctx, dispatch.ExecuteParams{
-			DispatchConfig: dispatch.DispatchConfig{
-				DB:                      database,
-				NonInteractiveFunc:      getWorkerFactory(),
-				InteractiveFunc:         getInteractiveWorkerFactory(),
-				RemoteFunc:              getRemoteWorkerFactory(),
-				BgFunc:                  getBgWorkerFactory(),
-				ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
-				TmuxSession:             dispatchSession,
-			},
-		}, action)
-
-		var af *dispatch.ActionFailedError
-		if errors.As(err, &af) {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d failed (%v)\n", af.ActionID, af.Err)
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-
-		switch result.Mode {
-		case dispatch.ModeRemote:
-			url := strings.TrimPrefix(result.Output, dispatch.RemoteSessionPrefix)
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched remotely (view: %s)\n", action.ID, url)
-		case dispatch.ModeInteractive:
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched interactively (%s)\n", action.ID, result.Output)
-		case dispatch.ModeBg:
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d dispatched to claude agent view (short: %s)\n", action.ID, result.Output)
-		default:
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d done\n", action.ID)
-		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), msg)
 		return nil
 	},
 }
