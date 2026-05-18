@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.21.29](https://github.com/MH4GF/tq/compare/v0.21.28...v0.21.29) - 2026-05-18
+- fix(dispatch): stop reaping live interactive actions via tmux window check by @MH4GF in https://github.com/MH4GF/tq/pull/353
+
 ## [v0.21.28](https://github.com/MH4GF/tq/compare/v0.21.27...v0.21.28) - 2026-05-18
 - docs: add best-practices guide with dispatch mode selection by @MH4GF in https://github.com/MH4GF/tq/pull/351
 
