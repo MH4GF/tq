@@ -121,7 +121,7 @@ func (db *DB) UpdateTaskFields(id int64, c TaskFieldChanges) error {
 		return fmt.Errorf("task #%d not found: %w", id, err)
 	}
 
-	var setClauses []string
+	setClauses := []string{"updated_at = datetime('now')"}
 	var args []any
 	if c.ProjectID != nil {
 		setClauses = append(setClauses, "project_id = ?")
@@ -145,12 +145,14 @@ func (db *DB) UpdateTaskFields(id int64, c TaskFieldChanges) error {
 		setClauses = append(setClauses, "status = ?")
 		args = append(args, *c.Status)
 	}
-	if len(setClauses) == 0 {
+	if len(args) == 0 {
 		return nil
 	}
 
 	args = append(args, id)
-	query := "UPDATE tasks SET " + strings.Join(setClauses, ", ") + ", updated_at = datetime('now') WHERE id = ?"
+	// #nosec G202 -- setClauses holds only hardcoded column literals; all
+	// values are bound via ? placeholders in args.
+	query := "UPDATE tasks SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
 	if _, err := tx.Exec(query, args...); err != nil {
 		return err
 	}
