@@ -41,6 +41,21 @@ func TestBgWorker_Execute(t *testing.T) {
 			wantArgs:     []string{"--bg", "Fix the bug", "--effort", "xhigh", "--worktree"},
 		},
 		{
+			// Real reproduction from action #5211: claude --bg wrapped the
+			// short id in ANSI SGR cyan (\x1b[36m ... \x1b[39m), which broke
+			// the parser and falsely marked a healthy session failed.
+			name: "parses short id wrapped in ANSI color",
+			runnerOutput: []byte("backgrounded · \x1b[36meb7a86bf\x1b[39m\n" +
+				"  claude agents             list sessions\n" +
+				"  claude attach eb7a86bf    open in this terminal\n" +
+				"  claude logs eb7a86bf      show recent output\n" +
+				"  claude stop eb7a86bf      stop this session\n"),
+			cfg:         ActionConfig{},
+			instruction: "Fix the bug",
+			wantShort:   "eb7a86bf",
+			wantArgs:    []string{"--bg", "Fix the bug"},
+		},
+		{
 			name:          "agent view disabled marker surfaces verbatim",
 			runnerOutput:  []byte("'--bg' is not enabled. If this is unexpected, retry in a moment.\n"),
 			cfg:           ActionConfig{},

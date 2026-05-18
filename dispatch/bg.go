@@ -34,7 +34,12 @@ func (w *BgWorker) Execute(ctx context.Context, instruction string, cfg ActionCo
 		return "", appendOutput(err, output)
 	}
 
-	s := string(output)
+	// claude --bg may wrap the short id (and other text) in ANSI SGR color
+	// codes. Strip them before matching so a colorized banner like
+	// "backgrounded · \x1b[36m239007b1\x1b[39m" still parses; otherwise a
+	// healthy session is falsely marked failed because the reaper never
+	// learns its short id.
+	s := stripANSI(string(output))
 	if strings.Contains(s, bgDisabledMarker) {
 		return "", fmt.Errorf("claude --bg refused: %s", strings.TrimSpace(s))
 	}
