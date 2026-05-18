@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.21.28](https://github.com/MH4GF/tq/compare/v0.21.27...v0.21.28) - 2026-05-18
+- docs: add best-practices guide with dispatch mode selection by @MH4GF in https://github.com/MH4GF/tq/pull/351
+
 ## [v0.21.27](https://github.com/MH4GF/tq/compare/v0.21.26...v0.21.27) - 2026-05-18
 - docs: reconcile tq search description with CLI help by @MH4GF in https://github.com/MH4GF/tq/pull/342
 - docs: reconcile action subcommand table with live CLI help by @MH4GF in https://github.com/MH4GF/tq/pull/343
