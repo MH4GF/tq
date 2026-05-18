@@ -77,6 +77,8 @@ tqタスク管理者。「タスク作って」「アクション追加して」
 
 `skills/manager/SKILL.md`
 
+When creating actions/schedules, prefer the `experimental_bg` or `interactive` dispatch mode and avoid `noninteractive` (it draws from the capped Agent SDK credit / API billing). See [Best practices — Dispatch mode selection](../../docs/best-practices.md#dispatch-mode-selection) for the full decision rule.
+
 ### `tq:investigate-incidents`
 
 tqキューに溜まった失敗actionとpermission denialを横断的に診断する。「インシデント調べて」「最近の失敗まとめて」「permission blockの傾向見せて」「/tq:investigate-incidents」で発動
