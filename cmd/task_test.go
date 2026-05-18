@@ -184,7 +184,8 @@ func TestTaskList(t *testing.T) {
 				t.Helper()
 				d.InsertTask(1, "open task", "{}", "")
 				id2, _ := d.InsertTask(1, "done task", "{}", "")
-				d.UpdateTask(id2, db.TaskStatusDone, "")
+				done := db.TaskStatusDone
+				d.UpdateTaskFields(id2, db.TaskFieldChanges{Status: &done})
 			},
 			args: []string{"task", "list", "--status", "open"},
 			check: func(t *testing.T, rows []map[string]any) {
@@ -382,6 +383,41 @@ func TestTaskUpdate(t *testing.T) {
 				t.Errorf("metadata = %q, want %q", task.Metadata, tc.wantMetadata)
 			}
 		})
+	}
+}
+
+// A status guard failure (here: an active action blocks closing) must not
+// leave a partial update — the --project change must roll back with it.
+func TestTaskUpdate_StatusGuardLeavesProjectUnchanged(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+
+	id, _ := d.InsertTask(1, "task", "{}", "")
+	if _, err := d.InsertAction("blocker", id, "{}", db.ActionStatusPending, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"task", "update", "1", "--project", "2", "--status", "done", "--note", "x"})
+
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected error: active action should block closing")
+	}
+
+	task, err := d.GetTask(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.ProjectID != 1 {
+		t.Errorf("project_id changed despite failed update: got %d, want 1", task.ProjectID)
+	}
+	if task.Status != db.TaskStatusOpen {
+		t.Errorf("status changed despite failed update: got %q, want open", task.Status)
 	}
 }
 

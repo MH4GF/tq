@@ -24,12 +24,12 @@ db/db.go:159 SCAN actions
 db/db.go:338 SCAN CONSTANT
 db/db.go:338 SCAN task_action_counts
 db/db.go:344 SCAN actions
-# db/event.go:69 — ListRecentEvents: LIMIT-bounded PK-order scan
+# db/event.go:72 — ListRecentEvents: LIMIT-bounded PK-order scan
 # (ORDER BY id DESC LIMIT ?), not a real full scan; no index will help.
-db/event.go:69 SCAN events
+db/event.go:72 SCAN events
 db/project.go:69 SCAN projects
 db/schedule.go:51 SCAN schedules
 db/search.go:152 SCAN actions_fts
 db/search.go:152 SCAN events_fts
 db/search.go:152 SCAN tasks_fts
-db/task.go:384 SCAN tasks
+db/task.go:399 SCAN tasks

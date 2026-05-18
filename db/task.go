@@ -72,46 +72,133 @@ func (db *DB) InsertTask(projectID int64, title, metadata, workDir string) (int6
 	return id, nil
 }
 
+// TaskFieldChanges is the set of task fields to update. A nil pointer (or nil
+// map) means "leave unchanged". All requested changes are applied atomically.
+type TaskFieldChanges struct {
+	ProjectID *int64
+	WorkDir   *string
+	Metadata  map[string]any // shallow-merged into existing metadata
+	Status    *string
+	Reason    string // recorded with the status change
+}
+
+// UpdateTaskFields applies every requested field change in a single
+// transaction: either all changes commit, or none do. Status validation runs
+// fail-fast before any write; events are emitted only after a successful
+// commit (matching the established post-commit emitEvent pattern).
+func (db *DB) UpdateTaskFields(id int64, c TaskFieldChanges) error {
+	if c.Status != nil {
+		status := *c.Status
+		if !ValidTaskStatuses[status] {
+			return fmt.Errorf("invalid task status %q: must be one of open, done, archived", status)
+		}
+		if IsTerminalTaskStatus(status) {
+			schedIDs, err := db.EnabledScheduleIDs(id)
+			if err != nil {
+				return fmt.Errorf("check enabled schedules: %w", err)
+			}
+			if len(schedIDs) > 0 {
+				return fmt.Errorf("task #%d has enabled schedules %v — this task has recurring scheduled actions; it should usually stay open. [agent hint] this task is likely not meant to be closed; confirm with the user whether they really want to close it, and if so, run `tq schedule disable <id>` for each schedule first, then retry", id, schedIDs)
+			}
+			activeCount, err := db.GetTaskActionCount(id, []string{ActionStatusPending, ActionStatusRunning, ActionStatusDispatched})
+			if err != nil {
+				return fmt.Errorf("check active actions: %w", err)
+			}
+			if activeCount > 0 {
+				return fmt.Errorf("task #%d has %d pending/running/dispatched action(s). Cancel or complete them before closing", id, activeCount)
+			}
+		}
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var cur Task
+	if err := tx.QueryRow("SELECT "+taskColumns+" FROM tasks WHERE id = ?", id).Scan(cur.scanFields()...); err != nil {
+		return fmt.Errorf("task #%d not found: %w", id, err)
+	}
+
+	setClauses := []string{"updated_at = datetime('now')"}
+	var args []any
+	if c.ProjectID != nil {
+		setClauses = append(setClauses, "project_id = ?")
+		args = append(args, *c.ProjectID)
+	}
+	if c.WorkDir != nil {
+		setClauses = append(setClauses, "work_dir = ?")
+		args = append(args, *c.WorkDir)
+	}
+	var metaKeys []string
+	if c.Metadata != nil {
+		data, keys, err := mergeMetadataJSON(cur.Metadata, c.Metadata)
+		if err != nil {
+			return err
+		}
+		setClauses = append(setClauses, "metadata = ?")
+		args = append(args, data)
+		metaKeys = keys
+	}
+	if c.Status != nil {
+		setClauses = append(setClauses, "status = ?")
+		args = append(args, *c.Status)
+	}
+	if len(args) == 0 {
+		return nil
+	}
+
+	args = append(args, id)
+	// #nosec G202 -- setClauses holds only hardcoded column literals; all
+	// values are bound via ? placeholders in args.
+	query := "UPDATE tasks SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
+	if _, err := tx.Exec(query, args...); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	if c.ProjectID != nil {
+		db.emitEvent("task", id, EventTaskProjectChanged, map[string]any{"from": cur.ProjectID, "to": *c.ProjectID})
+	}
+	if c.WorkDir != nil {
+		db.emitEvent("task", id, EventTaskWorkDirChanged, map[string]any{"from": cur.WorkDir, "to": *c.WorkDir})
+	}
+	if c.Metadata != nil {
+		db.emitEvent("task", id, EventTaskMetadataMerged, map[string]any{"keys_updated": metaKeys})
+	}
+	if c.Status != nil {
+		db.emitEvent("task", id, EventTaskStatusChanged, map[string]any{"from": cur.Status, "to": *c.Status, "reason": c.Reason})
+	}
+	return nil
+}
+
+// mergeMetadataJSON shallow-merges updates into the existing JSON metadata
+// blob and returns the marshalled result plus the updated key names.
+func mergeMetadataJSON(existing string, updates map[string]any) (string, []string, error) {
+	merged := make(map[string]any)
+	if existing != "" && existing != "{}" {
+		if err := json.Unmarshal([]byte(existing), &merged); err != nil {
+			return "", nil, fmt.Errorf("parse existing metadata: %w", err)
+		}
+	}
+	maps.Copy(merged, updates)
+	data, err := json.Marshal(merged)
+	if err != nil {
+		return "", nil, fmt.Errorf("marshal metadata: %w", err)
+	}
+	keys := make([]string, 0, len(updates))
+	for k := range updates {
+		keys = append(keys, k)
+	}
+	return string(data), keys, nil
+}
+
 func (db *DB) UpdateTask(id int64, status, reason string) error {
-	if !ValidTaskStatuses[status] {
-		return fmt.Errorf("invalid task status %q: must be one of open, done, archived", status)
-	}
-
-	var from string
-	if err := db.QueryRow("SELECT status FROM tasks WHERE id = ?", id).Scan(&from); err != nil {
-		return fmt.Errorf("get current status: %w", err)
-	}
-
-	if status == TaskStatusDone || status == TaskStatusArchived {
-		schedIDs, err := db.EnabledScheduleIDs(id)
-		if err != nil {
-			return fmt.Errorf("check enabled schedules: %w", err)
-		}
-		if len(schedIDs) > 0 {
-			return fmt.Errorf("task #%d has enabled schedules %v — this task has recurring scheduled actions; it should usually stay open. [agent hint] this task is likely not meant to be closed; confirm with the user whether they really want to close it, and if so, run `tq schedule disable <id>` for each schedule first, then retry", id, schedIDs)
-		}
-	}
-
-	if status == TaskStatusDone || status == TaskStatusArchived {
-		activeCount, err := db.GetTaskActionCount(id, []string{ActionStatusPending, ActionStatusRunning, ActionStatusDispatched})
-		if err != nil {
-			return fmt.Errorf("check active actions: %w", err)
-		}
-		if activeCount > 0 {
-			return fmt.Errorf("task #%d has %d pending/running/dispatched action(s). Cancel or complete them before closing", id, activeCount)
-		}
-	}
-
-	_, err := db.Exec(
-		"UPDATE tasks SET status = ?, updated_at = datetime('now') WHERE id = ?",
-		status, id,
-	)
-	if err == nil {
-		db.emitEvent("task", id, EventTaskStatusChanged, map[string]any{
-			"from": from, "to": status, "reason": reason,
-		})
-	}
-	return err
+	return db.UpdateTaskFields(id, TaskFieldChanges{Status: &status, Reason: reason})
 }
 
 type TaskStatusHistoryEntry struct {
@@ -251,78 +338,6 @@ func decodeTaskNote(e Event) (TaskNoteEntry, bool) {
 		Metadata: p.Metadata,
 		At:       FormatLocal(e.CreatedAt),
 	}, true
-}
-
-func (db *DB) UpdateTaskProject(id, projectID int64) error {
-	var from int64
-	if err := db.QueryRow("SELECT project_id FROM tasks WHERE id = ?", id).Scan(&from); err != nil {
-		return fmt.Errorf("get current project_id: %w", err)
-	}
-
-	_, err := db.Exec(
-		"UPDATE tasks SET project_id = ?, updated_at = datetime('now') WHERE id = ?",
-		projectID, id,
-	)
-	if err == nil {
-		db.emitEvent("task", id, "task.project_changed", map[string]any{
-			"from": from, "to": projectID,
-		})
-	}
-	return err
-}
-
-func (db *DB) UpdateTaskWorkDir(id int64, workDir string) error {
-	var from string
-	if err := db.QueryRow("SELECT work_dir FROM tasks WHERE id = ?", id).Scan(&from); err != nil {
-		return fmt.Errorf("get current work_dir: %w", err)
-	}
-
-	_, err := db.Exec(
-		"UPDATE tasks SET work_dir = ?, updated_at = datetime('now') WHERE id = ?",
-		workDir, id,
-	)
-	if err == nil {
-		db.emitEvent("task", id, "task.workdir_changed", map[string]any{
-			"from": from, "to": workDir,
-		})
-	}
-	return err
-}
-
-func (db *DB) MergeTaskMetadata(id int64, updates map[string]any) error {
-	var existing string
-	err := db.QueryRow("SELECT metadata FROM tasks WHERE id = ?", id).Scan(&existing)
-	if err != nil {
-		return err
-	}
-
-	merged := make(map[string]any)
-	if existing != "" && existing != "{}" {
-		if err := json.Unmarshal([]byte(existing), &merged); err != nil {
-			return fmt.Errorf("parse existing metadata: %w", err)
-		}
-	}
-	maps.Copy(merged, updates)
-
-	data, err := json.Marshal(merged)
-	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
-	}
-
-	_, err = db.Exec(
-		"UPDATE tasks SET metadata = ?, updated_at = datetime('now') WHERE id = ?",
-		string(data), id,
-	)
-	if err == nil {
-		keys := make([]string, 0, len(updates))
-		for k := range updates {
-			keys = append(keys, k)
-		}
-		db.emitEvent("task", id, "task.metadata_merged", map[string]any{
-			"keys_updated": keys,
-		})
-	}
-	return err
 }
 
 func (db *DB) GetTask(id int64) (*Task, error) {

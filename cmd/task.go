@@ -156,6 +156,7 @@ At least one of --status, --project, --work-dir, or --meta is required.
 			}
 		}
 
+		var changes db.TaskFieldChanges
 		var updates []string
 
 		if taskUpdateProjectID != 0 {
@@ -163,31 +164,28 @@ At least one of --status, --project, --work-dir, or --meta is required.
 			if err != nil {
 				return fmt.Errorf("project %d not found (see: tq project list): %w", taskUpdateProjectID, err)
 			}
-			if err := database.UpdateTaskProject(taskUpdateID, project.ID); err != nil {
-				return fmt.Errorf("update task project: %w", err)
-			}
+			changes.ProjectID = &project.ID
 			updates = append(updates, fmt.Sprintf("project: %s", project.Name))
 		}
 
 		if taskUpdateWorkDir != "" {
-			if err := database.UpdateTaskWorkDir(taskUpdateID, taskUpdateWorkDir); err != nil {
-				return fmt.Errorf("update task work_dir: %w", err)
-			}
+			changes.WorkDir = &taskUpdateWorkDir
 			updates = append(updates, fmt.Sprintf("work_dir: %s", taskUpdateWorkDir))
 		}
 
 		if metaMap != nil {
-			if err := database.MergeTaskMetadata(taskUpdateID, metaMap); err != nil {
-				return fmt.Errorf("update task metadata: %w", err)
-			}
+			changes.Metadata = metaMap
 			updates = append(updates, "metadata: updated")
 		}
 
 		if taskUpdateStatus != "" {
-			if err := database.UpdateTask(taskUpdateID, taskUpdateStatus, taskUpdateNote); err != nil {
-				return fmt.Errorf("update task: %w", err)
-			}
+			changes.Status = &taskUpdateStatus
+			changes.Reason = taskUpdateNote
 			updates = append(updates, fmt.Sprintf("status: %s", taskUpdateStatus))
+		}
+
+		if err := database.UpdateTaskFields(taskUpdateID, changes); err != nil {
+			return fmt.Errorf("update task: %w", err)
 		}
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "task #%d updated (%s)\n", taskUpdateID, joinUpdates(updates))

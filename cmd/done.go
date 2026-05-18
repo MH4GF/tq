@@ -74,7 +74,7 @@ amend an already-"done" action's result, use 'tq action update ID --result'.`,
 		} else if pwd, err := os.Getwd(); err != nil {
 			slog.Warn("failed to get working directory", "error", err)
 		} else if task.WorkDir != pwd {
-			if err := database.UpdateTaskWorkDir(task.ID, pwd); err != nil {
+			if err := database.UpdateTaskFields(task.ID, db.TaskFieldChanges{WorkDir: &pwd}); err != nil {
 				slog.Warn("failed to update task work_dir", "task_id", task.ID, "error", err)
 			} else {
 				slog.Info("updated task work_dir", "task_id", task.ID, "work_dir", pwd)

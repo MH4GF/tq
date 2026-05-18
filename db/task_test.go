@@ -68,7 +68,8 @@ func TestUpdateTaskProject(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := d.UpdateTaskProject(id, 2); err != nil {
+	pid := int64(2)
+	if err := d.UpdateTaskFields(id, db.TaskFieldChanges{ProjectID: &pid}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -287,7 +288,8 @@ func TestUpdateTaskWorkDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := d.UpdateTaskWorkDir(id, "/new/path"); err != nil {
+	wd := "/new/path"
+	if err := d.UpdateTaskFields(id, db.TaskFieldChanges{WorkDir: &wd}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -303,7 +305,7 @@ func TestUpdateTaskWorkDir(t *testing.T) {
 	}
 }
 
-func TestMergeTaskMetadata(t *testing.T) {
+func TestUpdateTaskFields_MetadataMerge(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -324,7 +326,7 @@ func TestMergeTaskMetadata(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := d.MergeTaskMetadata(id, tc.merge); err != nil {
+			if err := d.UpdateTaskFields(id, db.TaskFieldChanges{Metadata: tc.merge}); err != nil {
 				t.Fatal(err)
 			}
 			task, err := d.GetTask(id)
@@ -335,6 +337,83 @@ func TestMergeTaskMetadata(t *testing.T) {
 				t.Errorf("expected metadata %s, got %s", tc.wantMeta, task.Metadata)
 			}
 		})
+	}
+}
+
+func TestUpdateTaskFields_AtomicRollback(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	id, err := d.InsertTask(1, "task", `{"keep":"me"}`, "/orig/dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// project_id REFERENCES projects(id) with foreign_keys=ON, so a
+	// non-existent project makes the project write fail mid-transaction.
+	missing := int64(99999)
+	wd := "/new/dir"
+	err = d.UpdateTaskFields(id, db.TaskFieldChanges{
+		WorkDir:   &wd,
+		Metadata:  map[string]any{"added": "x"},
+		ProjectID: &missing,
+	})
+	if err == nil {
+		t.Fatal("expected error from FK violation, got nil")
+	}
+
+	task, err := d.GetTask(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.ProjectID != 1 {
+		t.Errorf("project_id changed despite rollback: got %d, want 1", task.ProjectID)
+	}
+	if task.WorkDir != "/orig/dir" {
+		t.Errorf("work_dir changed despite rollback: got %q, want %q", task.WorkDir, "/orig/dir")
+	}
+	if task.Metadata != `{"keep":"me"}` {
+		t.Errorf("metadata changed despite rollback: got %s", task.Metadata)
+	}
+}
+
+func TestUpdateTaskFields_AllFieldsAtomicSuccess(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	id, err := d.InsertTask(1, "task", `{"keep":"me"}`, "/orig/dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pid := int64(2)
+	wd := "/new/dir"
+	status := db.TaskStatusDone
+	if err := d.UpdateTaskFields(id, db.TaskFieldChanges{
+		ProjectID: &pid,
+		WorkDir:   &wd,
+		Metadata:  map[string]any{"added": "x"},
+		Status:    &status,
+		Reason:    "all at once",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	task, err := d.GetTask(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.ProjectID != 2 {
+		t.Errorf("project_id: got %d, want 2", task.ProjectID)
+	}
+	if task.WorkDir != "/new/dir" {
+		t.Errorf("work_dir: got %q, want %q", task.WorkDir, "/new/dir")
+	}
+	if task.Metadata != `{"added":"x","keep":"me"}` {
+		t.Errorf("metadata: got %s", task.Metadata)
+	}
+	if task.Status != db.TaskStatusDone {
+		t.Errorf("status: got %s, want done", task.Status)
 	}
 }
 
