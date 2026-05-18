@@ -369,6 +369,22 @@ Substring search is backed by an FTS5 trigram index, so keywords shorter than 3 
 - `--project` — Filter by project ID (default: 0 = all projects)
 - `--jq` — Filter JSON output (fields: `entity_type`, `entity_id`, `task_id`, `project_id`, `field`, `snippet`, `status`, `created_at`)
 
+## config
+
+Global key-value settings stored in the DB, so configuration travels with libsql/Turso endpoints rather than a local file.
+
+```
+tq config set <KEY> <VALUE>
+tq config get <KEY>
+tq config list [--jq <EXPR>]
+```
+
+| Key | Description |
+|-----|-------------|
+| `default_mode` | Default execution mode (`interactive`, `noninteractive`, `remote`, `experimental_bg`) stamped into a new action's metadata when `tq action create --meta` does not specify one. An explicit `--meta '{"mode":...}'` always overrides it. When unset, actions fall back to `interactive` at dispatch time. |
+
+Only recognized keys are accepted; unknown keys and invalid values are rejected. `tq config get` prints an empty line when the key is unset. `tq config list` outputs JSON (fields: `key`, `value`).
+
 ## completion
 
 | Command | Description |

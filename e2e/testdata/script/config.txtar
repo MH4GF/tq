@@ -1,0 +1,35 @@
+# tq config: global default_mode is stored in the DB and stamped into new
+# actions at creation time; an explicit --meta mode always overrides it.
+
+# unset key reads as empty
+exec tq config get default_mode
+! stdout .
+
+# unknown key is rejected (typo guard)
+! exec tq config set bogus_key x
+stderr 'unknown config key'
+
+# invalid value for a known key is rejected
+! exec tq config set default_mode plan
+stderr 'invalid value'
+
+# set + get round trip
+exec tq config set default_mode experimental_bg
+stdout 'config default_mode = experimental_bg'
+exec tq config get default_mode
+stdout 'experimental_bg'
+exec tq config list
+stdout '"key": "default_mode"'
+stdout '"value": "experimental_bg"'
+
+# action created without an explicit mode gets the configured default stamped
+exec tq project create demo /tmp/demo
+exec tq task create 'work' --project 1
+exec tq action create 'do something' --task 1 --title 'a1'
+exec tq action get 1 --jq '.metadata | fromjson.mode'
+stdout 'experimental_bg'
+
+# explicit --meta mode overrides the configured default
+exec tq action create 'do other' --task 1 --title 'a2' --meta '{"mode":"interactive"}'
+exec tq action get 2 --jq '.metadata | fromjson.mode'
+stdout 'interactive'

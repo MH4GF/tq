@@ -133,6 +133,34 @@ var validModes = map[string]bool{
 	ModeBg:             true,
 }
 
+// IsValidMode reports whether s is one of tq's dispatch modes.
+func IsValidMode(s string) bool { return validModes[s] }
+
+// ResolveDefaultMode decides the mode to stamp into a new action's metadata
+// when --meta did not specify one. It returns "" when nothing should be
+// stamped (an explicit mode is already present, or no global default is
+// configured) — the caller leaves metadata untouched and dispatch falls back
+// to ModeInteractive. A non-empty globalDefault that is not a valid mode is
+// an error so a misconfigured setting fails action creation loudly instead of
+// silently falling back.
+func ResolveDefaultMode(actionMeta map[string]any, globalDefault string) (string, error) {
+	if s, ok := actionMeta[MetaKeyMode].(string); ok && s != "" {
+		return "", nil
+	}
+	if globalDefault == "" {
+		return "", nil
+	}
+	if !IsValidMode(globalDefault) {
+		return "", fmt.Errorf(
+			`configured default mode %q is invalid: must be one of %s, %s, %s, %s `+
+				`(fix with 'tq config set %s <mode>')`,
+			globalDefault, ModeInteractive, ModeNonInteractive, ModeRemote, ModeBg,
+			"default_mode",
+		)
+	}
+	return globalDefault, nil
+}
+
 // ValidateActionMode rejects Claude permission-mode values (auto, plan,
 // acceptEdits, ...) passed by mistake as tq's mode, which previously caused
 // silent fallback to noninteractive. Missing key and empty string are
