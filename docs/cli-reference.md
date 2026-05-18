@@ -132,12 +132,12 @@ Notes with `kind=triage_keep` are surfaced on `tq task list` as `latest_triage_n
 | `tq action list` | List actions, optionally filtered by status and/or task ID (JSON) |
 | `tq action get <ID>` | Get an action by ID (JSON) |
 | `tq action update <ID>` | Update an action |
-| `tq action done <ID> [RESULT]` | Mark action as done |
-| `tq action fail <ID> [REASON]` | Mark action as failed when the goal could not be achieved |
-| `tq action cancel <ID> [REASON]` | Cancel a pending, running, dispatched, or failed action |
-| `tq action attach <ID>` | Attach to a running action's tmux window (or `claude attach <short>` for experimental_bg mode) |
+| `tq action done <ID> [RESULT]` | Mark an action as done, optionally recording a result summary |
+| `tq action fail <ID> [REASON]` | Mark an action as failed when the goal could not be achieved despite genuine effort |
+| `tq action cancel <ID> [REASON]` | Cancel a pending, running, dispatched, or failed action (cannot cancel actions already done or cancelled) |
+| `tq action attach <ID>` | Attach to a running action (tmux window or claude agent view) |
 | `tq action reset <ID>` | Reset a failed or cancelled action to pending |
-| `tq action dispatch <ID>` | Dispatch an action immediately (skip queue) |
+| `tq action dispatch <ID>` | Dispatch a pending action immediately by its ID (manual override, skips the queue) |
 | `tq action resume <ID>` | Resume the claude session of a closed action |
 | `tq action prompt <ID>` | Render the wrapped claude prompt for an action (used by interactive dispatch) |
 
