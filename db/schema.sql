@@ -48,6 +48,23 @@ CREATE TABLE IF NOT EXISTS action_dependencies (
 CREATE INDEX IF NOT EXISTS idx_action_deps_action ON action_dependencies(action_id);
 CREATE INDEX IF NOT EXISTS idx_action_deps_dep ON action_dependencies(dep_type, dep_id);
 
+-- action_dependencies.dep_id is polymorphic (dep_type action|task) with no FK,
+-- so deleting the referenced task/action leaves dangling edges that the
+-- dependency gate can never satisfy. Purge them on delete (all delete paths).
+CREATE TRIGGER IF NOT EXISTS trg_action_deps_purge_task
+AFTER DELETE ON tasks
+BEGIN
+  DELETE FROM action_dependencies
+  WHERE dep_type = 'task' AND dep_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_action_deps_purge_action
+AFTER DELETE ON actions
+BEGIN
+  DELETE FROM action_dependencies
+  WHERE dep_type = 'action' AND dep_id = OLD.id;
+END;
+
 CREATE TABLE IF NOT EXISTS task_action_counts (
   task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   status  TEXT NOT NULL,

@@ -1,6 +1,7 @@
 package db_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -332,5 +333,80 @@ func TestSetWorkDir_NotFound(t *testing.T) {
 	err := d.SetWorkDir(999, "/tmp/nope")
 	if err == nil {
 		t.Error("expected error for non-existent project")
+	}
+}
+
+// TestDeleteProject_Cascade_RemovesCrossProjectDependencyEdges verifies that
+// cascade-deleting a project also purges action_dependencies edges (owned by a
+// surviving project's action) whose polymorphic dep_id pointed into the
+// deleted project. Without the schema triggers those edges dangle forever and
+// the dependent action is stranded out of NextPending with no terminal state.
+func TestDeleteProject_Cascade_RemovesCrossProjectDependencyEdges(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	ctx := context.Background()
+
+	// Project A: a task and a non-done blocker action (status=running so it
+	// blocks the dependent but is never itself picked by NextPending).
+	projectA, err := d.InsertProject("A", "/tmp/a", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskA, err := d.InsertTask(projectA, "task A", "{}", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	blockerAct, err := d.InsertAction("blocker", taskA, "{}", "running", nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Project B: a pending action depending on both an action and a task that
+	// live inside project A (covers both polymorphic dep_type branches).
+	projectB, err := d.InsertProject("B", "/tmp/b", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskB, err := d.InsertTask(projectB, "task B", "{}", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dependentAct, err := d.InsertAction("dependent", taskB, "{}", "pending", nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AddActionDependencies(dependentAct, []db.ActionDep{
+		{Type: db.DepTypeAction, ID: blockerAct},
+		{Type: db.DepTypeTask, ID: taskA},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sanity: dependent is blocked, so nothing is dispatchable.
+	if a, err := d.NextPending(ctx); err != nil {
+		t.Fatal(err)
+	} else if a != nil {
+		t.Fatalf("expected no dispatchable action while blocked, got #%d", a.ID)
+	}
+
+	if err := d.DeleteProject(projectA, true); err != nil {
+		t.Fatalf("cascade delete project A: %v", err)
+	}
+
+	// The dangling edges must be gone, not stranded.
+	deps, err := d.ListActionDependencies(dependentAct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deps) != 0 {
+		t.Errorf("expected dependency edges purged, got %d: %+v", len(deps), deps)
+	}
+
+	// And the dependent action is now dispatchable again.
+	a, err := d.NextPending(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == nil || a.ID != dependentAct {
+		t.Errorf("expected NextPending to return dependent action #%d, got %+v", dependentAct, a)
 	}
 }

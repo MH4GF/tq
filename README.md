@@ -131,8 +131,10 @@ project → task → action
   * completion dependencies (`--blocked-by-action`/`--blocked-by-task`) hold a
     pending action until every blocker reaches a successful terminal state
     (action=done, task=done/archived); a failed/cancelled blocker holds it
-    forever (rescue via `/tq-dep-triage`). `tq action dispatch` is the manual
-    bypass; the queue worker respects the gate (see `docs/cli-reference.md`)
+    forever (rescue via `/tq-dep-triage`, or delete the blocker — including
+    `tq project delete --cascade` — which purges the edge). `tq action
+    dispatch` is the manual bypass; the queue worker respects the gate (see
+    `docs/cli-reference.md`)
 ```
 
 ### Worker Types
