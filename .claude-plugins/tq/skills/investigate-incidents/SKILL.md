@@ -36,7 +36,7 @@ Run the CLI to see what's available, then read what matters:
 
 ```bash
 tq action list --status failed --jq '.[] | {id, task_id, created_at, title, result_head: (.result // "")[0:200]}'
-tq action list --jq '.[] | select(.metadata | contains("permission_denials")) | {id, task_id, created_at, title, denials: (.metadata | fromjson.permission_denials)}'
+tq action list --jq '.[] | select((.metadata | fromjson? | .permission_denials) != null) | {id, task_id, created_at, title, denials: (.metadata | fromjson? | .permission_denials)}'
 ```
 
 Default time window: roughly the last 24 hours when run on a schedule, or whatever window the caller asks for. Don't hold yourself to a strict window — if a cluster clearly extends further back, follow it.
