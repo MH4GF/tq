@@ -62,7 +62,7 @@ Inventory and organize open tasks - review status, propose cleanup, execute.
 
 ### `tq search <keyword>`
 
-Cross-cutting full-text search over task titles, task metadata, task status change reasons, action titles, action results, and action metadata. Output is JSON. Each result includes `project_id`. Filter with `--jq`, or scope to a single project with `--project <ID>`.
+Full-text search across task titles, task metadata, task status change reasons, action titles, action results, and action metadata. Output is JSON. Each result includes `project_id`. Filter with `--jq`, or scope to a single project with `--project <ID>`.
 
 ```
 tq search "login bug"
