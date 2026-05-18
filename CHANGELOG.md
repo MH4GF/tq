@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.21.26](https://github.com/MH4GF/tq/compare/v0.21.25...v0.21.26) - 2026-05-18
+- db: remove dead ListTasksByStatus (Rule 19 burn-down) by @MH4GF in https://github.com/MH4GF/tq/pull/335
+- fix(db): purge dangling action_dependencies on task/action delete by @MH4GF in https://github.com/MH4GF/tq/pull/341
+
 ## [v0.21.25](https://github.com/MH4GF/tq/compare/v0.21.24...v0.21.25) - 2026-05-16
 - refactor: remove dead db.Store.UpdateScheduleRun by @MH4GF in https://github.com/MH4GF/tq/pull/336
 - noninteractive: attach raw output on JSON parse failure by @MH4GF in https://github.com/MH4GF/tq/pull/339
