@@ -1009,3 +1009,115 @@ func TestExecuteAction_AsyncPanicMarksFailed(t *testing.T) {
 		t.Errorf("result = %q, want it to contain panic message %q", a.Result.String, "boom in worker")
 	}
 }
+
+type markDoneErrStore struct {
+	db.Store
+	failTimes    int
+	markDoneHits int
+}
+
+func (s *markDoneErrStore) MarkDone(id int64, result string) error {
+	s.markDoneHits++
+	if s.markDoneHits <= s.failTimes {
+		return errors.New("simulated mark done write failure")
+	}
+	return s.Store.MarkDone(id, result)
+}
+
+func TestExecuteAction_AsyncMarkDoneRetrySucceeds(t *testing.T) {
+	origDelay := markDoneRetryDelay
+	markDoneRetryDelay = 0
+	t.Cleanup(func() { markDoneRetryDelay = origDelay })
+
+	base := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, base)
+	store := &markDoneErrStore{Store: base, failTimes: 1}
+
+	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
+	taskID, _ := base.InsertTask(1, "Test task", `{}`, "")
+	base.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil, "")
+	action, _ := base.NextPending(context.Background())
+
+	worker := &countingWorker{result: "ok"}
+	workerFunc := func() Worker { return worker }
+
+	result, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 store,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+		Async: func(fn func()) { fn() },
+	}, action)
+	if err != nil {
+		t.Fatalf("ExecuteAction returned error: %v", err)
+	}
+	if result.Mode != ModeNonInteractive {
+		t.Errorf("mode = %q, want %q", result.Mode, ModeNonInteractive)
+	}
+	if store.markDoneHits != 2 {
+		t.Errorf("markDoneHits = %d, want 2 (one failure + one retry)", store.markDoneHits)
+	}
+	a, _ := base.GetAction(action.ID)
+	if a.Status != db.ActionStatusDone {
+		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusDone)
+	}
+	if a.Result.String != "ok" {
+		t.Errorf("result = %q, want %q", a.Result.String, "ok")
+	}
+}
+
+func TestExecuteAction_AsyncMarkDonePersistentFailureMarksFailed(t *testing.T) {
+	origDelay := markDoneRetryDelay
+	markDoneRetryDelay = 0
+	t.Cleanup(func() { markDoneRetryDelay = origDelay })
+
+	base := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, base)
+	store := &markDoneErrStore{Store: base, failTimes: 1_000_000}
+
+	meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": "noninteractive"})
+	taskID, _ := base.InsertTask(1, "Test task", `{}`, "")
+	base.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil, "")
+	action, _ := base.NextPending(context.Background())
+
+	worker := &countingWorker{result: "worker-succeeded-payload"}
+	workerFunc := func() Worker { return worker }
+
+	_, err := ExecuteAction(context.Background(), ExecuteParams{
+		DispatchConfig: DispatchConfig{
+			DB:                 store,
+			NonInteractiveFunc: workerFunc,
+			InteractiveFunc:    workerFunc,
+			RemoteFunc:         workerFunc,
+		},
+		Async: func(fn func()) { fn() },
+	}, action)
+	if err != nil {
+		t.Fatalf("ExecuteAction returned error: %v", err)
+	}
+	if store.markDoneHits != 2 {
+		t.Errorf("markDoneHits = %d, want 2 (one initial + one retry)", store.markDoneHits)
+	}
+
+	a, _ := base.GetAction(action.ID)
+	if a.Status != db.ActionStatusFailed {
+		t.Fatalf("status = %q, want %q", a.Status, db.ActionStatusFailed)
+	}
+	if !strings.Contains(a.Result.String, "mark done failed after successful run") {
+		t.Errorf("result = %q, want it to contain %q", a.Result.String, "mark done failed after successful run")
+	}
+	if strings.Contains(a.Result.String, "stale: noninteractive action exceeded timeout") {
+		t.Errorf("result = %q must NOT be the stale-reaper reason", a.Result.String)
+	}
+
+	var meta2 map[string]any
+	if a.Metadata != "" {
+		_ = json.Unmarshal([]byte(a.Metadata), &meta2)
+	}
+	got, ok := meta2[MetaKeySuccessfulResult].(string)
+	if !ok || got != "worker-succeeded-payload" {
+		t.Errorf("successful_result metadata = %v, want %q", meta2[MetaKeySuccessfulResult], "worker-succeeded-payload")
+	}
+}

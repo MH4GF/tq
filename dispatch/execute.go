@@ -9,9 +9,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/MH4GF/tq/db"
 )
+
+var markDoneRetryDelay = 200 * time.Millisecond
 
 // dirExists reports whether the given path exists on disk.
 var dirExists = func(path string) bool {
@@ -44,7 +47,8 @@ const (
 	// MetaKeyDaemonShort holds the 8-char short id returned by `claude --bg`
 	// for ModeBg actions. Used by the queue worker to poll
 	// ~/.claude/jobs/<short>/state.json for lifecycle transitions.
-	MetaKeyDaemonShort = "daemon_short"
+	MetaKeyDaemonShort      = "daemon_short"
+	MetaKeySuccessfulResult = "successful_result"
 )
 
 // Executor values for metadata.executor. Distinguishes where the action's
@@ -378,7 +382,9 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 				slog.Error("dispatch goroutine panic recovered", "action_id", actionCopy.ID, "error", r)
 			}
 		}()
-		_, _ = runNonInteractive(ctx, params, &actionCopy, worker, instruction, cfg, workDir)
+		if _, err := runNonInteractive(ctx, params, &actionCopy, worker, instruction, cfg, workDir); err != nil && !errors.Is(err, context.Canceled) {
+			slog.Error("noninteractive async execution returned error", "action_id", actionCopy.ID, "error", err)
+		}
 	})
 	return &ExecuteResult{Mode: ModeNonInteractive}, nil
 }
@@ -413,8 +419,25 @@ func runNonInteractive(ctx context.Context, params ExecuteParams, action *db.Act
 	}
 
 	if err := params.DB.MarkDone(action.ID, result); err != nil {
-		slog.Error("mark done", "action_id", action.ID, "error", err)
-		return nil, fmt.Errorf("mark done: %w", err)
+		slog.Warn("mark done failed, retrying", "action_id", action.ID, "error", err)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(markDoneRetryDelay):
+		}
+		if retryErr := params.DB.MarkDone(action.ID, result); retryErr != nil {
+			slog.Error("mark done after retry", "action_id", action.ID, "error", retryErr)
+			reason := fmt.Sprintf("mark done failed after successful run: %v", retryErr)
+			if mfErr := params.DB.MarkFailed(action.ID, reason); mfErr != nil {
+				slog.Error("mark action failed after mark done retries", "action_id", action.ID, "error", mfErr)
+			}
+			if mmErr := params.DB.MergeActionMetadata(action.ID, map[string]any{
+				MetaKeySuccessfulResult: result,
+			}); mmErr != nil {
+				slog.Error("merge successful_result metadata", "action_id", action.ID, "error", mmErr)
+			}
+			return nil, fmt.Errorf("mark done: %w", retryErr)
+		}
 	}
 
 	return &ExecuteResult{Mode: ModeNonInteractive, Output: result}, nil
