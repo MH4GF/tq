@@ -354,6 +354,7 @@ func TestRunWorker_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
 type mockClaudeSessionLogChecker struct {
 	mu        sync.Mutex
 	active    bool
+	logAge    time.Duration
 	logExists bool
 	err       error
 	calls     int
@@ -363,7 +364,13 @@ func (m *mockClaudeSessionLogChecker) IsClaudeSessionActive(workDir string, fres
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.calls++
-	return m.active, m.err
+	if m.err != nil {
+		return false, m.err
+	}
+	if m.logAge > 0 {
+		return m.logAge < freshnessThreshold, nil
+	}
+	return m.active, nil
 }
 
 func (m *mockClaudeSessionLogChecker) SessionLogExists(sessionID string) (bool, error) {
@@ -436,6 +443,14 @@ func TestReapStaleActions_Interactive(t *testing.T) {
 			log:                  &mockClaudeSessionLogChecker{active: false},
 			earlyDispatchTimeout: 5 * time.Minute,
 			wantStatus:           db.ActionStatusRunning,
+		},
+		{
+			name:                 "early-stale uses HeartbeatFreshness, reaps log stale by heartbeat but young vs sinceStart",
+			startedOffset:        -10 * time.Minute,
+			log:                  &mockClaudeSessionLogChecker{logAge: 130 * time.Second},
+			earlyDispatchTimeout: 5 * time.Minute,
+			wantStatus:           db.ActionStatusFailed,
+			wantResultContains:   "early-stale",
 		},
 		{
 			// A live interactive worktree session (claude_session_id

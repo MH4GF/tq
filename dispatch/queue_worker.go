@@ -545,7 +545,7 @@ func classifyEarlyStale(cfg WorkerConfig, a *db.Action, workDir string, startedA
 		}
 	}
 
-	active, err := cfg.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, sinceStart)
+	active, err := cfg.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, cfg.HeartbeatFreshness)
 	if err != nil {
 		slog.Warn("early-stale watchdog: claude session log check failed", "action_id", a.ID, "error", err)
 		return "", false
