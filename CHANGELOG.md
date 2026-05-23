@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.21.30](https://github.com/MH4GF/tq/compare/v0.21.29...v0.21.30) - 2026-05-23
+- feat(gh-ops): add Edit plan field to respond-review draft by @MH4GF in https://github.com/MH4GF/tq/pull/355
+- feat(tui): show full action context in detail view by @MH4GF in https://github.com/MH4GF/tq/pull/357
+- docs(cli-reference): document r/f TUI shortcuts alongside d by @MH4GF in https://github.com/MH4GF/tq/pull/358
+- fix(dispatch): retry MarkDone and emit explicit FAILED on persistent write error by @MH4GF in https://github.com/MH4GF/tq/pull/359
+- fix(dispatch): mark action FAILED when DeferToPending itself fails by @MH4GF in https://github.com/MH4GF/tq/pull/360
+- fix(dispatch): use HeartbeatFreshness in early-stale watchdog to stop leaking running actions by @MH4GF in https://github.com/MH4GF/tq/pull/361
+- rename simplify → code-review in /quality-review by @MH4GF in https://github.com/MH4GF/tq/pull/362
+
 ## [v0.21.29](https://github.com/MH4GF/tq/compare/v0.21.28...v0.21.29) - 2026-05-18
 - fix(dispatch): stop reaping live interactive actions via tmux window check by @MH4GF in https://github.com/MH4GF/tq/pull/353
 
