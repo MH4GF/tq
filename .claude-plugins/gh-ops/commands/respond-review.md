@@ -14,7 +14,7 @@ Respond to reviewer comments. Process in batches by phase, not one-by-one sequen
 ${CLAUDE_PLUGIN_ROOT}/scripts/gh-prepare-review-replies $ARGUMENTS
 ```
 
-The script writes a Markdown draft to `.claude/tmp/pr${NUMBER}-review-replies-${TIMESTAMP}.md` containing every unresolved thread (Thread ID, file:line, author, every quoted comment in the thread joined by `---`, empty Classification/Reply draft fields). It prints the generated path on stdout.
+The script writes a Markdown draft to `.claude/tmp/pr${NUMBER}-review-replies-${TIMESTAMP}.md` containing every unresolved thread (Thread ID, file:line, author, every quoted comment in the thread joined by `---`, empty Classification/Reply draft/Edit plan fields). It prints the generated path on stdout.
 
 If stdout is empty (stderr says `No unresolved threads`) → report and finish.
 
@@ -24,7 +24,7 @@ Read the file path printed by Phase 1 and fill in each thread.
 
 ### Editing rules (the draft is the user's source of truth)
 
-- Edit ONLY the `Classification` line and the `Reply draft` block. Leave every other byte — heading, Thread ID, quoted comment — exactly as the script wrote it.
+- Edit ONLY the `Classification` line, the `Reply draft` block, and the `Edit plan` block. Leave every other byte — heading, Thread ID, quoted comment — exactly as the script wrote it.
 - NEVER modify, summarize, paraphrase, reorder, or delete the quoted comment lines (lines starting with `>`). The user reviews the draft against that quote; rewriting it forces them to cross-check GitHub for every reply and breaks the workflow.
 - NEVER reference threads by position or by any other ad-hoc label inside `Reply draft` (e.g. `same as the first thread`, `see thread above`). The GitHub review UI shows no such ordering, so reviewers cannot resolve the reference. If you need to point at another thread, cite its `file:line` directly.
 
@@ -38,8 +38,12 @@ Read the file path printed by Phase 1 and fill in each thread.
   - `Action required`: write the body assuming an `addressed in abc1234` style commit hash will be appended after the fix.
   - `Resolve without code change`: write the final body to be posted as-is.
   - `No action`: usually empty. Fill in only if you want to post a comment without resolving.
+- **Edit plan**: how the code will be changed. Fill this in **only** when `Classification` is `Action required` — leave the `_(n/a)_` placeholder for the other two. The plan is what the user signs off on before Phase 3 Step 2 runs, so it must be specific enough that the user can redirect the approach without reading the diff.
+  - Include: target file(s) / function(s) being touched, the intended change (with alternatives when there's a real choice to make), side effects or out-of-scope items being deliberately left alone, and how the change will be verified (test added / existing test exercised / manual check).
+  - Keep it proportional to the comment. A typo fix needs a one-liner ("fix typo in `foo.go:42`"). A behavioural change or design call needs the alternatives and the rationale for the chosen one.
+  - If the right fix is genuinely unclear, write the plan as a question / option list and surface it to the user before Phase 3 instead of guessing.
 
-For judgment calls (naming, value selection, design decisions), include precedent research and rationale in the draft.
+For judgment calls (naming, value selection, design decisions), include precedent research and rationale in the draft AND the edit plan.
 
 ### Example: what to edit vs what to preserve
 
@@ -57,6 +61,10 @@ Before (script output):
 **Reply draft**:
 
 _(empty)_
+
+**Edit plan** _(Action required only — leave as `_(n/a)_` otherwise)_:
+
+_(n/a)_
 ```
 
 After (your edit — heading / Thread ID / quote untouched):
@@ -73,9 +81,19 @@ After (your edit — heading / Thread ID / quote untouched):
 **Reply draft**:
 
 Extracted into `extractFoo()` in `src/util/foo.ts`. Both call sites updated.
+
+**Edit plan** _(Action required only — leave as `_(n/a)_` otherwise)_:
+
+- Target: `src/foo.ts:42` and `src/bar.ts:88` (the two duplicated blocks).
+- Change: extract the shared body into `extractFoo(input)` in a new `src/util/foo.ts`; replace both sites with calls to it. Keep the signature `(input: FooInput) => FooResult` so neither caller needs adapting.
+- Alternative considered: inline at one site and delete the other. Rejected — `bar.ts` has a slightly different surrounding context, deleting it would change behaviour.
+- Out of scope: the third near-duplicate at `baz.ts:120` looks similar but takes a different input shape; leave it for a follow-up.
+- Verification: existing `foo.test.ts` covers both call sites; add one direct unit test for `extractFoo` to lock the contract.
 ```
 
-After editing, present the file to the user and reach agreement. The user may edit the file directly. Do NOT start Phase 3 without agreement.
+For `No action` / `Resolve without code change` threads, leave `Edit plan` as the `_(n/a)_` placeholder — there is no code change to plan.
+
+After editing, present the file to the user and reach agreement on both the Reply draft AND the Edit plan. The user may edit the file directly. Do NOT start Phase 3 without agreement — the Edit plan is what Phase 3 Step 2 implements, so an unreviewed plan means an unreviewed code change.
 
 **Skip Phase 3 entirely** when every thread is `No action` and every Reply draft is empty. Report `all no-op` and finish.
 
@@ -89,7 +107,9 @@ Post `Will address` on every `Action required` thread (intent declaration before
 Skip if no `Action required` threads.
 
 ### Step 2: Apply code changes
-Implement every fix called out in Reply drafts. Bundle all changes into one commit.
+Implement every fix per the agreed `Edit plan` for each `Action required` thread. The Edit plan is the source of truth for what to change; the Reply draft only describes what happened. Bundle all changes into one commit.
+
+If, while implementing, you discover the Edit plan is wrong or incomplete, stop and re-sync with the user before continuing — do not silently deviate from the plan that was agreed in Phase 2.
 
 Skip if no `Action required` threads.
 

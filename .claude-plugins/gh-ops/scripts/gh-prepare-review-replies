@@ -42,7 +42,8 @@ OUTFILE=".claude/tmp/pr${NUMBER}-review-replies-${TIMESTAMP}.md"
     "- **Thread ID**: `\($thread.id)`\n\n" +
     ($thread.comments.nodes | map("> " + (.body | gsub("\n"; "\n> "))) | join("\n\n---\n\n")) +
     "\n\n**Classification**: _(No action / Resolve without code change / Action required)_\n\n" +
-    "**Reply draft**:\n\n_(empty)_\n\n---\n"
+    "**Reply draft**:\n\n_(empty)_\n\n" +
+    "**Edit plan** _(Action required only — leave as `_(n/a)_` otherwise)_:\n\n_(n/a)_\n\n---\n"
   '
 } > "$OUTFILE"
 
