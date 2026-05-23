@@ -18,7 +18,7 @@
       "WebFetch(domain:pkg.go.dev)",
       "WebFetch(domain:turso.tech)",
       "Skill(quality-review)",
-      "Skill(simplify)"
+      "Skill(code-review)"
     ],
     "deny": [
       "Bash(turso db destroy:*)",
