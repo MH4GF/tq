@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -8,6 +9,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/MH4GF/tq/db"
+)
+
+const (
+	metaKeyMode            = "mode"
+	metaKeyExecutor        = "executor"
+	metaKeyClaudeArgs      = "claude_args"
+	metaKeyClaudeSessionID = "claude_session_id"
+	metaKeyDaemonShort     = "daemon_short"
+	metaKeyParentActionID  = "parent_action_id"
 )
 
 // ── Color palette (256-color) ──
@@ -156,15 +166,80 @@ func depMark(satisfied bool) string {
 	return "⧖"
 }
 
+func parseActionMeta(metadata string) map[string]any {
+	if metadata == "" {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(metadata), &m); err != nil {
+		return nil
+	}
+	return m
+}
+
+func metaString(m map[string]any, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func metaInt64(m map[string]any, key string) int64 {
+	switch v := m[key].(type) {
+	case float64:
+		return int64(v)
+	case int64:
+		return v
+	case json.Number:
+		n, _ := v.Int64()
+		return n
+	}
+	return 0
+}
+
+func formatClaudeArgs(v any) string {
+	arr, ok := v.([]any)
+	if !ok || len(arr) == 0 {
+		return ""
+	}
+	var buf strings.Builder
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(arr); err != nil {
+		return ""
+	}
+	return strings.TrimRight(buf.String(), "\n")
+}
+
+func renderField(pad, label, value string, bodyW int) []string {
+	labelW := lipgloss.Width(label) + 2
+	avail := bodyW - labelW
+	if avail < 1 {
+		avail = 1
+	}
+	wrapped := wrapLine(value, avail)
+	if len(wrapped) == 0 {
+		wrapped = []string{""}
+	}
+	out := make([]string, len(wrapped))
+	indent := strings.Repeat(" ", labelW)
+	for i, line := range wrapped {
+		if i == 0 {
+			out[i] = fmt.Sprintf("%s%s  %s", pad, styleFieldLabel.Render(label), styleFieldValue.Render(line))
+		} else {
+			out[i] = pad + indent + styleFieldValue.Render(line)
+		}
+	}
+	return out
+}
+
 func RenderDetailView(a *db.Action, deps []db.ActionDepStatus, scroll, width, height int) string {
 	var b strings.Builder
-	pad := "  " // 2-col left margin
+	pad := "  "
 	bodyW := max(0, min(width, 80)-len(pad))
 
-	// Top padding
 	b.WriteString("\n")
 
-	// Header strip: ← esc  title  status icon + status
 	st := StatusStyle(a.Status)
 	icon := StatusIcon(a.Status)
 	headerLine := fmt.Sprintf("%s%s  %s  %s %s",
@@ -177,20 +252,54 @@ func RenderDetailView(a *db.Action, deps []db.ActionDepStatus, scroll, width, he
 	b.WriteString(headerLine + "\n")
 	b.WriteString(pad + styleBorderChar.Render(strings.Repeat("─", bodyW)) + "\n")
 
-	// Metadata grid
-	fields := []struct{ label, value string }{
+	meta := parseActionMeta(a.Metadata)
+	type field struct{ label, value string }
+	fields := []field{
 		{"   Action", fmt.Sprintf("#%d", a.ID)},
 		{"     Task", fmt.Sprintf("#%d", a.TaskID)},
 	}
-	if a.CompletedAt.Valid {
-		fields = append(fields, struct{ label, value string }{"Completed", db.FormatLocal(a.CompletedAt.String)})
+	if v := metaString(meta, metaKeyMode); v != "" {
+		fields = append(fields, field{"     Mode", v})
 	}
+	if v := metaString(meta, metaKeyExecutor); v != "" {
+		fields = append(fields, field{" Executor", v})
+	}
+	if a.WorkDir != "" {
+		fields = append(fields, field{" Work dir", a.WorkDir})
+	}
+	if v := formatClaudeArgs(meta[metaKeyClaudeArgs]); v != "" {
+		fields = append(fields, field{"     Args", v})
+	}
+	if v := metaString(meta, metaKeyClaudeSessionID); v != "" {
+		fields = append(fields, field{"  Session", v})
+	}
+	if v := metaString(meta, metaKeyDaemonShort); v != "" {
+		fields = append(fields, field{"   Daemon", v})
+	}
+	if v := metaInt64(meta, metaKeyParentActionID); v != 0 {
+		fields = append(fields, field{"   Parent", fmt.Sprintf("#%d", v)})
+	}
+	if a.DispatchAfter.Valid {
+		fields = append(fields, field{"    After", db.FormatLocal(a.DispatchAfter.String)})
+	}
+	if a.TmuxSession.Valid || a.TmuxWindow.Valid {
+		fields = append(fields, field{"     Tmux", strings.Trim(a.TmuxSession.String+":"+a.TmuxWindow.String, ":")})
+	}
+	fields = append(fields, field{"  Created", db.FormatLocal(a.CreatedAt)})
+	if a.StartedAt.Valid {
+		fields = append(fields, field{"  Started", db.FormatLocal(a.StartedAt.String)})
+	}
+	if a.CompletedAt.Valid {
+		fields = append(fields, field{"Completed", db.FormatLocal(a.CompletedAt.String)})
+	}
+
+	totalFieldLines := 0
 	for _, f := range fields {
-		fmt.Fprintf(&b, "%s%s  %s\n",
-			pad,
-			styleFieldLabel.Render(f.label),
-			styleFieldValue.Render(f.value),
-		)
+		rendered := renderField(pad, f.label, f.value, bodyW)
+		for _, line := range rendered {
+			b.WriteString(line + "\n")
+		}
+		totalFieldLines += len(rendered)
 	}
 	b.WriteString(pad + styleBorderChar.Render(strings.Repeat("─", bodyW)) + "\n")
 
@@ -225,9 +334,7 @@ func RenderDetailView(a *db.Action, deps []db.ActionDepStatus, scroll, width, he
 	}
 	appendSection("Result", result, "(no result yet)")
 
-	// Chrome outside the scrollable body: top(1) + header(1) + separator(1)
-	// + fields + separator(1) + padding before help(1) = 5 + len(fields)
-	chromeLines := 5 + len(fields)
+	chromeLines := 5 + totalFieldLines
 	bodyHeight := height - chromeLines
 	if bodyHeight < 1 {
 		bodyHeight = 10

@@ -38,10 +38,62 @@ func TestRenderDetailView(t *testing.T) {
 			},
 			wantContain: []string{"(no instruction)", "(no result yet)"},
 		},
+		{
+			name: "dispatch metadata shown",
+			action: db.Action{
+				ID: 4, Title: "dispatched", Status: db.ActionStatusRunning,
+				WorkDir: "/tmp/work",
+				Metadata: `{"instruction":"go","mode":"experimental_bg","executor":"local",` +
+					`"claude_args":["--worktree","scope-name","--effort","xhigh"],` +
+					`"claude_session_id":"sess-abc","daemon_short":"6983ea7f","parent_action_id":42}`,
+			},
+			wantContain: []string{
+				"Mode", "experimental_bg",
+				"Executor", "local",
+				"Work dir", "/tmp/work",
+				"Args", "--worktree", "scope-name", "--effort", "xhigh",
+				"Session", "sess-abc",
+				"Daemon", "6983ea7f",
+				"Parent", "#42",
+			},
+		},
+		{
+			name: "timestamps and tmux fields",
+			action: db.Action{
+				ID: 5, Title: "tmux", Status: db.ActionStatusRunning,
+				CreatedAt:     "2026-05-23 10:00:00",
+				StartedAt:     sql.NullString{String: "2026-05-23 10:05:00", Valid: true},
+				CompletedAt:   sql.NullString{String: "2026-05-23 10:30:00", Valid: true},
+				DispatchAfter: sql.NullString{String: "2026-05-23 11:00:00", Valid: true},
+				TmuxSession:   sql.NullString{String: "tq", Valid: true},
+				TmuxWindow:    sql.NullString{String: "5", Valid: true},
+				Metadata:      `{}`,
+			},
+			wantContain: []string{
+				"Created",
+				"Started",
+				"Completed",
+				"After",
+				"Tmux", "tq:5",
+			},
+		},
+		{
+			name: "long claude_args wraps without truncation",
+			action: db.Action{
+				ID: 6, Title: "wrap", Status: db.ActionStatusPending,
+				Metadata: `{"claude_args":["--worktree","very-long-scope-name-that-might-overflow","--effort","xhigh","--permission-mode","plan"]}`,
+			},
+			wantContain: []string{
+				"--worktree",
+				"very-long-scope-name-that-might-overflow",
+				"--permission-mode",
+				"plan",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out := RenderDetailView(&tt.action, nil, 0, 100, 40)
+			out := RenderDetailView(&tt.action, nil, 0, 100, 60)
 			for _, want := range tt.wantContain {
 				if !strings.Contains(out, want) {
 					t.Errorf("RenderDetailView output missing %q\ngot:\n%s", want, out)
