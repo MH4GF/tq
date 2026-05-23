@@ -409,4 +409,8 @@ tq ui [--max-interactive <N>] [--max-noninteractive <N>] [--poll <DURATION>] [--
 
 The two caps are independent slots. Noninteractive execution runs in goroutines so a long-running `claude -p` does not block the dispatch loop from starting new actions. See [`docs/dispatch.md`](dispatch.md) for the concurrency model.
 
-In the task list, pressing `d` on a selected `pending` action dispatches it immediately — equivalent to `tq action dispatch <ID>` (bypasses the completion-dependency gate). The help bar shows `d: dispatch` only when the cursor is on a pending action.
+Keyboard shortcuts in the task list (the help bar surfaces each key only when the cursor is on an eligible row):
+
+- `d` — Dispatch the selected `pending` action immediately, equivalent to `tq action dispatch <ID>` (bypasses the completion-dependency gate).
+- `r` — Resume the selected action by creating a new action that continues its Claude session. Only available on terminal actions (`done` / `failed` / `cancelled`) whose metadata carries a `claude_session_id`.
+- `f` — Toggle `dispatch_enabled` (focus) on the selected project, equivalent to `tq project update <ID> --dispatch-enabled true|false`. Only available when the cursor is on a project header row.
