@@ -213,10 +213,7 @@ func formatClaudeArgs(v any) string {
 
 func renderField(pad, label, value string, bodyW int) []string {
 	labelW := lipgloss.Width(label) + 2
-	avail := bodyW - labelW
-	if avail < 1 {
-		avail = 1
-	}
+	avail := max(bodyW-labelW, 1)
 	wrapped := wrapLine(value, avail)
 	if len(wrapped) == 0 {
 		wrapped = []string{""}
