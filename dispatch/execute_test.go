@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/testutil"
@@ -848,6 +849,117 @@ func TestExecuteAction_MarkFailedErrorIsLogged(t *testing.T) {
 			}
 			if !strings.Contains(logs, "simulated FK violation") {
 				t.Errorf("expected log to contain underlying error, got:\n%s", logs)
+			}
+		})
+	}
+}
+
+type deferErrStore struct {
+	db.Store
+	deferErr     error
+	deferHits    int
+	markFailedAt string
+}
+
+func (s *deferErrStore) DeferToPending(id int64, retryAfter time.Duration) error {
+	s.deferHits++
+	return s.deferErr
+}
+
+func (s *deferErrStore) MarkFailed(id int64, result string) error {
+	s.markFailedAt = result
+	return s.Store.MarkFailed(id, result)
+}
+
+func TestExecuteAction_DeferToPendingFailureMarksFailed(t *testing.T) {
+	tests := []struct {
+		name     string
+		mode     string
+		sentinel error
+		setHook  func(p *ExecuteParams, hook func(*db.Action) error)
+	}{
+		{
+			name:     "interactive defer fails",
+			mode:     ModeInteractive,
+			sentinel: ErrInteractiveDeferred,
+			setHook: func(p *ExecuteParams, hook func(*db.Action) error) {
+				p.BeforeInteractive = hook
+			},
+		},
+		{
+			name:     "noninteractive defer fails",
+			mode:     ModeNonInteractive,
+			sentinel: ErrNonInteractiveDeferred,
+			setHook: func(p *ExecuteParams, hook func(*db.Action) error) {
+				p.BeforeNonInteractive = hook
+			},
+		},
+		{
+			name:     "bg defer fails",
+			mode:     ModeBg,
+			sentinel: ErrBgDeferred,
+			setHook: func(p *ExecuteParams, hook func(*db.Action) error) {
+				p.BeforeBg = hook
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			base := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, base)
+
+			deferErr := errors.New("simulated sqlite contention")
+			store := &deferErrStore{Store: base, deferErr: deferErr}
+
+			meta, _ := json.Marshal(map[string]any{"instruction": "do the task", "mode": tc.mode})
+			taskID, _ := base.InsertTask(1, "Test task", `{}`, "")
+			actionID, _ := base.InsertAction("test", taskID, string(meta), db.ActionStatusPending, nil, "")
+
+			action, _ := base.NextPending(context.Background())
+
+			worker := &countingWorker{}
+			workerFunc := func() Worker { return worker }
+
+			params := ExecuteParams{
+				DispatchConfig: DispatchConfig{
+					DB:                 store,
+					NonInteractiveFunc: workerFunc,
+					InteractiveFunc:    workerFunc,
+					RemoteFunc:         workerFunc,
+					BgFunc:             workerFunc,
+				},
+			}
+			tc.setHook(&params, func(_ *db.Action) error { return tc.sentinel })
+
+			_, err := ExecuteAction(context.Background(), params, action)
+
+			var af *ActionFailedError
+			if !errors.As(err, &af) {
+				t.Fatalf("expected *ActionFailedError, got %v", err)
+			}
+			if af.ActionID != actionID {
+				t.Errorf("ActionID = %d, want %d", af.ActionID, actionID)
+			}
+			if errors.Is(err, tc.sentinel) {
+				t.Errorf("error must not wrap deferred sentinel (would cause queue_worker to retry instead of terminalize): %v", err)
+			}
+			if store.deferHits != 1 {
+				t.Errorf("DeferToPending hits = %d, want 1", store.deferHits)
+			}
+			if !strings.Contains(store.markFailedAt, "defer") {
+				t.Errorf("MarkFailed reason = %q, want substring %q", store.markFailedAt, "defer")
+			}
+
+			a, _ := base.GetAction(actionID)
+			if a.Status != db.ActionStatusFailed {
+				t.Errorf("status = %q, want %q", a.Status, db.ActionStatusFailed)
+			}
+			if !strings.Contains(a.Result.String, "defer") {
+				t.Errorf("action.Result = %q, want substring %q", a.Result.String, "defer")
+			}
+			if worker.Count() != 0 {
+				t.Errorf("worker should not run when defer fails, got count %d", worker.Count())
 			}
 		})
 	}

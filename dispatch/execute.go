@@ -262,14 +262,22 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 	return executeNonInteractive(ctx, params, action, instruction, cfg, workDir)
 }
 
+func deferOrFail(store db.Store, actionID int64, sentinel error) error {
+	if rpErr := store.DeferToPending(actionID, defaultDeferBackoff); rpErr != nil {
+		failMsg := fmt.Sprintf("defer to pending failed: %v", rpErr)
+		if mfErr := store.MarkFailed(actionID, failMsg); mfErr != nil {
+			slog.Error("mark action failed", "action_id", actionID, "error", mfErr)
+		}
+		return &ActionFailedError{ActionID: actionID, Err: rpErr}
+	}
+	return sentinel
+}
+
 func executeBg(ctx context.Context, params ExecuteParams, action *db.Action, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
 	if params.BeforeBg != nil {
 		if err := params.BeforeBg(action); err != nil {
 			if errors.Is(err, ErrBgDeferred) {
-				if rpErr := params.DB.DeferToPending(action.ID, defaultDeferBackoff); rpErr != nil {
-					return nil, fmt.Errorf("defer to pending for action #%d: %w", action.ID, rpErr)
-				}
-				return nil, ErrBgDeferred
+				return nil, deferOrFail(params.DB, action.ID, ErrBgDeferred)
 			}
 			return nil, err
 		}
@@ -320,10 +328,7 @@ func executeInteractive(ctx context.Context, params ExecuteParams, action *db.Ac
 	if params.BeforeInteractive != nil {
 		if err := params.BeforeInteractive(action); err != nil {
 			if errors.Is(err, ErrInteractiveDeferred) {
-				if rpErr := params.DB.DeferToPending(action.ID, defaultDeferBackoff); rpErr != nil {
-					return nil, fmt.Errorf("defer to pending for action #%d: %w", action.ID, rpErr)
-				}
-				return nil, ErrInteractiveDeferred
+				return nil, deferOrFail(params.DB, action.ID, ErrInteractiveDeferred)
 			}
 			return nil, err
 		}
@@ -352,10 +357,7 @@ func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db
 	if params.BeforeNonInteractive != nil {
 		if err := params.BeforeNonInteractive(action); err != nil {
 			if errors.Is(err, ErrNonInteractiveDeferred) {
-				if rpErr := params.DB.DeferToPending(action.ID, defaultDeferBackoff); rpErr != nil {
-					return nil, fmt.Errorf("defer to pending for action #%d: %w", action.ID, rpErr)
-				}
-				return nil, ErrNonInteractiveDeferred
+				return nil, deferOrFail(params.DB, action.ID, ErrNonInteractiveDeferred)
 			}
 			return nil, err
 		}
