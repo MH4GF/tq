@@ -30,10 +30,16 @@ func TestActionUpdate(t *testing.T) {
 			wantErrSubstr: "at least one flag",
 		},
 		{
-			name:          "done action returns error",
+			name:          "done action rejects --title",
 			markDoneFirst: true,
 			extraArgs:     []string{"--title", "nope"},
-			wantErrSubstr: "only pending or failed",
+			wantErrSubstr: "title/task/work-dir can only be updated on pending or failed",
+		},
+		{
+			name:          "done action accepts --meta for backfill",
+			markDoneFirst: true,
+			extraArgs:     []string{"--meta", `{"claude_session_id":"01a2b3ed-bc16-4577-8ad5-e0ee40f1f39c"}`},
+			wantOutSubstr: "updated",
 		},
 		{
 			name:          "invalid meta returns error",

@@ -1123,6 +1123,76 @@ func TestReapBg(t *testing.T) {
 	}
 }
 
+func TestReapBg_BackfillsClaudeSessionID(t *testing.T) {
+	now := time.Now()
+	const sessionID = "01a2b3ed-bc16-4577-8ad5-e0ee40f1f39c"
+
+	tests := []struct {
+		name          string
+		metadata      string
+		stateJSON     []byte
+		wantSessionID string
+	}{
+		{
+			name:          "working session with sessionId populates metadata",
+			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"aaaaaaaa"}`,
+			stateJSON:     []byte(`{"state":"working","sessionId":"` + sessionID + `"}`),
+			wantSessionID: sessionID,
+		},
+		{
+			name:          "done session with sessionId populates metadata before terminal transition",
+			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"bbbbbbbb"}`,
+			stateJSON:     []byte(`{"state":"done","sessionId":"` + sessionID + `","output":{"result":"shipped"}}`),
+			wantSessionID: sessionID,
+		},
+		{
+			name:          "existing claude_session_id is not overwritten",
+			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"cccccccc","claude_session_id":"keep-me"}`,
+			stateJSON:     []byte(`{"state":"working","sessionId":"` + sessionID + `"}`),
+			wantSessionID: "keep-me",
+		},
+		{
+			name:          "state.json without sessionId leaves metadata untouched",
+			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"dddddddd"}`,
+			stateJSON:     []byte(`{"state":"working"}`),
+			wantSessionID: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			taskID, _ := d.InsertTask(1, "Task", "{}", "")
+			if _, err := d.InsertAction("bg-action", taskID, tt.metadata, db.ActionStatusRunning, nil, ""); err != nil {
+				t.Fatalf("seed action: %v", err)
+			}
+			started := now.Add(-1 * time.Minute)
+			d.SetActionTmuxInfoForTest(1, nil, nil, &started)
+
+			short, _ := ParseActionMetadata(tt.metadata)
+			shortStr, _ := short[MetaKeyDaemonShort].(string)
+
+			cfg := WorkerConfig{
+				DispatchConfig:    DispatchConfig{DB: d},
+				BgStateReader:     &fakeBgStateReader{files: map[string][]byte{shortStr: tt.stateJSON}},
+				BgMissingJobGrace: 30 * time.Second,
+			}
+			reapBg(cfg, now)
+
+			action, _ := d.GetAction(1)
+			meta, err := ParseActionMetadata(action.Metadata)
+			if err != nil {
+				t.Fatalf("parse metadata: %v", err)
+			}
+			got, _ := meta[MetaKeyClaudeSessionID].(string)
+			if got != tt.wantSessionID {
+				t.Errorf("claude_session_id = %q, want %q", got, tt.wantSessionID)
+			}
+		})
+	}
+}
+
 func TestReapBg_NilStateReaderSkips(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

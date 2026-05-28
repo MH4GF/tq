@@ -582,6 +582,55 @@ func (db *DB) MergeActionMetadata(id int64, updates map[string]any) error {
 	return err
 }
 
+func (db *DB) BulkMergeActionMetadata(merges []ActionMetadataMerge) error {
+	if len(merges) == 0 {
+		return nil
+	}
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("bulk merge action metadata: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	type committed struct {
+		id   int64
+		keys []string
+	}
+	var done []committed
+
+	for _, m := range merges {
+		if len(m.Updates) == 0 {
+			continue
+		}
+		var existing string
+		if err := tx.QueryRowContext(ctx, "SELECT metadata FROM actions WHERE id = ?", m.ID).Scan(&existing); err != nil {
+			return fmt.Errorf("bulk merge action metadata: get metadata for id=%d: %w", m.ID, err)
+		}
+
+		data, keys, err := mergeMetadataJSON(existing, m.Updates)
+		if err != nil {
+			return fmt.Errorf("bulk merge action metadata: merge id=%d: %w", m.ID, err)
+		}
+
+		if _, err := tx.ExecContext(ctx, "UPDATE actions SET metadata = ? WHERE id = ?", data, m.ID); err != nil {
+			return fmt.Errorf("bulk merge action metadata: update id=%d: %w", m.ID, err)
+		}
+		done = append(done, committed{id: m.ID, keys: keys})
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("bulk merge action metadata: commit: %w", err)
+	}
+
+	for _, c := range done {
+		db.emitEvent("action", c.id, "action.metadata_merged", map[string]any{
+			"keys_updated": c.keys,
+		})
+	}
+	return nil
+}
+
 func (db *DB) UpdateAction(id int64, title *string, taskID *int64, metadata, workDir, result *string) error {
 	var current Action
 	err := db.QueryRow("SELECT "+actionColumns+" FROM actions WHERE id = ?", id).Scan(current.scanFields()...)
@@ -589,9 +638,12 @@ func (db *DB) UpdateAction(id int64, title *string, taskID *int64, metadata, wor
 		return fmt.Errorf("action #%d not found: %w", id, err)
 	}
 
-	structuralUpdate := title != nil || taskID != nil || metadata != nil || workDir != nil
-	if structuralUpdate && current.Status != ActionStatusPending && current.Status != ActionStatusFailed {
-		return fmt.Errorf("action #%d has status %q: only pending or failed actions can be updated", id, current.Status)
+	nonMetadataStructural := title != nil || taskID != nil || workDir != nil
+	if nonMetadataStructural && current.Status != ActionStatusPending && current.Status != ActionStatusFailed {
+		return fmt.Errorf("action #%d has status %q: title/task/work-dir can only be updated on pending or failed actions", id, current.Status)
+	}
+	if metadata != nil && !isResultAmendable(current.Status) {
+		return fmt.Errorf("action #%d has status %q: metadata can only be amended on pending, failed, done, or cancelled actions", id, current.Status)
 	}
 	if result != nil && !isResultAmendable(current.Status) {
 		return fmt.Errorf("action #%d has status %q: result can only be amended on pending, failed, done, or cancelled actions", id, current.Status)
@@ -778,6 +830,11 @@ type ActionFailureUpdate struct {
 type ActionDoneUpdate struct {
 	ID     int64
 	Result string
+}
+
+type ActionMetadataMerge struct {
+	ID      int64
+	Updates map[string]any
 }
 
 // BulkInsertActions inserts all specs in a single multi-row INSERT and returns

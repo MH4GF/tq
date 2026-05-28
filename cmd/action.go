@@ -32,11 +32,11 @@ var actionUpdateCmd = &cobra.Command{
 	Short: "Update an action",
 	Long: `Update an action.
 
-Structural fields (--title, --task, --meta, --work-dir) can only be changed
-on pending or failed actions.
+--title, --task, --work-dir can only be changed on pending or failed actions.
 
---result amends the recorded result and is also allowed on done or cancelled
-actions (running/dispatched are in-flight; use 'tq action done'/'fail').
+--meta and --result are allowed on pending, failed, done, or cancelled actions
+so post-execution observability fields (claude_session_id, executor, etc.) can
+be backfilled. running/dispatched are in-flight; use 'tq action done'/'fail'.
 
 --blocked-by-action / --blocked-by-task (repeatable) append completion
 dependencies: the action stays pending until every blocker reaches a
