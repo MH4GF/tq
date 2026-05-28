@@ -228,10 +228,13 @@ REASON serves as feedback for improving classification logic. Record why the act
 tq action update <ID> [--title <TITLE>] [--task <ID>] [--meta <JSON>] [--work-dir <PATH>] [--result <TEXT>] [--blocked-by-action <ID>]... [--blocked-by-task <ID>]... [--clear-deps]
 ```
 
-Structural fields (`--title` / `--task` / `--meta` / `--work-dir`) can only be changed on `pending` or `failed` actions; running, dispatched, done, or cancelled actions are rejected.
+`--title` / `--task` / `--work-dir` can only be changed on `pending` or `failed` actions; running, dispatched, done, or cancelled actions are rejected.
+
+`--meta` and `--result` are allowed on `pending`, `failed`, `done`, or `cancelled` actions so post-execution observability fields (e.g. `claude_session_id`, `executor`) can be backfilled after the worker has marked the action terminal. Running/dispatched remain rejected because they are in-flight — use `tq action done`/`fail` instead.
 
 - `--work-dir` — Override or clear the action-level working directory. Pass an empty string (`--work-dir ""`) to clear.
-- `--result` — Amend the recorded result. Allowed on `pending`, `failed`, `done`, or `cancelled` actions (running/dispatched are in-flight and rejected — use `tq action done`/`fail` instead). This is the recovery path for a result wrongly committed on an already-`done` action.
+- `--meta` — Merge JSON object into existing metadata (existing keys are overwritten; other keys preserved). Allowed on `pending`, `failed`, `done`, or `cancelled`. Typical backfill: `tq action update <ID> --meta '{"claude_session_id":"<uuid>"}'` so `tq action resume <ID>` becomes viable for an experimental_bg action whose session id was not auto-recorded.
+- `--result` — Amend the recorded result. Same status whitelist as `--meta`. This is the recovery path for a result wrongly committed on an already-`done` action.
 - `--blocked-by-action` / `--blocked-by-task` — Append completion dependencies (repeatable; same semantics as `tq action create`). Allowed on `pending` or `failed` actions only.
 - `--clear-deps` — Remove all dependencies first. Use alone to unblock a forever-blocked action, or with `--blocked-by-*` to replace the dependency set (e.g. re-point to a resumed blocker). This is the primary recovery path out of a failed-blocker dead end.
 
@@ -255,7 +258,7 @@ Create a new action that resumes the claude session of a previously completed/fa
 
 The parent must be in `failed` / `cancelled` / `done` status and have a non-empty `claude_session_id` in metadata. Only the `claude_session_id` is inherited — other `claude_args` (`--worktree`, `--permission-mode`, etc.) are dropped because the resumed claude session restores its own context.
 
-`claude_session_id` is populated by the tq Claude Code plugin's `SessionStart` hook (see `.claude-plugins/tq/`), which records the id whenever a tq-dispatched claude session starts.
+`claude_session_id` is populated by the tq Claude Code plugin's `SessionStart` hook (see `.claude-plugins/tq/`) for interactive/noninteractive dispatch, and by the queue worker's bg reaper (which reads `~/.claude/jobs/<short>/state.json`) for `experimental_bg` actions. For pre-existing actions without a recorded session id, backfill via `tq action update <ID> --meta '{"claude_session_id":"<uuid>"}'`.
 
 - `--message` — Additional instruction passed as the new prompt (default: `"Continue the previous session."`)
 - `--mode` — Execution mode: `interactive` | `noninteractive` | `remote` | `experimental_bg` (default: parent action's mode). Any other value is rejected.

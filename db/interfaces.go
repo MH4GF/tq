@@ -20,6 +20,7 @@ type CommandWriter interface {
 	DeferToPending(id int64, retryAfter time.Duration) error
 	SetTmuxInfo(id int64, tmuxSession, tmuxWindow string) error
 	MergeActionMetadata(id int64, updates map[string]any) error
+	BulkMergeActionMetadata(updates []ActionMetadataMerge) error
 	UpdateAction(id int64, title *string, taskID *int64, metadata, workDir, result *string) error
 	NextPending(ctx context.Context) (*Action, error)
 	ClaimPending(ctx context.Context, id int64) (*Action, error)

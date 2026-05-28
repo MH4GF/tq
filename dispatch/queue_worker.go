@@ -335,8 +335,9 @@ func reapNonInteractive(cfg WorkerConfig, now time.Time) {
 // reaper consumes. Schema confirmed on 2026-05-13; if the daemon changes the
 // shape, update this struct.
 type bgStatePayload struct {
-	State  string `json:"state"`
-	Output struct {
+	State     string `json:"state"`
+	SessionID string `json:"sessionId"`
+	Output    struct {
 		Result string `json:"result"`
 	} `json:"output"`
 	Detail string `json:"detail"`
@@ -364,6 +365,7 @@ func reapBg(cfg WorkerConfig, now time.Time) {
 	var (
 		dones    []db.ActionDoneUpdate
 		failures []db.ActionFailureUpdate
+		merges   []db.ActionMetadataMerge
 	)
 
 	for _, a := range actions {
@@ -403,6 +405,17 @@ func reapBg(cfg WorkerConfig, now time.Time) {
 			continue
 		}
 
+		if payload.SessionID != "" {
+			if existing, _ := meta[MetaKeyClaudeSessionID].(string); existing == "" {
+				merges = append(merges, db.ActionMetadataMerge{
+					ID: a.ID,
+					Updates: map[string]any{
+						MetaKeyClaudeSessionID: payload.SessionID,
+					},
+				})
+			}
+		}
+
 		// Only the two terminal states transition the action. Anything else
 		// (working, blocked, queued, future daemon-internal states) keeps the
 		// action running — `blocked` in particular signals "waiting on user
@@ -422,6 +435,11 @@ func reapBg(cfg WorkerConfig, now time.Time) {
 		}
 	}
 
+	if len(merges) > 0 {
+		if err := cfg.DB.BulkMergeActionMetadata(merges); err != nil {
+			slog.Warn("bg reaper: bulk merge metadata", "error", err, "count", len(merges))
+		}
+	}
 	if len(dones) > 0 {
 		if err := cfg.DB.BulkMarkDone(dones); err != nil {
 			slog.Error("bg reaper: bulk mark done", "error", err, "count", len(dones))

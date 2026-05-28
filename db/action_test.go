@@ -1326,7 +1326,7 @@ func TestUpdateAction_StatusRestriction(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected error for %s action", tt.status)
 			}
-			if !strings.Contains(err.Error(), "only pending or failed") {
+			if !strings.Contains(err.Error(), "title/task/work-dir can only be updated on pending or failed") {
 				t.Errorf("error = %q, want mention of status restriction", err.Error())
 			}
 		})
@@ -1372,6 +1372,53 @@ func TestUpdateAction_Result(t *testing.T) {
 			a, _ := d.GetAction(id)
 			if !a.Result.Valid || a.Result.String != amended {
 				t.Errorf("result = %v, want %q", a.Result, amended)
+			}
+		})
+	}
+}
+
+func TestUpdateAction_Metadata(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+	tests := []struct {
+		name      string
+		setup     func(int64)
+		wantError bool
+	}{
+		{"pending", func(int64) {}, false},
+		{"failed", func(id int64) { d.MarkFailed(id, "old") }, false},
+		{"done", func(id int64) { d.MarkDone(id, "old") }, false},
+		{"cancelled", func(id int64) { d.MarkCancelled(id, "old") }, false},
+		{"running", func(id int64) { d.ClaimPending(context.Background(), id) }, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id, _ := d.InsertAction("test", taskID, `{"existing":"keep"}`, db.ActionStatusPending, nil, "")
+			tt.setup(id)
+
+			newMeta := `{"claude_session_id":"01a2b3ed-bc16-4577-8ad5-e0ee40f1f39c"}`
+			err := d.UpdateAction(id, nil, nil, &newMeta, nil, nil)
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("expected error amending metadata on %s action", tt.name)
+				}
+				if !strings.Contains(err.Error(), "metadata can only be amended") {
+					t.Errorf("error = %q, want mention of metadata amend restriction", err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			a, _ := d.GetAction(id)
+			if !strings.Contains(a.Metadata, `"claude_session_id":"01a2b3ed-bc16-4577-8ad5-e0ee40f1f39c"`) {
+				t.Errorf("metadata missing claude_session_id: %s", a.Metadata)
+			}
+			if !strings.Contains(a.Metadata, `"existing":"keep"`) {
+				t.Errorf("merge clobbered existing key: %s", a.Metadata)
 			}
 		})
 	}
