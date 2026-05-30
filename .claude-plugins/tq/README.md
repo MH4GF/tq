@@ -27,13 +27,13 @@ verbatim from the skill's `SKILL.md` frontmatter.
 
 ### `tq:create-action` — `/tq:create-action [instruction]`
 
-tqアクションを作成し、別のワーカーセッションに作業を委譲する。「〜するアクション作って」「これをタスク化して」「アクション作成して」など作業の委譲を頼まれたとき、triage/gc系スキルからのフォローアップ作成時、`/tq:create-action` で発動。作業自体は実行せず、pending action を作ることがゴール。
+Create a tq action (auto-infer instruction or let user specify)
 
 `skills/create-action/SKILL.md`
 
 ### `tq:done` — `/tq:done <action_id> [summary]`
 
-完了したtqアクションの結果を記録し、タスクの完了判定とフォローアップ作成を行う。「アクション完了して」「doneにして」「結果を記録して」、ワーカーセッションが作業を終えたとき、`/tq:done` で発動。code変更を伴うアクションはPRがマージされて初めて done にできる。
+Mark a tq action as done, then judge task-level completion and propose follow-up actions when work remains
 
 `skills/done/SKILL.md`
 
@@ -45,9 +45,11 @@ tqアクションを作成し、別のワーカーセッションに作業を委
 
 ### `tq:failed` — `/tq:failed [action_id]`
 
-tqアクションを失敗として記録し、リトライや別アプローチのフォローアップを判断する。権限不足・環境破損・外部API障害・CI flake などで完了できなかったとき、「失敗として記録して」「failedにして」、`/tq:failed` で発動。failed アクションは `tq action reset` で再試行できる。
+Mark a tq action as failed, then judge task-level completion and propose follow-up actions when retry or alternative approach is needed
 
 `skills/failed/SKILL.md`
+
+Use for cases that could not be completed (missing permissions, broken environment, external API outage, CI flake, etc.). Failed actions can be returned to pending with `tq action reset` and retried.
 
 ```
 /tq:failed           # auto-detect action_id
@@ -56,7 +58,7 @@ tqアクションを失敗として記録し、リトライや別アプローチ
 
 ### `tq:cancel` — `/tq:cancel [action_id]`
 
-tqアクションを改善提案つきでキャンセルし、タスクの完了判定とフォローアップを行う。「このアクションはもう不要」「キャンセルして」「cancelして」など作業が不要・重複・陳腐化したとき、`/tq:cancel` で発動。
+Cancel a tq action with improvement suggestions, then judge task-level completion and propose follow-up actions when work remains
 
 `skills/cancel/SKILL.md`
 
@@ -67,13 +69,13 @@ tqアクションを改善提案つきでキャンセルし、タスクの完了
 
 ### `tq:triage` — `/tq:triage [project_name]`
 
-オープンなtqタスクを棚卸し・整理する。各タスクの状態をレビューし、クリーンアップを提案・実行する。「タスク整理して」「オープンタスク見直して」「triageして」、`/tq:triage` で発動。
+Inventory and organize open tasks - review status, propose cleanup, execute
 
 `skills/triage/SKILL.md`
 
 ### `tq:manager`
 
-tqタスク管理者。タスク/アクションの一覧・状況確認・ディスパッチ・スケジュール運用のハブ。「状況見せて」「タスク一覧」「割り込み実行して」「スケジュール実行したい」「タスク作って」で発動。アクションの委譲作成は tq:create-action、完了/失敗/キャンセルの記録は tq:done / tq:failed / tq:cancel、タスク棚卸しは tq:triage が担当する。
+tqタスク管理者。「タスク作って」「アクション追加して」「状況見せて」「割り込み実行して」「スケジュール実行したい」で発動
 
 `skills/manager/SKILL.md`
 
