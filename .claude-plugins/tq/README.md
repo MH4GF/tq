@@ -16,13 +16,26 @@ claude plugin marketplace add MH4GF/tq
 claude plugin install tq@tq-marketplace
 ```
 
-## Commands
+## Skills
 
-### `/tq:done <action_id> [summary]`
+All tq operations are packaged as Agent Skills. Each one triggers from natural
+language **and** from the matching slash invocation `/tq:<name>` — they are
+equivalent. The slash form is still the explicit entry point used by the
+dispatch worker prompt and by other skills; natural language lets the same flow
+fire without remembering a command name. Each description below is reproduced
+verbatim from the skill's `SKILL.md` frontmatter.
 
-Mark a tq action as done, then judge task-level completion and propose follow-up actions when work remains.
+### `tq:create-action` — `/tq:create-action [instruction]`
 
-Use this from a Claude Code session launched via the tq interactive worker.
+Create a tq action (auto-infer instruction or let user specify)
+
+`skills/create-action/SKILL.md`
+
+### `tq:done` — `/tq:done <action_id> [summary]`
+
+Mark a tq action as done, then judge task-level completion and propose follow-up actions when work remains
+
+`skills/done/SKILL.md`
 
 ```
 /tq:done           # auto-detect action_id, auto-generate summary
@@ -30,9 +43,11 @@ Use this from a Claude Code session launched via the tq interactive worker.
 /tq:done 42 Fix auth bug  # specify action_id and summary
 ```
 
-### `/tq:failed [action_id]`
+### `tq:failed` — `/tq:failed [action_id]`
 
-Mark a tq action as failed, then judge task-level completion and propose follow-up actions when retry or alternative approach is needed.
+Mark a tq action as failed, then judge task-level completion and propose follow-up actions when retry or alternative approach is needed
+
+`skills/failed/SKILL.md`
 
 Use for cases that could not be completed (missing permissions, broken environment, external API outage, CI flake, etc.). Failed actions can be returned to pending with `tq action reset` and retried.
 
@@ -41,39 +56,26 @@ Use for cases that could not be completed (missing permissions, broken environme
 /tq:failed 42        # specify action_id
 ```
 
-### `/tq:cancel [action_id]`
+### `tq:cancel` — `/tq:cancel [action_id]`
 
-Cancel a tq action with improvement suggestions, then judge task-level completion and propose follow-up actions when work remains.
+Cancel a tq action with improvement suggestions, then judge task-level completion and propose follow-up actions when work remains
+
+`skills/cancel/SKILL.md`
 
 ```
 /tq:cancel           # auto-detect action_id
 /tq:cancel 42        # specify action_id
 ```
 
-### `/tq:create-action [instruction]`
+### `tq:triage` — `/tq:triage [project_name]`
 
-Create a tq action (auto-infer instruction or let user specify).
+Inventory and organize open tasks - review status, propose cleanup, execute
 
-### `/tq:triage [project_name]`
-
-Inventory and organize open tasks - review status, propose cleanup, execute.
-
-## CLI commands used
-
-### `tq search <keyword>`
-
-Full-text search across task titles, task metadata, task status change reasons, action titles, action results, and action metadata. Output is JSON. Each result includes `project_id`. Filter with `--jq`, or scope to a single project with `--project <ID>`.
-
-```
-tq search "login bug"
-tq search deploy --project 1
-```
-
-## Skills
+`skills/triage/SKILL.md`
 
 ### `tq:manager`
 
-tqタスク管理者。「タスク作って」「アクション追加して」「完了にして」「状況見せて」「割り込み実行して」「スケジュール実行したい」で発動
+tqタスク管理者。「タスク作って」「アクション追加して」「状況見せて」「割り込み実行して」「スケジュール実行したい」で発動
 
 `skills/manager/SKILL.md`
 
@@ -93,6 +95,17 @@ tq schedule create --instruction '/tq:investigate-incidents' --task <task_id> --
 ```
 
 Run `tq schedule create --help` for available flags.
+
+## CLI commands used
+
+### `tq search <keyword>`
+
+Full-text search across task titles, task metadata, task status change reasons, action titles, action results, and action metadata. Output is JSON. Each result includes `project_id`. Filter with `--jq`, or scope to a single project with `--project <ID>`.
+
+```
+tq search "login bug"
+tq search deploy --project 1
+```
 
 ## hooks
 
