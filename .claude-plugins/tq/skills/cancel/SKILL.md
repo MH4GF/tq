@@ -1,5 +1,5 @@
 ---
-description: Cancel a tq action with improvement suggestions, then judge task-level completion and propose follow-up actions when work remains
+description: tqアクションを改善提案つきでキャンセルし、タスクの完了判定とフォローアップを行う。「このアクションはもう不要」「キャンセルして」「cancelして」など作業が不要・重複・陳腐化したとき、`/tq:cancel` で発動。
 argument-hint: "[action_id]"
 allowed-tools: Bash(tq *)
 ---

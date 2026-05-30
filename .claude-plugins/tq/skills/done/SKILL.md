@@ -1,5 +1,5 @@
 ---
-description: Mark a tq action as done, then judge task-level completion and propose follow-up actions when work remains
+description: 完了したtqアクションの結果を記録し、タスクの完了判定とフォローアップ作成を行う。「アクション完了して」「doneにして」「結果を記録して」、ワーカーセッションが作業を終えたとき、`/tq:done` で発動。code変更を伴うアクションはPRがマージされて初めて done にできる。
 argument-hint: "<action_id> [summary]"
 allowed-tools: Bash(tq *), Bash(gh pr view *), Bash(git status *), Bash(git log *)
 ---

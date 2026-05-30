@@ -1,5 +1,5 @@
 ---
-description: Create a tq action (auto-infer instruction or let user specify)
+description: tqアクションを作成し、別のワーカーセッションに作業を委譲する。「〜するアクション作って」「これをタスク化して」「アクション作成して」など作業の委譲を頼まれたとき、triage/gc系スキルからのフォローアップ作成時、`/tq:create-action` で発動。作業自体は実行せず、pending action を作ることがゴール。
 argument-hint: "[instruction]"
 allowed-tools: Bash(tq *)
 ---

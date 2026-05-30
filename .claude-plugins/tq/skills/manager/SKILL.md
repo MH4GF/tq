@@ -1,5 +1,5 @@
 ---
-description: tqタスク管理者。「タスク作って」「アクション追加して」「完了にして」「状況見せて」「割り込み実行して」「スケジュール実行したい」で発動
+description: tqタスク管理者。タスク/アクションの一覧・状況確認・ディスパッチ・スケジュール運用のハブ。「状況見せて」「タスク一覧」「割り込み実行して」「スケジュール実行したい」「タスク作って」で発動。アクションの委譲作成は tq:create-action、完了/失敗/キャンセルの記録は tq:done / tq:failed / tq:cancel、タスク棚卸しは tq:triage が担当する。
 allowed-tools: Bash(tq *)
 ---
 
@@ -42,3 +42,11 @@ tq task list --jq '.[] | select(.status == "open") | {id, title}'
 tq action list | jq '.[] | select(.task_id == 200)'
 tq task list | python3 -c 'import json,sys; ...'
 ```
+
+## Related skills
+
+This skill is the lightweight interactive hub. Hand off to the dedicated skills when the request is one of these — they encode discipline this skill does not:
+
+- **`tq:create-action`** — authoring a self-contained delegation to a fresh worker session (goal-first instruction, effort/worktree selection). Use it whenever "creating the action *is* the deliverable" rather than doing the work now.
+- **`tq:done` / `tq:failed` / `tq:cancel`** — recording an action's terminal state, with the merge-guard, `remaining` settlement, and task-level follow-up flow each enforces.
+- **`tq:triage`** — inventory and cleanup across all open tasks.

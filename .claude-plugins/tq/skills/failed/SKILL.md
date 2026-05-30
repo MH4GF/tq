@@ -1,5 +1,5 @@
 ---
-description: Mark a tq action as failed, then judge task-level completion and propose follow-up actions when retry or alternative approach is needed
+description: tqアクションを失敗として記録し、リトライや別アプローチのフォローアップを判断する。権限不足・環境破損・外部API障害・CI flake などで完了できなかったとき、「失敗として記録して」「failedにして」、`/tq:failed` で発動。failed アクションは `tq action reset` で再試行できる。
 argument-hint: "[action_id]"
 allowed-tools: Bash(tq *)
 ---

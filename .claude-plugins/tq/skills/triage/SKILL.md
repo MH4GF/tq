@@ -1,5 +1,5 @@
 ---
-description: Inventory and organize open tasks - review status, propose cleanup, execute
+description: オープンなtqタスクを棚卸し・整理する。各タスクの状態をレビューし、クリーンアップを提案・実行する。「タスク整理して」「オープンタスク見直して」「triageして」、`/tq:triage` で発動。
 argument-hint: "[project_name]"
 allowed-tools: Bash(tq *), Bash(gh pr view *), Bash(find *), Read, AskUserQuestion, Skill(tq:create-action)
 ---
