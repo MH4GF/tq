@@ -242,7 +242,11 @@ func executeViaBg(ctx context.Context, params ExecuteParams, action *db.Action, 
 			if errors.Is(err, deferErr) {
 				return nil, deferOrFail(params.DB, action.ID, deferErr)
 			}
-			return nil, err
+			failMsg := fmt.Sprintf("admission check failed: %v", err)
+			if mfErr := params.DB.MarkFailed(action.ID, failMsg); mfErr != nil {
+				slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
+			}
+			return nil, &ActionFailedError{ActionID: action.ID, Err: err}
 		}
 	}
 

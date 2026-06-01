@@ -56,6 +56,7 @@ type QueryReader interface {
 	GetTaskActionCount(taskID int64, statuses []string) (int64, error)
 	GetTasksByIDs(ids []int64) (map[int64]*Task, error)
 	ListRunningWithDaemonShort() ([]Action, error)
+	ListRunningOrphans(minAge time.Duration) ([]Action, error)
 	CountRunningInteractive() (int, error)
 	CountRunningNonInteractive() (int, error)
 	CountPendingByDispatch() (PendingCounts, error)

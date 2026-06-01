@@ -54,6 +54,9 @@ func (db *DB) ResumeAction(parentID int64, opts ResumeOptions) (int64, error) {
 			mode = "interactive"
 		}
 	}
+	if mode == "experimental_bg" {
+		mode = "interactive"
+	}
 
 	message := opts.Message
 	if strings.TrimSpace(message) == "" {

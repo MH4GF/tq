@@ -416,6 +416,34 @@ func (db *DB) ListRunningWithDaemonShort() ([]Action, error) {
 	return actions, rows.Err()
 }
 
+func (db *DB) ListRunningOrphans(minAge time.Duration) ([]Action, error) {
+	cutoff := time.Now().UTC().Add(-minAge).Format(TimeLayout)
+	rows, err := db.Query(
+		"SELECT "+actionColumns+" FROM actions "+
+			"WHERE status = ? "+
+			"AND json_extract(metadata, '$.daemon_short') IS NULL "+
+			"AND COALESCE(json_extract(metadata, '$.executor'), 'local') <> 'cloud' "+
+			"AND started_at IS NOT NULL "+
+			"AND started_at <= ? "+
+			"ORDER BY id",
+		ActionStatusRunning, cutoff,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var actions []Action
+	for rows.Next() {
+		var a Action
+		if err := rows.Scan(a.scanFields()...); err != nil {
+			return nil, err
+		}
+		actions = append(actions, a)
+	}
+	return actions, rows.Err()
+}
+
 func (db *DB) CountRunningInteractive() (int, error) {
 	var count int
 	err := db.QueryRow(

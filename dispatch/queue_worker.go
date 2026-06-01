@@ -18,6 +18,7 @@ const (
 	DefaultStaleThreshold    = 30 * time.Second
 	DefaultPollInterval      = 10 * time.Second
 	DefaultBgMissingJobGrace = 30 * time.Second
+	DefaultBgHardTimeout     = 4 * time.Hour
 )
 
 var defaultDeferBackoff = 30 * time.Second
@@ -29,6 +30,7 @@ type WorkerConfig struct {
 	PollInterval      time.Duration
 	BgStateReader     BgStateReader
 	BgMissingJobGrace time.Duration
+	BgHardTimeout     time.Duration
 }
 
 func RunWorker(ctx context.Context, cfg WorkerConfig) error {
@@ -43,6 +45,9 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 	}
 	if cfg.BgMissingJobGrace <= 0 {
 		cfg.BgMissingJobGrace = DefaultBgMissingJobGrace
+	}
+	if cfg.BgHardTimeout <= 0 {
+		cfg.BgHardTimeout = DefaultBgHardTimeout
 	}
 
 	slog.Info("queue worker started",
@@ -89,10 +94,33 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 }
 
 func reapStaleActions(cfg WorkerConfig) {
-	if cfg.BgStateReader == nil {
+	now := time.Now()
+	reapOrphans(cfg, now)
+	if cfg.BgStateReader != nil {
+		reapBg(cfg, now)
+	}
+}
+
+func reapOrphans(cfg WorkerConfig, _ time.Time) {
+	actions, err := cfg.DB.ListRunningOrphans(cfg.BgMissingJobGrace)
+	if err != nil {
+		slog.Error("list running orphans", "error", err)
 		return
 	}
-	reapBg(cfg, time.Now())
+	if len(actions) == 0 {
+		return
+	}
+	failures := make([]db.ActionFailureUpdate, 0, len(actions))
+	for _, a := range actions {
+		failures = append(failures, db.ActionFailureUpdate{
+			ID:     a.ID,
+			Reason: fmt.Sprintf("orphaned: running for >%v with no daemon_short recorded", cfg.BgMissingJobGrace),
+		})
+		slog.Warn("reaped orphan running action", "action_id", a.ID)
+	}
+	if err := cfg.DB.BulkMarkFailed(failures); err != nil {
+		slog.Error("bulk mark orphan actions failed", "error", err, "count", len(failures))
+	}
 }
 
 func parseStartedAt(a *db.Action) (started time.Time, ok bool) {
@@ -192,6 +220,14 @@ func reapBg(cfg WorkerConfig, now time.Time) {
 				msg = "bg session reported state=failed"
 			}
 			failures = append(failures, db.ActionFailureUpdate{ID: a.ID, Reason: msg})
+		default:
+			if started, ok := parseStartedAt(&a); ok && now.Sub(started) >= cfg.BgHardTimeout {
+				failures = append(failures, db.ActionFailureUpdate{
+					ID:     a.ID,
+					Reason: fmt.Sprintf("bg hard timeout (%v) elapsed in state=%q", cfg.BgHardTimeout, payload.State),
+				})
+				slog.Warn("bg reaper: hard timeout reached", "action_id", a.ID, "state", payload.State, "elapsed", now.Sub(started))
+			}
 		}
 	}
 

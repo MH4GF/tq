@@ -246,6 +246,77 @@ func TestReapBg_MissingJobWithinGraceIsKept(t *testing.T) {
 	}
 }
 
+func TestReapOrphans_MarksRunningWithoutDaemonShortAsFailed(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive"}`)
+	claimRunning(t, d, actionID)
+	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-2*time.Hour))); err != nil {
+		t.Fatalf("set started_at: %v", err)
+	}
+
+	cfg := WorkerConfig{
+		DispatchConfig:    DispatchConfig{DB: d},
+		BgMissingJobGrace: time.Minute,
+	}
+
+	reapOrphans(cfg, time.Now())
+
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusFailed {
+		t.Errorf("status = %q, want %q (orphan reaped)", updated.Status, db.ActionStatusFailed)
+	}
+	if !strings.Contains(updated.Result.String, "orphaned") {
+		t.Errorf("reason = %q, want substring %q", updated.Result.String, "orphaned")
+	}
+}
+
+func TestReapOrphans_SkipsCloudExecutor(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","executor":"cloud"}`)
+	claimRunning(t, d, actionID)
+	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-2*time.Hour))); err != nil {
+		t.Fatalf("set started_at: %v", err)
+	}
+
+	cfg := WorkerConfig{
+		DispatchConfig:    DispatchConfig{DB: d},
+		BgMissingJobGrace: time.Minute,
+	}
+
+	reapOrphans(cfg, time.Now())
+
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusRunning {
+		t.Errorf("cloud executor orphan unexpectedly reaped: status = %q", updated.Status)
+	}
+}
+
+func TestReapBg_WedgedWorkingHardTimeout(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","daemon_short":"abcd1234"}`)
+	claimRunning(t, d, actionID)
+	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-5*time.Hour))); err != nil {
+		t.Fatalf("set started_at: %v", err)
+	}
+
+	reader := &fakeBgStateReader{}
+	reader.set("abcd1234", []byte(`{"state":"working"}`))
+
+	cfg := WorkerConfig{
+		DispatchConfig:    DispatchConfig{DB: d},
+		BgStateReader:     reader,
+		BgMissingJobGrace: time.Minute,
+		BgHardTimeout:     4 * time.Hour,
+	}
+
+	reapBg(cfg, time.Now())
+
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusFailed {
+		t.Errorf("status = %q, want %q (hard timeout)", updated.Status, db.ActionStatusFailed)
+	}
+	if !strings.Contains(updated.Result.String, "hard timeout") {
+		t.Errorf("reason = %q, want substring %q", updated.Result.String, "hard timeout")
+	}
+}
+
 func TestSlotPredicates_LegacyExperimentalBgCountedInInteractive(t *testing.T) {
 	d, _ := setupTaskAndAction(t, `{"instruction":"x","mode":"experimental_bg","daemon_short":"abcd1234"}`)
 	projectID := int64(1)
