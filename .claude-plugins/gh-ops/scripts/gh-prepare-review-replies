@@ -38,9 +38,14 @@ OUTFILE=".claude/tmp/pr${NUMBER}-review-replies-${TIMESTAMP}.md"
     (if $first.path == null then "(general)"
      elif $first.line then "\($first.path):\($first.line)"
      else $first.path end) as $loc |
-    "## \($loc) by @\($author)\n\n" +
-    "- **Thread ID**: `\($thread.id)`\n\n" +
-    ($thread.comments.nodes | map("> " + (.body | gsub("\n"; "\n> "))) | join("\n\n---\n\n")) +
+    "## `\($loc)` by `@\($author)`\n\n" +
+    "- Thread ID — `\($thread.id)`\n\n" +
+    ($thread.comments.nodes | map(
+      .body as $b |
+      ([$b | scan("`+")] | map(length) | max // 0) as $run |
+      ("`" * ([$run + 1, 3] | max)) as $fence |
+      $fence + "\n" + $b + "\n" + $fence
+    ) | join("\n\n---\n\n")) +
     "\n\n**Classification**: _(No action / Resolve without code change / Action required)_\n\n" +
     "**Reply draft**:\n\n_(empty)_\n\n" +
     "**Edit plan** _(Action required only — leave as `_(n/a)_` otherwise)_:\n\n_(n/a)_\n\n---\n"

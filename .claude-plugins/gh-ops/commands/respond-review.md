@@ -14,7 +14,7 @@ Respond to reviewer comments. Process in batches by phase, not one-by-one sequen
 ${CLAUDE_PLUGIN_ROOT}/scripts/gh-prepare-review-replies $ARGUMENTS
 ```
 
-The script writes a Markdown draft to `.claude/tmp/pr${NUMBER}-review-replies-${TIMESTAMP}.md` containing every unresolved thread (Thread ID, file:line, author, every quoted comment in the thread joined by `---`, empty Classification/Reply draft/Edit plan fields). It prints the generated path on stdout.
+The script writes a Markdown draft to `.claude/tmp/pr${NUMBER}-review-replies-${TIMESTAMP}.md` containing every unresolved thread (Thread ID, file:line, author, each comment body verbatim inside a fenced code block joined by `---`, empty Classification/Reply draft/Edit plan fields). It prints the generated path on stdout. Comment bodies sit in code fences so the AI-writing lint guard treats the reviewer's words as data, not as your prose.
 
 If stdout is empty (stderr says `No unresolved threads`) → report and finish.
 
@@ -24,8 +24,8 @@ Read the file path printed by Phase 1 and fill in each thread.
 
 ### Editing rules (the draft is the user's source of truth)
 
-- Edit ONLY the `Classification` line, the `Reply draft` block, and the `Edit plan` block. Leave every other byte — heading, Thread ID, quoted comment — exactly as the script wrote it.
-- NEVER modify, summarize, paraphrase, reorder, or delete the quoted comment lines (lines starting with `>`). The user reviews the draft against that quote; rewriting it forces them to cross-check GitHub for every reply and breaks the workflow.
+- Edit ONLY the `Classification` line, the `Reply draft` block, and the `Edit plan` block. Leave every other byte — heading, Thread ID, the fenced comment body — exactly as the script wrote it.
+- NEVER modify, summarize, paraphrase, reorder, or delete the verbatim comment body inside the fenced code block (and never strip or shrink the fence itself). The user reviews the draft against that quote; rewriting it forces them to cross-check GitHub for every reply and breaks the workflow.
 - NEVER reference threads by position or by any other ad-hoc label inside `Reply draft` (e.g. `same as the first thread`, `see thread above`). The GitHub review UI shows no such ordering, so reviewers cannot resolve the reference. If you need to point at another thread, cite its `file:line` directly.
 
 ### Fields to fill in
@@ -49,12 +49,14 @@ For judgment calls (naming, value selection, design decisions), include preceden
 
 Before (script output):
 
-```markdown
-## src/foo.ts:42 by @coderabbitai[bot]
+````markdown
+## `src/foo.ts:42` by `@coderabbitai[bot]`
 
-- **Thread ID**: `PRRT_xxx`
+- Thread ID — `PRRT_xxx`
 
-> Consider extracting this into a helper — it's duplicated in `bar.ts:88`.
+```
+Consider extracting this into a helper — it's duplicated in `bar.ts:88`.
+```
 
 **Classification**: _(No action / Resolve without code change / Action required)_
 
@@ -65,16 +67,18 @@ _(empty)_
 **Edit plan** _(Action required only — leave as `_(n/a)_` otherwise)_:
 
 _(n/a)_
+````
+
+After (your edit — heading / Thread ID / fenced comment untouched):
+
+````markdown
+## `src/foo.ts:42` by `@coderabbitai[bot]`
+
+- Thread ID — `PRRT_xxx`
+
 ```
-
-After (your edit — heading / Thread ID / quote untouched):
-
-```markdown
-## src/foo.ts:42 by @coderabbitai[bot]
-
-- **Thread ID**: `PRRT_xxx`
-
-> Consider extracting this into a helper — it's duplicated in `bar.ts:88`.
+Consider extracting this into a helper — it's duplicated in `bar.ts:88`.
+```
 
 **Classification**: Action required
 
@@ -89,7 +93,7 @@ Extracted into `extractFoo()` in `src/util/foo.ts`. Both call sites updated.
 - Alternative considered: inline at one site and delete the other. Rejected — `bar.ts` has a slightly different surrounding context, deleting it would change behaviour.
 - Out of scope: the third near-duplicate at `baz.ts:120` looks similar but takes a different input shape; leave it for a follow-up.
 - Verification: existing `foo.test.ts` covers both call sites; add one direct unit test for `extractFoo` to lock the contract.
-```
+````
 
 For `No action` / `Resolve without code change` threads, leave `Edit plan` as the `_(n/a)_` placeholder — there is no code change to plan.
 
