@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.21.32](https://github.com/MH4GF/tq/compare/v0.21.31...v0.21.32) - 2026-06-01
+- refactor: unify action launch on claude --bg, retire experimental_bg by @MH4GF in https://github.com/MH4GF/tq/pull/367
+- fix(db): guard experimental_bg migration against malformed metadata rows by @MH4GF in https://github.com/MH4GF/tq/pull/369
+
 ## [v0.21.31](https://github.com/MH4GF/tq/compare/v0.21.30...v0.21.31) - 2026-06-01
 - feat: auto-record claude_session_id for experimental_bg; allow --meta on done by @MH4GF in https://github.com/MH4GF/tq/pull/363
 - Migrate tq plugin slash commands to Agent Skills by @MH4GF in https://github.com/MH4GF/tq/pull/365
