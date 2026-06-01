@@ -77,6 +77,58 @@ func TestClose(t *testing.T) {
 	}
 }
 
+func TestMigrate_TolerateMalformedMetadataDuringExperimentalBgRewrite(t *testing.T) {
+	d := testutil.NewTestDB(t)
+
+	if _, err := d.Exec(`
+		INSERT INTO projects(name, work_dir) VALUES('p', '/tmp/p');
+		INSERT INTO tasks(project_id, title) VALUES(last_insert_rowid(), 't');
+	`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	if _, err := d.Exec(`
+		INSERT INTO actions(task_id, title, metadata, status)
+		VALUES (1, 'malformed', 'not-json', 'failed');
+	`); err != nil {
+		t.Fatalf("seed malformed row: %v", err)
+	}
+	if _, err := d.Exec(`
+		INSERT INTO actions(task_id, title, metadata, status)
+		VALUES (1, 'legacy bg', '{"mode":"experimental_bg","instruction":"x"}', 'done');
+	`); err != nil {
+		t.Fatalf("seed legacy row: %v", err)
+	}
+
+	if err := d.Migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	var legacyMode string
+	if err := d.QueryRow(
+		`SELECT json_extract(metadata, '$.mode') FROM actions WHERE title = 'legacy bg'`,
+	).Scan(&legacyMode); err != nil {
+		t.Fatalf("read legacy row: %v", err)
+	}
+	if legacyMode != "interactive" {
+		t.Errorf("legacy bg mode = %q, want %q", legacyMode, "interactive")
+	}
+
+	var malformedMeta string
+	if err := d.QueryRow(
+		`SELECT metadata FROM actions WHERE title = 'malformed'`,
+	).Scan(&malformedMeta); err != nil {
+		t.Fatalf("read malformed row: %v", err)
+	}
+	if malformedMeta != "not-json" {
+		t.Errorf("malformed metadata changed = %q, want %q (left alone)", malformedMeta, "not-json")
+	}
+
+	if err := d.Migrate(); err != nil {
+		t.Fatalf("second migrate: %v", err)
+	}
+}
+
 func TestMigrate_RenamesTmuxColumns(t *testing.T) {
 	d := testutil.NewTestDB(t)
 

@@ -317,7 +317,9 @@ func (db *DB) migrateExperimentalBgToInteractive() error {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE actions
 		 SET metadata = json_set(metadata, '$.mode', 'interactive')
-		 WHERE json_extract(metadata, '$.mode') = 'experimental_bg'`,
+		 WHERE metadata IS NOT NULL
+		   AND json_valid(metadata)
+		   AND json_extract(metadata, '$.mode') = 'experimental_bg'`,
 	); err != nil {
 		return fmt.Errorf("update actions: %w", err)
 	}
@@ -331,7 +333,9 @@ func (db *DB) migrateExperimentalBgToInteractive() error {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE schedules
 		 SET metadata = json_set(metadata, '$.mode', 'interactive')
-		 WHERE json_extract(metadata, '$.mode') = 'experimental_bg'`,
+		 WHERE metadata IS NOT NULL
+		   AND json_valid(metadata)
+		   AND json_extract(metadata, '$.mode') = 'experimental_bg'`,
 	); err != nil {
 		return fmt.Errorf("update schedules: %w", err)
 	}
