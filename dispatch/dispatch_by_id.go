@@ -15,12 +15,8 @@ func (r *ExecuteResult) DispatchMessage(id int64) string {
 	case ModeRemote:
 		url := strings.TrimPrefix(r.Output, RemoteSessionPrefix)
 		return fmt.Sprintf("action #%d dispatched remotely (view: %s)", id, url)
-	case ModeInteractive:
-		return fmt.Sprintf("action #%d dispatched interactively (%s)", id, r.Output)
-	case ModeBg:
-		return fmt.Sprintf("action #%d dispatched to claude agent view (short: %s)", id, r.Output)
 	default:
-		return fmt.Sprintf("action #%d done", id)
+		return fmt.Sprintf("action #%d dispatched to claude agent view (short: %s)", id, r.Output)
 	}
 }
 

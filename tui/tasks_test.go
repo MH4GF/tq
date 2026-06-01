@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -918,7 +917,7 @@ func TestTasksModel_MessageStaleTimerIgnored(t *testing.T) {
 	}
 }
 
-func TestTasksModel_AttachActionRejectsHalfSetTmuxInfo(t *testing.T) {
+func TestTasksModel_AttachActionReportsMissingDaemonShort(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 
@@ -930,22 +929,14 @@ func TestTasksModel_AttachActionRejectsHalfSetTmuxInfo(t *testing.T) {
 		wantMsg string
 	}{
 		{
-			name: "session valid, window invalid",
-			action: &db.Action{
-				ID:          1,
-				TmuxSession: sql.NullString{String: "main", Valid: true},
-				TmuxWindow:  sql.NullString{Valid: false},
-			},
-			wantMsg: "no tmux session info",
+			name:    "metadata without daemon_short",
+			action:  &db.Action{ID: 1, Metadata: `{"instruction":"x","mode":"interactive"}`},
+			wantMsg: "no daemon_short recorded yet",
 		},
 		{
-			name: "session invalid, window valid",
-			action: &db.Action{
-				ID:          2,
-				TmuxSession: sql.NullString{Valid: false},
-				TmuxWindow:  sql.NullString{String: "tq-action-2", Valid: true},
-			},
-			wantMsg: "no tmux session info",
+			name:    "metadata with daemon_short",
+			action:  &db.Action{ID: 2, Metadata: `{"instruction":"x","mode":"interactive","daemon_short":"abcd1234"}`},
+			wantMsg: "run `claude attach abcd1234` in a terminal to view this session",
 		},
 	}
 

@@ -2,8 +2,6 @@ package dispatch
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"io/fs"
 	"strings"
 	"sync"
@@ -16,9 +14,6 @@ import (
 
 func ptr[T any](v T) *T { return &v }
 
-// withShortDeferBackoff shrinks defaultDeferBackoff to the polling-loop scale
-// for slot-defer tests that expect a deferred action to resume promptly after
-// the slot frees. Restored via t.Cleanup.
 func withShortDeferBackoff(t *testing.T) {
 	t.Helper()
 	original := defaultDeferBackoff
@@ -26,1605 +21,413 @@ func withShortDeferBackoff(t *testing.T) {
 	t.Cleanup(func() { defaultDeferBackoff = original })
 }
 
-type countingWorker struct {
-	mu      sync.Mutex
-	count   int
-	result  string
-	err     error
-	denials []PermissionDenial
+type bgWorkerStub struct {
+	mu     sync.Mutex
+	count  int
+	short  string
+	err    error
+	gotCfg ActionConfig
 }
 
-func (w *countingWorker) Execute(ctx context.Context, instruction string, cfg ActionConfig, workDir string, actionID, taskID int64) (string, error) {
+func (w *bgWorkerStub) Execute(_ context.Context, _ string, cfg ActionConfig, _ string, _, _ int64) (string, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.count++
-	return w.result, w.err
+	w.gotCfg = cfg
+	if w.err != nil {
+		return "", w.err
+	}
+	return w.short, nil
 }
 
-func (w *countingWorker) Count() int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.count
-}
-
-func (w *countingWorker) Set(result string, err error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.result = result
-	w.err = err
-}
-
-func (w *countingWorker) LastDenials() []PermissionDenial { return w.denials }
-
-// blockingWorker.Execute blocks on the `block` channel until released, and
-// records the call count. Used to simulate a long-running noninteractive
-// claude -p in queue worker tests.
-type blockingWorker struct {
-	mu          sync.Mutex
-	count       int
-	block       chan struct{}
-	releaseOnce sync.Once
-	result      string
-	err         error
-}
-
-func newBlockingWorker() *blockingWorker {
-	return &blockingWorker{block: make(chan struct{})}
-}
-
-func (w *blockingWorker) Execute(ctx context.Context, instruction string, cfg ActionConfig, workDir string, actionID, taskID int64) (string, error) {
-	w.mu.Lock()
-	w.count++
-	w.mu.Unlock()
-	select {
-	case <-w.block:
-		return w.result, w.err
-	case <-ctx.Done():
-		return "", ctx.Err()
-	}
-}
-
-func (w *blockingWorker) Count() int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.count
-}
-
-func (w *blockingWorker) Release() {
-	w.releaseOnce.Do(func() { close(w.block) })
-}
-
-func (w *blockingWorker) LastDenials() []PermissionDenial { return nil }
-
-// waitFor polls fn until it returns true or the timeout expires.
-func waitFor(t *testing.T, timeout time.Duration, msg string, fn func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if fn() {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("waitFor timeout after %v: %s", timeout, msg)
-}
-
-func TestRunWorker_ProcessesAndStops(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-
-	worker := &countingWorker{result: `{"ok":true}`}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{
-			DB: d,
-			NonInteractiveFunc: func() Worker {
-				return worker
-			},
-			InteractiveFunc: func() Worker {
-				return worker
-			},
-		},
-		MaxInteractive: 3,
-		PollInterval:   50 * time.Millisecond,
-	}
-
-	err := RunWorker(ctx, cfg)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("RunWorker error = %v, want context.DeadlineExceeded", err)
-	}
-
-	if worker.Count() != 1 {
-		t.Errorf("worker.count = %d, want 1", worker.Count())
-	}
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusDone {
-		t.Errorf("action status = %q, want %q", action.Status, db.ActionStatusDone)
-	}
-}
-
-func TestRunWorker_InteractiveLimitEnforced(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix conflict","mode":"interactive"}`, db.ActionStatusPending, nil, "")
-
-	d.InsertAction("respond-review", taskID, "{}", db.ActionStatusRunning, nil, "")
-	d.SetActionTmuxInfoForTest(2, ptr("session-1"), nil, nil)
-
-	interactiveWorker := &countingWorker{result: "interactive:session=test"}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{
-			DB: d,
-			NonInteractiveFunc: func() Worker {
-				return &countingWorker{result: `{"ok":true}`}
-			},
-			InteractiveFunc: func() Worker {
-				return interactiveWorker
-			},
-		},
-		MaxInteractive: 1,
-		PollInterval:   50 * time.Millisecond,
-	}
-
-	_ = RunWorker(ctx, cfg)
-
-	if interactiveWorker.Count() != 0 {
-		t.Errorf("interactive worker called %d times, want 0 (limit reached)", interactiveWorker.Count())
-	}
-}
-
-func TestRunWorker_FailureEscalation(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-
-	worker := &countingWorker{err: context.DeadlineExceeded}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{
-			DB: d,
-			NonInteractiveFunc: func() Worker {
-				return worker
-			},
-			InteractiveFunc: func() Worker {
-				return worker
-			},
-		},
-		MaxInteractive: 3,
-		PollInterval:   50 * time.Millisecond,
-	}
-
-	_ = RunWorker(ctx, cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusFailed {
-		t.Errorf("action status = %q, want %q", action.Status, db.ActionStatusFailed)
-	}
-}
-
-// TestRunWorker_FailureDoesNotCreateFollowUp verifies that worker failure
-// marks the action as failed without spawning a follow-up investigation
-// action. Per-failure auto-investigation was retired 2026-05-14 in favor of
-// the batched /tq:investigate-incidents skill.
-func TestRunWorker_FailureDoesNotCreateFollowUp(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("check-pr-status", taskID, `{"instruction":"check pr status","mode":"noninteractive"}`, "pending", nil, "")
-
-	worker := &countingWorker{err: fmt.Errorf("something went wrong")}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{
-			DB: d,
-			NonInteractiveFunc: func() Worker {
-				return worker
-			},
-			InteractiveFunc: func() Worker {
-				return worker
-			},
-		},
-		MaxInteractive: 3,
-		PollInterval:   50 * time.Millisecond,
-	}
-
-	_ = RunWorker(ctx, cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != "failed" {
-		t.Errorf("action status = %q, want failed", action.Status)
-	}
-	if action.TaskID != taskID {
-		t.Errorf("action task_id = %d, want %d", action.TaskID, taskID)
-	}
-
-	actions, _ := d.ListActions("", nil, 0)
-	if len(actions) != 1 {
-		t.Errorf("expected exactly 1 action (no auto-generated follow-up), got %d", len(actions))
-	}
-}
-
-func TestRunWorker_RemoteDispatch(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Remote task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("remote-task", taskID, `{"instruction":"do remote task","mode":"remote"}`, db.ActionStatusPending, nil, "")
-
-	remoteWorker := &countingWorker{result: "remote:session=https://console.anthropic.com/p/abc"}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{
-			DB: d,
-			NonInteractiveFunc: func() Worker {
-				return &countingWorker{result: `{"ok":true}`}
-			},
-			InteractiveFunc: func() Worker {
-				return &countingWorker{result: "interactive:action=1"}
-			},
-			RemoteFunc: func() Worker {
-				return remoteWorker
-			},
-		},
-		MaxInteractive: 1,
-		PollInterval:   50 * time.Millisecond,
-	}
-
-	_ = RunWorker(ctx, cfg)
-
-	if remoteWorker.Count() != 1 {
-		t.Errorf("remote worker called %d times, want 1", remoteWorker.Count())
-	}
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusDispatched {
-		t.Errorf("action status = %q, want %q", action.Status, db.ActionStatusDispatched)
-	}
-}
-
-func TestRunWorker_RemoteDoesNotCountTowardInteractiveLimit(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("remote-task", taskID, `{"instruction":"do remote task","mode":"remote"}`, db.ActionStatusPending, nil, "")
-	d.InsertAction("fix-conflict", taskID, `{"instruction":"fix conflict","mode":"interactive"}`, db.ActionStatusPending, nil, "")
-
-	d.InsertAction("respond-review", taskID, `{"instruction":"respond to review","mode":"interactive"}`, db.ActionStatusRunning, nil, "")
-	d.SetActionTmuxInfoForTest(3, ptr("session-1"), nil, nil)
-
-	remoteWorker := &countingWorker{result: "remote:session=https://example.com"}
-	interactiveWorker := &countingWorker{result: "interactive:action=2"}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{
-			DB: d,
-			NonInteractiveFunc: func() Worker {
-				return &countingWorker{result: `{"ok":true}`}
-			},
-			InteractiveFunc: func() Worker {
-				return interactiveWorker
-			},
-			RemoteFunc: func() Worker {
-				return remoteWorker
-			},
-		},
-		MaxInteractive: 1,
-		PollInterval:   50 * time.Millisecond,
-	}
-
-	_ = RunWorker(ctx, cfg)
-
-	if remoteWorker.Count() != 1 {
-		t.Errorf("remote worker called %d times, want 1 (should not be limited)", remoteWorker.Count())
-	}
-	if interactiveWorker.Count() != 0 {
-		t.Errorf("interactive worker called %d times, want 0 (limit reached)", interactiveWorker.Count())
-	}
-}
-
-type mockClaudeSessionLogChecker struct {
-	mu        sync.Mutex
-	active    bool
-	logAge    time.Duration
-	logExists bool
-	err       error
-	calls     int
-}
-
-func (m *mockClaudeSessionLogChecker) IsClaudeSessionActive(workDir string, freshnessThreshold time.Duration) (bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.calls++
-	if m.err != nil {
-		return false, m.err
-	}
-	if m.logAge > 0 {
-		return m.logAge < freshnessThreshold, nil
-	}
-	return m.active, nil
-}
-
-func (m *mockClaudeSessionLogChecker) SessionLogExists(sessionID string) (bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.logExists, m.err
-}
-
-func (m *mockClaudeSessionLogChecker) callCount() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.calls
-}
-
-// TestReapStaleActions_Interactive locks the interactive reaper's liveness
-// contract after the tmux-window probe was removed: liveness is
-// judged solely by the claude session log. A fresh log keeps the action
-// running; a non-fresh log only fails the action via the early-stale watchdog
-// (never produced a log) or, for a started session, once it has exceeded
-// InteractiveHardTimeout. A live session is never reaped just because its tmux
-// window was renamed.
-func TestReapStaleActions_Interactive(t *testing.T) {
-	tests := []struct {
-		name                   string
-		startedOffset          time.Duration
-		omitStartedAt          bool
-		metadata               string
-		log                    *mockClaudeSessionLogChecker
-		interactiveHardTimeout time.Duration
-		earlyDispatchTimeout   time.Duration
-		wantStatus             string
-		wantResultContains     string
-	}{
-		{
-			name:          "no-op when no log checker",
-			startedOffset: -5 * time.Minute,
-			wantStatus:    db.ActionStatusRunning,
-		},
-		{
-			name:          "skips within grace period",
-			startedOffset: -10 * time.Second,
-			log:           &mockClaudeSessionLogChecker{active: false},
-			wantStatus:    db.ActionStatusRunning,
-		},
-		{
-			name:          "skips when session log fresh",
-			startedOffset: -10 * time.Minute,
-			log:           &mockClaudeSessionLogChecker{active: true},
-			wantStatus:    db.ActionStatusRunning,
-		},
-		{
-			name:                   "fresh log keeps action running even past hard timeout",
-			startedOffset:          -2 * time.Hour,
-			metadata:               `{"claude_session_id":"sess-fresh"}`,
-			log:                    &mockClaudeSessionLogChecker{active: true, logExists: true},
-			interactiveHardTimeout: 1 * time.Hour,
-			wantStatus:             db.ActionStatusRunning,
-		},
-		{
-			name:                 "early-stale: no session_id, stale log, past early timeout",
-			startedOffset:        -6 * time.Minute,
-			log:                  &mockClaudeSessionLogChecker{active: false},
-			earlyDispatchTimeout: 5 * time.Minute,
-			wantStatus:           db.ActionStatusFailed,
-			wantResultContains:   "early-stale",
-		},
-		{
-			name:                 "early-stale deferred within early timeout stays running",
-			startedOffset:        -2 * time.Minute,
-			log:                  &mockClaudeSessionLogChecker{active: false},
-			earlyDispatchTimeout: 5 * time.Minute,
-			wantStatus:           db.ActionStatusRunning,
-		},
-		{
-			name:                 "early-stale uses HeartbeatFreshness, reaps log stale by heartbeat but young vs sinceStart",
-			startedOffset:        -10 * time.Minute,
-			log:                  &mockClaudeSessionLogChecker{logAge: 130 * time.Second},
-			earlyDispatchTimeout: 5 * time.Minute,
-			wantStatus:           db.ActionStatusFailed,
-			wantResultContains:   "early-stale",
-		},
-		{
-			// A live interactive worktree session (claude_session_id
-			// recorded, session log .jsonl on disk) whose session log is
-			// momentarily stale but which started well within the hard
-			// timeout. It is still working — must NOT be reaped. Before the
-			// fix the tmux-window probe reaped it because automatic-rename had
-			// renamed its window away from tq-action-<id>.
-			name:                 "live session, stale log, within hard timeout, not reaped",
-			startedOffset:        -7 * time.Minute,
-			metadata:             `{"claude_session_id":"sess-5219"}`,
-			log:                  &mockClaudeSessionLogChecker{active: false, logExists: true},
-			earlyDispatchTimeout: 5 * time.Minute,
-			wantStatus:           db.ActionStatusRunning,
-		},
-		{
-			name:                   "started session (log exists), stale log, past hard timeout reaped",
-			startedOffset:          -2 * time.Hour,
-			metadata:               `{"claude_session_id":"sess-done"}`,
-			log:                    &mockClaudeSessionLogChecker{active: false, logExists: true},
-			interactiveHardTimeout: 1 * time.Hour,
-			wantStatus:             db.ActionStatusFailed,
-			wantResultContains:     "hard timeout",
-		},
-		{
-			name:                   "SessionLogExists errors defers, then hard timeout reaps",
-			startedOffset:          -2 * time.Hour,
-			metadata:               `{"claude_session_id":"sess-e"}`,
-			log:                    &mockClaudeSessionLogChecker{active: false, err: fmt.Errorf("glob failed")},
-			interactiveHardTimeout: 1 * time.Hour,
-			wantStatus:             db.ActionStatusFailed,
-			wantResultContains:     "hard timeout",
-		},
-		{
-			name:                   "no session_id, stale log, early-stale suppressed, past hard timeout reaped",
-			startedOffset:          -2 * time.Hour,
-			log:                    &mockClaudeSessionLogChecker{active: false},
-			interactiveHardTimeout: 1 * time.Hour,
-			earlyDispatchTimeout:   24 * time.Hour,
-			wantStatus:             db.ActionStatusFailed,
-			wantResultContains:     "hard timeout",
-		},
-		{
-			name:                 "session_id set but log absent stays early-stale",
-			startedOffset:        -6 * time.Minute,
-			metadata:             `{"claude_session_id":"sess-x"}`,
-			log:                  &mockClaudeSessionLogChecker{active: false, logExists: false},
-			earlyDispatchTimeout: 5 * time.Minute,
-			wantStatus:           db.ActionStatusFailed,
-			wantResultContains:   "early-stale",
-		},
-		{
-			// startedAt unknown: kept as a candidate so early-stale can run,
-			// but the hard-timeout backstop cannot fire without a start time,
-			// so the action lingers rather than being falsely reaped.
-			name:                 "startedAt unknown is not reapable by hard timeout",
-			omitStartedAt:        true,
-			log:                  &mockClaudeSessionLogChecker{active: false},
-			earlyDispatchTimeout: 24 * time.Hour,
-			wantStatus:           db.ActionStatusRunning,
-		},
-		{
-			name:                   "skips cloud executor action even when log stale past hard timeout",
-			startedOffset:          -2 * time.Hour,
-			metadata:               `{"executor":"cloud"}`,
-			log:                    &mockClaudeSessionLogChecker{active: false},
-			interactiveHardTimeout: 1 * time.Hour,
-			earlyDispatchTimeout:   24 * time.Hour,
-			wantStatus:             db.ActionStatusRunning,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := testutil.NewTestDB(t)
-			testutil.SeedTestProjects(t, d)
-
-			taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-			meta := tt.metadata
-			if meta == "" {
-				meta = "{}"
-			}
-			d.InsertAction("fix-conflict", taskID, meta, db.ActionStatusRunning, nil, "")
-
-			var startedAt *time.Time
-			if !tt.omitStartedAt {
-				s := time.Now().Add(tt.startedOffset)
-				startedAt = &s
-			}
-			d.SetActionTmuxInfoForTest(1, ptr("main"), ptr("tq-action-1"), startedAt)
-
-			cfg := WorkerConfig{
-				DispatchConfig:         DispatchConfig{DB: d},
-				StaleGracePeriod:       30 * time.Second,
-				HeartbeatFreshness:     120 * time.Second,
-				InteractiveHardTimeout: DefaultInteractiveHardTimeout,
-				EarlyDispatchTimeout:   DefaultEarlyDispatchTimeout,
-			}
-			if tt.log != nil {
-				cfg.ClaudeSessionLogChecker = tt.log
-			}
-			if tt.interactiveHardTimeout > 0 {
-				cfg.InteractiveHardTimeout = tt.interactiveHardTimeout
-			}
-			if tt.earlyDispatchTimeout > 0 {
-				cfg.EarlyDispatchTimeout = tt.earlyDispatchTimeout
-			}
-
-			reapStaleActions(cfg)
-
-			action, _ := d.GetAction(1)
-			if action.Status != tt.wantStatus {
-				t.Errorf("status = %q, want %q", action.Status, tt.wantStatus)
-			}
-			if tt.wantResultContains != "" {
-				if !action.Result.Valid || !strings.Contains(action.Result.String, tt.wantResultContains) {
-					t.Errorf("result = %v, want containing %q", action.Result, tt.wantResultContains)
-				}
-			}
-		})
-	}
-}
-
-func TestReapStaleActions_NonInteractive(t *testing.T) {
-	tests := []struct {
-		name               string
-		startedOffset      time.Duration
-		omitStartedAt      bool
-		metadata           string
-		log                *mockClaudeSessionLogChecker
-		wantStatus         string
-		wantResultContains string
-	}{
-		{
-			name:               "reaps when timeout exceeded",
-			startedOffset:      -25 * time.Minute,
-			wantStatus:         db.ActionStatusFailed,
-			wantResultContains: "noninteractive",
-		},
-		{
-			name:          "skips within threshold",
-			startedOffset: -5 * time.Minute,
-			wantStatus:    db.ActionStatusRunning,
-		},
-		{
-			name:          "skips when started_at unset",
-			omitStartedAt: true,
-			wantStatus:    db.ActionStatusRunning,
-		},
-		{
-			name:          "skipped by fresh heartbeat",
-			startedOffset: -25 * time.Minute,
-			log:           &mockClaudeSessionLogChecker{active: true},
-			wantStatus:    db.ActionStatusRunning,
-		},
-		{
-			name:          "reaped by stale heartbeat",
-			startedOffset: -25 * time.Minute,
-			log:           &mockClaudeSessionLogChecker{active: false},
-			wantStatus:    db.ActionStatusFailed,
-		},
-		{
-			name:          "reaped when checker errors",
-			startedOffset: -25 * time.Minute,
-			log:           &mockClaudeSessionLogChecker{err: fmt.Errorf("permission denied")},
-			wantStatus:    db.ActionStatusFailed,
-		},
-		{
-			name:          "skips cloud executor noninteractive even past timeout",
-			startedOffset: -25 * time.Minute,
-			metadata:      `{"instruction":"x","mode":"noninteractive","executor":"cloud"}`,
-			log:           &mockClaudeSessionLogChecker{active: false},
-			wantStatus:    db.ActionStatusRunning,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := testutil.NewTestDB(t)
-			testutil.SeedTestProjects(t, d)
-
-			taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-			meta := tt.metadata
-			if meta == "" {
-				meta = `{"instruction":"check","mode":"noninteractive"}`
-			}
-			d.InsertAction("check-pr", taskID, meta, db.ActionStatusRunning, nil, "")
-
-			if !tt.omitStartedAt {
-				started := time.Now().Add(tt.startedOffset)
-				d.SetActionTmuxInfoForTest(1, nil, nil, &started)
-			}
-
-			cfg := WorkerConfig{
-				DispatchConfig:     DispatchConfig{DB: d},
-				HeartbeatFreshness: 120 * time.Second,
-			}
-			if tt.log != nil {
-				cfg.ClaudeSessionLogChecker = tt.log
-			}
-
-			reapStaleActions(cfg)
-
-			action, _ := d.GetAction(1)
-			if action.Status != tt.wantStatus {
-				t.Errorf("status = %q, want %q", action.Status, tt.wantStatus)
-			}
-			if tt.wantResultContains != "" {
-				if !action.Result.Valid || !strings.Contains(action.Result.String, tt.wantResultContains) {
-					t.Errorf("result = %v, want containing %q", action.Result, tt.wantResultContains)
-				}
-			}
-		})
-	}
-}
-
-func TestReapStaleActions_MultipleStaleAllReaped(t *testing.T) {
-	tests := []struct {
-		name        string
-		actionTitle string
-		metadata    string
-		staleAt     time.Duration
-		tmuxSession *string
-		cfgExtras   func(*WorkerConfig)
-	}{
-		{
-			name:        "interactive",
-			actionTitle: "fix-conflict",
-			metadata:    "{}",
-			staleAt:     -10 * time.Minute,
-			tmuxSession: ptr("main"),
-			cfgExtras: func(c *WorkerConfig) {
-				c.StaleGracePeriod = 30 * time.Second
-				c.InteractiveHardTimeout = DefaultInteractiveHardTimeout
-				c.EarlyDispatchTimeout = DefaultEarlyDispatchTimeout
-				// No session_id + stale log past the early timeout → all
-				// reaped as early-stale.
-				c.ClaudeSessionLogChecker = &mockClaudeSessionLogChecker{active: false}
-			},
-		},
-		{
-			name:        "noninteractive",
-			actionTitle: "check-pr",
-			metadata:    `{"instruction":"check","mode":"noninteractive"}`,
-			staleAt:     -25 * time.Minute,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := testutil.NewTestDB(t)
-			testutil.SeedTestProjects(t, d)
-
-			taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-
-			staleAt := time.Now().Add(tt.staleAt)
-			const n = 3
-			for i := range n {
-				if _, err := d.InsertAction(tt.actionTitle, taskID, tt.metadata, db.ActionStatusRunning, nil, ""); err != nil {
-					t.Fatalf("seed action %d: %v", i, err)
-				}
-			}
-			for i := int64(1); i <= n; i++ {
-				if tt.tmuxSession != nil {
-					d.SetActionTmuxInfoForTest(i, tt.tmuxSession, ptr(WindowName(i)), &staleAt)
-				} else {
-					d.SetActionTmuxInfoForTest(i, nil, nil, &staleAt)
-				}
-			}
-
-			cfg := WorkerConfig{
-				DispatchConfig:     DispatchConfig{DB: d},
-				HeartbeatFreshness: 120 * time.Second,
-			}
-			if tt.cfgExtras != nil {
-				tt.cfgExtras(&cfg)
-			}
-
-			reapStaleActions(cfg)
-
-			for i := int64(1); i <= n; i++ {
-				a, err := d.GetAction(i)
-				if err != nil {
-					t.Fatalf("GetAction(%d): %v", i, err)
-				}
-				if a.Status != db.ActionStatusFailed {
-					t.Errorf("action %d status = %q, want %q", i, a.Status, db.ActionStatusFailed)
-				}
-			}
-		})
-	}
-}
-
-func TestDispatchOne_NoPending(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{
-			DB: d,
-			NonInteractiveFunc: func() Worker {
-				return &countingWorker{}
-			},
-			InteractiveFunc: func() Worker {
-				return &countingWorker{}
-			},
-		},
-		PollInterval: 50 * time.Millisecond,
-	}
-
-	dispatched, err := dispatchOne(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("dispatchOne error: %v", err)
-	}
-	if dispatched {
-		t.Error("expected dispatched=false when no pending actions")
-	}
-}
-
-// TestRunWorker_NonInteractiveDoesNotBlockInteractive verifies that a
-// long-running noninteractive action does not block the dispatch loop from
-// dispatching a queued interactive action — the regression that motivated
-// switching noninteractive execution to a goroutine.
-func TestRunWorker_NonInteractiveDoesNotBlockInteractive(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("long-ni", taskID, `{"instruction":"long","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-	d.InsertAction("interactive", taskID, `{"instruction":"fix","mode":"interactive"}`, db.ActionStatusPending, nil, "")
-
-	niWorker := newBlockingWorker()
-	defer niWorker.Release()
-	intWorker := &countingWorker{result: "interactive:session=test"}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: func() Worker { return niWorker },
-			InteractiveFunc:    func() Worker { return intWorker },
-		},
-		MaxInteractive:    3,
-		MaxNonInteractive: 3,
-		PollInterval:      30 * time.Millisecond,
-	}
-
-	done := make(chan error, 1)
-	go func() { done <- RunWorker(ctx, cfg) }()
-
-	waitFor(t, 1*time.Second, "interactive worker dispatched while noninteractive is running", func() bool {
-		return intWorker.Count() >= 1 && niWorker.Count() >= 1
-	})
-
-	cancel()
-	<-done
-
-	if niWorker.Count() != 1 {
-		t.Errorf("niWorker.count = %d, want 1", niWorker.Count())
-	}
-	if intWorker.Count() != 1 {
-		t.Errorf("intWorker.count = %d, want 1", intWorker.Count())
-	}
-}
-
-// TestRunWorker_NonInteractiveSlotLimit verifies MaxNonInteractive caps the
-// number of in-flight noninteractive actions: when the cap is reached, new
-// pending noninteractive actions are deferred (ResetToPending) until a slot
-// frees up.
-func TestRunWorker_NonInteractiveSlotLimit(t *testing.T) {
-	withShortDeferBackoff(t)
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("ni-1", taskID, `{"instruction":"ni-1","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-	d.InsertAction("ni-2", taskID, `{"instruction":"ni-2","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-
-	niWorker := newBlockingWorker()
-	niWorker.result = `{"ok":true}`
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: func() Worker { return niWorker },
-			InteractiveFunc:    func() Worker { return &countingWorker{} },
-		},
-		MaxInteractive:    3,
-		MaxNonInteractive: 1,
-		PollInterval:      30 * time.Millisecond,
-	}
-
-	done := make(chan error, 1)
-	go func() { done <- RunWorker(ctx, cfg) }()
-
-	// First slot fills, second action stays pending due to cap.
-	waitFor(t, 1*time.Second, "first noninteractive starts running", func() bool {
-		return niWorker.Count() >= 1
-	})
-	// Confirm the cap holds: count stays at 1 over the next few polls.
-	time.Sleep(150 * time.Millisecond)
-	if got := niWorker.Count(); got != 1 {
-		t.Fatalf("niWorker.count = %d, want 1 (cap should hold)", got)
-	}
-	a2, _ := d.GetAction(2)
-	if a2.Status != db.ActionStatusPending {
-		t.Errorf("action #2 status = %q, want %q (deferred)", a2.Status, db.ActionStatusPending)
-	}
-
-	// Release the first action; the second should now claim the slot.
-	niWorker.Release()
-	waitFor(t, 1*time.Second, "second noninteractive dispatched after slot frees", func() bool {
-		return niWorker.Count() >= 2
-	})
-
-	cancel()
-	<-done
-}
-
-// TestRunWorker_NonInteractiveFailureDoesNotStopLoop verifies that a failed
-// noninteractive action does not wedge the dispatch loop: a follow-up
-// noninteractive action queued afterwards still gets dispatched on the next
-// poll cycle.
-func TestRunWorker_NonInteractiveFailureDoesNotStopLoop(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("ni-fail", taskID, `{"instruction":"fail","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-
-	failedThenOK := &countingWorker{err: fmt.Errorf("boom")}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: func() Worker { return failedThenOK },
-			InteractiveFunc:    func() Worker { return &countingWorker{} },
-		},
-		MaxInteractive:    3,
-		MaxNonInteractive: 3,
-		PollInterval:      30 * time.Millisecond,
-	}
-
-	done := make(chan error, 1)
-	go func() { done <- RunWorker(ctx, cfg) }()
-
-	waitFor(t, 1*time.Second, "first noninteractive marked failed", func() bool {
-		a, err := d.GetAction(1)
-		return err == nil && a.Status == db.ActionStatusFailed
-	})
-
-	// Queue another noninteractive after the failure.
-	d.InsertAction("ni-after", taskID, `{"instruction":"after","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-	failedThenOK.Set(`{"ok":true}`, nil)
-
-	waitFor(t, 1*time.Second, "follow-up noninteractive dispatched after failure", func() bool {
-		// id 1 was the failed ni-fail; id 2 is our manually queued ni-after
-		// (no auto-generated follow-up exists since per-failure investigation
-		// was retired 2026-05-14).
-		a, err := d.GetAction(2)
-		return err == nil && (a.Status == db.ActionStatusRunning || a.Status == db.ActionStatusDone)
-	})
-
-	cancel()
-	<-done
-}
-
-// TestRunWorker_ShutdownDoesNotMarkInflightFailed verifies that ctx cancel
-// during shutdown does NOT mark in-flight noninteractive actions as failed.
-// They should remain running so the next worker session's stale reaper can
-// re-evaluate.
-func TestRunWorker_ShutdownDoesNotMarkInflightFailed(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-	d.InsertAction("long-ni", taskID, `{"instruction":"long","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-
-	niWorker := newBlockingWorker()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: func() Worker { return niWorker },
-			InteractiveFunc:    func() Worker { return &countingWorker{} },
-		},
-		MaxInteractive:    3,
-		MaxNonInteractive: 3,
-		PollInterval:      30 * time.Millisecond,
-	}
-
-	done := make(chan error, 1)
-	go func() { done <- RunWorker(ctx, cfg) }()
-
-	waitFor(t, 1*time.Second, "noninteractive action starts running", func() bool {
-		a, err := d.GetAction(1)
-		return err == nil && a.Status == db.ActionStatusRunning
-	})
-
-	// Cancel the worker while the noninteractive is in flight.
-	cancel()
-	<-done
-
-	a, _ := d.GetAction(1)
-	if a.Status == db.ActionStatusFailed {
-		t.Errorf("action status = %q, want still running (shutdown should not mark in-flight as failed)", a.Status)
-	}
-}
-
-// fakeBgStateReader is an in-memory BgStateReader. Map values are returned
-// verbatim; absence of a key triggers os.ErrNotExist (so the reaper applies
-// its "job dir missing" grace logic).
 type fakeBgStateReader struct {
-	mu    sync.Mutex
-	files map[string][]byte
-	err   error
+	mu     sync.Mutex
+	states map[string][]byte
+	errs   map[string]error
 }
 
-func (f *fakeBgStateReader) ReadState(short string) ([]byte, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.err != nil {
-		return nil, f.err
+func (r *fakeBgStateReader) set(short string, payload []byte) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.states == nil {
+		r.states = make(map[string][]byte)
 	}
-	data, ok := f.files[short]
+	r.states[short] = payload
+}
+
+func (r *fakeBgStateReader) setErr(short string, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.errs == nil {
+		r.errs = make(map[string]error)
+	}
+	r.errs[short] = err
+}
+
+func (r *fakeBgStateReader) ReadState(short string) ([]byte, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err, ok := r.errs[short]; ok {
+		return nil, err
+	}
+	payload, ok := r.states[short]
 	if !ok {
 		return nil, &fs.PathError{Op: "open", Path: short, Err: fs.ErrNotExist}
 	}
-	return data, nil
+	return payload, nil
 }
 
-func TestReapBg(t *testing.T) {
-	now := time.Now()
-	stateWorking := []byte(`{"state":"working"}`)
-	stateDone := []byte(`{"state":"done","output":{"result":"shipped"}}`)
-	stateFailed := []byte(`{"state":"failed","detail":"daemon abort"}`)
-	stateFailedNoDetail := []byte(`{"state":"failed","output":{"result":"agg"}}`)
-	stateMalformed := []byte(`{not json`)
-	stateUnknown := []byte(`{"state":"banana"}`)
-
-	tests := []struct {
-		name              string
-		metadata          string
-		startedOffset     time.Duration // applied to StartedAt; 0 means "do not set"
-		omitStartedAt     bool
-		files             map[string][]byte
-		short             string
-		wantStatus        string
-		wantResultPiece   string
-		wantNoInvestigate bool
-	}{
-		{
-			name:          "working leaves action untouched",
-			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"aaaaaaaa"}`,
-			startedOffset: -1 * time.Minute,
-			files:         map[string][]byte{"aaaaaaaa": stateWorking},
-			wantStatus:    db.ActionStatusRunning,
-		},
-		{
-			name:            "done marks action done with output.result",
-			metadata:        `{"instruction":"x","mode":"experimental_bg","daemon_short":"bbbbbbbb"}`,
-			startedOffset:   -1 * time.Minute,
-			files:           map[string][]byte{"bbbbbbbb": stateDone},
-			wantStatus:      db.ActionStatusDone,
-			wantResultPiece: "shipped",
-		},
-		{
-			name:            "failed (with detail) marks failed and prefers detail over result",
-			metadata:        `{"instruction":"x","mode":"experimental_bg","daemon_short":"cccccccc"}`,
-			startedOffset:   -1 * time.Minute,
-			files:           map[string][]byte{"cccccccc": stateFailed},
-			wantStatus:      db.ActionStatusFailed,
-			wantResultPiece: "daemon abort",
-		},
-		{
-			name:            "failed (no detail) falls back to output.result",
-			metadata:        `{"instruction":"x","mode":"experimental_bg","daemon_short":"dddddddd"}`,
-			startedOffset:   -1 * time.Minute,
-			files:           map[string][]byte{"dddddddd": stateFailedNoDetail},
-			wantStatus:      db.ActionStatusFailed,
-			wantResultPiece: "agg",
-		},
-		{
-			name:            "missing state file past grace marks failed",
-			metadata:        `{"instruction":"x","mode":"experimental_bg","daemon_short":"eeeeeeee"}`,
-			startedOffset:   -2 * time.Minute,
-			files:           map[string][]byte{},
-			wantStatus:      db.ActionStatusFailed,
-			wantResultPiece: "daemon job dir missing",
-		},
-		{
-			name:          "missing state file within grace skips",
-			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"ffffffff"}`,
-			startedOffset: -1 * time.Second,
-			files:         map[string][]byte{},
-			wantStatus:    db.ActionStatusRunning,
-		},
-		{
-			name:          "missing daemon_short skips",
-			metadata:      `{"instruction":"x","mode":"experimental_bg"}`,
-			startedOffset: -1 * time.Minute,
-			files:         map[string][]byte{},
-			wantStatus:    db.ActionStatusRunning,
-		},
-		{
-			name:          "malformed JSON does not flip status",
-			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"gggggggg"}`,
-			startedOffset: -1 * time.Minute,
-			files:         map[string][]byte{"gggggggg": stateMalformed},
-			wantStatus:    db.ActionStatusRunning,
-		},
-		{
-			name:          "unknown state value does not flip status",
-			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"hhhhhhhh"}`,
-			startedOffset: -1 * time.Minute,
-			files:         map[string][]byte{"hhhhhhhh": stateUnknown},
-			wantStatus:    db.ActionStatusRunning,
-		},
-		{
-			name:          "blocked state (awaiting user input via claude agents) keeps running",
-			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"iiiiiiii"}`,
-			startedOffset: -1 * time.Minute,
-			files:         map[string][]byte{"iiiiiiii": []byte(`{"state":"blocked","detail":"awaiting reply"}`)},
-			wantStatus:    db.ActionStatusRunning,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := testutil.NewTestDB(t)
-			testutil.SeedTestProjects(t, d)
-
-			taskID, _ := d.InsertTask(1, "Task", "{}", "")
-			if _, err := d.InsertAction("bg-action", taskID, tt.metadata, db.ActionStatusRunning, nil, ""); err != nil {
-				t.Fatalf("seed action: %v", err)
-			}
-			if !tt.omitStartedAt {
-				started := now.Add(tt.startedOffset)
-				d.SetActionTmuxInfoForTest(1, nil, nil, &started)
-			}
-
-			cfg := WorkerConfig{
-				DispatchConfig:    DispatchConfig{DB: d},
-				BgStateReader:     &fakeBgStateReader{files: tt.files},
-				BgMissingJobGrace: 30 * time.Second,
-			}
-			reapBg(cfg, now)
-
-			action, _ := d.GetAction(1)
-			if action.Status != tt.wantStatus {
-				t.Errorf("status = %q, want %q", action.Status, tt.wantStatus)
-			}
-			if tt.wantResultPiece != "" {
-				if !action.Result.Valid || !strings.Contains(action.Result.String, tt.wantResultPiece) {
-					t.Errorf("result = %v, want containing %q", action.Result, tt.wantResultPiece)
-				}
-			}
-		})
-	}
-}
-
-func TestReapBg_BackfillsClaudeSessionID(t *testing.T) {
-	now := time.Now()
-	const sessionID = "01a2b3ed-bc16-4577-8ad5-e0ee40f1f39c"
-
-	tests := []struct {
-		name          string
-		metadata      string
-		stateJSON     []byte
-		wantSessionID string
-	}{
-		{
-			name:          "working session with sessionId populates metadata",
-			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"aaaaaaaa"}`,
-			stateJSON:     []byte(`{"state":"working","sessionId":"` + sessionID + `"}`),
-			wantSessionID: sessionID,
-		},
-		{
-			name:          "done session with sessionId populates metadata before terminal transition",
-			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"bbbbbbbb"}`,
-			stateJSON:     []byte(`{"state":"done","sessionId":"` + sessionID + `","output":{"result":"shipped"}}`),
-			wantSessionID: sessionID,
-		},
-		{
-			name:          "existing claude_session_id is not overwritten",
-			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"cccccccc","claude_session_id":"keep-me"}`,
-			stateJSON:     []byte(`{"state":"working","sessionId":"` + sessionID + `"}`),
-			wantSessionID: "keep-me",
-		},
-		{
-			name:          "state.json without sessionId leaves metadata untouched",
-			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"dddddddd"}`,
-			stateJSON:     []byte(`{"state":"working"}`),
-			wantSessionID: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := testutil.NewTestDB(t)
-			testutil.SeedTestProjects(t, d)
-			taskID, _ := d.InsertTask(1, "Task", "{}", "")
-			if _, err := d.InsertAction("bg-action", taskID, tt.metadata, db.ActionStatusRunning, nil, ""); err != nil {
-				t.Fatalf("seed action: %v", err)
-			}
-			started := now.Add(-1 * time.Minute)
-			d.SetActionTmuxInfoForTest(1, nil, nil, &started)
-
-			short, _ := ParseActionMetadata(tt.metadata)
-			shortStr, _ := short[MetaKeyDaemonShort].(string)
-
-			cfg := WorkerConfig{
-				DispatchConfig:    DispatchConfig{DB: d},
-				BgStateReader:     &fakeBgStateReader{files: map[string][]byte{shortStr: tt.stateJSON}},
-				BgMissingJobGrace: 30 * time.Second,
-			}
-			reapBg(cfg, now)
-
-			action, _ := d.GetAction(1)
-			meta, err := ParseActionMetadata(action.Metadata)
-			if err != nil {
-				t.Fatalf("parse metadata: %v", err)
-			}
-			got, _ := meta[MetaKeyClaudeSessionID].(string)
-			if got != tt.wantSessionID {
-				t.Errorf("claude_session_id = %q, want %q", got, tt.wantSessionID)
-			}
-		})
-	}
-}
-
-func TestReapBg_NilStateReaderSkips(t *testing.T) {
+func setupTaskAndAction(t *testing.T, meta string) (db.Store, int64) {
+	t.Helper()
 	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	taskID, _ := d.InsertTask(1, "Task", "{}", "")
-	if _, err := d.InsertAction("bg-action", taskID,
-		`{"instruction":"x","mode":"experimental_bg","daemon_short":"aaaaaaaa"}`,
-		db.ActionStatusRunning, nil, "",
-	); err != nil {
-		t.Fatalf("seed action: %v", err)
+	projectID, err := d.InsertProject("p", "", "{}")
+	if err != nil {
+		t.Fatalf("insert project: %v", err)
+	}
+	taskID, err := d.InsertTask(projectID, "t", "{}", "")
+	if err != nil {
+		t.Fatalf("insert task: %v", err)
+	}
+	actionID, err := d.InsertAction("a", taskID, meta, db.ActionStatusPending, nil, "")
+	if err != nil {
+		t.Fatalf("insert action: %v", err)
+	}
+	return d, actionID
+}
+
+func claimRunning(t *testing.T, d db.Store, actionID int64) {
+	t.Helper()
+	if _, err := d.ClaimPending(context.Background(), actionID); err != nil {
+		t.Fatalf("claim pending: %v", err)
+	}
+}
+
+func TestReapBg_MarksDoneOnTerminalState(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","daemon_short":"aaaaaaaa"}`)
+	claimRunning(t, d, actionID)
+
+	reader := &fakeBgStateReader{}
+	reader.set("aaaaaaaa", []byte(`{"state":"done","sessionId":"sess-1","output":{"result":"all good"}}`))
+
+	cfg := WorkerConfig{
+		DispatchConfig:    DispatchConfig{DB: d},
+		BgStateReader:     reader,
+		BgMissingJobGrace: time.Hour,
+	}
+
+	reapBg(cfg, time.Now())
+
+	updated, err := d.GetAction(actionID)
+	if err != nil {
+		t.Fatalf("get action: %v", err)
+	}
+	if updated.Status != db.ActionStatusDone {
+		t.Errorf("status = %q, want %q", updated.Status, db.ActionStatusDone)
+	}
+	if !updated.Result.Valid || updated.Result.String != "all good" {
+		t.Errorf("result = %q, want %q", updated.Result.String, "all good")
+	}
+	if !strings.Contains(updated.Metadata, `"claude_session_id":"sess-1"`) {
+		t.Errorf("claude_session_id not backfilled: %q", updated.Metadata)
+	}
+}
+
+func TestReapBg_MarksFailedOnTerminalState(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"noninteractive","daemon_short":"bbbbbbbb"}`)
+	claimRunning(t, d, actionID)
+
+	reader := &fakeBgStateReader{}
+	reader.set("bbbbbbbb", []byte(`{"state":"failed","detail":"boom"}`))
+
+	cfg := WorkerConfig{
+		DispatchConfig:    DispatchConfig{DB: d},
+		BgStateReader:     reader,
+		BgMissingJobGrace: time.Hour,
+	}
+
+	reapBg(cfg, time.Now())
+
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusFailed {
+		t.Errorf("status = %q, want %q", updated.Status, db.ActionStatusFailed)
+	}
+	if !updated.Result.Valid || updated.Result.String != "boom" {
+		t.Errorf("result = %q, want %q", updated.Result.String, "boom")
+	}
+}
+
+func TestReapBg_LegacyExperimentalBgIsHandled(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"experimental_bg","daemon_short":"cccccccc"}`)
+	claimRunning(t, d, actionID)
+
+	reader := &fakeBgStateReader{}
+	reader.set("cccccccc", []byte(`{"state":"done","output":{"result":"legacy ok"}}`))
+
+	cfg := WorkerConfig{
+		DispatchConfig:    DispatchConfig{DB: d},
+		BgStateReader:     reader,
+		BgMissingJobGrace: time.Hour,
+	}
+
+	reapBg(cfg, time.Now())
+
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusDone {
+		t.Errorf("legacy experimental_bg not reaped: status = %q", updated.Status)
+	}
+}
+
+func TestReapBg_SkipsCloudExecutorActions(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","daemon_short":"dddddddd","executor":"cloud"}`)
+	claimRunning(t, d, actionID)
+
+	reader := &fakeBgStateReader{}
+	reader.set("dddddddd", []byte(`{"state":"done"}`))
+
+	cfg := WorkerConfig{
+		DispatchConfig:    DispatchConfig{DB: d},
+		BgStateReader:     reader,
+		BgMissingJobGrace: time.Hour,
+	}
+
+	reapBg(cfg, time.Now())
+
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusRunning {
+		t.Errorf("cloud executor action should not be reaped, status = %q", updated.Status)
+	}
+}
+
+func TestReapBg_MissingJobAfterGraceMarksFailed(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","daemon_short":"eeeeeeee"}`)
+	claimRunning(t, d, actionID)
+	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-2*time.Hour))); err != nil {
+		t.Fatalf("set started_at: %v", err)
+	}
+
+	reader := &fakeBgStateReader{}
+	reader.setErr("eeeeeeee", &fs.PathError{Op: "open", Path: "x", Err: fs.ErrNotExist})
+
+	cfg := WorkerConfig{
+		DispatchConfig:    DispatchConfig{DB: d},
+		BgStateReader:     reader,
+		BgMissingJobGrace: time.Minute,
+	}
+
+	reapBg(cfg, time.Now())
+
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusFailed {
+		t.Errorf("status = %q, want %q after grace period", updated.Status, db.ActionStatusFailed)
+	}
+	if !strings.Contains(updated.Result.String, "daemon job dir missing") {
+		t.Errorf("failure reason missing: %q", updated.Result.String)
+	}
+}
+
+func TestReapBg_MissingJobWithinGraceIsKept(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","daemon_short":"ffffffff"}`)
+	claimRunning(t, d, actionID)
+
+	reader := &fakeBgStateReader{}
+	reader.setErr("ffffffff", &fs.PathError{Op: "open", Path: "x", Err: fs.ErrNotExist})
+
+	cfg := WorkerConfig{
+		DispatchConfig:    DispatchConfig{DB: d},
+		BgStateReader:     reader,
+		BgMissingJobGrace: time.Hour,
+	}
+
+	reapBg(cfg, time.Now())
+
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusRunning {
+		t.Errorf("status = %q, want %q (within grace)", updated.Status, db.ActionStatusRunning)
+	}
+}
+
+func TestReapOrphans_MarksRunningWithoutDaemonShortAsFailed(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive"}`)
+	claimRunning(t, d, actionID)
+	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-2*time.Hour))); err != nil {
+		t.Fatalf("set started_at: %v", err)
 	}
 
 	cfg := WorkerConfig{
 		DispatchConfig:    DispatchConfig{DB: d},
-		BgMissingJobGrace: 30 * time.Second,
-	}
-	reapStaleActions(cfg)
-
-	action, _ := d.GetAction(1)
-	if action.Status != db.ActionStatusRunning {
-		t.Errorf("status = %q, want %q (reaper must no-op when BgStateReader is nil)", action.Status, db.ActionStatusRunning)
-	}
-}
-
-func TestDispatchOne_InteractiveBgShareSlotPool(t *testing.T) {
-	tests := []struct {
-		name              string
-		seededInteractive int
-		seededBg          int
-		newMode           string
-		maxInteractive    int
-		wantDispatched    bool
-		wantClaimedStatus string
-		wantInvocationLog string
-	}{
-		{
-			name:              "interactive 1 + bg 1 with cap 3 admits new bg",
-			seededInteractive: 1,
-			seededBg:          1,
-			newMode:           ModeBg,
-			maxInteractive:    3,
-			wantDispatched:    true,
-			wantClaimedStatus: db.ActionStatusRunning,
-		},
-		{
-			name:              "interactive 2 + bg 1 with cap 3 defers new bg",
-			seededInteractive: 2,
-			seededBg:          1,
-			newMode:           ModeBg,
-			maxInteractive:    3,
-			wantDispatched:    false,
-			wantClaimedStatus: db.ActionStatusPending,
-		},
-		{
-			name:              "interactive 1 + bg 2 with cap 3 defers new interactive",
-			seededInteractive: 1,
-			seededBg:          2,
-			newMode:           ModeInteractive,
-			maxInteractive:    3,
-			wantDispatched:    false,
-			wantClaimedStatus: db.ActionStatusPending,
-		},
-		{
-			name:              "bg alone exceeding cap defers new bg",
-			seededInteractive: 0,
-			seededBg:          3,
-			newMode:           ModeBg,
-			maxInteractive:    3,
-			wantDispatched:    false,
-			wantClaimedStatus: db.ActionStatusPending,
-		},
+		BgMissingJobGrace: time.Minute,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := testutil.NewTestDB(t)
-			testutil.SeedTestProjects(t, d)
-			taskID, _ := d.InsertTask(1, "Task", "{}", "")
+	reapOrphans(cfg, time.Now())
 
-			for i := 0; i < tt.seededInteractive; i++ {
-				if _, err := d.InsertAction("seed-int", taskID,
-					`{"instruction":"x","mode":"interactive"}`,
-					db.ActionStatusRunning, nil, "",
-				); err != nil {
-					t.Fatalf("seed interactive %d: %v", i, err)
-				}
-			}
-			for i := 0; i < tt.seededBg; i++ {
-				if _, err := d.InsertAction("seed-bg", taskID,
-					`{"instruction":"x","mode":"experimental_bg","daemon_short":"00000000"}`,
-					db.ActionStatusRunning, nil, "",
-				); err != nil {
-					t.Fatalf("seed bg %d: %v", i, err)
-				}
-			}
-
-			meta := fmt.Sprintf(`{"instruction":"new","mode":%q}`, tt.newMode)
-			newID, err := d.InsertAction("new-action", taskID, meta, db.ActionStatusPending, nil, "")
-			if err != nil {
-				t.Fatalf("seed pending: %v", err)
-			}
-
-			interactiveCalls := &countingWorker{}
-			bgCalls := &countingWorker{result: "1ff90554"}
-
-			cfg := WorkerConfig{
-				DispatchConfig: DispatchConfig{
-					DB:                 d,
-					InteractiveFunc:    func() Worker { return interactiveCalls },
-					NonInteractiveFunc: func() Worker { return interactiveCalls },
-					RemoteFunc:         func() Worker { return interactiveCalls },
-					BgFunc:             func() Worker { return bgCalls },
-					TmuxSession:        "main",
-				},
-				MaxInteractive: tt.maxInteractive,
-			}
-
-			dispatched, err := dispatchOne(context.Background(), cfg)
-			if err != nil {
-				t.Fatalf("dispatchOne: %v", err)
-			}
-			if dispatched != tt.wantDispatched {
-				t.Errorf("dispatched = %v, want %v", dispatched, tt.wantDispatched)
-			}
-
-			action, _ := d.GetAction(newID)
-			if action.Status != tt.wantClaimedStatus {
-				t.Errorf("new action status = %q, want %q", action.Status, tt.wantClaimedStatus)
-			}
-
-			if tt.wantClaimedStatus == db.ActionStatusPending {
-				if !action.DispatchAfter.Valid {
-					t.Errorf("deferred action should have dispatch_after set, got NULL")
-				} else {
-					got, err := time.Parse(db.TimeLayout, action.DispatchAfter.String)
-					if err != nil {
-						t.Errorf("parse dispatch_after: %v", err)
-					} else if !got.After(time.Now().UTC().Add(-1 * time.Second)) {
-						t.Errorf("dispatch_after = %v, want future", got)
-					}
-				}
-			}
-		})
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusFailed {
+		t.Errorf("status = %q, want %q (orphan reaped)", updated.Status, db.ActionStatusFailed)
+	}
+	if !strings.Contains(updated.Result.String, "orphaned") {
+		t.Errorf("reason = %q, want substring %q", updated.Result.String, "orphaned")
 	}
 }
 
-// TestRunWorker_DeferredActionYieldsToOtherSlotPool verifies that when the
-// shared interactive+bg slot pool is full, a deferred bg action does not
-// monopolize NextPending — a higher-id pending noninteractive action (separate
-// slot pool) gets a turn within the same poll cycle window thanks to the
-// dispatch_after backoff stamped by DeferToPending.
-func TestRunWorker_DeferredActionYieldsToOtherSlotPool(t *testing.T) {
-	withShortDeferBackoff(t)
+func TestReapOrphans_SkipsCloudExecutor(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","executor":"cloud"}`)
+	claimRunning(t, d, actionID)
+	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-2*time.Hour))); err != nil {
+		t.Fatalf("set started_at: %v", err)
+	}
 
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	taskID, _ := d.InsertTask(1, "Task", "{}", "")
+	cfg := WorkerConfig{
+		DispatchConfig:    DispatchConfig{DB: d},
+		BgMissingJobGrace: time.Minute,
+	}
 
-	for i := range 3 {
-		if _, err := d.InsertAction("seed-bg", taskID,
-			`{"instruction":"x","mode":"experimental_bg","daemon_short":"00000000"}`,
-			db.ActionStatusRunning, nil, ""); err != nil {
-			t.Fatalf("seed bg %d: %v", i, err)
+	reapOrphans(cfg, time.Now())
+
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusRunning {
+		t.Errorf("cloud executor orphan unexpectedly reaped: status = %q", updated.Status)
+	}
+}
+
+func TestReapBg_WedgedWorkingHardTimeout(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","daemon_short":"abcd1234"}`)
+	claimRunning(t, d, actionID)
+	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-5*time.Hour))); err != nil {
+		t.Fatalf("set started_at: %v", err)
+	}
+
+	reader := &fakeBgStateReader{}
+	reader.set("abcd1234", []byte(`{"state":"working"}`))
+
+	cfg := WorkerConfig{
+		DispatchConfig:    DispatchConfig{DB: d},
+		BgStateReader:     reader,
+		BgMissingJobGrace: time.Minute,
+		BgHardTimeout:     4 * time.Hour,
+	}
+
+	reapBg(cfg, time.Now())
+
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusFailed {
+		t.Errorf("status = %q, want %q (hard timeout)", updated.Status, db.ActionStatusFailed)
+	}
+	if !strings.Contains(updated.Result.String, "hard timeout") {
+		t.Errorf("reason = %q, want substring %q", updated.Result.String, "hard timeout")
+	}
+}
+
+func TestSlotPredicates_LegacyExperimentalBgCountedInInteractive(t *testing.T) {
+	d, _ := setupTaskAndAction(t, `{"instruction":"x","mode":"experimental_bg","daemon_short":"abcd1234"}`)
+	projectID := int64(1)
+	taskID, _ := d.InsertTask(projectID, "t2", "{}", "")
+	id2, _ := d.InsertAction("a2", taskID, `{"instruction":"x","mode":"interactive"}`, db.ActionStatusPending, nil, "")
+	id3, _ := d.InsertAction("a3", taskID, `{"instruction":"x","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
+
+	for _, id := range []int64{id2, id3} {
+		if err := d.SetActionStatusForTest(id, db.ActionStatusRunning); err != nil {
+			t.Fatalf("set status running: %v", err)
 		}
 	}
+	if err := d.SetActionStatusForTest(1, db.ActionStatusRunning); err != nil {
+		t.Fatalf("set status running for legacy: %v", err)
+	}
 
-	bgPendingID, _ := d.InsertAction("bg-A", taskID,
-		`{"instruction":"bg-A","mode":"experimental_bg"}`, db.ActionStatusPending, nil, "")
-	niPendingID, _ := d.InsertAction("ni-B", taskID,
-		`{"instruction":"ni-B","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
+	gotInter, err := d.CountRunningInteractive()
+	if err != nil {
+		t.Fatalf("CountRunningInteractive: %v", err)
+	}
+	if gotInter != 2 {
+		t.Errorf("CountRunningInteractive = %d, want 2 (legacy bg + interactive)", gotInter)
+	}
 
-	niWorker := &countingWorker{result: `{"ok":true}`}
-	bgWorker := &countingWorker{result: "1ff90554"}
+	gotNon, err := d.CountRunningNonInteractive()
+	if err != nil {
+		t.Fatalf("CountRunningNonInteractive: %v", err)
+	}
+	if gotNon != 1 {
+		t.Errorf("CountRunningNonInteractive = %d, want 1", gotNon)
+	}
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+func TestDispatchOne_DispatchesInteractiveViaBg(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"do","mode":"interactive"}`)
+
+	bg := &bgWorkerStub{short: "abcd1234"}
+	rem := &bgWorkerStub{}
 
 	cfg := WorkerConfig{
 		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: func() Worker { return niWorker },
-			InteractiveFunc:    func() Worker { return &countingWorker{} },
-			BgFunc:             func() Worker { return bgWorker },
+			DB:         d,
+			BgFunc:     func() Worker { return bg },
+			RemoteFunc: func() Worker { return rem },
 		},
 		MaxInteractive:    3,
 		MaxNonInteractive: 5,
-		PollInterval:      20 * time.Millisecond,
 	}
 
-	done := make(chan error, 1)
-	go func() { done <- RunWorker(ctx, cfg) }()
-
-	waitFor(t, 1*time.Second, "noninteractive dispatched despite shared slot full", func() bool {
-		return niWorker.Count() >= 1
-	})
-
-	bgA, _ := d.GetAction(bgPendingID)
-	if bgA.Status != db.ActionStatusPending {
-		t.Errorf("bg-A status = %q, want pending (slot still full)", bgA.Status)
-	}
-	if !bgA.DispatchAfter.Valid {
-		t.Error("bg-A should have dispatch_after set after defer")
-	}
-
-	niB, _ := d.GetAction(niPendingID)
-	if niB.Status != db.ActionStatusRunning && niB.Status != db.ActionStatusDone {
-		t.Errorf("ni-B status = %q, want running or done", niB.Status)
-	}
-
-	cancel()
-	<-done
-}
-
-// TestRunWorker_DeferDoesNotProduceEventStorm verifies that a single pending
-// action repeatedly hitting a full slot does not generate one status_changed
-// event per poll cycle. With dispatch_after backoff, events are bounded by
-// elapsed_time / deferBackoff rather than elapsed_time / pollInterval.
-func TestRunWorker_DeferDoesNotProduceEventStorm(t *testing.T) {
-	withShortDeferBackoff(t)
-
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	taskID, _ := d.InsertTask(1, "Task", "{}", "")
-
-	for i := range 3 {
-		if _, err := d.InsertAction("seed-bg", taskID,
-			`{"instruction":"x","mode":"experimental_bg","daemon_short":"00000000"}`,
-			db.ActionStatusRunning, nil, ""); err != nil {
-			t.Fatalf("seed bg %d: %v", i, err)
-		}
-	}
-	bgPendingID, _ := d.InsertAction("bg-A", taskID,
-		`{"instruction":"bg-A","mode":"experimental_bg"}`, db.ActionStatusPending, nil, "")
-
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{
-			DB:              d,
-			InteractiveFunc: func() Worker { return &countingWorker{} },
-			BgFunc:          func() Worker { return &countingWorker{result: "1ff90554"} },
-		},
-		MaxInteractive: 3,
-		PollInterval:   10 * time.Millisecond,
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-
-	done := make(chan error, 1)
-	go func() { done <- RunWorker(ctx, cfg) }()
-	<-done
-
-	events, err := d.ListEvents("action", bgPendingID)
+	dispatched, err := dispatchOne(context.Background(), cfg)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("dispatchOne: %v", err)
 	}
-	var statusChanges int
-	for _, e := range events {
-		if e.EventType == "action.status_changed" {
-			statusChanges++
+	if !dispatched {
+		t.Error("dispatchOne reported nothing dispatched")
+	}
+	if bg.count != 1 {
+		t.Errorf("BgWorker called %d times, want 1", bg.count)
+	}
+	if rem.count != 0 {
+		t.Errorf("RemoteWorker called %d times, want 0", rem.count)
+	}
+	if bg.gotCfg.Mode != ModeInteractive {
+		t.Errorf("worker received mode %q, want %q", bg.gotCfg.Mode, ModeInteractive)
+	}
+
+	updated, _ := d.GetAction(actionID)
+	if !strings.Contains(updated.Metadata, `"daemon_short":"abcd1234"`) {
+		t.Errorf("daemon_short not merged: %q", updated.Metadata)
+	}
+}
+
+func TestDispatchOne_DefersWhenSlotFull(t *testing.T) {
+	withShortDeferBackoff(t)
+	d := testutil.NewTestDB(t)
+	projectID, _ := d.InsertProject("p", "", "{}")
+	taskID, _ := d.InsertTask(projectID, "t", "{}", "")
+
+	for range 3 {
+		id, _ := d.InsertAction("blocking", taskID, `{"instruction":"x","mode":"interactive","daemon_short":"running01"}`, db.ActionStatusPending, nil, "")
+		if err := d.SetActionStatusForTest(id, db.ActionStatusRunning); err != nil {
+			t.Fatalf("set status running: %v", err)
 		}
 	}
 
-	// 500ms run ÷ 50ms deferBackoff ≈ 10 cycles. Allow generous headroom.
-	// Pre-fix behavior: 500ms ÷ 10ms pollInterval = ~50 cycles. The bound
-	// catches both the storm regression and accidental over-defer.
-	if statusChanges > 20 {
-		t.Errorf("status_changed events = %d, want ≤ 20 (storm regression)", statusChanges)
-	}
-	if statusChanges == 0 {
-		t.Errorf("status_changed events = 0, want ≥ 1 (action should be deferred at least once)")
-	}
-}
+	newID, _ := d.InsertAction("pending", taskID, `{"instruction":"do","mode":"interactive"}`, db.ActionStatusPending, nil, "")
 
-// prefetchSpyStore counts the two work_dir-context SELECTs so tests can assert
-// the reaper skips them when the in-memory pre-filter leaves no candidates.
-type prefetchSpyStore struct {
-	db.Store
-	getTasksCalls    int
-	getProjectsCalls int
-}
-
-func (s *prefetchSpyStore) GetTasksByIDs(ids []int64) (map[int64]*db.Task, error) {
-	s.getTasksCalls++
-	return s.Store.GetTasksByIDs(ids)
-}
-
-func (s *prefetchSpyStore) GetProjectsByIDs(ids []int64) (map[int64]*db.Project, error) {
-	s.getProjectsCalls++
-	return s.Store.GetProjectsByIDs(ids)
-}
-
-func TestReapStaleActions_SkipsPrefetchWhenNoCandidates(t *testing.T) {
-	tests := []struct {
-		name          string
-		title         string
-		metadata      string
-		startedOffset time.Duration
-		withLog       bool
-		wantPrefetch  bool
-	}{
-		{
-			name:          "interactive within grace skips prefetch",
-			title:         "fix-conflict",
-			metadata:      "{}",
-			startedOffset: 0,
-			withLog:       true,
-			wantPrefetch:  false,
-		},
-		{
-			name:          "noninteractive within threshold skips prefetch",
-			title:         "check-pr",
-			metadata:      `{"instruction":"check","mode":"noninteractive"}`,
-			startedOffset: -5 * time.Minute,
-			wantPrefetch:  false,
-		},
-		{
-			name:          "stale interactive still prefetches (control)",
-			title:         "fix-conflict",
-			metadata:      "{}",
-			startedOffset: -5 * time.Minute,
-			withLog:       true,
-			wantPrefetch:  true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := testutil.NewTestDB(t)
-			testutil.SeedTestProjects(t, d)
-
-			taskID, _ := d.InsertTask(1, "Task", `{"url":"https://example.com"}`, "")
-			d.InsertAction(tt.title, taskID, tt.metadata, db.ActionStatusRunning, nil, "")
-
-			started := time.Now().Add(tt.startedOffset)
-			d.SetActionTmuxInfoForTest(1, ptr("main"), ptr(WindowName(1)), &started)
-
-			spy := &prefetchSpyStore{Store: d}
-			cfg := WorkerConfig{
-				DispatchConfig:         DispatchConfig{DB: spy},
-				StaleGracePeriod:       30 * time.Second,
-				HeartbeatFreshness:     120 * time.Second,
-				InteractiveHardTimeout: DefaultInteractiveHardTimeout,
-				EarlyDispatchTimeout:   DefaultEarlyDispatchTimeout,
-			}
-			if tt.withLog {
-				// A log checker enables the interactive reaper; prefetch
-				// happens (or is skipped) based on candidate filtering.
-				cfg.ClaudeSessionLogChecker = &mockClaudeSessionLogChecker{active: false}
-			}
-
-			reapStaleActions(cfg)
-
-			gotPrefetch := spy.getTasksCalls > 0 || spy.getProjectsCalls > 0
-			if gotPrefetch != tt.wantPrefetch {
-				t.Errorf("prefetch called = %v (tasks=%d projects=%d), want %v",
-					gotPrefetch, spy.getTasksCalls, spy.getProjectsCalls, tt.wantPrefetch)
-			}
-		})
-	}
-}
-
-func TestRunWorker_DependencyBlocksThenReleases(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
-	dep, _ := d.InsertAction("dep", taskID, `{"instruction":"x","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-	_ = d.SetActionStatusForTest(dep, db.ActionStatusRunning)
-	follower, _ := d.InsertAction("follower", taskID, `{"instruction":"y","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-	if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: dep}}); err != nil {
-		t.Fatal(err)
-	}
-
-	worker := &countingWorker{result: `{"ok":true}`}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+	bg := &bgWorkerStub{short: "abcd1234"}
 	cfg := WorkerConfig{
 		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: func() Worker { return worker },
-			InteractiveFunc:    func() Worker { return worker },
+			DB:         d,
+			BgFunc:     func() Worker { return bg },
+			RemoteFunc: func() Worker { return &bgWorkerStub{} },
 		},
-		MaxInteractive: 3,
-		PollInterval:   20 * time.Millisecond,
-	}
-	go func() { _ = RunWorker(ctx, cfg) }()
-
-	// While the dependency is unsatisfied the follower must stay pending.
-	time.Sleep(150 * time.Millisecond)
-	if a, _ := d.GetAction(follower); a.Status != db.ActionStatusPending {
-		t.Fatalf("follower status = %q, want pending while blocked", a.Status)
+		MaxInteractive:    3,
+		MaxNonInteractive: 5,
 	}
 
-	// Satisfy the dependency; the worker should pick the follower up.
-	if err := d.MarkDone(dep, "ok"); err != nil {
-		t.Fatal(err)
+	dispatched, err := dispatchOne(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("dispatchOne: %v", err)
 	}
-	waitFor(t, 2*time.Second, "follower dispatched after dep done", func() bool {
-		a, _ := d.GetAction(follower)
-		return a.Status == db.ActionStatusDone
-	})
-}
-
-func TestRunWorker_FailedDependencyBlocksForever(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
-	dep, _ := d.InsertAction("dep", taskID, `{"instruction":"x","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-	_ = d.SetActionStatusForTest(dep, db.ActionStatusFailed)
-	follower, _ := d.InsertAction("follower", taskID, `{"instruction":"y","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-	if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: dep}}); err != nil {
-		t.Fatal(err)
+	if dispatched {
+		t.Error("expected dispatch deferred because slot pool full")
+	}
+	if bg.count != 0 {
+		t.Errorf("BgWorker unexpectedly called %d times when deferred", bg.count)
 	}
 
-	worker := &countingWorker{result: `{"ok":true}`}
-	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
-	defer cancel()
-	cfg := WorkerConfig{
-		DispatchConfig: DispatchConfig{
-			DB:                 d,
-			NonInteractiveFunc: func() Worker { return worker },
-			InteractiveFunc:    func() Worker { return worker },
-		},
-		MaxInteractive: 3,
-		PollInterval:   20 * time.Millisecond,
-	}
-	_ = RunWorker(ctx, cfg)
-
-	if a, _ := d.GetAction(follower); a.Status != db.ActionStatusPending {
-		t.Fatalf("follower status = %q, want pending (blocked forever by failed dep)", a.Status)
-	}
-	if worker.Count() != 0 {
-		t.Fatalf("worker.count = %d, want 0 (follower must never dispatch)", worker.Count())
+	updated, _ := d.GetAction(newID)
+	if updated.Status != db.ActionStatusPending {
+		t.Errorf("status = %q, want %q (deferred)", updated.Status, db.ActionStatusPending)
 	}
 }

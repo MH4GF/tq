@@ -16,7 +16,6 @@ import (
 var (
 	resumeMessage string
 	resumeMode    string
-	resumeSession string
 )
 
 var actionResumeCmd = &cobra.Command{
@@ -58,13 +57,9 @@ claude session restores its own context.`,
 
 		result, err := dispatch.ExecuteAction(ctx, dispatch.ExecuteParams{
 			DispatchConfig: dispatch.DispatchConfig{
-				DB:                      database,
-				NonInteractiveFunc:      getWorkerFactory(),
-				InteractiveFunc:         interactiveWorkerForResume(resumeSession),
-				RemoteFunc:              getRemoteWorkerFactory(),
-				BgFunc:                  getBgWorkerFactory(),
-				ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
-				TmuxSession:             resumeSession,
+				DB:         database,
+				BgFunc:     getBgWorkerFactory(),
+				RemoteFunc: getRemoteWorkerFactory(),
 			},
 		}, action)
 
@@ -77,39 +72,20 @@ claude session restores its own context.`,
 			return err
 		}
 
-		switch result.Mode {
-		case dispatch.ModeRemote:
+		if result.Mode == dispatch.ModeRemote {
 			url := strings.TrimPrefix(result.Output, dispatch.RemoteSessionPrefix)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d resumed remotely from #%d (view: %s)\n", action.ID, parentID, url)
-		case dispatch.ModeInteractive:
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d resumed interactively from #%d (%s)\n", action.ID, parentID, result.Output)
-		case dispatch.ModeBg:
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d resumed to claude agent view from #%d (short: %s)\n", action.ID, parentID, result.Output)
-		default:
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d resumed from #%d (done)\n", action.ID, parentID)
+			return nil
 		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "action #%d resumed to claude agent view from #%d (short: %s)\n", action.ID, parentID, result.Output)
 		return nil
 	},
-}
-
-// interactiveWorkerForResume returns a factory that builds an InteractiveWorker
-// pinned to the given tmux session. The closure does not read package-level
-// dispatch state, so the resume path stays independent of `tq action dispatch`.
-func interactiveWorkerForResume(session string) func() dispatch.Worker {
-	return func() dispatch.Worker {
-		return &dispatch.InteractiveWorker{
-			Runner:  &dispatch.ExecRunner{},
-			Session: session,
-		}
-	}
 }
 
 func init() {
 	actionResumeCmd.Flags().StringVar(&resumeMessage, "message", db.DefaultResumeMessage,
 		"Additional instruction passed as the new prompt for the resumed session")
 	actionResumeCmd.Flags().StringVar(&resumeMode, "mode", "",
-		"Execution mode: interactive | noninteractive | remote | experimental_bg (default: parent action's mode)")
-	actionResumeCmd.Flags().StringVar(&resumeSession, "session", "main",
-		"Target tmux session name (interactive mode only)")
+		"Execution mode: interactive | noninteractive | remote (default: parent action's mode)")
 	actionCmd.AddCommand(actionResumeCmd)
 }

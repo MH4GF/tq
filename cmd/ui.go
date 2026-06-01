@@ -17,16 +17,17 @@ var (
 	uiMaxInteractive    int
 	uiMaxNonInteractive int
 	uiPollInterval      time.Duration
-	uiSession           string
 )
 
 var uiCmd = &cobra.Command{
 	Use:   "ui",
 	Short: "Launch interactive TUI with queue worker",
-	Long:  `Launch the terminal UI with a queue worker that auto-dispatches pending actions via tmux.`,
+	Long: `Launch the terminal UI with a queue worker that auto-dispatches pending actions.
+
+All local actions are dispatched as background sessions via 'claude --bg' and
+appear in 'claude agents'. Remote-mode actions still go through 'claude --remote'.`,
 	Example: `  tq ui
-  tq ui --max-interactive 5 --poll 30s
-  tq ui --session work`,
+  tq ui --max-interactive 5 --poll 30s`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logCh := make(chan tui.LogEntry, 100)
 
@@ -45,29 +46,9 @@ var uiCmd = &cobra.Command{
 		}
 
 		dispatchCfg := dispatch.DispatchConfig{
-			DB: database,
-			NonInteractiveFunc: func() dispatch.Worker {
-				return &dispatch.NonInteractiveWorker{
-					Runner:                  &dispatch.ExecRunner{},
-					ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
-				}
-			},
-			InteractiveFunc: func() dispatch.Worker {
-				return &dispatch.InteractiveWorker{
-					Runner:  &dispatch.ExecRunner{},
-					Session: uiSession,
-				}
-			},
-			RemoteFunc: func() dispatch.Worker {
-				return &dispatch.RemoteWorker{
-					Runner: &dispatch.ExecRunner{},
-				}
-			},
-			BgFunc: func() dispatch.Worker {
-				return &dispatch.BgWorker{Runner: &dispatch.ExecRunner{}}
-			},
-			TmuxSession:             uiSession,
-			ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
+			DB:         database,
+			BgFunc:     getBgWorkerFactory(),
+			RemoteFunc: getRemoteWorkerFactory(),
 		}
 
 		workerBg := func(ctx context.Context) error {
@@ -95,8 +76,7 @@ var uiCmd = &cobra.Command{
 }
 
 func init() {
-	uiCmd.Flags().IntVar(&uiMaxInteractive, "max-interactive", dispatch.DefaultMaxInteractive, "Maximum concurrent user-facing sessions (interactive tmux + experimental_bg via 'claude agents' share this pool), cognitive-load cap")
-	uiCmd.Flags().IntVar(&uiMaxNonInteractive, "max-noninteractive", dispatch.DefaultMaxNonInteractive, "Maximum concurrent noninteractive (claude -p) processes (OS resource cap)")
+	uiCmd.Flags().IntVar(&uiMaxInteractive, "max-interactive", dispatch.DefaultMaxInteractive, "Maximum concurrent user-facing sessions (interactive slot pool), cognitive-load cap")
+	uiCmd.Flags().IntVar(&uiMaxNonInteractive, "max-noninteractive", dispatch.DefaultMaxNonInteractive, "Maximum concurrent noninteractive sessions (separate slot pool)")
 	uiCmd.Flags().DurationVar(&uiPollInterval, "poll", dispatch.DefaultPollInterval, "Queue worker poll interval")
-	uiCmd.Flags().StringVar(&uiSession, "session", "main", "Target tmux session name")
 }

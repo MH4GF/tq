@@ -43,12 +43,12 @@ func TestRenderDetailView(t *testing.T) {
 			action: db.Action{
 				ID: 4, Title: "dispatched", Status: db.ActionStatusRunning,
 				WorkDir: "/tmp/work",
-				Metadata: `{"instruction":"go","mode":"experimental_bg","executor":"local",` +
+				Metadata: `{"instruction":"go","mode":"interactive","executor":"local",` +
 					`"claude_args":["--worktree","scope-name","--effort","xhigh"],` +
 					`"claude_session_id":"sess-abc","daemon_short":"6983ea7f","parent_action_id":42}`,
 			},
 			wantContain: []string{
-				"Mode", "experimental_bg",
+				"Mode", "interactive",
 				"Executor", "local",
 				"Work dir", "/tmp/work",
 				"Args", "--worktree", "scope-name", "--effort", "xhigh",

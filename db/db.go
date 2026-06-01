@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	_ "embed"
 	"encoding/json"
@@ -290,6 +291,10 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	if err := db.migrateExperimentalBgToInteractive(); err != nil {
+		return fmt.Errorf("migrate experimental_bg mode: %w", err)
+	}
+
 	if err := db.backfillTaskActionCounts(); err != nil {
 		return fmt.Errorf("backfill task_action_counts: %w", err)
 	}
@@ -298,6 +303,41 @@ func (db *DB) Migrate() error {
 		return fmt.Errorf("backfill search FTS: %w", err)
 	}
 
+	return nil
+}
+
+func (db *DB) migrateExperimentalBgToInteractive() error {
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE actions
+		 SET metadata = json_set(metadata, '$.mode', 'interactive')
+		 WHERE json_extract(metadata, '$.mode') = 'experimental_bg'`,
+	); err != nil {
+		return fmt.Errorf("update actions: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE settings SET value = 'interactive'
+		 WHERE key = ? AND value = 'experimental_bg'`,
+		SettingDefaultMode,
+	); err != nil {
+		return fmt.Errorf("update settings: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE schedules
+		 SET metadata = json_set(metadata, '$.mode', 'interactive')
+		 WHERE json_extract(metadata, '$.mode') = 'experimental_bg'`,
+	); err != nil {
+		return fmt.Errorf("update schedules: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
 	return nil
 }
 

@@ -19,15 +19,17 @@
 #     O(N), shows as SCAN in EXPLAIN but not actionable via index)
 
 db/action.go:316 SCAN actions
-db/db.go:142 SCAN tasks
-db/db.go:159 SCAN actions
-db/db.go:338 SCAN CONSTANT
-db/db.go:338 SCAN task_action_counts
-db/db.go:344 SCAN actions
+db/db.go:143 SCAN tasks
+db/db.go:160 SCAN actions
+db/db.go:317 SCAN actions
+db/db.go:331 SCAN schedules
+db/db.go:378 SCAN CONSTANT
+db/db.go:378 SCAN task_action_counts
+db/db.go:384 SCAN actions
 # db/event.go:72 — ListRecentEvents: LIMIT-bounded PK-order scan
 # (ORDER BY id DESC LIMIT ?), not a real full scan; no index will help.
 db/event.go:72 SCAN events
-db/project.go:69 SCAN projects
+db/project.go:35 SCAN projects
 db/schedule.go:51 SCAN schedules
 # db/settings.go — ListSettings: full-table list of a tiny KV table, no WHERE
 db/settings.go:28 SCAN settings

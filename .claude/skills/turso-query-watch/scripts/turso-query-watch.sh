@@ -239,7 +239,7 @@ if regressions and not dry_run:
         out = subprocess.run(
             [tq_bin, "action", "create", instruction,
              "--task", str(watch_task_id), "--title", title,
-             "--meta", json.dumps({"mode": "experimental_bg"})],
+             "--meta", json.dumps({"mode": "interactive"})],
             capture_output=True, text=True, check=True)
         sys.stderr.write("turso-query-watch: filed action -> "
                          + out.stdout.strip() + "\n")

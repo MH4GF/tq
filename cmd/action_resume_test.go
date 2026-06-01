@@ -221,9 +221,9 @@ func TestActionResumeCmd(t *testing.T) {
 				return id
 			},
 			args:            func(id int64) []string { return []string{"action", "resume", intToStr(id)} },
-			workerResult:    `{"ok":true}`,
-			wantOutContains: "resumed from",
-			wantNewStatus:   db.ActionStatusDone,
+			workerResult:    "abcd1234",
+			wantOutContains: "resumed to claude agent view",
+			wantNewStatus:   db.ActionStatusRunning,
 		},
 		{
 			name: "claude failure marks new action failed",
@@ -277,8 +277,8 @@ func TestActionResumeCmd(t *testing.T) {
 			parentID := tt.setup(d)
 
 			worker := &mockWorker{result: tt.workerResult, err: tt.workerErr}
-			cmd.SetWorkerFactory(func() dispatch.Worker { return worker })
-			t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
+			cmd.SetBgWorkerFactory(func() dispatch.Worker { return worker })
+			t.Cleanup(func() { cmd.SetBgWorkerFactory(nil) })
 
 			root := cmd.GetRootCmd()
 			buf := new(bytes.Buffer)

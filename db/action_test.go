@@ -488,59 +488,6 @@ func TestCountPendingByDispatch(t *testing.T) {
 	}
 }
 
-func TestListRunningInteractive(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-
-	d.InsertAction("with-session", taskID, "{}", db.ActionStatusRunning, nil, "")
-	d.Exec("UPDATE actions SET tmux_session = 'main', tmux_window = 'tq-action-1' WHERE id = 1")
-	d.InsertAction("default-mode-no-session", taskID, "{}", db.ActionStatusRunning, nil, "")
-	d.InsertAction("explicit-interactive", taskID, `{"mode":"interactive"}`, db.ActionStatusRunning, nil, "")
-	d.InsertAction("noninteractive", taskID, `{"mode":"noninteractive"}`, db.ActionStatusRunning, nil, "")
-	d.InsertAction("remote", taskID, `{"mode":"remote"}`, db.ActionStatusRunning, nil, "")
-	d.InsertAction("pending", taskID, "{}", db.ActionStatusPending, nil, "")
-	d.InsertAction("done", taskID, "{}", db.ActionStatusDone, nil, "")
-
-	actions, err := d.ListRunningInteractive()
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantTitles := []string{"with-session", "default-mode-no-session", "explicit-interactive"}
-	if len(actions) != len(wantTitles) {
-		t.Fatalf("expected %d actions, got %d", len(wantTitles), len(actions))
-	}
-	for i, want := range wantTitles {
-		if actions[i].Title != want {
-			t.Errorf("actions[%d].Title = %q, want %q", i, actions[i].Title, want)
-		}
-	}
-}
-
-func TestListRunningNonInteractive(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-
-	d.InsertAction("ni-action", taskID, `{"instruction":"check","mode":"noninteractive"}`, db.ActionStatusRunning, nil, "")
-	d.InsertAction("worktree-action", taskID, `{"instruction":"fix","claude_args":["--permission-mode","plan","--worktree"]}`, db.ActionStatusRunning, nil, "")
-	d.InsertAction("interactive-action", taskID, `{}`, db.ActionStatusRunning, nil, "")
-	d.InsertAction("pending-ni", taskID, `{"mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-
-	actions, err := d.ListRunningNonInteractive()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(actions) != 1 {
-		t.Fatalf("expected 1 action, got %d", len(actions))
-	}
-	if actions[0].Title != "ni-action" {
-		t.Errorf("expected title 'ni-action', got %s", actions[0].Title)
-	}
-}
-
 func TestCountRunningInteractive(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -730,26 +677,6 @@ func TestDeferToPending_LastWriteWins(t *testing.T) {
 	gotSecond, _ := time.Parse(db.TimeLayout, second)
 	if !gotSecond.After(gotFirst) {
 		t.Errorf("second dispatch_after (%v) should be after first (%v)", gotSecond, gotFirst)
-	}
-}
-
-func TestSetTmuxInfo(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-
-	taskID, _ := d.InsertTask(1, "test", "{}", "")
-	id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusRunning, nil, "")
-
-	if err := d.SetTmuxInfo(id, "main", "tq-action-1"); err != nil {
-		t.Fatal(err)
-	}
-
-	a, _ := d.GetAction(id)
-	if !a.TmuxSession.Valid || a.TmuxSession.String != "main" {
-		t.Errorf("tmux_session = %v, want 'main'", a.TmuxSession)
-	}
-	if !a.TmuxWindow.Valid || a.TmuxWindow.String != "tq-action-1" {
-		t.Errorf("tmux_window = %v, want 'tq-action-1'", a.TmuxWindow)
 	}
 }
 

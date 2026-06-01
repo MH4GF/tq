@@ -7,56 +7,32 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/MH4GF/tq/db"
 )
 
 const (
-	DefaultMaxInteractive         = 3
-	DefaultMaxNonInteractive      = 5
-	DefaultStaleThreshold         = 30 * time.Second
-	DefaultPollInterval           = 10 * time.Second
-	DefaultStaleGracePeriod       = 30 * time.Second
-	DefaultHeartbeatFreshness     = 120 * time.Second
-	DefaultInteractiveHardTimeout = 1 * time.Hour
-	// Must exceed init-hook duration (worktree setup, migrations), not just
-	// claude startup — hooks run before any session log is written.
-	DefaultEarlyDispatchTimeout = 5 * time.Minute
-	// DefaultBgMissingJobGrace is how long we wait after a bg action's dispatch
-	// before deciding that a missing ~/.claude/jobs/<short>/state.json means
-	// the daemon job has disappeared (and we should fail the action).
+	DefaultMaxInteractive    = 3
+	DefaultMaxNonInteractive = 5
+	DefaultStaleThreshold    = 30 * time.Second
+	DefaultPollInterval      = 10 * time.Second
 	DefaultBgMissingJobGrace = 30 * time.Second
+	DefaultBgHardTimeout     = 4 * time.Hour
 )
 
-// defaultDeferBackoff is the dispatch_after window applied when an action is
-// deferred because its slot pool is full. Set to ~3× DefaultPollInterval so
-// the worker can attempt 2-3 other pending actions before re-trying the
-// deferred one.
 var defaultDeferBackoff = 30 * time.Second
 
-// WorkerConfig configures the queue worker.
 type WorkerConfig struct {
 	DispatchConfig
-	MaxInteractive         int
-	MaxNonInteractive      int
-	PollInterval           time.Duration
-	BgStateReader          BgStateReader
-	StaleGracePeriod       time.Duration
-	HeartbeatFreshness     time.Duration
-	InteractiveHardTimeout time.Duration
-	EarlyDispatchTimeout   time.Duration
-	BgMissingJobGrace      time.Duration
-	// async, when non-nil, is used to launch noninteractive worker.Execute
-	// in the background so the dispatch loop is not blocked. RunWorker sets
-	// this internally before calling dispatchOne; tests usually leave it nil
-	// (synchronous path).
-	async func(func())
+	MaxInteractive    int
+	MaxNonInteractive int
+	PollInterval      time.Duration
+	BgStateReader     BgStateReader
+	BgMissingJobGrace time.Duration
+	BgHardTimeout     time.Duration
 }
 
-// RunWorker continuously dispatches pending actions.
-// It processes one action per iteration, sleeping when idle.
 func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 	if cfg.MaxInteractive <= 0 {
 		cfg.MaxInteractive = DefaultMaxInteractive
@@ -67,23 +43,11 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 	if cfg.PollInterval <= 0 {
 		cfg.PollInterval = DefaultPollInterval
 	}
-	if cfg.StaleGracePeriod <= 0 {
-		cfg.StaleGracePeriod = DefaultStaleGracePeriod
-	}
-	if cfg.TmuxSession == "" {
-		cfg.TmuxSession = "main"
-	}
-	if cfg.HeartbeatFreshness <= 0 {
-		cfg.HeartbeatFreshness = DefaultHeartbeatFreshness
-	}
-	if cfg.InteractiveHardTimeout <= 0 {
-		cfg.InteractiveHardTimeout = DefaultInteractiveHardTimeout
-	}
-	if cfg.EarlyDispatchTimeout <= 0 {
-		cfg.EarlyDispatchTimeout = DefaultEarlyDispatchTimeout
-	}
 	if cfg.BgMissingJobGrace <= 0 {
 		cfg.BgMissingJobGrace = DefaultBgMissingJobGrace
+	}
+	if cfg.BgHardTimeout <= 0 {
+		cfg.BgHardTimeout = DefaultBgHardTimeout
 	}
 
 	slog.Info("queue worker started",
@@ -91,21 +55,6 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 		"max_noninteractive", cfg.MaxNonInteractive,
 		"poll_interval", cfg.PollInterval,
 	)
-
-	var wg sync.WaitGroup
-	cfg.async = func(fn func()) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("dispatch goroutine panic recovered", "error", r)
-				}
-			}()
-			fn()
-		}()
-	}
-	defer wg.Wait()
 
 	var lastHeartbeat time.Time
 	for {
@@ -146,26 +95,34 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 
 func reapStaleActions(cfg WorkerConfig) {
 	now := time.Now()
-
-	if cfg.ClaudeSessionLogChecker != nil {
-		reapInteractive(cfg, now)
-	}
-	reapNonInteractive(cfg, now)
+	reapOrphans(cfg, now)
 	if cfg.BgStateReader != nil {
 		reapBg(cfg, now)
 	}
 }
 
-// reapCandidate is an action that survived the in-memory pre-filter, paired
-// with its parsed StartedAt (zero if unset/unparseable) so the classify loop
-// reuses the parse instead of redoing it.
-type reapCandidate struct {
-	action    db.Action
-	startedAt time.Time
+func reapOrphans(cfg WorkerConfig, _ time.Time) {
+	actions, err := cfg.DB.ListRunningOrphans(cfg.BgMissingJobGrace)
+	if err != nil {
+		slog.Error("list running orphans", "error", err)
+		return
+	}
+	if len(actions) == 0 {
+		return
+	}
+	failures := make([]db.ActionFailureUpdate, 0, len(actions))
+	for _, a := range actions {
+		failures = append(failures, db.ActionFailureUpdate{
+			ID:     a.ID,
+			Reason: fmt.Sprintf("orphaned: running for >%v with no daemon_short recorded", cfg.BgMissingJobGrace),
+		})
+		slog.Warn("reaped orphan running action", "action_id", a.ID)
+	}
+	if err := cfg.DB.BulkMarkFailed(failures); err != nil {
+		slog.Error("bulk mark orphan actions failed", "error", err, "count", len(failures))
+	}
 }
 
-// parseStartedAt parses an action's StartedAt; ok is false when StartedAt is
-// unset or unparseable.
 func parseStartedAt(a *db.Action) (started time.Time, ok bool) {
 	if !a.StartedAt.Valid {
 		return time.Time{}, false
@@ -177,163 +134,6 @@ func parseStartedAt(a *db.Action) (started time.Time, ok bool) {
 	return t, true
 }
 
-// filterInteractiveCandidates drops cloud-executor and within-grace-period
-// actions so the caller can skip prefetch when nothing is reapable. An action
-// whose StartedAt is unset/unparseable is KEPT (startedAt zero) so the
-// early-stale watchdog can still classify it; the hard-timeout backstop cannot
-// fire without a start time, so such an action lingers until it reports done
-// or its session log goes fresh again. Store-free by design so the per-action
-// loop stays clear of db.Store (golden Rule 15).
-func filterInteractiveCandidates(actions []db.Action, now time.Time, grace time.Duration) []reapCandidate {
-	var candidates []reapCandidate
-	for _, a := range actions {
-		if MetadataHasValue(a.Metadata, MetaKeyExecutor, ExecutorCloud) {
-			continue
-		}
-		startedAt, ok := parseStartedAt(&a)
-		if ok && now.Sub(startedAt) < grace {
-			continue
-		}
-		candidates = append(candidates, reapCandidate{action: a, startedAt: startedAt})
-	}
-	return candidates
-}
-
-// filterNonInteractiveCandidates drops cloud-executor actions and any action
-// not yet past staleThreshold. Unlike filterInteractiveCandidates, an action
-// with an unset/unparseable StartedAt is dropped: reapNonInteractive is purely
-// time-threshold based and cannot classify one without a start time.
-func filterNonInteractiveCandidates(actions []db.Action, now time.Time, staleThreshold time.Duration) []reapCandidate {
-	var candidates []reapCandidate
-	for _, a := range actions {
-		if MetadataHasValue(a.Metadata, MetaKeyExecutor, ExecutorCloud) {
-			continue
-		}
-		started, ok := parseStartedAt(&a)
-		if !ok || now.Sub(started) < staleThreshold {
-			continue
-		}
-		candidates = append(candidates, reapCandidate{action: a, startedAt: started})
-	}
-	return candidates
-}
-
-// reapInteractive scans running interactive actions and classifies them in
-// memory against prefetched task/project maps, then bulk-marks the stale ones
-// failed. Liveness is judged purely by the claude session log: a fresh log
-// keeps the action running, and a non-fresh log only fails the action once it
-// has exceeded InteractiveHardTimeout. There is deliberately no tmux-window
-// probe — tmux `automatic-rename` renames a live session's window away from
-// tq-action-<id>, which made an exact-name check misreport live sessions as
-// gone and reap genuinely-working actions. A dead session that never reports
-// done/fail instead lingers until the hard timeout, which loses no work and
-// self-heals, unlike a false failure.
-func reapInteractive(cfg WorkerConfig, now time.Time) {
-	actions, err := cfg.DB.ListRunningInteractive()
-	if err != nil {
-		slog.Error("list running interactive for stale check", "error", err)
-		return
-	}
-	if len(actions) == 0 {
-		return
-	}
-
-	candidates := filterInteractiveCandidates(actions, now, cfg.StaleGracePeriod)
-	if len(candidates) == 0 {
-		return
-	}
-
-	taskMap, projectMap, err := prefetchWorkDirContext(cfg.DB, candidates)
-	if err != nil {
-		slog.Error("prefetch work_dir context for interactive reaper", "error", err)
-		return
-	}
-
-	var failures []db.ActionFailureUpdate
-	for _, c := range candidates {
-		a := c.action
-		startedAt := c.startedAt
-
-		workDir := workDirFromMaps(&a, taskMap, projectMap)
-
-		if reason, decided := classifyEarlyStale(cfg, &a, workDir, startedAt, now); decided {
-			if reason != "" {
-				failures = append(failures, db.ActionFailureUpdate{ID: a.ID, Reason: reason})
-				slog.Warn("reaped early-stale action", "action_id", a.ID, "elapsed", now.Sub(startedAt))
-			}
-			continue
-		}
-
-		if claudeSessionStillActive(cfg, workDir, cfg.HeartbeatFreshness) {
-			slog.Info("action claude session log is fresh, skipping stale check", "action_id", a.ID)
-			continue
-		}
-
-		if !startedAt.IsZero() && now.Sub(startedAt) >= cfg.InteractiveHardTimeout {
-			reason := fmt.Sprintf("stale: session log not fresh and action exceeded hard timeout (%v)", cfg.InteractiveHardTimeout)
-			failures = append(failures, db.ActionFailureUpdate{ID: a.ID, Reason: reason})
-			slog.Warn("reaped stale action via hard timeout", "action_id", a.ID, "hard_timeout", cfg.InteractiveHardTimeout)
-		}
-	}
-
-	if len(failures) > 0 {
-		if err := cfg.DB.BulkMarkFailed(failures); err != nil {
-			slog.Error("bulk mark stale interactive actions failed", "error", err, "count", len(failures))
-		}
-	}
-}
-
-// reapNonInteractive mirrors reapInteractive without the tmux fallback:
-// noninteractive actions are reaped on the time-based stale threshold once
-// their session log goes silent.
-func reapNonInteractive(cfg WorkerConfig, now time.Time) {
-	niActions, err := cfg.DB.ListRunningNonInteractive()
-	if err != nil {
-		slog.Error("list running noninteractive for stale check", "error", err)
-		return
-	}
-	if len(niActions) == 0 {
-		return
-	}
-
-	staleThreshold := time.Duration(defaultTimeout*nonInteractiveStaleMultiplier) * time.Second
-
-	candidates := filterNonInteractiveCandidates(niActions, now, staleThreshold)
-	if len(candidates) == 0 {
-		return
-	}
-
-	taskMap, projectMap, err := prefetchWorkDirContext(cfg.DB, candidates)
-	if err != nil {
-		slog.Error("prefetch work_dir context for noninteractive reaper", "error", err)
-		return
-	}
-
-	var failures []db.ActionFailureUpdate
-	for _, c := range candidates {
-		a := c.action
-
-		workDir := workDirFromMaps(&a, taskMap, projectMap)
-		if claudeSessionStillActive(cfg, workDir, cfg.HeartbeatFreshness) {
-			slog.Info("noninteractive action claude session log is fresh, skipping stale check", "action_id", a.ID)
-			continue
-		}
-
-		reason := fmt.Sprintf("stale: noninteractive action exceeded timeout (%v)", staleThreshold)
-		failures = append(failures, db.ActionFailureUpdate{ID: a.ID, Reason: reason})
-		slog.Warn("reaped stale noninteractive action", "action_id", a.ID)
-	}
-
-	if len(failures) > 0 {
-		if err := cfg.DB.BulkMarkFailed(failures); err != nil {
-			slog.Error("bulk mark stale noninteractive actions failed", "error", err, "count", len(failures))
-		}
-	}
-}
-
-// bgStatePayload mirrors the subset of ~/.claude/jobs/<short>/state.json the
-// reaper consumes. Schema confirmed on 2026-05-13; if the daemon changes the
-// shape, update this struct.
 type bgStatePayload struct {
 	State     string `json:"state"`
 	SessionID string `json:"sessionId"`
@@ -348,14 +148,10 @@ const (
 	bgStateFailed = "failed"
 )
 
-// reapBg drives the lifecycle of experimental_bg actions by polling each
-// action's daemon-maintained state.json. Lifecycle decisions are collected
-// during the range loop and applied as bulk operations afterward (Rule 15:
-// no db.Store calls inside the range body).
 func reapBg(cfg WorkerConfig, now time.Time) {
-	actions, err := cfg.DB.ListRunningBg()
+	actions, err := cfg.DB.ListRunningWithDaemonShort()
 	if err != nil {
-		slog.Error("list running bg for state poll", "error", err)
+		slog.Error("list running with daemon_short for state poll", "error", err)
 		return
 	}
 	if len(actions) == 0 {
@@ -376,8 +172,6 @@ func reapBg(cfg WorkerConfig, now time.Time) {
 		}
 		short, _ := meta[MetaKeyDaemonShort].(string)
 		if short == "" {
-			// Dispatch hasn't recorded daemon_short yet (or the merge failed);
-			// we have no handle to poll, so leave the action alone.
 			continue
 		}
 
@@ -399,8 +193,6 @@ func reapBg(cfg WorkerConfig, now time.Time) {
 
 		var payload bgStatePayload
 		if err := json.Unmarshal(raw, &payload); err != nil {
-			// Daemon may be mid-write; do not flip the action to failed on a
-			// transient parse error.
 			slog.Warn("bg reaper: decode state.json", "action_id", a.ID, "short", short, "error", err)
 			continue
 		}
@@ -416,10 +208,6 @@ func reapBg(cfg WorkerConfig, now time.Time) {
 			}
 		}
 
-		// Only the two terminal states transition the action. Anything else
-		// (working, blocked, queued, future daemon-internal states) keeps the
-		// action running — `blocked` in particular signals "waiting on user
-		// input via claude agents" and must not be flipped to failed.
 		switch payload.State {
 		case bgStateDone:
 			dones = append(dones, db.ActionDoneUpdate{ID: a.ID, Result: payload.Output.Result})
@@ -432,6 +220,14 @@ func reapBg(cfg WorkerConfig, now time.Time) {
 				msg = "bg session reported state=failed"
 			}
 			failures = append(failures, db.ActionFailureUpdate{ID: a.ID, Reason: msg})
+		default:
+			if started, ok := parseStartedAt(&a); ok && now.Sub(started) >= cfg.BgHardTimeout {
+				failures = append(failures, db.ActionFailureUpdate{
+					ID:     a.ID,
+					Reason: fmt.Sprintf("bg hard timeout (%v) elapsed in state=%q", cfg.BgHardTimeout, payload.State),
+				})
+				slog.Warn("bg reaper: hard timeout reached", "action_id", a.ID, "state", payload.State, "elapsed", now.Sub(started))
+			}
 		}
 	}
 
@@ -452,9 +248,6 @@ func reapBg(cfg WorkerConfig, now time.Time) {
 	}
 }
 
-// bgJobMissingForTooLong reports whether enough time has passed since the
-// action was claimed (StartedAt) to treat a missing state.json as a real
-// disappearance rather than a race with daemon initialization.
 func bgJobMissingForTooLong(a *db.Action, now time.Time, grace time.Duration) bool {
 	started, ok := parseStartedAt(a)
 	if !ok {
@@ -463,137 +256,6 @@ func bgJobMissingForTooLong(a *db.Action, now time.Time, grace time.Duration) bo
 	return now.Sub(started) >= grace
 }
 
-// prefetchWorkDirContext bulk-fetches the tasks (and their projects) needed
-// to resolve work_dir for every candidate. Returns empty maps on empty input.
-func prefetchWorkDirContext(database db.Store, candidates []reapCandidate) (map[int64]*db.Task, map[int64]*db.Project, error) {
-	taskIDSet := make(map[int64]struct{}, len(candidates))
-	for _, c := range candidates {
-		taskIDSet[c.action.TaskID] = struct{}{}
-	}
-	taskIDs := make([]int64, 0, len(taskIDSet))
-	for id := range taskIDSet {
-		taskIDs = append(taskIDs, id)
-	}
-	taskMap, err := database.GetTasksByIDs(taskIDs)
-	if err != nil {
-		return nil, nil, fmt.Errorf("get tasks: %w", err)
-	}
-
-	projectIDSet := make(map[int64]struct{}, len(taskMap))
-	for _, t := range taskMap {
-		projectIDSet[t.ProjectID] = struct{}{}
-	}
-	projectIDs := make([]int64, 0, len(projectIDSet))
-	for id := range projectIDSet {
-		projectIDs = append(projectIDs, id)
-	}
-	projectMap, err := database.GetProjectsByIDs(projectIDs)
-	if err != nil {
-		return nil, nil, fmt.Errorf("get projects: %w", err)
-	}
-	return taskMap, projectMap, nil
-}
-
-// workDirFromMaps mirrors resolveWorkDir's read-only decision tree but reads
-// from prefetched maps. Returns "." for any unresolvable case.
-func workDirFromMaps(a *db.Action, taskMap map[int64]*db.Task, projectMap map[int64]*db.Project) string {
-	task, ok := taskMap[a.TaskID]
-	if !ok {
-		return "."
-	}
-	if task.WorkDir != "" {
-		expanded := expandHome(task.WorkDir)
-		if dirExists(expanded) {
-			return expanded
-		}
-		// Fall through to project fallback (mirrors resolveWorkDir's recovery path).
-		project, ok := projectMap[task.ProjectID]
-		if !ok {
-			return "."
-		}
-		if project.WorkDir != "" {
-			projExpanded := expandHome(project.WorkDir)
-			if dirExists(projExpanded) {
-				return projExpanded
-			}
-		}
-		return "."
-	}
-	project, ok := projectMap[task.ProjectID]
-	if !ok {
-		return "."
-	}
-	if project.WorkDir != "" {
-		return expandHome(project.WorkDir)
-	}
-	return "."
-}
-
-// classifyEarlyStale evaluates the early-stale watchdog: an action that has
-// exceeded EarlyDispatchTimeout but never produced a session log. If the
-// action's claude_session_id already has a session log .jsonl on disk the
-// session demonstrably started, so it is NOT early-stale — we return
-// ("", false) to defer to the regular stale/liveness classifiers, which reap
-// it with an accurate message. Returns (reason, true) to schedule a failure,
-// ("", true) to suppress further checks for this action (session is active),
-// and ("", false) to defer to the next classifier in the chain.
-func classifyEarlyStale(cfg WorkerConfig, a *db.Action, workDir string, startedAt, now time.Time) (string, bool) {
-	if cfg.ClaudeSessionLogChecker == nil || startedAt.IsZero() {
-		return "", false
-	}
-	sinceStart := now.Sub(startedAt)
-	if sinceStart < cfg.EarlyDispatchTimeout {
-		return "", false
-	}
-
-	// A recorded claude_session_id means the SessionStart hook ran, i.e. the
-	// session started. If its log exists (or the check itself errors) treat
-	// the action as started and defer downstream — never produced a session
-	// log is false here, so an early-stale verdict would be a lie.
-	if meta, err := ParseActionMetadata(a.Metadata); err == nil {
-		if sid, _ := meta[MetaKeyClaudeSessionID].(string); sid != "" {
-			exists, err := cfg.ClaudeSessionLogChecker.SessionLogExists(sid)
-			if err != nil {
-				slog.Warn("early-stale watchdog: session log existence check failed", "action_id", a.ID, "error", err)
-				return "", false
-			}
-			if exists {
-				return "", false
-			}
-		}
-	}
-
-	active, err := cfg.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, cfg.HeartbeatFreshness)
-	if err != nil {
-		slog.Warn("early-stale watchdog: claude session log check failed", "action_id", a.ID, "error", err)
-		return "", false
-	}
-	if active {
-		// Session is alive even past the early window — defer to nothing else;
-		// the regular liveness check would also see this as fresh.
-		return "", true
-	}
-	return fmt.Sprintf("early-stale: no claude session log within %v of dispatch", cfg.EarlyDispatchTimeout), true
-}
-
-// claudeSessionStillActive reports whether the action's session log shows
-// recent activity. Errors and missing checker count as "not active" so
-// callers fall through to other liveness signals.
-func claudeSessionStillActive(cfg WorkerConfig, workDir string, freshness time.Duration) bool {
-	if cfg.ClaudeSessionLogChecker == nil {
-		return false
-	}
-	active, err := cfg.ClaudeSessionLogChecker.IsClaudeSessionActive(workDir, freshness)
-	if err != nil {
-		slog.Warn("claude session log check failed", "error", err)
-		return false
-	}
-	return active
-}
-
-// MetadataHasValue reports whether the action's metadata JSON has the given
-// string-typed key set to the given value. False on empty/invalid JSON or
-// non-string values.
 func MetadataHasValue(raw, key, value string) bool {
 	if raw == "" || raw == "{}" {
 		return false
@@ -618,15 +280,9 @@ func dispatchOne(ctx context.Context, cfg WorkerConfig) (bool, error) {
 	result, err := ExecuteAction(ctx, ExecuteParams{
 		DispatchConfig: cfg.DispatchConfig,
 		BeforeInteractive: func(a *db.Action) error {
-			// NextPending has already marked this action running, so `running`
-			// includes the just-claimed action itself. Compare with `>` so
-			// `MaxInteractive=N` means "up to N concurrent" (inclusive). The
-			// count combines interactive and bg actions because they share the
-			// MaxInteractive slot pool (bg sessions are interactive via the
-			// `claude agents` view).
-			running, err := cfg.DB.CountRunningInteractiveOrBg()
+			running, err := cfg.DB.CountRunningInteractive()
 			if err != nil {
-				return fmt.Errorf("count running interactive+bg: %w", err)
+				return fmt.Errorf("count running interactive: %w", err)
 			}
 			if running > cfg.MaxInteractive {
 				slog.Debug("interactive limit reached, deferring", "action_id", a.ID, "running", running, "max", cfg.MaxInteractive)
@@ -635,7 +291,6 @@ func dispatchOne(ctx context.Context, cfg WorkerConfig) (bool, error) {
 			return nil
 		},
 		BeforeNonInteractive: func(a *db.Action) error {
-			// `running` includes the just-claimed action (see BeforeInteractive).
 			running, err := cfg.DB.CountRunningNonInteractive()
 			if err != nil {
 				return fmt.Errorf("count running noninteractive: %w", err)
@@ -646,21 +301,9 @@ func dispatchOne(ctx context.Context, cfg WorkerConfig) (bool, error) {
 			}
 			return nil
 		},
-		BeforeBg: func(a *db.Action) error {
-			running, err := cfg.DB.CountRunningInteractiveOrBg()
-			if err != nil {
-				return fmt.Errorf("count running interactive+bg: %w", err)
-			}
-			if running > cfg.MaxInteractive {
-				slog.Debug("interactive+bg limit reached, deferring bg", "action_id", a.ID, "running", running, "max", cfg.MaxInteractive)
-				return ErrBgDeferred
-			}
-			return nil
-		},
-		Async: cfg.async,
 	}, action)
 
-	if errors.Is(err, ErrInteractiveDeferred) || errors.Is(err, ErrNonInteractiveDeferred) || errors.Is(err, ErrBgDeferred) {
+	if errors.Is(err, ErrInteractiveDeferred) || errors.Is(err, ErrNonInteractiveDeferred) {
 		return false, nil
 	}
 	var af *ActionFailedError

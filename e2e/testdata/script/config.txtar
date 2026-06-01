@@ -13,21 +13,25 @@ stderr 'unknown config key'
 ! exec tq config set default_mode plan
 stderr 'invalid value'
 
+# experimental_bg is no longer a valid mode
+! exec tq config set default_mode experimental_bg
+stderr 'invalid value'
+
 # set + get round trip
-exec tq config set default_mode experimental_bg
-stdout 'config default_mode = experimental_bg'
+exec tq config set default_mode noninteractive
+stdout 'config default_mode = noninteractive'
 exec tq config get default_mode
-stdout 'experimental_bg'
+stdout 'noninteractive'
 exec tq config list
 stdout '"key": "default_mode"'
-stdout '"value": "experimental_bg"'
+stdout '"value": "noninteractive"'
 
 # action created without an explicit mode gets the configured default stamped
 exec tq project create demo /tmp/demo
 exec tq task create 'work' --project 1
 exec tq action create 'do something' --task 1 --title 'a1'
 exec tq action get 1 --jq '.metadata | fromjson.mode'
-stdout 'experimental_bg'
+stdout 'noninteractive'
 
 # explicit --meta mode overrides the configured default
 exec tq action create 'do other' --task 1 --title 'a2' --meta '{"mode":"interactive"}'

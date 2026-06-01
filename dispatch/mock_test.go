@@ -14,7 +14,6 @@ type mockRunner struct {
 	calls  []mockCall
 	output []byte
 	err    error
-	// failAt indicates which call index should return the error (0-based). -1 means no failure.
 	failAt int
 }
 
@@ -25,33 +24,4 @@ func (m *mockRunner) Run(ctx context.Context, name string, args []string, dir st
 		return m.output, m.err
 	}
 	return m.output, nil
-}
-
-// blockingRunner blocks until ctx is cancelled or finishedCh is closed.
-type blockingRunner struct {
-	output     []byte
-	finishedCh chan struct{}
-}
-
-func (r *blockingRunner) Run(ctx context.Context, _ string, _ []string, _ string, _ []string) ([]byte, error) {
-	select {
-	case <-ctx.Done():
-		return r.output, ctx.Err()
-	case <-r.finishedCh:
-		return r.output, nil
-	}
-}
-
-// sequenceRunner returns successive outputs across calls; the last entry repeats.
-type sequenceRunner struct {
-	outputs [][]byte
-	idx     int
-}
-
-func (s *sequenceRunner) Run(_ context.Context, _ string, _ []string, _ string, _ []string) ([]byte, error) {
-	out := s.outputs[s.idx]
-	if s.idx < len(s.outputs)-1 {
-		s.idx++
-	}
-	return out, nil
 }

@@ -18,7 +18,6 @@ type CommandWriter interface {
 	MarkDispatched(id int64) error
 	ResetToPending(id int64) error
 	DeferToPending(id int64, retryAfter time.Duration) error
-	SetTmuxInfo(id int64, tmuxSession, tmuxWindow string) error
 	MergeActionMetadata(id int64, updates map[string]any) error
 	BulkMergeActionMetadata(updates []ActionMetadataMerge) error
 	UpdateAction(id int64, title *string, taskID *int64, metadata, workDir, result *string) error
@@ -56,12 +55,10 @@ type QueryReader interface {
 	HasActiveActionsForSchedules(scheduleIDs []int64) (map[int64]bool, error)
 	GetTaskActionCount(taskID int64, statuses []string) (int64, error)
 	GetTasksByIDs(ids []int64) (map[int64]*Task, error)
-	ListRunningInteractive() ([]Action, error)
-	ListRunningNonInteractive() ([]Action, error)
-	ListRunningBg() ([]Action, error)
+	ListRunningWithDaemonShort() ([]Action, error)
+	ListRunningOrphans(minAge time.Duration) ([]Action, error)
 	CountRunningInteractive() (int, error)
 	CountRunningNonInteractive() (int, error)
-	CountRunningInteractiveOrBg() (int, error)
 	CountPendingByDispatch() (PendingCounts, error)
 	IsActionDispatchEnabled(actionID int64) (bool, error)
 	ListActionsByTaskIDs(taskIDs []int64) (map[int64][]Action, error)
@@ -77,7 +74,6 @@ type QueryReader interface {
 	LatestTaskNotes(taskIDs []int64, kindFilter string) (map[int64]TaskNoteEntry, error)
 	// Project queries
 	GetProjectByID(id int64) (*Project, error)
-	GetProjectsByIDs(ids []int64) (map[int64]*Project, error)
 	ListProjects(limit int) ([]Project, error)
 	// Schedule queries
 	GetSchedule(id int64) (*Schedule, error)

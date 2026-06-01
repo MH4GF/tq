@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os/exec"
 	"sort"
 	"strings"
 
@@ -202,9 +201,9 @@ func (m TasksModel) loadTasks() tea.Cmd {
 			trees = append(trees, projectTree{project: p, tasks: nodes})
 		}
 		var ri int
-		n, err := m.database.CountRunningInteractiveOrBg()
+		n, err := m.database.CountRunningInteractive()
 		if err != nil {
-			recordErr(fmt.Errorf("count running interactive+bg: %w", err))
+			recordErr(fmt.Errorf("count running interactive: %w", err))
 		} else {
 			ri = n
 		}
@@ -729,19 +728,32 @@ func (m TasksModel) dispatchAction(a *db.Action) tea.Cmd {
 }
 
 func actionAttachable(a *db.Action) bool {
-	return a != nil && a.TmuxSession.Valid && a.TmuxWindow.Valid
+	if a == nil {
+		return false
+	}
+	short := daemonShortFromMetadata(a.Metadata)
+	return short != ""
+}
+
+func daemonShortFromMetadata(raw string) string {
+	if raw == "" || raw == "{}" {
+		return ""
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return ""
+	}
+	short, _ := m["daemon_short"].(string)
+	return short
 }
 
 func (m TasksModel) attachAction(a *db.Action) tea.Cmd {
 	return func() tea.Msg {
 		if !actionAttachable(a) {
-			return actionAttachedMsg{id: a.ID, message: "no tmux session info"}
+			return actionAttachedMsg{id: a.ID, message: "no daemon_short recorded yet"}
 		}
-		target := fmt.Sprintf("%s:%s", a.TmuxSession.String, a.TmuxWindow.String)
-		if err := exec.Command("tmux", "select-window", "-t", target).Run(); err != nil {
-			return actionAttachedMsg{id: a.ID, message: fmt.Sprintf("attach failed: %v", err)}
-		}
-		return actionAttachedMsg{id: a.ID}
+		short := daemonShortFromMetadata(a.Metadata)
+		return actionAttachedMsg{id: a.ID, message: fmt.Sprintf("run `claude attach %s` in a terminal to view this session", short)}
 	}
 }
 

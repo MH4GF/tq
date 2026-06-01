@@ -9,12 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/MH4GF/tq/db"
 )
-
-var markDoneRetryDelay = 200 * time.Millisecond
 
 // dirExists reports whether the given path exists on disk.
 var dirExists = func(path string) bool {
@@ -26,29 +23,18 @@ const (
 	ModeRemote         = "remote"
 	ModeInteractive    = "interactive"
 	ModeNonInteractive = "noninteractive"
-	// ModeBg dispatches via `claude --bg`, registering the session with the
-	// daemon supervisor so it appears in `claude agents`. The string value is
-	// `experimental_bg` during the research-preview phase and will be flipped
-	// to `bg` on promotion — keep db/action.go:bgModePredicate in sync.
-	ModeBg = "experimental_bg"
 
-	MetaKeyInstruction = "instruction"
-	MetaKeyMode        = "mode"
-	MetaKeyClaudeArgs  = "claude_args"
-	MetaKeyScheduleID  = "schedule_id"
-	// MetaKeyPermissionDenials carries the denial summaries reported by
-	// `claude -p` for cross-event analysis by the /tq:investigate-incidents
-	// skill.
+	MetaKeyInstruction       = "instruction"
+	MetaKeyMode              = "mode"
+	MetaKeyClaudeArgs        = "claude_args"
+	MetaKeyScheduleID        = "schedule_id"
 	MetaKeyPermissionDenials = "permission_denials"
 	MetaKeyClaudeSessionID   = "claude_session_id"
 	MetaKeyParentActionID    = "parent_action_id"
 	MetaKeyIsResume          = "is_resume"
 	MetaKeyExecutor          = "executor"
-	// MetaKeyDaemonShort holds the 8-char short id returned by `claude --bg`
-	// for ModeBg actions. Used by the queue worker to poll
-	// ~/.claude/jobs/<short>/state.json for lifecycle transitions.
-	MetaKeyDaemonShort      = "daemon_short"
-	MetaKeySuccessfulResult = "successful_result"
+	MetaKeyDaemonShort       = "daemon_short"
+	MetaKeySuccessfulResult  = "successful_result"
 )
 
 // Executor values for metadata.executor. Distinguishes where the action's
@@ -70,24 +56,15 @@ func IsCloudExecution() bool {
 
 // DispatchConfig holds shared dispatch settings used by both WorkerConfig and ExecuteParams.
 type DispatchConfig struct {
-	DB                      db.Store
-	NonInteractiveFunc      func() Worker
-	InteractiveFunc         func() Worker
-	RemoteFunc              func() Worker
-	BgFunc                  func() Worker
-	TmuxSession             string
-	ClaudeSessionLogChecker ClaudeSessionLogChecker
+	DB         db.Store
+	BgFunc     func() Worker
+	RemoteFunc func() Worker
 }
 
 type ExecuteParams struct {
 	DispatchConfig
 	BeforeInteractive    func(action *db.Action) error
 	BeforeNonInteractive func(action *db.Action) error
-	BeforeBg             func(action *db.Action) error
-	// Async, when non-nil, runs noninteractive worker.Execute and its
-	// post-processing in a goroutine so the dispatch loop is not blocked.
-	// When nil (e.g. in unit tests), execution stays synchronous.
-	Async func(func())
 }
 
 type ExecuteResult struct {
@@ -111,13 +88,7 @@ func (e *ActionFailedError) Unwrap() error {
 var (
 	ErrInteractiveDeferred    = errors.New("interactive deferred")
 	ErrNonInteractiveDeferred = errors.New("noninteractive deferred")
-	ErrBgDeferred             = errors.New("bg deferred")
 )
-
-// WindowName returns the tmux window name for an action.
-func WindowName(actionID int64) string {
-	return fmt.Sprintf("tq-action-%d", actionID)
-}
 
 // ActionConfig holds execution configuration extracted from action metadata.
 type ActionConfig struct {
@@ -128,12 +99,11 @@ type ActionConfig struct {
 func (c ActionConfig) IsInteractive() bool    { return c.Mode == ModeInteractive }
 func (c ActionConfig) IsNonInteractive() bool { return c.Mode == ModeNonInteractive }
 func (c ActionConfig) IsRemote() bool         { return c.Mode == ModeRemote }
-func (c ActionConfig) IsBg() bool             { return c.Mode == ModeBg }
 
 // validModeList is the canonical ordered set of tq dispatch modes; validModes
 // is derived from it. ValidModesList renders it for error messages so adding a
 // mode updates every message in one place.
-var validModeList = []string{ModeInteractive, ModeNonInteractive, ModeRemote, ModeBg}
+var validModeList = []string{ModeInteractive, ModeNonInteractive, ModeRemote}
 
 var validModes = func() map[string]bool {
 	m := make(map[string]bool, len(validModeList))
@@ -152,7 +122,7 @@ const SettingKeyDefaultMode = "default_mode"
 func IsValidMode(s string) bool { return validModes[s] }
 
 // ValidModesList returns the valid modes as a comma-separated string for
-// error messages, e.g. "interactive, noninteractive, remote, experimental_bg".
+// error messages, e.g. "interactive, noninteractive, remote".
 func ValidModesList() string { return strings.Join(validModeList, ", ") }
 
 // ResolveDefaultMode decides the mode to stamp into a new action's metadata
@@ -240,9 +210,7 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 		return nil, fmt.Errorf("validate claude_args: %w", err)
 	}
 
-	if !cfg.IsInteractive() {
-		instruction = RenderPrompt(instruction, action.ID, action.TaskID, cfg.Mode)
-	}
+	instruction = RenderPrompt(instruction, action.ID, action.TaskID, cfg.Mode)
 
 	workDir, recovery, err := resolveWorkDir(params.DB, action)
 	if err != nil {
@@ -253,13 +221,7 @@ func ExecuteAction(ctx context.Context, params ExecuteParams, action *db.Action)
 	if cfg.IsRemote() {
 		return executeRemote(ctx, params, action, instruction, cfg, workDir)
 	}
-	if cfg.IsBg() {
-		return executeBg(ctx, params, action, instruction, cfg, workDir)
-	}
-	if cfg.IsInteractive() {
-		return executeInteractive(ctx, params, action, instruction, cfg, workDir)
-	}
-	return executeNonInteractive(ctx, params, action, instruction, cfg, workDir)
+	return executeViaBg(ctx, params, action, instruction, cfg, workDir)
 }
 
 func deferOrFail(store db.Store, actionID int64, sentinel error) error {
@@ -273,13 +235,18 @@ func deferOrFail(store db.Store, actionID int64, sentinel error) error {
 	return sentinel
 }
 
-func executeBg(ctx context.Context, params ExecuteParams, action *db.Action, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
-	if params.BeforeBg != nil {
-		if err := params.BeforeBg(action); err != nil {
-			if errors.Is(err, ErrBgDeferred) {
-				return nil, deferOrFail(params.DB, action.ID, ErrBgDeferred)
+func executeViaBg(ctx context.Context, params ExecuteParams, action *db.Action, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
+	before, deferErr := admissionFor(params, cfg)
+	if before != nil {
+		if err := before(action); err != nil {
+			if errors.Is(err, deferErr) {
+				return nil, deferOrFail(params.DB, action.ID, deferErr)
 			}
-			return nil, err
+			failMsg := fmt.Sprintf("admission check failed: %v", err)
+			if mfErr := params.DB.MarkFailed(action.ID, failMsg); mfErr != nil {
+				slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
+			}
+			return nil, &ActionFailedError{ActionID: action.ID, Err: err}
 		}
 	}
 
@@ -298,7 +265,14 @@ func executeBg(ctx context.Context, params ExecuteParams, action *db.Action, ins
 		slog.Warn("failed to save bg daemon_short", "action_id", action.ID, "error", err)
 	}
 
-	return &ExecuteResult{Mode: ModeBg, Output: short}, nil
+	return &ExecuteResult{Mode: cfg.Mode, Output: short}, nil
+}
+
+func admissionFor(params ExecuteParams, cfg ActionConfig) (func(*db.Action) error, error) {
+	if cfg.IsNonInteractive() {
+		return params.BeforeNonInteractive, ErrNonInteractiveDeferred
+	}
+	return params.BeforeInteractive, ErrInteractiveDeferred
 }
 
 func executeRemote(ctx context.Context, params ExecuteParams, action *db.Action, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
@@ -322,127 +296,6 @@ func executeRemote(ctx context.Context, params ExecuteParams, action *db.Action,
 	}
 
 	return &ExecuteResult{Mode: ModeRemote, Output: result}, nil
-}
-
-func executeInteractive(ctx context.Context, params ExecuteParams, action *db.Action, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
-	if params.BeforeInteractive != nil {
-		if err := params.BeforeInteractive(action); err != nil {
-			if errors.Is(err, ErrInteractiveDeferred) {
-				return nil, deferOrFail(params.DB, action.ID, ErrInteractiveDeferred)
-			}
-			return nil, err
-		}
-	}
-
-	worker := params.InteractiveFunc()
-	result, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
-	if err != nil {
-		if mfErr := params.DB.MarkFailed(action.ID, err.Error()); mfErr != nil {
-			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
-		}
-		return nil, &ActionFailedError{ActionID: action.ID, Err: err}
-	}
-
-	if params.TmuxSession != "" {
-		windowName := WindowName(action.ID)
-		if err := params.DB.SetTmuxInfo(action.ID, params.TmuxSession, windowName); err != nil {
-			slog.Warn("failed to save tmux info", "action_id", action.ID, "error", err)
-		}
-	}
-
-	return &ExecuteResult{Mode: ModeInteractive, Output: result}, nil
-}
-
-func executeNonInteractive(ctx context.Context, params ExecuteParams, action *db.Action, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
-	if params.BeforeNonInteractive != nil {
-		if err := params.BeforeNonInteractive(action); err != nil {
-			if errors.Is(err, ErrNonInteractiveDeferred) {
-				return nil, deferOrFail(params.DB, action.ID, ErrNonInteractiveDeferred)
-			}
-			return nil, err
-		}
-	}
-
-	worker := params.NonInteractiveFunc()
-
-	if params.Async == nil {
-		// Synchronous path: keeps existing ExecuteAction unit tests deterministic.
-		return runNonInteractive(ctx, params, action, worker, instruction, cfg, workDir)
-	}
-
-	// Async path: dispatch loop continues immediately so other actions can be
-	// dispatched while claude -p runs. Errors are logged and DB is updated
-	// inside the goroutine.
-	actionCopy := *action
-	params.Async(func() {
-		defer func() {
-			if r := recover(); r != nil {
-				msg := fmt.Sprintf("dispatch goroutine panic: %v", r)
-				if mfErr := params.DB.MarkFailed(actionCopy.ID, msg); mfErr != nil {
-					slog.Error("mark action failed", "action_id", actionCopy.ID, "error", mfErr)
-				}
-				slog.Error("dispatch goroutine panic recovered", "action_id", actionCopy.ID, "error", r)
-			}
-		}()
-		if _, err := runNonInteractive(ctx, params, &actionCopy, worker, instruction, cfg, workDir); err != nil && !errors.Is(err, context.Canceled) {
-			slog.Error("noninteractive async execution returned error", "action_id", actionCopy.ID, "error", err)
-		}
-	})
-	return &ExecuteResult{Mode: ModeNonInteractive}, nil
-}
-
-// runNonInteractive returns (nil, *ActionFailedError) on worker failure so
-// the synchronous path preserves caller-visible behavior; the async path
-// swallows the error after logging.
-func runNonInteractive(ctx context.Context, params ExecuteParams, action *db.Action, worker Worker, instruction string, cfg ActionConfig, workDir string) (*ExecuteResult, error) {
-	result, err := worker.Execute(ctx, instruction, cfg, workDir, action.ID, action.TaskID)
-	if err != nil {
-		// Shutdown cancel: leave in-flight running so the next dispatch
-		// cycle's stale reaper can either find them alive (heartbeat fresh)
-		// or reap them legitimately.
-		if errors.Is(err, context.Canceled) {
-			slog.Warn("noninteractive interrupted by shutdown; leaving for reaper", "action_id", action.ID)
-			return nil, err
-		}
-		if mfErr := params.DB.MarkFailed(action.ID, err.Error()); mfErr != nil {
-			slog.Error("mark action failed", "action_id", action.ID, "error", mfErr)
-		}
-		return nil, &ActionFailedError{ActionID: action.ID, Err: err}
-	}
-
-	if p, ok := worker.(interface{ LastDenials() []PermissionDenial }); ok {
-		if denials := p.LastDenials(); len(denials) > 0 {
-			if err := params.DB.MergeActionMetadata(action.ID, map[string]any{
-				MetaKeyPermissionDenials: denialSummaries(denials),
-			}); err != nil {
-				slog.Error("merge permission_denials metadata", "action_id", action.ID, "error", err)
-			}
-		}
-	}
-
-	if err := params.DB.MarkDone(action.ID, result); err != nil {
-		slog.Warn("mark done failed, retrying", "action_id", action.ID, "error", err)
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(markDoneRetryDelay):
-		}
-		if retryErr := params.DB.MarkDone(action.ID, result); retryErr != nil {
-			slog.Error("mark done after retry", "action_id", action.ID, "error", retryErr)
-			reason := fmt.Sprintf("mark done failed after successful run: %v", retryErr)
-			if mfErr := params.DB.MarkFailed(action.ID, reason); mfErr != nil {
-				slog.Error("mark action failed after mark done retries", "action_id", action.ID, "error", mfErr)
-			}
-			if mmErr := params.DB.MergeActionMetadata(action.ID, map[string]any{
-				MetaKeySuccessfulResult: result,
-			}); mmErr != nil {
-				slog.Error("merge successful_result metadata", "action_id", action.ID, "error", mmErr)
-			}
-			return nil, fmt.Errorf("mark done: %w", retryErr)
-		}
-	}
-
-	return &ExecuteResult{Mode: ModeNonInteractive, Output: result}, nil
 }
 
 // RenderPrompt builds the wrapped claude prompt for an action: the user-provided

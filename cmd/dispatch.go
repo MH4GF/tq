@@ -10,46 +10,23 @@ import (
 	"github.com/MH4GF/tq/dispatch"
 )
 
-var defaultWorkerFactory = func() dispatch.Worker {
-	return &dispatch.NonInteractiveWorker{
-		Runner:                  &dispatch.ExecRunner{},
-		ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
+var defaultBgWorkerFactory = func() dispatch.Worker {
+	return &dispatch.BgWorker{Runner: &dispatch.ExecRunner{}}
+}
+
+var activeBgWorkerFactory func() dispatch.Worker
+
+func getBgWorkerFactory() func() dispatch.Worker {
+	if activeBgWorkerFactory != nil {
+		return activeBgWorkerFactory
 	}
+	return defaultBgWorkerFactory
 }
 
-var activeWorkerFactory func() dispatch.Worker
-
-func getWorkerFactory() func() dispatch.Worker {
-	if activeWorkerFactory != nil {
-		return activeWorkerFactory
-	}
-	return defaultWorkerFactory
-}
-
-func SetWorkerFactory(f func() dispatch.Worker) {
-	activeWorkerFactory = f
-}
-
-var dispatchSession string
-
-var defaultInteractiveWorkerFactory = func() dispatch.Worker {
-	return &dispatch.InteractiveWorker{
-		Runner:  &dispatch.ExecRunner{},
-		Session: dispatchSession,
-	}
-}
-
-var activeInteractiveWorkerFactory func() dispatch.Worker
-
-func getInteractiveWorkerFactory() func() dispatch.Worker {
-	if activeInteractiveWorkerFactory != nil {
-		return activeInteractiveWorkerFactory
-	}
-	return defaultInteractiveWorkerFactory
-}
-
-func SetInteractiveWorkerFactory(f func() dispatch.Worker) {
-	activeInteractiveWorkerFactory = f
+// SetBgWorkerFactory overrides the BgWorker factory used by `tq action dispatch`
+// and the queue worker. Exposed for tests; production callers leave it unset.
+func SetBgWorkerFactory(f func() dispatch.Worker) {
+	activeBgWorkerFactory = f
 }
 
 var defaultRemoteWorkerFactory = func() dispatch.Worker {
@@ -67,25 +44,6 @@ func getRemoteWorkerFactory() func() dispatch.Worker {
 	return defaultRemoteWorkerFactory
 }
 
-var defaultBgWorkerFactory = func() dispatch.Worker {
-	return &dispatch.BgWorker{Runner: &dispatch.ExecRunner{}}
-}
-
-var activeBgWorkerFactory func() dispatch.Worker
-
-func getBgWorkerFactory() func() dispatch.Worker {
-	if activeBgWorkerFactory != nil {
-		return activeBgWorkerFactory
-	}
-	return defaultBgWorkerFactory
-}
-
-// SetBgWorkerFactory overrides the worker used for experimental_bg
-// dispatches. Exposed for tests; production callers leave it unset.
-func SetBgWorkerFactory(f func() dispatch.Worker) {
-	activeBgWorkerFactory = f
-}
-
 var actionDispatchCmd = &cobra.Command{
 	Use:   "dispatch <action_id>",
 	Short: "Dispatch an action immediately (skip queue)",
@@ -94,9 +52,8 @@ var actionDispatchCmd = &cobra.Command{
 This is a manual override: it bypasses the completion-dependency gate, so an
 action whose blockers are not yet satisfied (including blocked-forever ones)
 is dispatched anyway. The automatic queue worker still respects dependencies.`,
-	Example: `  tq action dispatch 42
-  tq action dispatch 42 --session work`,
-	Args: cobra.ExactArgs(1),
+	Example: `  tq action dispatch 42`,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
@@ -105,13 +62,9 @@ is dispatched anyway. The automatic queue worker still respects dependencies.`,
 			return fmt.Errorf("invalid action ID %q: %w", args[0], parseErr)
 		}
 		cfg := dispatch.DispatchConfig{
-			DB:                      database,
-			NonInteractiveFunc:      getWorkerFactory(),
-			InteractiveFunc:         getInteractiveWorkerFactory(),
-			RemoteFunc:              getRemoteWorkerFactory(),
-			BgFunc:                  getBgWorkerFactory(),
-			ClaudeSessionLogChecker: &dispatch.FileClaudeSessionLogChecker{},
-			TmuxSession:             dispatchSession,
+			DB:         database,
+			BgFunc:     getBgWorkerFactory(),
+			RemoteFunc: getRemoteWorkerFactory(),
 		}
 		msg, err := dispatch.DispatchByID(ctx, cfg, id)
 		if err != nil {
@@ -123,6 +76,5 @@ is dispatched anyway. The automatic queue worker still respects dependencies.`,
 }
 
 func init() {
-	actionDispatchCmd.Flags().StringVar(&dispatchSession, "session", "main", "Target tmux session name")
 	actionCmd.AddCommand(actionDispatchCmd)
 }

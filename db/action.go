@@ -377,27 +377,27 @@ func (db *DB) IsActionDispatchEnabled(actionID int64) (bool, error) {
 	return enabled, nil
 }
 
-// interactiveModePredicate matches actions whose mode is interactive (the default
-// when unset). Keep ListRunningInteractive and CountRunningInteractive in sync.
-const interactiveModePredicate = "(json_extract(metadata, '$.mode') IS NULL OR json_extract(metadata, '$.mode') = 'interactive')"
+// interactiveModePredicate matches actions whose mode counts against the
+// MaxInteractive slot pool: unset (the default), explicit "interactive", or
+// legacy "experimental_bg" rows left over from before the launch-path unification.
+// The legacy match is a shim: pending experimental_bg rows are migrated to
+// "interactive" by db.Migrate, but running rows are left alone and we count
+// them here so the slot accounting stays consistent until they terminate.
+const interactiveModePredicate = "(json_extract(metadata, '$.mode') IS NULL " +
+	"OR json_extract(metadata, '$.mode') = 'interactive' " +
+	"OR json_extract(metadata, '$.mode') = 'experimental_bg')"
 
 // noninteractiveModePredicate matches actions whose mode is explicitly noninteractive.
 // Keep ListRunningNonInteractive and CountRunningNonInteractive in sync.
 const noninteractiveModePredicate = "json_extract(metadata, '$.mode') = 'noninteractive'"
 
-// bgModePredicate matches the experimental_bg dispatch mode. The literal string
-// MUST stay in sync with dispatch.ModeBg — the db package cannot import dispatch
-// (layering constraint), so the value is duplicated intentionally.
-const bgModePredicate = "json_extract(metadata, '$.mode') = 'experimental_bg'"
-
-// interactiveOrBgModePredicate matches actions that compete for the same
-// MaxInteractive slot pool: classic interactive sessions and bg sessions
-// (which the user interacts with via `claude agents`).
-const interactiveOrBgModePredicate = "(" + interactiveModePredicate + " OR " + bgModePredicate + ")"
-
-func (db *DB) ListRunningInteractive() ([]Action, error) {
+func (db *DB) ListRunningWithDaemonShort() ([]Action, error) {
 	rows, err := db.Query(
-		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND "+interactiveModePredicate+" ORDER BY id",
+		"SELECT "+actionColumns+" FROM actions "+
+			"WHERE status = ? "+
+			"AND json_extract(metadata, '$.daemon_short') IS NOT NULL "+
+			"AND COALESCE(json_extract(metadata, '$.executor'), 'local') <> 'cloud' "+
+			"ORDER BY id",
 		ActionStatusRunning,
 	)
 	if err != nil {
@@ -416,31 +416,17 @@ func (db *DB) ListRunningInteractive() ([]Action, error) {
 	return actions, rows.Err()
 }
 
-func (db *DB) ListRunningNonInteractive() ([]Action, error) {
+func (db *DB) ListRunningOrphans(minAge time.Duration) ([]Action, error) {
+	cutoff := time.Now().UTC().Add(-minAge).Format(TimeLayout)
 	rows, err := db.Query(
-		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND "+noninteractiveModePredicate+" ORDER BY id",
-		ActionStatusRunning,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var actions []Action
-	for rows.Next() {
-		var a Action
-		if err := rows.Scan(a.scanFields()...); err != nil {
-			return nil, err
-		}
-		actions = append(actions, a)
-	}
-	return actions, rows.Err()
-}
-
-func (db *DB) ListRunningBg() ([]Action, error) {
-	rows, err := db.Query(
-		"SELECT "+actionColumns+" FROM actions WHERE status = ? AND "+bgModePredicate+" ORDER BY id",
-		ActionStatusRunning,
+		"SELECT "+actionColumns+" FROM actions "+
+			"WHERE status = ? "+
+			"AND json_extract(metadata, '$.daemon_short') IS NULL "+
+			"AND COALESCE(json_extract(metadata, '$.executor'), 'local') <> 'cloud' "+
+			"AND started_at IS NOT NULL "+
+			"AND started_at <= ? "+
+			"ORDER BY id",
+		ActionStatusRunning, cutoff,
 	)
 	if err != nil {
 		return nil, err
@@ -471,18 +457,6 @@ func (db *DB) CountRunningNonInteractive() (int, error) {
 	var count int
 	err := db.QueryRow(
 		"SELECT COUNT(*) FROM actions WHERE status = ? AND "+noninteractiveModePredicate,
-		ActionStatusRunning,
-	).Scan(&count)
-	return count, err
-}
-
-// CountRunningInteractiveOrBg returns the total number of running actions that
-// compete for the MaxInteractive concurrency slot pool: classic interactive
-// sessions and experimental_bg sessions combined.
-func (db *DB) CountRunningInteractiveOrBg() (int, error) {
-	var count int
-	err := db.QueryRow(
-		"SELECT COUNT(*) FROM actions WHERE status = ? AND "+interactiveOrBgModePredicate,
 		ActionStatusRunning,
 	).Scan(&count)
 	return count, err
@@ -546,19 +520,6 @@ func (db *DB) movePending(id int64, dispatchAfterValid bool, dispatchAfter, requ
 	}
 	db.emitEvent("action", id, "action.status_changed", evt)
 	return nil
-}
-
-func (db *DB) SetTmuxInfo(id int64, tmuxSession, tmuxWindow string) error {
-	_, err := db.Exec(
-		"UPDATE actions SET tmux_session = ?, tmux_window = ? WHERE id = ?",
-		tmuxSession, tmuxWindow, id,
-	)
-	if err == nil {
-		db.emitEvent("action", id, "action.tmux_info_set", map[string]any{
-			"tmux_session": tmuxSession, "tmux_window": tmuxWindow,
-		})
-	}
-	return err
 }
 
 func (db *DB) MergeActionMetadata(id int64, updates map[string]any) error {
