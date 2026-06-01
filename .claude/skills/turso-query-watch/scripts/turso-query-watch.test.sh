@@ -80,9 +80,9 @@ assert "action" in args and "create" in args, args
 assert "--task" in args and args[args.index("--task") + 1] == "698", args
 mi = args.index("--meta")
 import json
-assert json.loads(args[mi + 1])["mode"] == "experimental_bg", args[mi + 1]
+assert json.loads(args[mi + 1])["mode"] == "interactive", args[mi + 1]
 PY
-pass "tq action create: --task 698, mode experimental_bg"
+pass "tq action create: --task 698, mode interactive"
 
 # --- Case 2: --dry-run files nothing, leaves baseline untouched ---------------
 BL2="$WORK/bl2.json"; cp "$BASELINE" "$BL2"

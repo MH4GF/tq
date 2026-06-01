@@ -54,9 +54,10 @@ var scheduleCreateCmd = &cobra.Command{
 evaluated in the local timezone.
 
 Metadata keys for dispatch control (passed to actions automatically):
-  mode         Execution mode: "interactive" (default), "noninteractive", "remote",
-               or "experimental_bg" (research preview: dispatches via "claude --bg"
-               so the action appears in "claude agents"; requires Claude Code v2.1.139+).
+  mode         Execution mode: "interactive" (default), "noninteractive", or "remote".
+               "interactive" and "noninteractive" both launch via "claude --bg"
+               (Agent View background session, requires Claude Code v2.1.139+);
+               the difference is which slot pool the action consumes.
                Any other value is rejected — pass Claude permission-mode
                (auto, plan, acceptEdits, ...) via claude_args instead.
   claude_args  Additional CLI arguments for claude (JSON array of strings,

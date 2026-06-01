@@ -13,9 +13,9 @@ import (
 
 var attachCmd = &cobra.Command{
 	Use:   "attach <action_id>",
-	Short: "Attach to a running action (tmux window or claude agent view)",
+	Short: "Attach to a running action (claude agent view)",
 	Example: `  tq action attach 3
-  # experimental_bg actions open via 'claude attach <short>'`,
+  # all local actions open via 'claude attach <daemon_short>'`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := strconv.ParseInt(args[0], 10, 64)
@@ -31,25 +31,18 @@ var attachCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("parse action metadata: %w", err)
 		}
-		if mode, _ := meta[dispatch.MetaKeyMode].(string); mode == dispatch.ModeBg {
-			short, _ := meta[dispatch.MetaKeyDaemonShort].(string)
-			if short == "" {
-				return fmt.Errorf("action #%d has no daemon_short yet (bg dispatch may still be in flight)", id)
-			}
-			attachCmd := exec.Command("claude", "attach", short)
-			attachCmd.Stdin = os.Stdin
-			attachCmd.Stdout = os.Stdout
-			attachCmd.Stderr = os.Stderr
-			return attachCmd.Run()
+		if mode, _ := meta[dispatch.MetaKeyMode].(string); mode == dispatch.ModeRemote {
+			return fmt.Errorf("action #%d uses remote mode; attach is not supported", id)
 		}
-
-		if !action.TmuxSession.Valid || !action.TmuxWindow.Valid {
-			return fmt.Errorf("action #%d has no tmux session info (action may not be running interactively)", id)
+		short, _ := meta[dispatch.MetaKeyDaemonShort].(string)
+		if short == "" {
+			return fmt.Errorf("action #%d has no daemon_short yet (dispatch may still be in flight)", id)
 		}
-		if os.Getenv("TMUX") == "" {
-			return fmt.Errorf("this command must be run inside a tmux session")
-		}
-		return exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:%s", action.TmuxSession.String, action.TmuxWindow.String)).Run()
+		attach := exec.Command("claude", "attach", short)
+		attach.Stdin = os.Stdin
+		attach.Stdout = os.Stdout
+		attach.Stderr = os.Stderr
+		return attach.Run()
 	},
 }
 

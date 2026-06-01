@@ -15,7 +15,7 @@ The skill `/turso-query-watch` runs
    mode — only `--queries` / `--verbose`).
 2. Parses the top N (default 10) queries by rows-read.
 3. Compares each against the stored baseline.
-4. Files **one** tq action (mode `experimental_bg`) under task #698 when any
+4. Files **one** tq action (mode `interactive`) under task #698 when any
    query regresses. Rewrites the baseline on every non-dry-run run, whether or
    not a regression fired.
 
@@ -29,7 +29,7 @@ no-ops — if `turso` is missing, unauthenticated, or the output cannot be parse
 | Cadence | Weekly, Sunday 20:00 local — cron `0 20 * * 0` |
 | Instruction | `/turso-query-watch` |
 | Task | #698 "Turso rows-read regression watch (recurring)" (project `tq`) |
-| Dispatch | `experimental_bg`, `--model sonnet --effort low` |
+| Dispatch | `interactive`, `--model sonnet --effort low` |
 
 Weekly is the deliberate starting default: rows-read accrues slowly and a
 weekly window keeps noise low. If observed week-over-week variance turns out

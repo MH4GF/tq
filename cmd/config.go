@@ -47,14 +47,14 @@ libsql/Turso endpoints rather than a local file.
 Keys:
   default_mode  Default execution mode stamped into new actions when
                 'tq action create --meta' does not specify one. One of
-                interactive, noninteractive, remote, experimental_bg.
+                interactive, noninteractive, remote.
                 An explicit --meta '{"mode":...}' always overrides it.`,
 }
 
 var configSetCmd = &cobra.Command{
 	Use:     "set <key> <value>",
 	Short:   "Set a setting",
-	Example: `  tq config set default_mode experimental_bg`,
+	Example: `  tq config set default_mode interactive`,
 	Args:    cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		key, value := args[0], args[1]

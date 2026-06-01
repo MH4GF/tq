@@ -290,6 +290,10 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	if err := db.migrateExperimentalBgToInteractive(); err != nil {
+		return fmt.Errorf("migrate experimental_bg mode: %w", err)
+	}
+
 	if err := db.backfillTaskActionCounts(); err != nil {
 		return fmt.Errorf("backfill task_action_counts: %w", err)
 	}
@@ -298,6 +302,33 @@ func (db *DB) Migrate() error {
 		return fmt.Errorf("backfill search FTS: %w", err)
 	}
 
+	return nil
+}
+
+func (db *DB) migrateExperimentalBgToInteractive() error {
+	if _, err := db.Exec(
+		`UPDATE actions
+		 SET metadata = json_set(metadata, '$.mode', 'interactive')
+		 WHERE status = ?
+		   AND json_extract(metadata, '$.mode') = 'experimental_bg'`,
+		ActionStatusPending,
+	); err != nil {
+		return fmt.Errorf("update actions: %w", err)
+	}
+	if _, err := db.Exec(
+		`UPDATE settings SET value = 'interactive'
+		 WHERE key = ? AND value = 'experimental_bg'`,
+		SettingDefaultMode,
+	); err != nil {
+		return fmt.Errorf("update settings: %w", err)
+	}
+	if _, err := db.Exec(
+		`UPDATE schedules
+		 SET metadata = json_set(metadata, '$.mode', 'interactive')
+		 WHERE json_extract(metadata, '$.mode') = 'experimental_bg'`,
+	); err != nil {
+		return fmt.Errorf("update schedules: %w", err)
+	}
 	return nil
 }
 

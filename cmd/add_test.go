@@ -322,7 +322,7 @@ func TestAdd_InvalidMode(t *testing.T) {
 			name: "claude permission-mode auto",
 			meta: `{"mode":"auto"}`,
 			wantErrSubs: []string{
-				"must be one of: interactive, noninteractive, remote, experimental_bg",
+				"must be one of: interactive, noninteractive, remote",
 				`got "auto"`,
 				"claude_args",
 				"--permission-mode",
@@ -465,12 +465,12 @@ func TestAdd_ApplyDefaultMode(t *testing.T) {
 		},
 		{
 			name:       "global set, no meta → stamped",
-			globalMode: "experimental_bg",
-			wantMode:   "experimental_bg",
+			globalMode: "noninteractive",
+			wantMode:   "noninteractive",
 		},
 		{
 			name:       "explicit meta mode overrides global",
-			globalMode: "experimental_bg",
+			globalMode: "noninteractive",
 			meta:       `{"mode":"interactive"}`,
 			wantMode:   "interactive",
 		},

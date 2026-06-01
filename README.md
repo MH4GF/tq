@@ -1,22 +1,24 @@
 # tq — Task Queue
 
-Job-queue based orchestration system for Claude Code. Combines a CLI/TUI with a Claude Code Plugin to manage multiple sessions via tmux.
+Job-queue based orchestration system for Claude Code. Combines a CLI/TUI with a Claude Code Plugin to manage multiple Claude Code sessions.
 
 Humans give instructions in natural language and monitor progress via TUI. The manager agent handles task breakdown, prompt tuning, and dispatching actions to worker sessions.
+
+All local actions are dispatched as Agent View background sessions via `claude --bg`, so they appear in `claude agents` and consume your regular Claude Code subscription usage (no extra Agent SDK billing — see [Agent View docs](https://code.claude.com/docs/en/agent-view#manage-multiple-agents-with-agent-view)).
 
 ![tq demo](docs/tq.gif)
 
 ## Highlights
 
-- **Job queue model** — actions are queued and processed asynchronously by workers, with independent concurrency caps for user-facing modes (interactive + experimental_bg share the same pool, default: 3) and noninteractive execution (default: 5)
+- **Job queue model** — actions are queued and processed asynchronously by workers, with independent concurrency caps for the interactive slot pool (default: 3) and the noninteractive slot pool (default: 5)
 - **Manager agent** — one Claude Code session manages others; humans just talk to it
-- **Delegates to Claude Code** — no custom workflow language; just runs `claude` in tmux, so skills, sub-agents, worktrees, and remote execution all work as-is
+- **Delegates to Claude Code** — no custom workflow language; every local action runs as a `claude --bg` background session, so skills, sub-agents, worktrees, and remote execution all work as-is
 - **CLI is for agents** — JSON-only output, `--jq` flag, agent-oriented `--help`; humans don't need to learn the CLI
 - **Schedule support** — cron-based action generation for recurring tasks
 
 ## Install
 
-Prerequisites: [tmux](https://github.com/tmux/tmux) (required for dispatching interactive sessions)
+Prerequisites: [Claude Code v2.1.139+](https://code.claude.com/docs/en/agent-view) with agent view enabled (needed by `claude --bg`)
 
 ```bash
 # Homebrew (macOS / Linux)
@@ -143,17 +145,16 @@ Controlled via `--meta` on `action create` / `schedule create`. Any value outsid
 
 | mode | Description |
 |------|-------------|
-| `interactive` (default) | `claude` in tmux — fire-and-forget, worker reports via `tq action done` / `tq action fail`. |
-| `noninteractive` | `claude -p` — captures stdout, auto-completes. Heartbeat-aware: kept alive past the 600s minimum while the session log mtime stays fresh (≤120s old), up to a 60-minute hard cap |
-| `remote` | Dispatched to remote worker |
-| `experimental_bg` | Research preview: dispatches via `claude --bg` so the action appears in `claude agents`. Lifecycle tracked by polling `~/.claude/jobs/<short>/state.json`. Shares the `MaxInteractive` slot pool with `interactive`. Requires Claude Code v2.1.139+ with agent view enabled |
+| `interactive` (default) | `claude --bg` background session that consumes the interactive slot pool (`MaxInteractive`, default 3). Lifecycle tracked by polling `~/.claude/jobs/<short>/state.json`. |
+| `noninteractive` | `claude --bg` background session that consumes the noninteractive slot pool (`MaxNonInteractive`, default 5). Same launch path as `interactive`; the distinct pool exists to keep many short batch sessions from starving long-running interactive ones. |
+| `remote` | `claude --remote` for cloud execution. The fire-and-forget cloud session reports back via `tq action done` / `tq action fail`. |
 
 Additional metadata keys:
 - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--permission-mode","plan","--worktree","--max-turns","5"]`)
 
 ## Testing
 
-Unit tests live alongside source files (`*_test.go`). End-to-end CLI scenarios are written as [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) files under `e2e/testdata/script/*.txtar`. Each scenario runs against an isolated `TQ_DB_URL`, `HOME`, and `TMUX_TMPDIR`, so they can run in parallel without interference. Run all tests with `go test ./...`, or just the E2E suite with `go test ./e2e`. To add a scenario, drop a new `.txtar` file describing the CLI invocations and expected stdout/stderr; for tmux dispatch scenarios, embed a `claude` stub via `-- file --` sections and synchronize with `tmux wait-for` to keep the test deterministic.
+Unit tests live alongside source files (`*_test.go`). End-to-end CLI scenarios are written as [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) files under `e2e/testdata/script/*.txtar`. Each scenario runs against an isolated `TQ_DB_URL` and `HOME`, so they can run in parallel without interference. Run all tests with `go test ./...`, or just the E2E suite with `go test ./e2e`. To add a scenario, drop a new `.txtar` file describing the CLI invocations and expected stdout/stderr.
 
 The same e2e suite can be replayed against a libsql endpoint to verify driver compatibility. With a sqld container (or Turso DB) reachable, set `TQ_DB_URL=libsql://...` and run `go test -tags libsql_e2e ./e2e/ -run TestLibsqlE2E`. The libsql variant resets the schema between scenarios since they share one DB. CI runs this against a sqld service container on every PR.
 

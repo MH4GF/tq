@@ -3,6 +3,7 @@ package cmd_test
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
@@ -16,30 +17,22 @@ type mockWorker struct {
 	err    error
 }
 
-func (m *mockWorker) Execute(ctx context.Context, prompt string, cfg dispatch.ActionConfig, workDir string, actionID, taskID int64) (string, error) {
+func (m *mockWorker) Execute(_ context.Context, _ string, _ dispatch.ActionConfig, _ string, _, _ int64) (string, error) {
 	return m.result, m.err
 }
 
-func TestDispatchInteractivePersistsSessionInfo(t *testing.T) {
+func TestDispatch_RecordsDaemonShortForLocalModes(t *testing.T) {
 	tests := []struct {
-		name        string
-		args        []string
-		wantSession string
+		name string
+		mode string
 	}{
-		{
-			name:        "default session",
-			args:        []string{"action", "dispatch", "1"},
-			wantSession: "main",
-		},
-		{
-			name:        "custom session",
-			args:        []string{"action", "dispatch", "1", "--session", "work"},
-			wantSession: "work",
-		},
+		{name: "default mode", mode: ""},
+		{name: "interactive mode", mode: "interactive"},
+		{name: "noninteractive mode", mode: "noninteractive"},
+		{name: "legacy experimental_bg metadata is migrated to interactive at dispatch", mode: "experimental_bg"},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			d := testutil.NewTestDB(t)
 			testutil.SeedTestProjects(t, d)
 			cmd.SetDB(d)
@@ -47,17 +40,28 @@ func TestDispatchInteractivePersistsSessionInfo(t *testing.T) {
 			cmd.SetConfigDir(t.TempDir())
 
 			taskID, _ := d.InsertTask(1, "t", "{}", "")
-			d.InsertAction("t", taskID, `{"instruction":"x","mode":"interactive"}`, db.ActionStatusPending, nil, "")
+			meta := `{"instruction":"x"}`
+			if tc.mode != "" && tc.mode != "experimental_bg" {
+				meta = `{"instruction":"x","mode":"` + tc.mode + `"}`
+			}
+			if tc.mode == "experimental_bg" {
+				_, _ = d.InsertAction("t", taskID, `{"instruction":"x","mode":"experimental_bg"}`, db.ActionStatusPending, nil, "")
+				if err := d.Migrate(); err != nil {
+					t.Fatalf("migrate: %v", err)
+				}
+			} else {
+				_, _ = d.InsertAction("t", taskID, meta, db.ActionStatusPending, nil, "")
+			}
 
-			worker := &mockWorker{result: "tq-action-1"}
-			cmd.SetInteractiveWorkerFactory(func() dispatch.Worker { return worker })
-			t.Cleanup(func() { cmd.SetInteractiveWorkerFactory(nil) })
+			worker := &mockWorker{result: "239007b1"}
+			cmd.SetBgWorkerFactory(func() dispatch.Worker { return worker })
+			t.Cleanup(func() { cmd.SetBgWorkerFactory(nil) })
 
 			root := cmd.GetRootCmd()
 			buf := new(bytes.Buffer)
 			root.SetOut(buf)
 			root.SetErr(buf)
-			root.SetArgs(tt.args)
+			root.SetArgs([]string{"action", "dispatch", "1"})
 
 			if err := root.Execute(); err != nil {
 				t.Fatalf("execute: %v", err)
@@ -67,161 +71,64 @@ func TestDispatchInteractivePersistsSessionInfo(t *testing.T) {
 			if err != nil {
 				t.Fatalf("get action: %v", err)
 			}
-			if !a.TmuxSession.Valid || a.TmuxSession.String != tt.wantSession {
-				t.Errorf("tmux_session = %v, want %q", a.TmuxSession, tt.wantSession)
+			if a.Status != db.ActionStatusRunning {
+				t.Errorf("status = %q, want %q (bg lifecycle is driven by reaper)", a.Status, db.ActionStatusRunning)
 			}
-			wantWindow := dispatch.WindowName(1)
-			if !a.TmuxWindow.Valid || a.TmuxWindow.String != wantWindow {
-				t.Errorf("tmux_window = %v, want %q", a.TmuxWindow, wantWindow)
-			}
-		})
-	}
-}
-
-func TestDispatch(t *testing.T) {
-	type wantAction struct {
-		id     int64
-		status string
-		result string
-	}
-
-	tests := []struct {
-		name            string
-		setup           func(d db.Store)
-		workerResult    string
-		workerErr       error
-		useWorker       bool
-		args            []string
-		wantErr         bool
-		wantErrContains string
-		wantOutContains string
-		wantActions     []wantAction
-	}{
-		{
-			name:    "no args",
-			args:    []string{"action", "dispatch"},
-			wantErr: true,
-		},
-		{
-			name: "success",
-			setup: func(d db.Store) {
-				taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
-				d.InsertAction("review-pr", taskID, `{"instruction":"Review PR for Fix bug.","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-			},
-			useWorker:       true,
-			workerResult:    `{"review":"approved"}`,
-			args:            []string{"action", "dispatch", "1"},
-			wantOutContains: "action #1 done",
-			wantActions: []wantAction{
-				{id: 1, status: db.ActionStatusDone, result: `{"review":"approved"}`},
-			},
-		},
-		{
-			name: "with action id",
-			setup: func(d db.Store) {
-				taskID, _ := d.InsertTask(1, "Fix bug", `{"url":"https://github.com/test/1"}`, "")
-				d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-				d.InsertAction("review-pr", taskID, `{"instruction":"Review PR.","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-			},
-			useWorker:       true,
-			workerResult:    `{"review":"approved"}`,
-			args:            []string{"action", "dispatch", "2"},
-			wantOutContains: "action #2 done",
-			wantActions: []wantAction{
-				{id: 1, status: db.ActionStatusPending},
-				{id: 2, status: db.ActionStatusDone},
-			},
-		},
-		{
-			name:            "invalid action id",
-			args:            []string{"action", "dispatch", "999"},
-			wantErr:         true,
-			wantErrContains: "not found",
-		},
-		{
-			name: "worker error",
-			setup: func(d db.Store) {
-				taskID, _ := d.InsertTask(1, "test", "{}", "")
-				d.InsertAction("test", taskID, `{"instruction":"Do something.","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
-			},
-			useWorker:       true,
-			workerErr:       context.DeadlineExceeded,
-			args:            []string{"action", "dispatch", "1"},
-			wantOutContains: "failed",
-			wantActions: []wantAction{
-				{id: 1, status: db.ActionStatusFailed},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := testutil.NewTestDB(t)
-			testutil.SeedTestProjects(t, d)
-			cmd.SetDB(d)
-			cmd.ResetForTest()
-			cmd.SetConfigDir(t.TempDir())
-
-			if tt.setup != nil {
-				tt.setup(d)
-			}
-
-			if tt.useWorker {
-				worker := &mockWorker{result: tt.workerResult, err: tt.workerErr}
-				cmd.SetWorkerFactory(func() dispatch.Worker { return worker })
-				t.Cleanup(func() { cmd.SetWorkerFactory(nil) })
-			}
-
-			root := cmd.GetRootCmd()
-			buf := new(bytes.Buffer)
-			root.SetOut(buf)
-			root.SetErr(buf)
-			root.SetArgs(tt.args)
-
-			err := root.Execute()
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected error, got nil")
-				}
-				if tt.wantErrContains != "" && !contains(err.Error(), tt.wantErrContains) {
-					t.Errorf("error = %q, want to contain %q", err, tt.wantErrContains)
-				}
-				return
-			}
+			meta2, err := dispatch.ParseActionMetadata(a.Metadata)
 			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+				t.Fatalf("parse metadata: %v", err)
 			}
-
-			if tt.wantOutContains != "" {
-				out := buf.String()
-				if !contains(out, tt.wantOutContains) {
-					t.Errorf("output = %q, want to contain %q", out, tt.wantOutContains)
-				}
+			if got, _ := meta2[dispatch.MetaKeyDaemonShort].(string); got != "239007b1" {
+				t.Errorf("metadata.daemon_short = %q, want %q", got, "239007b1")
 			}
-
-			for _, wa := range tt.wantActions {
-				a, err := d.GetAction(wa.id)
-				if err != nil {
-					t.Fatalf("get action %d: %v", wa.id, err)
-				}
-				if a.Status != wa.status {
-					t.Errorf("action %d status = %q, want %q", wa.id, a.Status, wa.status)
-				}
-				if wa.result != "" {
-					if !a.Result.Valid || a.Result.String != wa.result {
-						t.Errorf("action %d result = %v, want %q", wa.id, a.Result, wa.result)
-					}
-				}
+			if !bytes.Contains(buf.Bytes(), []byte("239007b1")) {
+				t.Errorf("stdout = %q, want to include daemon short id", buf.String())
 			}
 		})
 	}
 }
 
-// TestDispatchBgRecordsDaemonShort exercises the experimental_bg path: the
-// bg worker returns the daemon-assigned short id, the CLI prints it, the
-// action stays running (queue worker reaper drives completion), and
-// metadata.daemon_short is persisted.
-func TestDispatchBgRecordsDaemonShort(t *testing.T) {
+func TestDispatch_NoArgsErrors(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+	cmd.SetConfigDir(t.TempDir())
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"action", "dispatch"})
+
+	if err := root.Execute(); err == nil {
+		t.Fatalf("expected error for missing args, got nil")
+	}
+}
+
+func TestDispatch_UnknownActionIDErrors(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	cmd.SetDB(d)
+	cmd.ResetForTest()
+	cmd.SetConfigDir(t.TempDir())
+
+	root := cmd.GetRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"action", "dispatch", "999"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "not found")
+	}
+}
+
+func TestDispatch_WorkerErrorMarksFailed(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	cmd.SetDB(d)
@@ -229,9 +136,9 @@ func TestDispatchBgRecordsDaemonShort(t *testing.T) {
 	cmd.SetConfigDir(t.TempDir())
 
 	taskID, _ := d.InsertTask(1, "t", "{}", "")
-	d.InsertAction("t", taskID, `{"instruction":"x","mode":"experimental_bg"}`, db.ActionStatusPending, nil, "")
+	d.InsertAction("t", taskID, `{"instruction":"x","mode":"interactive"}`, db.ActionStatusPending, nil, "")
 
-	worker := &mockWorker{result: "239007b1"}
+	worker := &mockWorker{err: context.DeadlineExceeded}
 	cmd.SetBgWorkerFactory(func() dispatch.Worker { return worker })
 	t.Cleanup(func() { cmd.SetBgWorkerFactory(nil) })
 
@@ -244,23 +151,12 @@ func TestDispatchBgRecordsDaemonShort(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-
-	a, err := d.GetAction(1)
-	if err != nil {
-		t.Fatalf("get action: %v", err)
+	out := buf.String()
+	if !strings.Contains(out, "failed") {
+		t.Errorf("output = %q, want substring %q", out, "failed")
 	}
-	if a.Status != db.ActionStatusRunning {
-		t.Errorf("status = %q, want %q (bg lifecycle is driven by reaper)", a.Status, db.ActionStatusRunning)
-	}
-
-	meta, err := dispatch.ParseActionMetadata(a.Metadata)
-	if err != nil {
-		t.Fatalf("parse metadata: %v", err)
-	}
-	if got, _ := meta[dispatch.MetaKeyDaemonShort].(string); got != "239007b1" {
-		t.Errorf("metadata.daemon_short = %q, want %q", got, "239007b1")
-	}
-	if out := buf.String(); !bytes.Contains(buf.Bytes(), []byte("239007b1")) {
-		t.Errorf("stdout = %q, want to include daemon short id", out)
+	a, _ := d.GetAction(1)
+	if a.Status != db.ActionStatusFailed {
+		t.Errorf("status = %q, want %q", a.Status, db.ActionStatusFailed)
 	}
 }

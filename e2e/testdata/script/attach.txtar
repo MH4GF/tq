@@ -1,12 +1,12 @@
-# tq action attach: input-validation branches that don't require a live tmux.
+# tq action attach: input-validation branches that don't require a live daemon.
 
 exec tq project create demo /tmp/demo
 exec tq task create 't' --project 1
 exec tq action create 'x' --task 1 --title 'x'
 
-# Action exists but has no tmux session info recorded yet (never dispatched).
+# Action exists but has no daemon_short recorded yet (never dispatched).
 ! exec tq action attach 1
-stderr 'has no tmux session info'
+stderr 'has no daemon_short'
 
 # Non-existent action: GetAction failure surfaces as "get action: ...".
 ! exec tq action attach 9999

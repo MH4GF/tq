@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
@@ -12,28 +13,18 @@ import (
 func TestAttach(t *testing.T) {
 	tests := []struct {
 		name       string
-		sessionID  string
-		windowID   string
-		wantErr    bool
+		metadata   string
 		wantErrMsg string
 	}{
 		{
-			name:       "no session info",
-			sessionID:  "",
-			wantErr:    true,
-			wantErrMsg: "has no tmux session info",
+			name:       "no daemon_short",
+			metadata:   `{"instruction":"x","mode":"interactive"}`,
+			wantErrMsg: "has no daemon_short",
 		},
 		{
-			name:       "session set but window NULL",
-			sessionID:  "main",
-			wantErr:    true,
-			wantErrMsg: "has no tmux session info",
-		},
-		{
-			name:      "with session info (tmux command fails outside tmux)",
-			sessionID: "main",
-			windowID:  "tq-action-1",
-			wantErr:   true,
+			name:       "remote mode is not attachable",
+			metadata:   `{"instruction":"x","mode":"remote"}`,
+			wantErrMsg: "remote mode; attach is not supported",
 		},
 	}
 
@@ -45,16 +36,7 @@ func TestAttach(t *testing.T) {
 			cmd.ResetForTest()
 
 			taskID, _ := d.InsertTask(1, "test", "{}", "")
-			id, _ := d.InsertAction("test", taskID, "{}", db.ActionStatusRunning, nil, "")
-			if tc.sessionID != "" {
-				var windowPtr *string
-				if tc.windowID != "" {
-					windowPtr = &tc.windowID
-				}
-				if err := d.SetActionTmuxInfoForTest(id, &tc.sessionID, windowPtr, nil); err != nil {
-					t.Fatalf("SetActionTmuxInfoForTest: %v", err)
-				}
-			}
+			d.InsertAction("test", taskID, tc.metadata, db.ActionStatusRunning, nil, "")
 
 			root := cmd.GetRootCmd()
 			buf := new(bytes.Buffer)
@@ -63,17 +45,11 @@ func TestAttach(t *testing.T) {
 			root.SetArgs([]string{"action", "attach", "1"})
 
 			err := root.Execute()
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				if tc.wantErrMsg != "" && !contains(err.Error(), tc.wantErrMsg) {
-					t.Errorf("error = %q, want to contain %q", err.Error(), tc.wantErrMsg)
-				}
-				return
+			if err == nil {
+				t.Fatal("expected error, got nil")
 			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+			if !strings.Contains(err.Error(), tc.wantErrMsg) {
+				t.Errorf("error = %q, want to contain %q", err.Error(), tc.wantErrMsg)
 			}
 		})
 	}

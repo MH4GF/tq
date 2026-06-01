@@ -16,14 +16,14 @@ func TestResolveDefaultMode(t *testing.T) {
 		{
 			name:          "explicit action mode wins, nothing stamped",
 			actionMeta:    map[string]any{MetaKeyMode: ModeInteractive},
-			globalDefault: ModeBg,
+			globalDefault: ModeNonInteractive,
 			want:          "",
 		},
 		{
 			name:          "no explicit mode, global default adopted",
 			actionMeta:    map[string]any{},
-			globalDefault: ModeBg,
-			want:          ModeBg,
+			globalDefault: ModeNonInteractive,
+			want:          ModeNonInteractive,
 		},
 		{
 			name:          "empty explicit mode is treated as unset",

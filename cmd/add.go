@@ -39,9 +39,10 @@ Instruction is provided as a positional argument.
 --meta passes JSON metadata. The instruction is automatically merged into metadata.
 
 Metadata keys for dispatch control:
-  mode         Execution mode: "interactive", "noninteractive", "remote",
-               or "experimental_bg" (research preview: dispatches via "claude --bg"
-               so the action appears in "claude agents"; requires Claude Code v2.1.139+).
+  mode         Execution mode: "interactive", "noninteractive", or "remote".
+               "interactive" and "noninteractive" both launch via "claude --bg"
+               (Agent View background session, requires Claude Code v2.1.139+);
+               the difference is which slot pool the action consumes.
                When omitted, the global default from 'tq config get default_mode'
                is stamped in; if that is unset too, it falls back to "interactive".
                Any other value is rejected — pass Claude permission-mode

@@ -69,3 +69,17 @@ func (FileBgStateReader) ReadState(short string) ([]byte, error) {
 	}
 	return os.ReadFile(filepath.Join(home, ".claude", "jobs", short, "state.json"))
 }
+
+func truncate(b []byte, max int) []byte {
+	if len(b) <= max {
+		return b
+	}
+	return b[:max]
+}
+
+func appendOutput(err error, output []byte) error {
+	if len(output) > 0 {
+		return fmt.Errorf("%w\noutput: %s", err, truncate(output, 2000))
+	}
+	return err
+}
