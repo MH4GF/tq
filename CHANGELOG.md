@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.21.31](https://github.com/MH4GF/tq/compare/v0.21.30...v0.21.31) - 2026-06-01
+- feat: auto-record claude_session_id for experimental_bg; allow --meta on done by @MH4GF in https://github.com/MH4GF/tq/pull/363
+- Migrate tq plugin slash commands to Agent Skills by @MH4GF in https://github.com/MH4GF/tq/pull/365
+- fix: respond-review draft template passes the unslop guard by @MH4GF in https://github.com/MH4GF/tq/pull/366
+
 ## [v0.21.30](https://github.com/MH4GF/tq/compare/v0.21.29...v0.21.30) - 2026-05-23
 - feat(gh-ops): add Edit plan field to respond-review draft by @MH4GF in https://github.com/MH4GF/tq/pull/355
 - feat(tui): show full action context in detail view by @MH4GF in https://github.com/MH4GF/tq/pull/357
