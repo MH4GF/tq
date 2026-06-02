@@ -79,7 +79,7 @@ tq task manager. Triggers on natural-language requests like "create a task", "ad
 
 `skills/manager/SKILL.md`
 
-All local actions launch via `claude --bg` regardless of `mode`; the `mode` field only picks a slot pool (`interactive` vs `noninteractive`). See [Best practices — Dispatch mode selection](../../docs/best-practices.md#dispatch-mode-selection) for the full decision rule.
+Local actions (`mode=interactive` or `noninteractive`) launch via `claude --bg` and differ only in which slot pool they consume. `mode=remote` is a separate cloud-execution path that runs `claude --remote` instead. See [Best practices — Dispatch mode selection](../../docs/best-practices.md#dispatch-mode-selection) for the full decision rule.
 
 ### `tq:investigate-incidents`
 
