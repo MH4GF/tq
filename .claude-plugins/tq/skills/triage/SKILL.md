@@ -37,7 +37,7 @@ Filter by `--project <id>` if `$ARGUMENTS` is given.
 
 **Pre-flight declaration (MUST output before Step 2)**: After running the query, count the result and emit an assistant message in this exact form:
 
-> Found N open tasks. M have prior `latest_triage_note` — Step 3 skip rule will be evaluated for each.
+> Found N open tasks. M have prior `latest_triage_note` — Step 3 skip rule (including PR-merge override) will be evaluated for each.
 
 Where `N` is the total task count and `M` is the count of tasks with `latest_triage_note != null`. Both numbers MUST be derived from the Step 1 query output. Do NOT proceed to Step 2 without emitting this declaration.
 
@@ -57,7 +57,14 @@ Project moves are resolved here; subsequent steps use the updated `project_id`.
 
 ### 3. Phase detection
 
-Classify each task from the Step 1 output. Inspect `latest.status` and keywords in `latest.result_head`.
+**PR-state pre-fetch** (runs first; the cache is read by the Phase criteria below, the skip rule, Step 4, and Step 6): For every task with a PR URL, run `gh pr view <url> --json state,mergedAt,mergeable,reviewDecision` calls **in parallel** (single message, multiple Bash calls). Cache the JSON by `task_id`. Tasks with no extractable PR URL skip this fetch — the PR-merge override below simply does not apply to them.
+
+PR URL precedence per task:
+
+1. Prefer `metadata_url` (extracted in Step 1). It is authoritative when set — the task was created with this specific PR in mind.
+2. Otherwise, take the **first** match in `latest.result_head` from the regex `https://github\.com/[\w.-]+/[\w.-]+/pull/\d+`. The `[\w.-]+` form anchors org/repo segments and stops the URL cleanly at the PR number — no trailing `/files`, `#issuecomment-…`, or punctuation.
+
+Now classify each task. Inspect `latest.status`, keywords in `latest.result_head`, and the cached PR state when available.
 
 **Phase criteria**:
 
@@ -67,7 +74,7 @@ Classify each task from the Step 1 output. Inspect `latest.status` and keywords 
 - **Awaiting deploy**: latest done-action is a review/self-review, merge/deploy remains.
 - **Stalled**: Persistent failures (status `failed` multiple times, or `stale: ...` in result) or `updated_at` older than 14 days.
 - **Blocked**: Stalled with a result that explicitly states a blocker (permission error, external dependency, etc.) that cannot be resolved independently.
-- **Likely complete**: `state == MERGED` from the PR-state pre-fetch (below), or `latest.status == done` with `merged` / `done` / `complete` in the result.
+- **Likely complete**: `state == MERGED` from the PR-state pre-fetch (above), or `latest.status == done` with `merged` / `done` / `complete` in the result.
 
 **Focus qualifier**: When `latest.status ∈ {running, pending}` AND the task's project is unfocus (`dispatch_enabled == false`), append `(unfocus: manual dispatch required)` to the phase label. This surfaces the fact that a `pending` action in an unfocus project will not progress on its own.
 
@@ -76,8 +83,15 @@ Classify each task from the Step 1 output. Inspect `latest.status` and keywords 
 - (a) `now - latest_triage_note.at < 7 days` (cooldown window).
 - (b) No new action has completed (any `completed_at > latest_triage_note.at`) and no `task.status_changed` event since `latest_triage_note.at` for this task. Inspect the action list and `tq event list --entity task --id <id>` if needed.
 - (c) `latest_triage_note.snooze_until` is unset, OR `now < latest_triage_note.snooze_until`.
+- (d) The task either has no cached PR state, or `pr_state.mergedAt` is null, or `pr_state.mergedAt <= latest_triage_note.at` (see the **timestamp normalization** note below before comparing).
 
-If (c) is set and `now < snooze_until`, **skip even if (a) or (b) would re-evaluate** — explicit snooze wins. Otherwise, failing any of (a)/(b)/(c) means the task is re-evaluated normally in Step 6 and the prior reason is shown in option `description` for context.
+**PR-merge override**: A PR merged after the prior triage note (`pr_state.mergedAt > latest_triage_note.at`) breaks (d) and forces re-evaluation **even when (a) cooldown or (c) snooze would otherwise hold**. The rationale: a merged PR means the task should almost certainly be marked done, so neither the 7-day wait nor an explicit snooze is load-bearing once the PR has landed. This catches the case where a human merges a PR manually while a `self-review` action sits pending — without (d), the note keeps the task buried until the cooldown lapses even though the underlying work is finished.
+
+**Out of scope for this override**: PR state transitions other than merge (CLOSED-without-merge, OPEN → APPROVED, mergeable conflict, etc.). They are still handled by clauses (a)/(b) if/when an action records them in tq, and by the Likely-complete phase rules in Step 6 once the next action runs. The override deliberately covers only the silent merge case.
+
+**Timestamp normalization** (for clause (d)): `pr_state.mergedAt` from `gh pr view` is ISO 8601 with `T` separator and `Z` suffix (e.g. `2026-06-02T19:00:00Z`). `latest_triage_note.at` is SQLite TEXT with a space separator (e.g. `2026-06-02 19:00:00`). Direct string comparison is unsafe — `T` (0x54) sorts after `' '` (0x20), so a same-day note can wrongly compare less-than. Before evaluating clause (d), replace the space in `at` with `T` and append `Z` (or parse both as datetimes); only then compare.
+
+If (c) is set and `now < snooze_until`, **skip even if (a) or (b) would re-evaluate** — explicit snooze wins. The PR-merge override (d) is the one exception: a post-note merge re-evaluates the task even with an active snooze. Otherwise, failing any of (a)/(b)/(c)/(d) means the task is re-evaluated normally in Step 6 and the prior reason is shown in option `description` for context.
 
 **Recurring-task exclusion rule** (independent of the triage skip rule; applies even when `latest_triage_note == null`). Fetch the schedule map **once**, reuse in Steps 5/6:
 
@@ -112,11 +126,11 @@ SID=$(tq action get <id> --jq '.metadata | fromjson.claude_session_id // empty')
 
 Use `Read` on the resolved path (last ~200 lines — the file may be large) and quote the latest few `type:"assistant"` entries (each embeds the response text plus any `tool_use` blocks in `message.content[]`) and any `type:"user"` entries carrying `tool_result` blocks, into 6-a Diagnosis. This does not replace the `tq task get` deep-dive — it runs in addition.
 
-### 4. PR-state pre-fetch
+### 4. PR-state finalization
 
-For tasks classified as Awaiting review / Awaiting deploy / Likely complete, collect all PR URLs from `metadata_url` or the latest result and run `gh pr view <url> --json state,mergedAt,mergeable,reviewDecision` calls **in parallel** (single message, multiple Bash calls).
+The Step 3 PR-state pre-fetch has already cached `gh pr view` JSON for every task with a PR URL — do not re-fetch here. Tasks without an extractable PR URL have no cache entry and skip this finalization (Step 3's keyword-based fallback in the Phase criteria already covers them).
 
-Finalize classification using the state: `state == MERGED` → **Likely complete**. Cache the JSON for Step 6.
+Finalize classification using the cached state: `state == MERGED` → **Likely complete**. The cache remains available for Step 6.
 
 ### 5. Summary
 
@@ -162,9 +176,9 @@ In the **assistant message body** (not `AskUserQuestion`), present:
 
 - Task ID, title, age (days since `updated_at`).
 - Latest substantive action: ID, status, and a 1-3 line `result` quote (use a blockquote for the decisive lines).
-- Phase classification from Step 3 + the specific evidence that decided it (which keyword in `result_head`, which `latest.status`, which Step 4 PR `state`).
+- Phase classification from Step 3 + the specific evidence that decided it (which keyword in `result_head`, which `latest.status`, which PR `state` from the Step 3 cache).
 - Phase-specific concern:
-  - **Awaiting review / Awaiting deploy**: blockers, PR state from the Step 4 cache.
+  - **Awaiting review / Awaiting deploy**: blockers, PR state from the Step 3 PR-state cache.
   - **Stalled / Blocked**: stall duration, unresolved obstacle.
   - **Likely complete**: completion evidence (PR merged, etc.).
   - **Not started**: probable reason for non-start.
@@ -188,7 +202,7 @@ Pick the 6-c options (2-4 per task) from this template:
 | Likely complete | `Mark done` / `Create merge action` / `Leave open` (see PR-state rule below) |
 | Not started | `Create first action` / `Archive` / `Leave open` |
 
-**Likely complete — PR-state rule** (uses Step 4 cache):
+**Likely complete — PR-state rule** (uses the Step 3 PR-state cache):
 
 - `state == MERGED` → `Mark done` first, label `Mark done (Recommended)`.
 - `state == OPEN` → `Create merge action` first, label `Create merge action (Recommended)`.
@@ -215,7 +229,7 @@ Issue **one** `AskUserQuestion` for **this task only**:
 - Place the recommended option first; append `(Recommended)` to its label.
 - Per-option `description` MUST contain the decision material:
   - 1-2 line summary of the latest `result`.
-  - For PR-related tasks: PR number + state from the Step 4 PR-state cache.
+  - For PR-related tasks: PR number + state from the Step 3 PR-state cache.
   - Days since last update (`updated_at` vs today).
 
 **Action instruction quality**: when the user picks `Create ... action`, invoke `/tq:create-action` with a `task_id` and an instruction that quotes the specific next step from the previous `result` (e.g. "Request review on PR #XXX" — not a vague "request review"). Include relevant URLs, IDs, and any `next action` note from the prior result. Do not call `tq action create` directly.
