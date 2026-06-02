@@ -75,15 +75,15 @@ Inventory and organize open tasks - review status, propose cleanup, execute
 
 ### `tq:manager`
 
-tqタスク管理者。「タスク作って」「アクション追加して」「状況見せて」「割り込み実行して」「スケジュール実行したい」で発動
+tq task manager. Triggers on natural-language requests like "create a task", "add an action", "show status", "run an interrupt", or "schedule something".
 
 `skills/manager/SKILL.md`
 
-When creating actions/schedules, prefer the `experimental_bg` or `interactive` dispatch mode and avoid `noninteractive` (it draws from the capped Agent SDK credit / API billing). See [Best practices — Dispatch mode selection](../../docs/best-practices.md#dispatch-mode-selection) for the full decision rule.
+Local actions (`mode=interactive` or `noninteractive`) launch via `claude --bg` and differ only in which slot pool they consume. `mode=remote` is a separate cloud-execution path that runs `claude --remote` instead. See [Best practices — Dispatch mode selection](../../docs/best-practices.md#dispatch-mode-selection) for the full decision rule.
 
 ### `tq:investigate-incidents`
 
-tqキューに溜まった失敗actionとpermission denialを横断的に診断する。「インシデント調べて」「最近の失敗まとめて」「permission blockの傾向見せて」「/tq:investigate-incidents」で発動
+Cross-cuts diagnosis of failed actions and permission denials accumulated in the tq queue. Triggers on phrases like "investigate incidents", "summarize recent failures", "show permission block trends", or `/tq:investigate-incidents`.
 
 `skills/investigate-incidents/SKILL.md`
 
@@ -116,4 +116,5 @@ Runs `tq internal claude-session-record` to record the `session_id` issued by Cl
 - The startup env variable `TQ_ACTION_ID` identifies the target action 1:1. Only Claude sessions launched via tq dispatch are recorded.
 - No side effects on manual claude launches without `TQ_ACTION_ID` (silent exit).
 - When `CLAUDE_CODE_REMOTE=true` (Claude Code on the web / Cloud Routines) is set, `executor=cloud` is also recorded into metadata. The reaper uses this value to unconditionally skip cloud-executed actions (local session log liveness checks do not apply to them).
+- Local actions (`mode=interactive` or `noninteractive`) launch through `claude --bg`, which does not propagate `TQ_ACTION_ID` into the daemonised session, so this hook is a no-op for them. The queue worker's bg reaper instead polls `~/.claude/jobs/<short>/state.json` each tick and back-fills `claude_session_id` from its `sessionId` field. Effectively, this hook records `claude_session_id` only for `mode=remote` actions.
 - Hook failures never disrupt the Claude session (always exits 0).
