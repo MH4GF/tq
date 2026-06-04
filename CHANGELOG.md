@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.21.33](https://github.com/MH4GF/tq/compare/v0.21.32...v0.21.33) - 2026-06-04
+
+- docs(plugin-readme): refresh SessionStart and dispatch-mode notes after unified bg path by @MH4GF in https://github.com/MH4GF/tq/pull/370
+- feat(triage): PR-merge override for skip rule by @MH4GF in https://github.com/MH4GF/tq/pull/371
+- fix(dispatch): apply bg hard timeout only to noninteractive actions by @MH4GF in https://github.com/MH4GF/tq/pull/373
+
 ## [v0.21.32](https://github.com/MH4GF/tq/compare/v0.21.31...v0.21.32) - 2026-06-01
 - refactor: unify action launch on claude --bg, retire experimental_bg by @MH4GF in https://github.com/MH4GF/tq/pull/367
 - fix(db): guard experimental_bg migration against malformed metadata rows by @MH4GF in https://github.com/MH4GF/tq/pull/369
