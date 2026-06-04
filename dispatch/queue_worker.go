@@ -13,24 +13,24 @@ import (
 )
 
 const (
-	DefaultMaxInteractive    = 3
-	DefaultMaxNonInteractive = 5
-	DefaultStaleThreshold    = 30 * time.Second
-	DefaultPollInterval      = 10 * time.Second
-	DefaultBgMissingJobGrace = 30 * time.Second
-	DefaultBgHardTimeout     = 4 * time.Hour
+	DefaultMaxInteractive              = 3
+	DefaultMaxNonInteractive           = 5
+	DefaultStaleThreshold              = 30 * time.Second
+	DefaultPollInterval                = 10 * time.Second
+	DefaultBgMissingJobGrace           = 30 * time.Second
+	DefaultBgNonInteractiveHardTimeout = 4 * time.Hour
 )
 
 var defaultDeferBackoff = 30 * time.Second
 
 type WorkerConfig struct {
 	DispatchConfig
-	MaxInteractive    int
-	MaxNonInteractive int
-	PollInterval      time.Duration
-	BgStateReader     BgStateReader
-	BgMissingJobGrace time.Duration
-	BgHardTimeout     time.Duration
+	MaxInteractive              int
+	MaxNonInteractive           int
+	PollInterval                time.Duration
+	BgStateReader               BgStateReader
+	BgMissingJobGrace           time.Duration
+	BgNonInteractiveHardTimeout time.Duration
 }
 
 func RunWorker(ctx context.Context, cfg WorkerConfig) error {
@@ -46,8 +46,8 @@ func RunWorker(ctx context.Context, cfg WorkerConfig) error {
 	if cfg.BgMissingJobGrace <= 0 {
 		cfg.BgMissingJobGrace = DefaultBgMissingJobGrace
 	}
-	if cfg.BgHardTimeout <= 0 {
-		cfg.BgHardTimeout = DefaultBgHardTimeout
+	if cfg.BgNonInteractiveHardTimeout <= 0 {
+		cfg.BgNonInteractiveHardTimeout = DefaultBgNonInteractiveHardTimeout
 	}
 
 	slog.Info("queue worker started",
@@ -221,13 +221,20 @@ func reapBg(cfg WorkerConfig, now time.Time) {
 			}
 			failures = append(failures, db.ActionFailureUpdate{ID: a.ID, Reason: msg})
 		default:
-			if started, ok := parseStartedAt(&a); ok && now.Sub(started) >= cfg.BgHardTimeout {
-				failures = append(failures, db.ActionFailureUpdate{
-					ID:     a.ID,
-					Reason: fmt.Sprintf("bg hard timeout (%v) elapsed in state=%q", cfg.BgHardTimeout, payload.State),
-				})
-				slog.Warn("bg reaper: hard timeout reached", "action_id", a.ID, "state", payload.State, "elapsed", now.Sub(started))
+			mode, _ := meta[MetaKeyMode].(string)
+			if mode != ModeNonInteractive {
+				continue
 			}
+			started, ok := parseStartedAt(&a)
+			if !ok || now.Sub(started) < cfg.BgNonInteractiveHardTimeout {
+				continue
+			}
+			failures = append(failures, db.ActionFailureUpdate{
+				ID:     a.ID,
+				Reason: fmt.Sprintf("bg hard timeout (%v) elapsed in state=%q", cfg.BgNonInteractiveHardTimeout, payload.State),
+			})
+			slog.Warn("bg reaper: hard timeout reached",
+				"action_id", a.ID, "mode", mode, "state", payload.State, "elapsed", now.Sub(started))
 		}
 	}
 

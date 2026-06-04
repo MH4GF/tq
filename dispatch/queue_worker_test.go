@@ -289,8 +289,8 @@ func TestReapOrphans_SkipsCloudExecutor(t *testing.T) {
 	}
 }
 
-func TestReapBg_WedgedWorkingHardTimeout(t *testing.T) {
-	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","daemon_short":"abcd1234"}`)
+func TestReapBg_NoninteractiveWedgedWorkingHitsHardTimeout(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"noninteractive","daemon_short":"abcd1234"}`)
 	claimRunning(t, d, actionID)
 	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-5*time.Hour))); err != nil {
 		t.Fatalf("set started_at: %v", err)
@@ -300,10 +300,10 @@ func TestReapBg_WedgedWorkingHardTimeout(t *testing.T) {
 	reader.set("abcd1234", []byte(`{"state":"working"}`))
 
 	cfg := WorkerConfig{
-		DispatchConfig:    DispatchConfig{DB: d},
-		BgStateReader:     reader,
-		BgMissingJobGrace: time.Minute,
-		BgHardTimeout:     4 * time.Hour,
+		DispatchConfig:              DispatchConfig{DB: d},
+		BgStateReader:               reader,
+		BgMissingJobGrace:           time.Minute,
+		BgNonInteractiveHardTimeout: 4 * time.Hour,
 	}
 
 	reapBg(cfg, time.Now())
@@ -314,6 +314,109 @@ func TestReapBg_WedgedWorkingHardTimeout(t *testing.T) {
 	}
 	if !strings.Contains(updated.Result.String, "hard timeout") {
 		t.Errorf("reason = %q, want substring %q", updated.Result.String, "hard timeout")
+	}
+}
+
+func TestReapBg_InteractiveNeverHitsHardTimeout(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","daemon_short":"abcd1235"}`)
+	claimRunning(t, d, actionID)
+	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-100*time.Hour))); err != nil {
+		t.Fatalf("set started_at: %v", err)
+	}
+
+	reader := &fakeBgStateReader{}
+	reader.set("abcd1235", []byte(`{"state":"working"}`))
+
+	cfg := WorkerConfig{
+		DispatchConfig:              DispatchConfig{DB: d},
+		BgStateReader:               reader,
+		BgMissingJobGrace:           time.Minute,
+		BgNonInteractiveHardTimeout: 4 * time.Hour,
+	}
+
+	reapBg(cfg, time.Now())
+
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusRunning {
+		t.Errorf("interactive action wrongly reaped: status = %q, want %q", updated.Status, db.ActionStatusRunning)
+	}
+}
+
+func TestReapBg_LegacyExperimentalBgTreatedAsInteractiveForTimeout(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"experimental_bg","daemon_short":"abcd1236"}`)
+	claimRunning(t, d, actionID)
+	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-100*time.Hour))); err != nil {
+		t.Fatalf("set started_at: %v", err)
+	}
+
+	reader := &fakeBgStateReader{}
+	reader.set("abcd1236", []byte(`{"state":"working"}`))
+
+	cfg := WorkerConfig{
+		DispatchConfig:              DispatchConfig{DB: d},
+		BgStateReader:               reader,
+		BgMissingJobGrace:           time.Minute,
+		BgNonInteractiveHardTimeout: 4 * time.Hour,
+	}
+
+	reapBg(cfg, time.Now())
+
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusRunning {
+		t.Errorf("legacy experimental_bg should be exempt from hard timeout: status = %q", updated.Status)
+	}
+}
+
+func TestReapBg_MissingModeTreatedAsInteractiveForTimeout(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","daemon_short":"abcd1237"}`)
+	claimRunning(t, d, actionID)
+	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-100*time.Hour))); err != nil {
+		t.Fatalf("set started_at: %v", err)
+	}
+
+	reader := &fakeBgStateReader{}
+	reader.set("abcd1237", []byte(`{"state":"working"}`))
+
+	cfg := WorkerConfig{
+		DispatchConfig:              DispatchConfig{DB: d},
+		BgStateReader:               reader,
+		BgMissingJobGrace:           time.Minute,
+		BgNonInteractiveHardTimeout: 4 * time.Hour,
+	}
+
+	reapBg(cfg, time.Now())
+
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusRunning {
+		t.Errorf("missing mode should default to interactive (no timeout): status = %q", updated.Status)
+	}
+}
+
+func TestReapBg_NoninteractiveDoneStillTakesPrecedenceOverTimeout(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"noninteractive","daemon_short":"abcd1238"}`)
+	claimRunning(t, d, actionID)
+	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-10*time.Hour))); err != nil {
+		t.Fatalf("set started_at: %v", err)
+	}
+
+	reader := &fakeBgStateReader{}
+	reader.set("abcd1238", []byte(`{"state":"done","output":{"result":"late but ok"}}`))
+
+	cfg := WorkerConfig{
+		DispatchConfig:              DispatchConfig{DB: d},
+		BgStateReader:               reader,
+		BgMissingJobGrace:           time.Minute,
+		BgNonInteractiveHardTimeout: 4 * time.Hour,
+	}
+
+	reapBg(cfg, time.Now())
+
+	updated, _ := d.GetAction(actionID)
+	if updated.Status != db.ActionStatusDone {
+		t.Errorf("done state should win over timeout: status = %q, want %q", updated.Status, db.ActionStatusDone)
+	}
+	if !updated.Result.Valid || updated.Result.String != "late but ok" {
+		t.Errorf("result = %q, want %q", updated.Result.String, "late but ok")
 	}
 }
 
