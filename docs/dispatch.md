@@ -76,6 +76,8 @@ Actions whose `metadata.executor` is `"cloud"` are skipped by `reapBg` because t
 
 `reapBg` polls `~/.claude/jobs/<short>/state.json` each tick: `state=done` → `BulkMarkDone(output.result)`, `state=failed` → `BulkMarkFailed(detail || output.result)`. Non-terminal states (`working`, `blocked`, …) leave the action `running`; `blocked` in particular means the bg session is awaiting reply via `claude agents`, not a failure. If the job dir disappears entirely (`os.IsNotExist`) and the action has been running longer than `BgMissingJobGrace` (default 30s), the action is failed.
 
+For non-terminal states the reaper applies a mode-aware hard timeout. `noninteractive` actions are failed once `now - started_at >= BgNonInteractiveHardTimeout` (default 4h) — this bounds runaway batch sessions. `interactive` actions (including the legacy `experimental_bg` value and actions with no `mode` recorded) are never reaped by wall-clock alone; they routinely park at `AskUserQuestion` for arbitrary periods while the human is away. Their only auto-cleanup paths are the orphan branches above (`reapOrphans` for missing `daemon_short`, `os.IsNotExist` for a vanished job dir) and the manual `tq action cancel` command.
+
 ## Shutdown
 
 `RunWorker` returns when its context is cancelled. The bg launch path is fire-and-forget once the daemon accepts the session, so there are no in-flight executor goroutines to drain at shutdown.
