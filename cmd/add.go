@@ -125,16 +125,17 @@ Metadata keys for dispatch control:
 			return err
 		}
 
-		id, err := database.InsertAction(addTitle, addTask, merged, status, dispatchAfter, addWorkDir)
+		deps := collectBlockedBy(addBlockedAct, addBlockedTsk)
+		id, err := database.InsertActionWithDependencies(db.ActionInsertSpec{
+			Title:         addTitle,
+			TaskID:        addTask,
+			Metadata:      merged,
+			Status:        status,
+			DispatchAfter: dispatchAfter,
+			WorkDir:       addWorkDir,
+		}, deps)
 		if err != nil {
 			return fmt.Errorf("insert action: %w", err)
-		}
-
-		deps := collectBlockedBy(addBlockedAct, addBlockedTsk)
-		if len(deps) > 0 {
-			if err := database.AddActionDependencies(id, deps); err != nil {
-				return fmt.Errorf("add dependencies: %w", err)
-			}
 		}
 
 		w := cmd.OutOrStdout()

@@ -18,7 +18,7 @@
 #   - LIMIT-bounded primary-key scan (ORDER BY id DESC LIMIT N — actually
 #     O(N), shows as SCAN in EXPLAIN but not actionable via index)
 
-db/action.go:316 SCAN actions
+db/action.go:366 SCAN actions
 db/db.go:143 SCAN tasks
 db/db.go:160 SCAN actions
 db/db.go:317 SCAN actions

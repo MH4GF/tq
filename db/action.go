@@ -124,6 +124,56 @@ func (db *DB) InsertAction(title string, taskID int64, metadata, status string, 
 	return id, nil
 }
 
+func (db *DB) InsertActionWithDependencies(spec ActionInsertSpec, deps []ActionDep) (int64, error) {
+	if !ValidActionStatuses[spec.Status] {
+		return 0, fmt.Errorf("invalid action status %q: must be one of pending, running, dispatched, done, failed, cancelled", spec.Status)
+	}
+
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx,
+		"INSERT INTO actions (title, task_id, metadata, status, dispatch_after, work_dir) VALUES (?, ?, ?, ?, ?, ?)",
+		spec.Title, spec.TaskID, spec.Metadata, spec.Status, spec.DispatchAfter, spec.WorkDir,
+	)
+	if err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+
+	if err := insertActionDependenciesTx(ctx, tx, id, deps, false); err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	evt := map[string]any{
+		"status": spec.Status, "task_id": spec.TaskID, "title": spec.Title,
+	}
+	if spec.DispatchAfter != nil {
+		evt["dispatch_after"] = *spec.DispatchAfter
+	}
+	if spec.WorkDir != "" {
+		evt["work_dir"] = spec.WorkDir
+	}
+	db.emitEvent("action", id, "action.created", evt)
+	if len(deps) > 0 {
+		db.emitEvent("action", id, "action.dependencies_added", map[string]any{
+			"count": len(deps),
+		})
+	}
+	return id, nil
+}
+
 // GetTaskActionCount reads from the trigger-maintained task_action_counts
 // table — an O(len(statuses)) PK lookup, not a scan of actions.
 func (db *DB) GetTaskActionCount(taskID int64, statuses []string) (int64, error) {
