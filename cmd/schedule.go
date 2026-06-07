@@ -91,6 +91,9 @@ Metadata keys for dispatch control (passed to actions automatically):
 		if err := validateMetaJSON(meta); err != nil {
 			return err
 		}
+		if err := ensureTaskOpenForAttach(taskID, "create schedule under"); err != nil {
+			return err
+		}
 
 		id, err := database.InsertSchedule(taskID, instruction, title, cronExpr, meta)
 		if err != nil {
@@ -231,6 +234,12 @@ var scheduleUpdateCmd = &cobra.Command{
 
 		if title == nil && cronExpr == nil && meta == nil && instruction == nil && taskID == nil {
 			return fmt.Errorf("at least one flag (--title, --cron, --meta, --instruction, --task) is required")
+		}
+
+		if taskID != nil {
+			if err := ensureTaskOpenForAttach(*taskID, "reassign schedule to"); err != nil {
+				return err
+			}
 		}
 
 		if err := database.UpdateSchedule(id, title, cronExpr, meta, instruction, taskID); err != nil {

@@ -306,7 +306,7 @@ tq schedule create --instruction <TEXT> --task <ID> --cron <EXPR> [--title <TITL
 ```
 
 - `--instruction` — Instruction text (**required**)
-- `--task` — Task ID (**required**)
+- `--task` — Task ID (**required**). Rejected if the task status is `done` or `archived`; reopen with `tq task update <ID> --status open` first if intentional.
 - `--cron` — Cron expression, 5-field format, evaluated in local timezone (**required**, e.g. `"0 9 * * *"`)
 - `--title` — Schedule title (defaults to instruction)
 - `--meta` — JSON metadata for dispatch control (same keys as `action create`)
@@ -334,6 +334,8 @@ tq schedule get <ID> [--jq <EXPR>]
 ```
 tq schedule update <ID> [--cron <EXPR>] [--title <TITLE>] [--task <ID>] [--instruction <TEXT>] [--meta <JSON>]
 ```
+
+- `--task` — Reassign to a different task. Rejected if the target task status is `done` or `archived`; reopen with `tq task update <ID> --status open` first if intentional.
 
 ## event
 

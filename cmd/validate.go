@@ -4,8 +4,25 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/MH4GF/tq/db"
 	"github.com/MH4GF/tq/dispatch"
 )
+
+func ensureTaskOpenForAttach(taskID int64, op string) error {
+	parent, err := database.GetTask(taskID)
+	if err != nil {
+		return fmt.Errorf("get parent task #%d: %w", taskID, err)
+	}
+	if db.IsTerminalTaskStatus(parent.Status) {
+		return fmt.Errorf(
+			"cannot %s task #%d (status=%s): "+
+				"verify the task ID is correct, or reopen with "+
+				"'tq task update %d --status open' if this is intentional",
+			op, taskID, parent.Status, taskID,
+		)
+	}
+	return nil
+}
 
 func validateMetaJSON(meta string) error {
 	var obj map[string]any
