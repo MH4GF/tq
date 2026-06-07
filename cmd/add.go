@@ -77,17 +77,8 @@ Metadata keys for dispatch control:
 			return fmt.Errorf("--task must be a positive integer")
 		}
 
-		parent, err := database.GetTask(addTask)
-		if err != nil {
-			return fmt.Errorf("get parent task #%d: %w", addTask, err)
-		}
-		if db.IsTerminalTaskStatus(parent.Status) {
-			return fmt.Errorf(
-				"cannot create action under task #%d (status=%s): "+
-					"verify the task ID is correct, or reopen with "+
-					"'tq task update %d --status open' if this is intentional",
-				addTask, parent.Status, addTask,
-			)
+		if err := ensureTaskOpenForAttach(addTask, "create action under"); err != nil {
+			return err
 		}
 
 		status := addStatus

@@ -272,6 +272,113 @@ func TestScheduleUpdate_ClaudeArgsValid(t *testing.T) {
 	}
 }
 
+func TestScheduleCreate_TerminalTaskRejected(t *testing.T) {
+	tests := []struct {
+		name       string
+		taskStatus string
+		wantErr    string
+	}{
+		{name: "done", taskStatus: "done", wantErr: "status=done"},
+		{name: "archived", taskStatus: "archived", wantErr: "status=archived"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+
+			taskID, err := d.InsertTask(1, "test task", "{}", "")
+			if err != nil {
+				t.Fatalf("insert task: %v", err)
+			}
+			if err := d.UpdateTask(taskID, tc.taskStatus, ""); err != nil {
+				t.Fatalf("update task: %v", err)
+			}
+
+			root := cmd.GetRootCmd()
+			root.SetOut(new(bytes.Buffer))
+			root.SetErr(new(bytes.Buffer))
+			root.SetArgs([]string{"schedule", "create", "--instruction", "/gh-ops:watch", "--task", "1", "--cron", "* * * * *"})
+
+			err = root.Execute()
+			if err == nil {
+				t.Fatal("expected error for terminal parent task, got nil")
+			}
+			if !contains(err.Error(), tc.wantErr) {
+				t.Errorf("error = %q, want to contain %q", err.Error(), tc.wantErr)
+			}
+			if !contains(err.Error(), "cannot create schedule under task #1") {
+				t.Errorf("error = %q, want the shared 'cannot ... task #N' hint", err.Error())
+			}
+
+			schedules, _ := d.ListSchedules(0)
+			if len(schedules) != 0 {
+				t.Errorf("expected no schedule rows after rejection, got %d", len(schedules))
+			}
+		})
+	}
+}
+
+func TestScheduleUpdate_TerminalTaskRejected(t *testing.T) {
+	tests := []struct {
+		name       string
+		taskStatus string
+		wantErr    string
+	}{
+		{name: "done", taskStatus: "done", wantErr: "status=done"},
+		{name: "archived", taskStatus: "archived", wantErr: "status=archived"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+
+			openTaskID, err := d.InsertTask(1, "open task", "{}", "")
+			if err != nil {
+				t.Fatalf("insert open task: %v", err)
+			}
+			closedTaskID, err := d.InsertTask(1, "closed task", "{}", "")
+			if err != nil {
+				t.Fatalf("insert closed task: %v", err)
+			}
+			scheduleID, err := d.InsertSchedule(openTaskID, "/gh-ops:watch", "Watch", "* * * * *", "{}")
+			if err != nil {
+				t.Fatalf("insert schedule: %v", err)
+			}
+			if err := d.UpdateTask(closedTaskID, tc.taskStatus, ""); err != nil {
+				t.Fatalf("update closed task: %v", err)
+			}
+
+			root := cmd.GetRootCmd()
+			root.SetOut(new(bytes.Buffer))
+			root.SetErr(new(bytes.Buffer))
+			root.SetArgs([]string{"schedule", "update", "1", "--task", "2"})
+
+			err = root.Execute()
+			if err == nil {
+				t.Fatal("expected error for terminal parent task, got nil")
+			}
+			if !contains(err.Error(), tc.wantErr) {
+				t.Errorf("error = %q, want to contain %q", err.Error(), tc.wantErr)
+			}
+			if !contains(err.Error(), "cannot reassign schedule to task #2") {
+				t.Errorf("error = %q, want the shared 'cannot ... task #N' hint", err.Error())
+			}
+
+			s, err := d.GetSchedule(scheduleID)
+			if err != nil {
+				t.Fatalf("get schedule: %v", err)
+			}
+			if s.TaskID != openTaskID {
+				t.Errorf("schedule task_id = %d, want %d (unchanged)", s.TaskID, openTaskID)
+			}
+		})
+	}
+}
+
 func TestScheduleUpdate_InvalidMeta(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
