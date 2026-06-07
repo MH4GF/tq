@@ -6,7 +6,16 @@
       "name": "tq",
       "source": "./.claude-plugins/tq",
       "description": "tq task queue worker commands",
-      "author": { "name": "MH4GF" }
+      "author": { "name": "MH4GF" },
+      "skills": [
+        "./skills/cancel",
+        "./skills/create-action",
+        "./skills/done",
+        "./skills/failed",
+        "./skills/investigate-incidents",
+        "./skills/manager",
+        "./skills/triage"
+      ]
     },
     {
       "name": "gh-ops",

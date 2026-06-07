@@ -1,5 +1,6 @@
 ---
-description: tqキューに溜まった失敗actionとpermission denialを横断的に診断する。「インシデント調べて」「最近の失敗まとめて」「permission blockの傾向見せて」「/tq:investigate-incidents」で発動
+name: tq-investigate-incidents
+description: Cross-event diagnosis of recent failed actions and permission-blocked actions in the tq queue. Use when the user wants to investigate incidents, summarize recent failures, or review permission-block trends across the queue. Clusters incidents and cross-checks prior remediations rather than per-event firefighting.
 context: fork
 allowed-tools: Bash(tq *), Read, Grep, Glob
 ---
@@ -28,7 +29,7 @@ Use this skill to do what the per-event path couldn't:
 - **Cluster.** Group incidents by signal, not by ID. Failure messages, denied tool patterns, source action context, time-of-day, schedule/worker identity — whichever axis is informative. Some clusters span both failures and denials with a shared root cause.
 - **Cross-check prior remediations.** For each cluster, search history: was this same pattern remediated before? If yes, and it's recurring, the prior remediation was wrong — the lesson there is more valuable than another defensive block. Surface it.
 - **Distinguish systemic from one-off.** A single odd failure usually doesn't need action. A cluster of 10 over a week usually does, and that action should be at the level of the cluster (one fix, one well-reasoned change) — not 10 separate per-event patches.
-- **Be skeptical of "just add an allow rule" / "just add a禁止 to SKILL.md".** Sometimes that's the right answer. Often it's not. Ask whether the rule will still be obviously correct in three months, or whether it's papering over a structural issue.
+- **Be skeptical of "just add an allow rule" / "just add a deny clause to SKILL.md".** Sometimes that's the right answer. Often it's not. Ask whether the rule will still be obviously correct in three months, or whether it's papering over a structural issue.
 
 ## How to start
 

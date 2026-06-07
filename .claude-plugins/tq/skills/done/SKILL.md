@@ -1,4 +1,5 @@
 ---
+name: tq-done
 description: Mark a tq action as done, then judge task-level completion and propose follow-up actions when work remains
 argument-hint: "<action_id> [summary]"
 allowed-tools: Bash(tq *), Bash(gh pr view *), Bash(git status *), Bash(git log *)
