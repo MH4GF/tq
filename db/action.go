@@ -531,16 +531,16 @@ func (db *DB) MergeActionMetadata(id int64, updates map[string]any) error {
 
 	var existing string
 	if err := tx.QueryRow("SELECT metadata FROM actions WHERE id = ?", id).Scan(&existing); err != nil {
-		return err
+		return fmt.Errorf("merge action metadata: get metadata for id=%d: %w", id, err)
 	}
 
 	data, keys, err := mergeMetadataJSON(existing, updates)
 	if err != nil {
-		return err
+		return fmt.Errorf("merge action metadata: merge id=%d: %w", id, err)
 	}
 
 	if _, err := tx.Exec("UPDATE actions SET metadata = ? WHERE id = ?", data, id); err != nil {
-		return err
+		return fmt.Errorf("merge action metadata: update id=%d: %w", id, err)
 	}
 
 	if err := tx.Commit(); err != nil {
