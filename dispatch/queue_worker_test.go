@@ -103,190 +103,217 @@ func claimRunning(t *testing.T, d db.Store, actionID int64) {
 	}
 }
 
-func TestReapBg_MarksDoneOnTerminalState(t *testing.T) {
-	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","daemon_short":"aaaaaaaa"}`)
-	claimRunning(t, d, actionID)
-
-	reader := &fakeBgStateReader{}
-	reader.set("aaaaaaaa", []byte(`{"state":"done","sessionId":"sess-1","output":{"result":"all good"}}`))
-
-	cfg := WorkerConfig{
-		DispatchConfig:    DispatchConfig{DB: d},
-		BgStateReader:     reader,
-		BgMissingJobGrace: time.Hour,
+func TestReapBg(t *testing.T) {
+	notFound := &fs.PathError{Op: "open", Path: "x", Err: fs.ErrNotExist}
+	cases := []struct {
+		name              string
+		metadata          string
+		daemonShort       string
+		startedAtAgo      time.Duration
+		readerPayload     string
+		readerErr         error
+		grace             time.Duration
+		hardTimeout       time.Duration
+		expectStatus      string
+		expectResult      string
+		expectMetadataSub string
+	}{
+		{
+			name:              "marks done on terminal state",
+			metadata:          `{"instruction":"x","mode":"interactive","daemon_short":"aaaaaaaa"}`,
+			daemonShort:       "aaaaaaaa",
+			readerPayload:     `{"state":"done","sessionId":"sess-1","output":{"result":"all good"}}`,
+			grace:             time.Hour,
+			expectStatus:      db.ActionStatusDone,
+			expectResult:      "all good",
+			expectMetadataSub: `"claude_session_id":"sess-1"`,
+		},
+		{
+			name:          "marks failed on terminal state",
+			metadata:      `{"instruction":"x","mode":"noninteractive","daemon_short":"bbbbbbbb"}`,
+			daemonShort:   "bbbbbbbb",
+			readerPayload: `{"state":"failed","detail":"boom"}`,
+			grace:         time.Hour,
+			expectStatus:  db.ActionStatusFailed,
+			expectResult:  "boom",
+		},
+		{
+			name:          "legacy experimental_bg is handled",
+			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"cccccccc"}`,
+			daemonShort:   "cccccccc",
+			readerPayload: `{"state":"done","output":{"result":"legacy ok"}}`,
+			grace:         time.Hour,
+			expectStatus:  db.ActionStatusDone,
+		},
+		{
+			name:          "skips cloud executor actions",
+			metadata:      `{"instruction":"x","mode":"interactive","daemon_short":"dddddddd","executor":"cloud"}`,
+			daemonShort:   "dddddddd",
+			readerPayload: `{"state":"done"}`,
+			grace:         time.Hour,
+			expectStatus:  db.ActionStatusRunning,
+		},
+		{
+			name:         "missing job after grace marks failed",
+			metadata:     `{"instruction":"x","mode":"interactive","daemon_short":"eeeeeeee"}`,
+			daemonShort:  "eeeeeeee",
+			startedAtAgo: 2 * time.Hour,
+			readerErr:    notFound,
+			grace:        time.Minute,
+			expectStatus: db.ActionStatusFailed,
+			expectResult: "daemon job dir missing",
+		},
+		{
+			name:         "missing job within grace is kept",
+			metadata:     `{"instruction":"x","mode":"interactive","daemon_short":"ffffffff"}`,
+			daemonShort:  "ffffffff",
+			readerErr:    notFound,
+			grace:        time.Hour,
+			expectStatus: db.ActionStatusRunning,
+		},
+		{
+			name:          "noninteractive wedged hits hard timeout",
+			metadata:      `{"instruction":"x","mode":"noninteractive","daemon_short":"abcd1234"}`,
+			daemonShort:   "abcd1234",
+			startedAtAgo:  5 * time.Hour,
+			readerPayload: `{"state":"working"}`,
+			grace:         time.Minute,
+			hardTimeout:   4 * time.Hour,
+			expectStatus:  db.ActionStatusFailed,
+			expectResult:  "hard timeout",
+		},
+		{
+			name:          "interactive never hits hard timeout",
+			metadata:      `{"instruction":"x","mode":"interactive","daemon_short":"abcd1235"}`,
+			daemonShort:   "abcd1235",
+			startedAtAgo:  100 * time.Hour,
+			readerPayload: `{"state":"working"}`,
+			grace:         time.Minute,
+			hardTimeout:   4 * time.Hour,
+			expectStatus:  db.ActionStatusRunning,
+		},
+		{
+			name:          "legacy experimental_bg exempt from hard timeout",
+			metadata:      `{"instruction":"x","mode":"experimental_bg","daemon_short":"abcd1236"}`,
+			daemonShort:   "abcd1236",
+			startedAtAgo:  100 * time.Hour,
+			readerPayload: `{"state":"working"}`,
+			grace:         time.Minute,
+			hardTimeout:   4 * time.Hour,
+			expectStatus:  db.ActionStatusRunning,
+		},
+		{
+			name:          "missing mode treated as interactive for timeout",
+			metadata:      `{"instruction":"x","daemon_short":"abcd1237"}`,
+			daemonShort:   "abcd1237",
+			startedAtAgo:  100 * time.Hour,
+			readerPayload: `{"state":"working"}`,
+			grace:         time.Minute,
+			hardTimeout:   4 * time.Hour,
+			expectStatus:  db.ActionStatusRunning,
+		},
+		{
+			name:          "noninteractive done wins over timeout",
+			metadata:      `{"instruction":"x","mode":"noninteractive","daemon_short":"abcd1238"}`,
+			daemonShort:   "abcd1238",
+			startedAtAgo:  10 * time.Hour,
+			readerPayload: `{"state":"done","output":{"result":"late but ok"}}`,
+			grace:         time.Minute,
+			hardTimeout:   4 * time.Hour,
+			expectStatus:  db.ActionStatusDone,
+			expectResult:  "late but ok",
+		},
 	}
 
-	reapBg(cfg, time.Now())
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d, actionID := setupTaskAndAction(t, tc.metadata)
+			claimRunning(t, d, actionID)
+			if tc.startedAtAgo > 0 {
+				if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-tc.startedAtAgo))); err != nil {
+					t.Fatalf("set started_at: %v", err)
+				}
+			}
 
-	updated, err := d.GetAction(actionID)
-	if err != nil {
-		t.Fatalf("get action: %v", err)
-	}
-	if updated.Status != db.ActionStatusDone {
-		t.Errorf("status = %q, want %q", updated.Status, db.ActionStatusDone)
-	}
-	if !updated.Result.Valid || updated.Result.String != "all good" {
-		t.Errorf("result = %q, want %q", updated.Result.String, "all good")
-	}
-	if !strings.Contains(updated.Metadata, `"claude_session_id":"sess-1"`) {
-		t.Errorf("claude_session_id not backfilled: %q", updated.Metadata)
+			reader := &fakeBgStateReader{}
+			if tc.readerPayload != "" {
+				reader.set(tc.daemonShort, []byte(tc.readerPayload))
+			}
+			if tc.readerErr != nil {
+				reader.setErr(tc.daemonShort, tc.readerErr)
+			}
+
+			cfg := WorkerConfig{
+				DispatchConfig:              DispatchConfig{DB: d},
+				BgStateReader:               reader,
+				BgMissingJobGrace:           tc.grace,
+				BgNonInteractiveHardTimeout: tc.hardTimeout,
+			}
+
+			reapBg(cfg, time.Now())
+
+			updated, err := d.GetAction(actionID)
+			if err != nil {
+				t.Fatalf("get action: %v", err)
+			}
+			if updated.Status != tc.expectStatus {
+				t.Errorf("status = %q, want %q", updated.Status, tc.expectStatus)
+			}
+			if tc.expectResult != "" {
+				if !updated.Result.Valid || !strings.Contains(updated.Result.String, tc.expectResult) {
+					t.Errorf("result = %q, want substring %q", updated.Result.String, tc.expectResult)
+				}
+			}
+			if tc.expectMetadataSub != "" && !strings.Contains(updated.Metadata, tc.expectMetadataSub) {
+				t.Errorf("metadata missing %q: %q", tc.expectMetadataSub, updated.Metadata)
+			}
+		})
 	}
 }
 
-func TestReapBg_MarksFailedOnTerminalState(t *testing.T) {
-	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"noninteractive","daemon_short":"bbbbbbbb"}`)
-	claimRunning(t, d, actionID)
-
-	reader := &fakeBgStateReader{}
-	reader.set("bbbbbbbb", []byte(`{"state":"failed","detail":"boom"}`))
-
-	cfg := WorkerConfig{
-		DispatchConfig:    DispatchConfig{DB: d},
-		BgStateReader:     reader,
-		BgMissingJobGrace: time.Hour,
+func TestReapOrphans(t *testing.T) {
+	cases := []struct {
+		name         string
+		metadata     string
+		expectStatus string
+		expectResult string
+	}{
+		{
+			name:         "marks running without daemon_short as failed",
+			metadata:     `{"instruction":"x","mode":"interactive"}`,
+			expectStatus: db.ActionStatusFailed,
+			expectResult: "orphaned",
+		},
+		{
+			name:         "skips cloud executor",
+			metadata:     `{"instruction":"x","mode":"interactive","executor":"cloud"}`,
+			expectStatus: db.ActionStatusRunning,
+		},
 	}
 
-	reapBg(cfg, time.Now())
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d, actionID := setupTaskAndAction(t, tc.metadata)
+			claimRunning(t, d, actionID)
+			if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-2*time.Hour))); err != nil {
+				t.Fatalf("set started_at: %v", err)
+			}
 
-	updated, _ := d.GetAction(actionID)
-	if updated.Status != db.ActionStatusFailed {
-		t.Errorf("status = %q, want %q", updated.Status, db.ActionStatusFailed)
-	}
-	if !updated.Result.Valid || updated.Result.String != "boom" {
-		t.Errorf("result = %q, want %q", updated.Result.String, "boom")
-	}
-}
+			cfg := WorkerConfig{
+				DispatchConfig:    DispatchConfig{DB: d},
+				BgMissingJobGrace: time.Minute,
+			}
 
-func TestReapBg_LegacyExperimentalBgIsHandled(t *testing.T) {
-	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"experimental_bg","daemon_short":"cccccccc"}`)
-	claimRunning(t, d, actionID)
+			reapOrphans(cfg, time.Now())
 
-	reader := &fakeBgStateReader{}
-	reader.set("cccccccc", []byte(`{"state":"done","output":{"result":"legacy ok"}}`))
-
-	cfg := WorkerConfig{
-		DispatchConfig:    DispatchConfig{DB: d},
-		BgStateReader:     reader,
-		BgMissingJobGrace: time.Hour,
-	}
-
-	reapBg(cfg, time.Now())
-
-	updated, _ := d.GetAction(actionID)
-	if updated.Status != db.ActionStatusDone {
-		t.Errorf("legacy experimental_bg not reaped: status = %q", updated.Status)
-	}
-}
-
-func TestReapBg_SkipsCloudExecutorActions(t *testing.T) {
-	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","daemon_short":"dddddddd","executor":"cloud"}`)
-	claimRunning(t, d, actionID)
-
-	reader := &fakeBgStateReader{}
-	reader.set("dddddddd", []byte(`{"state":"done"}`))
-
-	cfg := WorkerConfig{
-		DispatchConfig:    DispatchConfig{DB: d},
-		BgStateReader:     reader,
-		BgMissingJobGrace: time.Hour,
-	}
-
-	reapBg(cfg, time.Now())
-
-	updated, _ := d.GetAction(actionID)
-	if updated.Status != db.ActionStatusRunning {
-		t.Errorf("cloud executor action should not be reaped, status = %q", updated.Status)
-	}
-}
-
-func TestReapBg_MissingJobAfterGraceMarksFailed(t *testing.T) {
-	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","daemon_short":"eeeeeeee"}`)
-	claimRunning(t, d, actionID)
-	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-2*time.Hour))); err != nil {
-		t.Fatalf("set started_at: %v", err)
-	}
-
-	reader := &fakeBgStateReader{}
-	reader.setErr("eeeeeeee", &fs.PathError{Op: "open", Path: "x", Err: fs.ErrNotExist})
-
-	cfg := WorkerConfig{
-		DispatchConfig:    DispatchConfig{DB: d},
-		BgStateReader:     reader,
-		BgMissingJobGrace: time.Minute,
-	}
-
-	reapBg(cfg, time.Now())
-
-	updated, _ := d.GetAction(actionID)
-	if updated.Status != db.ActionStatusFailed {
-		t.Errorf("status = %q, want %q after grace period", updated.Status, db.ActionStatusFailed)
-	}
-	if !strings.Contains(updated.Result.String, "daemon job dir missing") {
-		t.Errorf("failure reason missing: %q", updated.Result.String)
-	}
-}
-
-func TestReapBg_MissingJobWithinGraceIsKept(t *testing.T) {
-	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","daemon_short":"ffffffff"}`)
-	claimRunning(t, d, actionID)
-
-	reader := &fakeBgStateReader{}
-	reader.setErr("ffffffff", &fs.PathError{Op: "open", Path: "x", Err: fs.ErrNotExist})
-
-	cfg := WorkerConfig{
-		DispatchConfig:    DispatchConfig{DB: d},
-		BgStateReader:     reader,
-		BgMissingJobGrace: time.Hour,
-	}
-
-	reapBg(cfg, time.Now())
-
-	updated, _ := d.GetAction(actionID)
-	if updated.Status != db.ActionStatusRunning {
-		t.Errorf("status = %q, want %q (within grace)", updated.Status, db.ActionStatusRunning)
-	}
-}
-
-func TestReapOrphans_MarksRunningWithoutDaemonShortAsFailed(t *testing.T) {
-	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive"}`)
-	claimRunning(t, d, actionID)
-	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-2*time.Hour))); err != nil {
-		t.Fatalf("set started_at: %v", err)
-	}
-
-	cfg := WorkerConfig{
-		DispatchConfig:    DispatchConfig{DB: d},
-		BgMissingJobGrace: time.Minute,
-	}
-
-	reapOrphans(cfg, time.Now())
-
-	updated, _ := d.GetAction(actionID)
-	if updated.Status != db.ActionStatusFailed {
-		t.Errorf("status = %q, want %q (orphan reaped)", updated.Status, db.ActionStatusFailed)
-	}
-	if !strings.Contains(updated.Result.String, "orphaned") {
-		t.Errorf("reason = %q, want substring %q", updated.Result.String, "orphaned")
-	}
-}
-
-func TestReapOrphans_SkipsCloudExecutor(t *testing.T) {
-	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","executor":"cloud"}`)
-	claimRunning(t, d, actionID)
-	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-2*time.Hour))); err != nil {
-		t.Fatalf("set started_at: %v", err)
-	}
-
-	cfg := WorkerConfig{
-		DispatchConfig:    DispatchConfig{DB: d},
-		BgMissingJobGrace: time.Minute,
-	}
-
-	reapOrphans(cfg, time.Now())
-
-	updated, _ := d.GetAction(actionID)
-	if updated.Status != db.ActionStatusRunning {
-		t.Errorf("cloud executor orphan unexpectedly reaped: status = %q", updated.Status)
+			updated, _ := d.GetAction(actionID)
+			if updated.Status != tc.expectStatus {
+				t.Errorf("status = %q, want %q", updated.Status, tc.expectStatus)
+			}
+			if tc.expectResult != "" && !strings.Contains(updated.Result.String, tc.expectResult) {
+				t.Errorf("reason = %q, want substring %q", updated.Result.String, tc.expectResult)
+			}
+		})
 	}
 }
 
@@ -347,137 +374,6 @@ func TestQueueWorker_BgMergeFailureDoesNotStrandRunningAction(t *testing.T) {
 	}
 	if !strings.Contains(final.Result.String, "orphaned") {
 		t.Errorf("reason = %q, want substring %q", final.Result.String, "orphaned")
-	}
-}
-
-func TestReapBg_NoninteractiveWedgedWorkingHitsHardTimeout(t *testing.T) {
-	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"noninteractive","daemon_short":"abcd1234"}`)
-	claimRunning(t, d, actionID)
-	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-5*time.Hour))); err != nil {
-		t.Fatalf("set started_at: %v", err)
-	}
-
-	reader := &fakeBgStateReader{}
-	reader.set("abcd1234", []byte(`{"state":"working"}`))
-
-	cfg := WorkerConfig{
-		DispatchConfig:              DispatchConfig{DB: d},
-		BgStateReader:               reader,
-		BgMissingJobGrace:           time.Minute,
-		BgNonInteractiveHardTimeout: 4 * time.Hour,
-	}
-
-	reapBg(cfg, time.Now())
-
-	updated, _ := d.GetAction(actionID)
-	if updated.Status != db.ActionStatusFailed {
-		t.Errorf("status = %q, want %q (hard timeout)", updated.Status, db.ActionStatusFailed)
-	}
-	if !strings.Contains(updated.Result.String, "hard timeout") {
-		t.Errorf("reason = %q, want substring %q", updated.Result.String, "hard timeout")
-	}
-}
-
-func TestReapBg_InteractiveNeverHitsHardTimeout(t *testing.T) {
-	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive","daemon_short":"abcd1235"}`)
-	claimRunning(t, d, actionID)
-	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-100*time.Hour))); err != nil {
-		t.Fatalf("set started_at: %v", err)
-	}
-
-	reader := &fakeBgStateReader{}
-	reader.set("abcd1235", []byte(`{"state":"working"}`))
-
-	cfg := WorkerConfig{
-		DispatchConfig:              DispatchConfig{DB: d},
-		BgStateReader:               reader,
-		BgMissingJobGrace:           time.Minute,
-		BgNonInteractiveHardTimeout: 4 * time.Hour,
-	}
-
-	reapBg(cfg, time.Now())
-
-	updated, _ := d.GetAction(actionID)
-	if updated.Status != db.ActionStatusRunning {
-		t.Errorf("interactive action wrongly reaped: status = %q, want %q", updated.Status, db.ActionStatusRunning)
-	}
-}
-
-func TestReapBg_LegacyExperimentalBgTreatedAsInteractiveForTimeout(t *testing.T) {
-	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"experimental_bg","daemon_short":"abcd1236"}`)
-	claimRunning(t, d, actionID)
-	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-100*time.Hour))); err != nil {
-		t.Fatalf("set started_at: %v", err)
-	}
-
-	reader := &fakeBgStateReader{}
-	reader.set("abcd1236", []byte(`{"state":"working"}`))
-
-	cfg := WorkerConfig{
-		DispatchConfig:              DispatchConfig{DB: d},
-		BgStateReader:               reader,
-		BgMissingJobGrace:           time.Minute,
-		BgNonInteractiveHardTimeout: 4 * time.Hour,
-	}
-
-	reapBg(cfg, time.Now())
-
-	updated, _ := d.GetAction(actionID)
-	if updated.Status != db.ActionStatusRunning {
-		t.Errorf("legacy experimental_bg should be exempt from hard timeout: status = %q", updated.Status)
-	}
-}
-
-func TestReapBg_MissingModeTreatedAsInteractiveForTimeout(t *testing.T) {
-	d, actionID := setupTaskAndAction(t, `{"instruction":"x","daemon_short":"abcd1237"}`)
-	claimRunning(t, d, actionID)
-	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-100*time.Hour))); err != nil {
-		t.Fatalf("set started_at: %v", err)
-	}
-
-	reader := &fakeBgStateReader{}
-	reader.set("abcd1237", []byte(`{"state":"working"}`))
-
-	cfg := WorkerConfig{
-		DispatchConfig:              DispatchConfig{DB: d},
-		BgStateReader:               reader,
-		BgMissingJobGrace:           time.Minute,
-		BgNonInteractiveHardTimeout: 4 * time.Hour,
-	}
-
-	reapBg(cfg, time.Now())
-
-	updated, _ := d.GetAction(actionID)
-	if updated.Status != db.ActionStatusRunning {
-		t.Errorf("missing mode should default to interactive (no timeout): status = %q", updated.Status)
-	}
-}
-
-func TestReapBg_NoninteractiveDoneStillTakesPrecedenceOverTimeout(t *testing.T) {
-	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"noninteractive","daemon_short":"abcd1238"}`)
-	claimRunning(t, d, actionID)
-	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-10*time.Hour))); err != nil {
-		t.Fatalf("set started_at: %v", err)
-	}
-
-	reader := &fakeBgStateReader{}
-	reader.set("abcd1238", []byte(`{"state":"done","output":{"result":"late but ok"}}`))
-
-	cfg := WorkerConfig{
-		DispatchConfig:              DispatchConfig{DB: d},
-		BgStateReader:               reader,
-		BgMissingJobGrace:           time.Minute,
-		BgNonInteractiveHardTimeout: 4 * time.Hour,
-	}
-
-	reapBg(cfg, time.Now())
-
-	updated, _ := d.GetAction(actionID)
-	if updated.Status != db.ActionStatusDone {
-		t.Errorf("done state should win over timeout: status = %q, want %q", updated.Status, db.ActionStatusDone)
-	}
-	if !updated.Result.Valid || updated.Result.String != "late but ok" {
-		t.Errorf("result = %q, want %q", updated.Result.String, "late but ok")
 	}
 }
 
