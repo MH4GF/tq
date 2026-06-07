@@ -1400,6 +1400,63 @@ func TestTasksModel_DispatchError(t *testing.T) {
 	}
 }
 
+func TestActionClaudeSessionID(t *testing.T) {
+	tests := []struct {
+		name     string
+		action   *db.Action
+		expected string
+	}{
+		{
+			name:     "nil action",
+			action:   nil,
+			expected: "",
+		},
+		{
+			name:     "empty metadata",
+			action:   &db.Action{Metadata: ""},
+			expected: "",
+		},
+		{
+			name:     "empty json object",
+			action:   &db.Action{Metadata: "{}"},
+			expected: "",
+		},
+		{
+			name:     "invalid json",
+			action:   &db.Action{Metadata: "not-json"},
+			expected: "",
+		},
+		{
+			name:     "session id present",
+			action:   &db.Action{Metadata: `{"claude_session_id":"abc-123"}`},
+			expected: "abc-123",
+		},
+		{
+			name:     "session id alongside other keys",
+			action:   &db.Action{Metadata: `{"mode":"interactive","claude_session_id":"xyz-789"}`},
+			expected: "xyz-789",
+		},
+		{
+			name:     "session id absent",
+			action:   &db.Action{Metadata: `{"mode":"interactive"}`},
+			expected: "",
+		},
+		{
+			name:     "session id wrong type",
+			action:   &db.Action{Metadata: `{"claude_session_id":42}`},
+			expected: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := actionClaudeSessionID(tt.action)
+			if got != tt.expected {
+				t.Errorf("actionClaudeSessionID() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestTasksModel_DispatchHelpKeyOnlyWhenPending(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
