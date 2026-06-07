@@ -60,6 +60,7 @@ func TestSchedulesModel_ErrorSurfacing(t *testing.T) {
 			},
 			wantErrSubstr: "database is locked",
 			extraCheck: func(t *testing.T, m SchedulesModel) {
+				t.Helper()
 				view := m.View()
 				if strings.Contains(view, "No schedules") {
 					t.Errorf("failed load must not render as silent empty list, got: %q", view)
