@@ -56,7 +56,7 @@ Create a tq action (auto-infer instruction or let user specify)
 
 `skills/create-action/SKILL.md`
 
-### `tq:done` — `/tq:done <action_id> [summary]`
+### `tq:done` — `/tq:done [action_id] [summary]`
 
 Mark a tq action as done, then judge task-level completion and propose follow-up actions when work remains
 
