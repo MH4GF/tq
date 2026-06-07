@@ -111,6 +111,14 @@ type tasksLoadedMsg struct {
 	err                    error
 }
 
+type taskDetailLoadedMsg struct {
+	task    *db.Task
+	history []db.TaskStatusHistoryEntry
+	notes   []db.TaskNoteEntry
+	partial []string
+	err     error
+}
+
 type dispatchToggledMsg struct {
 	err error
 }
@@ -280,6 +288,22 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 			return m, tea.Batch(reload, m.setMessage(fmt.Sprintf("toggle focus failed: %v", msg.err), true))
 		}
 		return m, reload
+	case taskDetailLoadedMsg:
+		if m.mode != modeNormal {
+			return m, nil
+		}
+		if msg.err != nil {
+			return m, m.setMessage(fmt.Sprintf("open task detail failed: %v", msg.err), true)
+		}
+		m.detailTask = msg.task
+		m.detailHistory = msg.history
+		m.detailNotes = msg.notes
+		m.detailScroll = 0
+		m.mode = modeViewTaskDetail
+		if len(msg.partial) > 0 {
+			return m, m.setMessage(fmt.Sprintf("task detail partial: %s unavailable", strings.Join(msg.partial, ", ")), true)
+		}
+		return m, nil
 	case tasksLoadedMsg:
 		var clearCmd tea.Cmd
 		if msg.err != nil {
@@ -424,39 +448,27 @@ func (m TasksModel) updateViewDetail(msg tea.KeyMsg) (TasksModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m *TasksModel) openTaskDetail(taskID int64) tea.Cmd {
-	m.detailTask = nil
-	m.detailHistory = nil
-	m.detailNotes = nil
-
-	task, err := m.database.GetTask(taskID)
-	if err != nil {
-		slog.Warn("tui: load task detail failed", "task_id", taskID, "err", err)
-		return m.setMessage(fmt.Sprintf("open task detail failed: %v", err), true)
+func (m TasksModel) openTaskDetail(taskID int64) tea.Cmd {
+	store := m.database
+	return func() tea.Msg {
+		task, err := store.GetTask(taskID)
+		if err != nil {
+			slog.Warn("tui: load task detail failed", "task_id", taskID, "err", err)
+			return taskDetailLoadedMsg{err: err}
+		}
+		var partial []string
+		history, herr := store.TaskStatusHistory(taskID)
+		if herr != nil {
+			slog.Warn("tui: load task status history failed", "task_id", taskID, "err", herr)
+			partial = append(partial, "history")
+		}
+		notes, nerr := store.TaskNotes(taskID, "")
+		if nerr != nil {
+			slog.Warn("tui: load task notes failed", "task_id", taskID, "err", nerr)
+			partial = append(partial, "notes")
+		}
+		return taskDetailLoadedMsg{task: task, history: history, notes: notes, partial: partial}
 	}
-	m.detailTask = task
-
-	var partial []string
-	if hist, err := m.database.TaskStatusHistory(taskID); err == nil {
-		m.detailHistory = hist
-	} else {
-		slog.Warn("tui: load task status history failed", "task_id", taskID, "err", err)
-		partial = append(partial, "history")
-	}
-	if notes, err := m.database.TaskNotes(taskID, ""); err == nil {
-		m.detailNotes = notes
-	} else {
-		slog.Warn("tui: load task notes failed", "task_id", taskID, "err", err)
-		partial = append(partial, "notes")
-	}
-
-	m.detailScroll = 0
-	m.mode = modeViewTaskDetail
-
-	if len(partial) > 0 {
-		return m.setMessage(fmt.Sprintf("task detail partial: %s unavailable", strings.Join(partial, ", ")), true)
-	}
-	return nil
 }
 
 func cardBorder(left, right string, width int) string {
