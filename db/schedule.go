@@ -151,6 +151,96 @@ type ScheduleRunUpdate struct {
 	LastError string
 }
 
+func (db *DB) BulkInsertScheduledActions(specs []ActionInsertSpec, runs []ScheduleRunUpdate) ([]int64, error) {
+	if len(specs) != len(runs) {
+		return nil, fmt.Errorf("bulk insert scheduled actions: specs (%d) and runs (%d) length mismatch", len(specs), len(runs))
+	}
+	if len(specs) == 0 {
+		return nil, nil
+	}
+	for i, s := range specs {
+		if !ValidActionStatuses[s.Status] {
+			return nil, fmt.Errorf("specs[%d]: invalid action status %q", i, s.Status)
+		}
+	}
+
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("bulk insert scheduled actions: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var sb strings.Builder
+	sb.WriteString("INSERT INTO actions (title, task_id, metadata, status, dispatch_after, work_dir) VALUES ")
+	args := make([]any, 0, len(specs)*6)
+	for i, s := range specs {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString("(?, ?, ?, ?, ?, ?)")
+		args = append(args, s.Title, s.TaskID, s.Metadata, s.Status, s.DispatchAfter, s.WorkDir)
+	}
+	sb.WriteString(" RETURNING id")
+
+	rows, err := tx.QueryContext(ctx, sb.String(), args...)
+	if err != nil {
+		return nil, fmt.Errorf("bulk insert scheduled actions: insert: %w", err)
+	}
+	ids := make([]int64, 0, len(specs))
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("bulk insert scheduled actions: scan id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, fmt.Errorf("bulk insert scheduled actions: insert rows: %w", err)
+	}
+	_ = rows.Close()
+	if len(ids) != len(specs) {
+		return nil, fmt.Errorf("bulk insert scheduled actions: expected %d ids, got %d", len(specs), len(ids))
+	}
+
+	for _, u := range runs {
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE schedules SET last_run_at = ?, last_error = NULLIF(?, '') WHERE id = ?",
+			u.LastRunAt, u.LastError, u.ID,
+		); err != nil {
+			return nil, fmt.Errorf("bulk insert scheduled actions: update schedule id=%d: %w", u.ID, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("bulk insert scheduled actions: commit: %w", err)
+	}
+
+	for i, id := range ids {
+		evt := map[string]any{
+			"status":  specs[i].Status,
+			"task_id": specs[i].TaskID,
+			"title":   specs[i].Title,
+		}
+		if specs[i].DispatchAfter != nil {
+			evt["dispatch_after"] = *specs[i].DispatchAfter
+		}
+		if specs[i].WorkDir != "" {
+			evt["work_dir"] = specs[i].WorkDir
+		}
+		db.emitEvent("action", id, "action.created", evt)
+	}
+	for _, u := range runs {
+		db.emitEvent("schedule", u.ID, "schedule.ran", map[string]any{
+			"last_run_at": u.LastRunAt,
+			"last_error":  u.LastError,
+		})
+	}
+	return ids, nil
+}
+
 // BulkUpdateScheduleRuns records one tick result across many schedules in a
 // single transaction. Tx-atomic: any UPDATE failure rolls back the entire
 // batch.

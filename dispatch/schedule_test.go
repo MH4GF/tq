@@ -430,12 +430,12 @@ func TestDecideSchedules_InsertImpliesSuccessRun(t *testing.T) {
 	}
 }
 
-type bulkInsertFailingStore struct {
+type bulkInsertScheduledFailingStore struct {
 	db.Store
 	err error
 }
 
-func (s *bulkInsertFailingStore) BulkInsertActions(specs []db.ActionInsertSpec) ([]int64, error) {
+func (s *bulkInsertScheduledFailingStore) BulkInsertScheduledActions(specs []db.ActionInsertSpec, runs []db.ScheduleRunUpdate) ([]int64, error) {
 	return nil, s.err
 }
 
@@ -456,7 +456,7 @@ func TestCheckSchedules_BulkInsertErrorAbortsTickAndRetries(t *testing.T) {
 		scheduleIDs = append(scheduleIDs, id)
 	}
 
-	wrapped := &bulkInsertFailingStore{Store: d, err: errors.New("simulated bulk insert failure")}
+	wrapped := &bulkInsertScheduledFailingStore{Store: d, err: errors.New("simulated bulk insert failure")}
 
 	now, _ := time.Parse(db.TimeLayout, "2026-03-12 10:00:00")
 	if err := dispatch.CheckSchedules(wrapped, now); err == nil {

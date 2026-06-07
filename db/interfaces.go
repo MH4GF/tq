@@ -10,7 +10,7 @@ type CommandWriter interface {
 	// Action commands
 	InsertAction(title string, taskID int64, metadata, status string, dispatchAfter *string, workDir string) (int64, error)
 	InsertActionWithDependencies(spec ActionInsertSpec, deps []ActionDep) (int64, error)
-	BulkInsertActions(specs []ActionInsertSpec) ([]int64, error)
+	BulkInsertScheduledActions(specs []ActionInsertSpec, runs []ScheduleRunUpdate) ([]int64, error)
 	MarkDone(id int64, result string) error
 	MarkFailed(id int64, result string) error
 	BulkMarkDone(updates []ActionDoneUpdate) error

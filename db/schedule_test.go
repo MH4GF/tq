@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/MH4GF/tq/db"
@@ -328,6 +329,195 @@ func TestBulkUpdateScheduleRuns(t *testing.T) {
 		}
 		if err := d.BulkUpdateScheduleRuns(updates); err != nil {
 			t.Errorf("unexpected err on missing id: %v", err)
+		}
+	})
+}
+
+func TestBulkInsertScheduledActions(t *testing.T) {
+	t.Run("empty input is no-op", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		ids, err := d.BulkInsertScheduledActions(nil, nil)
+		if err != nil {
+			t.Errorf("nil input returned err: %v", err)
+		}
+		if ids != nil {
+			t.Errorf("expected nil ids, got %v", ids)
+		}
+	})
+
+	t.Run("length mismatch is rejected", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		scheduleID, _ := d.InsertSchedule(taskID, "p", "T", "* * * * *", "{}")
+
+		specs := []db.ActionInsertSpec{{Title: "a", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending}}
+		runs := []db.ScheduleRunUpdate{
+			{ID: scheduleID, LastRunAt: "2026-01-01 00:00:00"},
+			{ID: scheduleID, LastRunAt: "2026-01-01 00:00:00"},
+		}
+		if _, err := d.BulkInsertScheduledActions(specs, runs); err == nil {
+			t.Fatal("expected length mismatch error")
+		}
+
+		actions, _ := d.ListActions("", nil, 0)
+		if len(actions) != 0 {
+			t.Errorf("expected 0 actions on validation error, got %d", len(actions))
+		}
+	})
+
+	t.Run("success: action created and schedule advanced", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		scheduleID, _ := d.InsertSchedule(taskID, "p", "T", "* * * * *", "{}")
+
+		specs := []db.ActionInsertSpec{
+			{Title: "Sched A", TaskID: taskID, Metadata: `{"schedule_id":"1"}`, Status: db.ActionStatusPending},
+		}
+		runs := []db.ScheduleRunUpdate{
+			{ID: scheduleID, LastRunAt: "2026-03-12 10:00:00", LastError: ""},
+		}
+		ids, err := d.BulkInsertScheduledActions(specs, runs)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if len(ids) != 1 || ids[0] < 1 {
+			t.Fatalf("ids = %v, want one positive id", ids)
+		}
+
+		a, err := d.GetAction(ids[0])
+		if err != nil {
+			t.Fatalf("GetAction: %v", err)
+		}
+		if a.Title != "Sched A" || a.Status != db.ActionStatusPending {
+			t.Errorf("action = %+v, want Sched A pending", a)
+		}
+
+		s, _ := d.GetSchedule(scheduleID)
+		if !s.LastRunAt.Valid || s.LastRunAt.String != "2026-03-12 10:00:00" {
+			t.Errorf("last_run_at = %v, want 2026-03-12 10:00:00", s.LastRunAt)
+		}
+		if s.LastError.Valid {
+			t.Errorf("last_error = %q, want clear", s.LastError.String)
+		}
+	})
+
+	t.Run("multi-row: returned ids map to specs in input order", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+
+		specs := make([]db.ActionInsertSpec, 0, 4)
+		runs := make([]db.ScheduleRunUpdate, 0, 4)
+		for i := range 4 {
+			sid, _ := d.InsertSchedule(taskID, "p", fmt.Sprintf("S%d", i), "* * * * *", "{}")
+			specs = append(specs, db.ActionInsertSpec{
+				Title:    fmt.Sprintf("Spec %d", i),
+				TaskID:   taskID,
+				Metadata: fmt.Sprintf(`{"schedule_id":"%d","marker":%d}`, sid, i),
+				Status:   db.ActionStatusPending,
+			})
+			runs = append(runs, db.ScheduleRunUpdate{ID: sid, LastRunAt: "2026-03-12 10:00:00"})
+		}
+
+		ids, err := d.BulkInsertScheduledActions(specs, runs)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if len(ids) != len(specs) {
+			t.Fatalf("len(ids) = %d, want %d", len(ids), len(specs))
+		}
+		for i, id := range ids {
+			a, err := d.GetAction(id)
+			if err != nil {
+				t.Fatalf("GetAction(%d): %v", id, err)
+			}
+			if a.Title != specs[i].Title {
+				t.Errorf("ids[%d] -> title %q, want %q (RETURNING did not preserve input order; event/log pairings will be miswired)", i, a.Title, specs[i].Title)
+			}
+			if a.Metadata != specs[i].Metadata {
+				t.Errorf("ids[%d] -> metadata %q, want %q", i, a.Metadata, specs[i].Metadata)
+			}
+		}
+	})
+
+	t.Run("multi-row with work_dir: work_dir column round-trips per spec", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		sid1, _ := d.InsertSchedule(taskID, "p", "S1", "* * * * *", "{}")
+		sid2, _ := d.InsertSchedule(taskID, "p", "S2", "* * * * *", "{}")
+		sid3, _ := d.InsertSchedule(taskID, "p", "S3", "* * * * *", "{}")
+
+		specs := []db.ActionInsertSpec{
+			{Title: "A", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending, WorkDir: "/tmp/a"},
+			{Title: "B", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending, WorkDir: ""},
+			{Title: "C", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending, WorkDir: "~/c"},
+		}
+		runs := []db.ScheduleRunUpdate{
+			{ID: sid1, LastRunAt: "2026-03-12 10:00:00"},
+			{ID: sid2, LastRunAt: "2026-03-12 10:00:00"},
+			{ID: sid3, LastRunAt: "2026-03-12 10:00:00"},
+		}
+		ids, err := d.BulkInsertScheduledActions(specs, runs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, id := range ids {
+			a, _ := d.GetAction(id)
+			if a.WorkDir != specs[i].WorkDir {
+				t.Errorf("specs[%d] work_dir = %q, want %q", i, a.WorkDir, specs[i].WorkDir)
+			}
+		}
+	})
+
+	t.Run("rollback: insert FK violation leaves no actions and no schedule advance", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		scheduleID, _ := d.InsertSchedule(taskID, "p", "T", "* * * * *", "{}")
+
+		specs := []db.ActionInsertSpec{
+			{Title: "Valid", TaskID: taskID, Metadata: `{"schedule_id":"1"}`, Status: db.ActionStatusPending},
+			{Title: "Invalid FK", TaskID: 999999, Metadata: `{"schedule_id":"1"}`, Status: db.ActionStatusPending},
+		}
+		runs := []db.ScheduleRunUpdate{
+			{ID: scheduleID, LastRunAt: "2026-03-12 10:00:00"},
+			{ID: scheduleID, LastRunAt: "2026-03-12 10:00:00"},
+		}
+		if _, err := d.BulkInsertScheduledActions(specs, runs); err == nil {
+			t.Fatal("expected FK violation error")
+		}
+
+		actions, _ := d.ListActions("", nil, 0)
+		if len(actions) != 0 {
+			t.Errorf("expected 0 actions after rollback, got %d (tx atomicity broken)", len(actions))
+		}
+
+		s, _ := d.GetSchedule(scheduleID)
+		if s.LastRunAt.Valid {
+			t.Errorf("last_run_at = %q, want unset after rollback (tx atomicity broken)", s.LastRunAt.String)
+		}
+	})
+
+	t.Run("invalid action status is rejected before tx begins", func(t *testing.T) {
+		d := testutil.NewTestDB(t)
+		testutil.SeedTestProjects(t, d)
+		taskID, _ := d.InsertTask(1, "test", "{}", "")
+		scheduleID, _ := d.InsertSchedule(taskID, "p", "T", "* * * * *", "{}")
+
+		specs := []db.ActionInsertSpec{
+			{Title: "Bad Status", TaskID: taskID, Metadata: "{}", Status: "bogus"},
+		}
+		runs := []db.ScheduleRunUpdate{{ID: scheduleID, LastRunAt: "2026-03-12 10:00:00"}}
+		if _, err := d.BulkInsertScheduledActions(specs, runs); err == nil {
+			t.Fatal("expected invalid status error")
+		}
+
+		s, _ := d.GetSchedule(scheduleID)
+		if s.LastRunAt.Valid {
+			t.Errorf("last_run_at = %q, want unset after validation rejection", s.LastRunAt.String)
 		}
 	})
 }

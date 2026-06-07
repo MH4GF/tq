@@ -844,7 +844,7 @@ func (db *DB) GetAction(id int64) (*Action, error) {
 	return a, nil
 }
 
-// ActionInsertSpec describes one row to be inserted by BulkInsertActions.
+// ActionInsertSpec describes one row to be inserted by InsertActionWithDependencies or BulkInsertScheduledActions.
 type ActionInsertSpec struct {
 	Title         string
 	TaskID        int64
@@ -869,69 +869,6 @@ type ActionDoneUpdate struct {
 type ActionMetadataMerge struct {
 	ID      int64
 	Updates map[string]any
-}
-
-// BulkInsertActions inserts all specs in a single multi-row INSERT and returns
-// the assigned IDs in input order. Tx-atomic: any constraint violation rolls
-// back the entire batch.
-func (db *DB) BulkInsertActions(specs []ActionInsertSpec) ([]int64, error) {
-	if len(specs) == 0 {
-		return nil, nil
-	}
-	for i, s := range specs {
-		if !ValidActionStatuses[s.Status] {
-			return nil, fmt.Errorf("specs[%d]: invalid action status %q", i, s.Status)
-		}
-	}
-
-	var sb strings.Builder
-	sb.WriteString("INSERT INTO actions (title, task_id, metadata, status, dispatch_after, work_dir) VALUES ")
-	args := make([]any, 0, len(specs)*6)
-	for i, s := range specs {
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		sb.WriteString("(?, ?, ?, ?, ?, ?)")
-		args = append(args, s.Title, s.TaskID, s.Metadata, s.Status, s.DispatchAfter, s.WorkDir)
-	}
-	sb.WriteString(" RETURNING id")
-
-	rows, err := db.Query(sb.String(), args...)
-	if err != nil {
-		return nil, fmt.Errorf("bulk insert actions: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	ids := make([]int64, 0, len(specs))
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("bulk insert actions: scan returned id: %w", err)
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("bulk insert actions: %w", err)
-	}
-	if len(ids) != len(specs) {
-		return nil, fmt.Errorf("bulk insert actions: expected %d ids, got %d", len(specs), len(ids))
-	}
-
-	for i, id := range ids {
-		evt := map[string]any{
-			"status":  specs[i].Status,
-			"task_id": specs[i].TaskID,
-			"title":   specs[i].Title,
-		}
-		if specs[i].DispatchAfter != nil {
-			evt["dispatch_after"] = *specs[i].DispatchAfter
-		}
-		if specs[i].WorkDir != "" {
-			evt["work_dir"] = specs[i].WorkDir
-		}
-		db.emitEvent("action", id, "action.created", evt)
-	}
-	return ids, nil
 }
 
 // BulkMarkFailed marks every update.ID as failed in one transaction.
