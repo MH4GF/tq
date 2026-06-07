@@ -3,7 +3,10 @@ package db_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1717,6 +1720,61 @@ func TestBulkMarkFailed(t *testing.T) {
 			t.Errorf("real action status = %q, want unchanged %q (atomicity broken)", a.Status, db.ActionStatusRunning)
 		}
 	})
+}
+
+func TestMergeActionMetadata_ConcurrentMerges(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, err := d.InsertTask(1, "task", "{}", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := d.InsertAction("test", taskID, "{}", db.ActionStatusPending, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const n = 50
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	errs := make(chan error, n)
+
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			<-start
+			key := fmt.Sprintf("k%d", idx)
+			if err := d.MergeActionMetadata(id, map[string]any{key: idx}); err != nil {
+				errs <- err
+			}
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("MergeActionMetadata returned error: %v", err)
+	}
+
+	a, err := d.GetAction(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	merged := map[string]any{}
+	if err := json.Unmarshal([]byte(a.Metadata), &merged); err != nil {
+		t.Fatalf("parse final metadata %s: %v", a.Metadata, err)
+	}
+	if len(merged) != n {
+		t.Fatalf("expected %d keys, got %d: %s", n, len(merged), a.Metadata)
+	}
+	for i := 0; i < n; i++ {
+		key := fmt.Sprintf("k%d", i)
+		if _, ok := merged[key]; !ok {
+			t.Errorf("missing key %q in merged metadata: %s", key, a.Metadata)
+		}
+	}
 }
 
 func TestActionInstruction(t *testing.T) {
