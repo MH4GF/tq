@@ -155,7 +155,7 @@ Current status totals are captured after each rule as `current violations: N`. A
   - Queries built via `strings.Join` for IN-clauses are checked with a single `?` placeholder substituted in. This is the worst case for the index decision.
   - Queries that fail `EXPLAIN QUERY PLAN` (typically migration queries against post-migration schema, e.g. dropped columns) are skipped with a count logged in the test output.
   - The output of `EXPLAIN QUERY PLAN` is SQLite-version dependent; the test pins itself to the in-memory SQLite shipped with `testutil.NewTestDB(t)` to keep CI deterministic.
-- Current violations: 13 allowlist entries across 10 sites (see `.goldenrules-rule17-allowlist`). `db.Search` is now FTS5 (its scans are the index-backed `SCAN <fts> VIRTUAL TABLE INDEX` path, not full scans). Remaining burndown is tracked as separate follow-up actions.
+- Current violations: 16 allowlist entries across 8 sites (see `.goldenrules-rule17-allowlist`). `db.Search` is now FTS5 (its scans are the index-backed `SCAN <fts> VIRTUAL TABLE INDEX` path, not full scans). Remaining burndown is tracked as separate follow-up actions.
 
 ### Aggregate queries on hot paths
 
@@ -234,11 +234,11 @@ Rule 2's scope (`testutil/` MUST NOT import upward) sits outside this per-layer 
 | 14 No `*ForTest` in prod | — | OK | OK | OK |
 | 15 No N+1 in for-range | — | OK | OK | OK |
 | 16 No leading-wildcard `LIKE` | OK | OK | OK | OK |
-| 17 No SCAN in EXPLAIN | 13 | — | — | — |
+| 17 No SCAN in EXPLAIN | 16 | — | — | — |
 | 18 No aggregate hot paths | — | OK | OK | — |
 | 19 No test-only `db.Store` methods | 0 | — | — | — |
 
-Totals: **13** current violations (Rule 16: 0 — `db.Search` burned down via FTS5 trigram conversion and the `migrateLegacyClaudeFlags` one-shot already removed, so Rule 16 is fully clean; Rule 17: 13 SCANs allowlisted in `.goldenrules-rule17-allowlist`, of which the `db.Search` entries are the index-backed FTS5 virtual-table path; Rule 19: 0 — fully burned down, `.goldenrules-rule19-allowlist` is empty; Rule 17 remaining burns down via per-query index work tracked as separate actions).
+Totals: **16** current violations (Rule 16: 0 — `db.Search` burned down via FTS5 trigram conversion and the `migrateLegacyClaudeFlags` one-shot already removed, so Rule 16 is fully clean; Rule 17: 16 SCANs allowlisted in `.goldenrules-rule17-allowlist`, of which the `db.Search` entries are the index-backed FTS5 virtual-table path; Rule 19: 0 — fully burned down, `.goldenrules-rule19-allowlist` is empty; Rule 17 remaining burns down via per-query index work tracked as separate actions).
 
 ---
 
