@@ -705,7 +705,7 @@ func actionClaudeSessionID(a *db.Action) string {
 	if err := json.Unmarshal([]byte(a.Metadata), &meta); err != nil {
 		return ""
 	}
-	s, _ := meta["claude_session_id"].(string)
+	s, _ := meta[metaKeyClaudeSessionID].(string)
 	return s
 }
 
