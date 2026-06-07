@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -38,78 +39,84 @@ func (s *schedulesErrorStore) UpdateScheduleEnabled(id int64, enabled bool) erro
 	return s.Store.UpdateScheduleEnabled(id, enabled)
 }
 
-// A failed ListSchedules must surface a non-empty error message instead of
-// rendering as a silent empty "No schedules" list.
-func TestSchedulesModel_ListSchedulesError(t *testing.T) {
-	store := &schedulesErrorStore{listErr: errors.New("database is locked")}
-	m := NewSchedulesModel(store)
+// Failed store operations must surface a visible error message instead of
+// leaving the user with no feedback (silent empty list on load, or a reload
+// that silently re-renders the unchanged schedule on toggle/delete).
+func TestSchedulesModel_ErrorSurfacing(t *testing.T) {
+	tests := []struct {
+		name          string
+		storeErr      func(*schedulesErrorStore)
+		invoke        func(*SchedulesModel) SchedulesModel
+		schedule      db.Schedule
+		wantErrSubstr string
+		extraCheck    func(t *testing.T, m SchedulesModel)
+	}{
+		{
+			name:     "ListSchedules error",
+			storeErr: func(s *schedulesErrorStore) { s.listErr = errors.New("database is locked") },
+			invoke: func(m *SchedulesModel) SchedulesModel {
+				next, _ := m.Update(m.loadSchedules()())
+				return next
+			},
+			wantErrSubstr: "database is locked",
+			extraCheck: func(t *testing.T, m SchedulesModel) {
+				view := m.View()
+				if strings.Contains(view, "No schedules") {
+					t.Errorf("failed load must not render as silent empty list, got: %q", view)
+				}
+				if !strings.Contains(view, "database is locked") {
+					t.Errorf("expected View to surface the error, got: %q", view)
+				}
+			},
+		},
+		{
+			name:     "ToggleEnabled error",
+			storeErr: func(s *schedulesErrorStore) { s.updateErr = errors.New("database is locked") },
+			invoke: func(m *SchedulesModel) SchedulesModel {
+				next, _ := m.toggleEnabled(&m.schedules[0])
+				return next
+			},
+			schedule:      db.Schedule{ID: 7, Enabled: true},
+			wantErrSubstr: "database is locked",
+		},
+		{
+			name:     "DeleteSchedule error",
+			storeErr: func(s *schedulesErrorStore) { s.deleteErr = errors.New("foreign key constraint") },
+			invoke: func(m *SchedulesModel) SchedulesModel {
+				next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+				return next
+			},
+			schedule:      db.Schedule{ID: 3, Enabled: true},
+			wantErrSubstr: "foreign key constraint",
+		},
+	}
 
-	msg := m.loadSchedules()()
-	loaded, ok := msg.(schedulesLoadedMsg)
-	if !ok {
-		t.Fatalf("expected schedulesLoadedMsg, got %T", msg)
-	}
-	if loaded.err == nil {
-		t.Fatal("expected schedulesLoadedMsg.err to be set on ListSchedules failure")
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &schedulesErrorStore{}
+			tc.storeErr(store)
+			m := NewSchedulesModel(store)
+			if tc.schedule.ID != 0 {
+				m.schedules = []db.Schedule{tc.schedule}
+			}
 
-	m, _ = m.Update(loaded)
+			m = tc.invoke(&m)
 
-	if !m.messageIsError {
-		t.Error("expected messageIsError to be true after failed load")
-	}
-	if m.message == "" {
-		t.Error("expected a non-empty error message after failed load")
-	}
-	if !strings.Contains(m.message, "database is locked") {
-		t.Errorf("expected message to contain the underlying error, got %q", m.message)
-	}
-
-	view := m.View()
-	if strings.Contains(view, "No schedules") {
-		t.Errorf("failed load must not render as silent empty list, got: %q", view)
-	}
-	if !strings.Contains(view, "database is locked") {
-		t.Errorf("expected View to surface the error, got: %q", view)
-	}
-}
-
-// A failed UpdateScheduleEnabled must surface a visible error message instead
-// of leaving the user with no feedback after pressing 'e'.
-func TestSchedulesModel_ToggleEnabledError(t *testing.T) {
-	store := &schedulesErrorStore{updateErr: errors.New("database is locked")}
-	m := NewSchedulesModel(store)
-	m.schedules = []db.Schedule{{ID: 7, Enabled: true}}
-
-	m, _ = m.toggleEnabled(&m.schedules[0])
-
-	if !m.messageIsError {
-		t.Error("expected messageIsError to be true after failed toggle")
-	}
-	if !strings.Contains(m.message, "database is locked") {
-		t.Errorf("expected message to contain the underlying error, got %q", m.message)
-	}
-	if !strings.Contains(m.message, "#7") {
-		t.Errorf("expected message to reference schedule #7, got %q", m.message)
-	}
-}
-
-// A failed DeleteSchedule must surface a visible error message instead of the
-// reload silently re-rendering the unchanged schedule with no feedback.
-func TestSchedulesModel_DeleteScheduleError(t *testing.T) {
-	store := &schedulesErrorStore{deleteErr: errors.New("foreign key constraint")}
-	m := NewSchedulesModel(store)
-	m.schedules = []db.Schedule{{ID: 3, Enabled: true}}
-
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
-
-	if !m.messageIsError {
-		t.Error("expected messageIsError to be true after failed delete")
-	}
-	if !strings.Contains(m.message, "foreign key constraint") {
-		t.Errorf("expected message to contain the underlying error, got %q", m.message)
-	}
-	if !strings.Contains(m.message, "#3") {
-		t.Errorf("expected message to reference schedule #3, got %q", m.message)
+			if !m.messageIsError {
+				t.Error("expected messageIsError to be true")
+			}
+			if !strings.Contains(m.message, tc.wantErrSubstr) {
+				t.Errorf("expected message to contain %q, got %q", tc.wantErrSubstr, m.message)
+			}
+			if tc.schedule.ID != 0 {
+				idMarker := fmt.Sprintf("#%d", tc.schedule.ID)
+				if !strings.Contains(m.message, idMarker) {
+					t.Errorf("expected message to reference schedule %s, got %q", idMarker, m.message)
+				}
+			}
+			if tc.extraCheck != nil {
+				tc.extraCheck(t, m)
+			}
+		})
 	}
 }
