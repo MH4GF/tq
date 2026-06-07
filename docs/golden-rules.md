@@ -214,6 +214,8 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 A cell is `OK` if the rule has zero violations in that layer, or `N` (the current violation count) otherwise. `—` means the rule does not apply to that layer.
 
+Rule 2's scope (`testutil/` MUST NOT import upward) sits outside this per-layer view — the importer is `testutil/`, not any of the columns — so its row is all `—`. Status is tracked in the rule body above.
+
 | Rule | db | dispatch | tui | cmd |
 |---|---|---|---|---|
 | 1 Layer direction | OK | OK | OK | OK |
@@ -224,7 +226,7 @@ A cell is `OK` if the rule has zero violations in that layer, or `N` (the curren
 | 6 No db mocks | OK | — | — | — |
 | 7 Table-driven tests | _agent_ | _agent_ | _agent_ | _agent_ |
 | 8 Error wrapping | OK | OK | OK | OK |
-| 9 Custom error Unwrap | — | OK (1) | — | — |
+| 9 Custom error Unwrap | — | OK | — | — |
 | 10 Metadata via constants | — | OK | OK | OK |
 | 11 SQL in db/ only | — | OK | OK | OK |
 | 12 CLI WriteJSON | — | — | — | OK |
