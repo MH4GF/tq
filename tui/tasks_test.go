@@ -1315,82 +1315,100 @@ func collectDispatchedMsg(t *testing.T, cmd tea.Cmd) actionDispatchedMsg {
 	return actionDispatchedMsg{}
 }
 
-func TestTasksModel_DispatchPendingAction(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
-	aid, _ := d.InsertAction("check", taskID, `{"instruction":"do it"}`, db.ActionStatusPending, nil, "")
-
-	var gotID int64
-	m := NewTasksModel(d, "")
-	m.dispatchFn = func(_ context.Context, id int64) (string, error) {
-		gotID = id
-		return fmt.Sprintf("action #%d dispatched (stub)", id), nil
+func TestTasksModel_DispatchKey(t *testing.T) {
+	tests := []struct {
+		name             string
+		actionStatus     string
+		dispatchFnSet    bool
+		wantCalled       bool
+		wantCmdNil       bool
+		wantFullDispatch bool
+	}{
+		{
+			name:             "pending action with dispatchFn dispatches",
+			actionStatus:     db.ActionStatusPending,
+			dispatchFnSet:    true,
+			wantCalled:       true,
+			wantCmdNil:       false,
+			wantFullDispatch: true,
+		},
+		{
+			name:          "running action is a no-op even with dispatchFn",
+			actionStatus:  db.ActionStatusRunning,
+			dispatchFnSet: true,
+			wantCalled:    false,
+			wantCmdNil:    true,
+		},
+		{
+			name:          "pending action with nil dispatchFn is a no-op",
+			actionStatus:  db.ActionStatusPending,
+			dispatchFnSet: false,
+			wantCalled:    false,
+			wantCmdNil:    true,
+		},
 	}
-	m = m.SetSize(120, 40)
-	m, _ = m.Update(m.Init()())
-	m = navigateToAction(m)
 
-	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
-	if want := fmt.Sprintf("dispatching #%d...", aid); m.message != want {
-		t.Errorf("progress message = %q, want %q", m.message, want)
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			taskID, _ := d.InsertTask(1, "Test task", "{}", "")
+			aid, _ := d.InsertAction("check", taskID, `{"instruction":"do it"}`, tc.actionStatus, nil, "")
 
-	dm := collectDispatchedMsg(t, cmd)
-	if gotID != aid {
-		t.Errorf("dispatchFn called with id %d, want %d", gotID, aid)
-	}
-	m, _ = m.Update(dm)
-	if m.messageIsError {
-		t.Error("success dispatch should not set error flag")
-	}
-	if !strings.Contains(m.message, "dispatched (stub)") {
-		t.Errorf("result message = %q, want it to contain stub output", m.message)
-	}
-}
+			var (
+				gotID  int64
+				called bool
+			)
+			m := NewTasksModel(d, "")
+			if tc.dispatchFnSet {
+				m.dispatchFn = func(_ context.Context, id int64) (string, error) {
+					called = true
+					gotID = id
+					return fmt.Sprintf("action #%d dispatched (stub)", id), nil
+				}
+			}
+			m = m.SetSize(120, 40)
+			m, _ = m.Update(m.Init()())
+			m = navigateToAction(m)
 
-func TestTasksModel_DispatchNonPendingNoop(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
-	d.InsertAction("check", taskID, "{}", db.ActionStatusRunning, nil, "")
+			m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 
-	called := false
-	m := NewTasksModel(d, "")
-	m.dispatchFn = func(_ context.Context, _ int64) (string, error) {
-		called = true
-		return "", nil
-	}
-	m = m.SetSize(120, 40)
-	m, _ = m.Update(m.Init()())
-	m = navigateToAction(m)
+			if tc.wantCmdNil && cmd != nil {
+				t.Error("expected no-op (nil cmd), got non-nil")
+			}
+			if !tc.wantCmdNil && cmd == nil {
+				t.Fatal("expected cmd, got nil")
+			}
 
-	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
-	if cmd != nil {
-		t.Error("d on a running action should be a no-op (nil cmd)")
-	}
-	if called {
-		t.Error("dispatchFn must not be called for non-pending action")
-	}
-	if m.message != "" {
-		t.Errorf("no-op should not set a message, got %q", m.message)
-	}
-}
+			if !tc.wantFullDispatch {
+				if called {
+					t.Errorf("dispatchFn must not be called, but it was")
+				}
+				if m.message != "" {
+					t.Errorf("no-op should not set a message, got %q", m.message)
+				}
+				return
+			}
 
-func TestTasksModel_DispatchNilFuncNoop(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	taskID, _ := d.InsertTask(1, "Test task", "{}", "")
-	d.InsertAction("check", taskID, "{}", db.ActionStatusPending, nil, "")
+			if want := fmt.Sprintf("dispatching #%d...", aid); m.message != want {
+				t.Errorf("progress message = %q, want %q", m.message, want)
+			}
 
-	m := NewTasksModel(d, "") // dispatchFn left nil
-	m = m.SetSize(120, 40)
-	m, _ = m.Update(m.Init()())
-	m = navigateToAction(m)
-
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
-	if cmd != nil {
-		t.Error("d with nil dispatchFn should be a no-op (nil cmd)")
+			dm := collectDispatchedMsg(t, cmd)
+			if called != tc.wantCalled {
+				t.Errorf("dispatchFn called = %v, want %v", called, tc.wantCalled)
+			}
+			if gotID != aid {
+				t.Errorf("dispatchFn called with id %d, want %d", gotID, aid)
+			}
+			m, _ = m.Update(dm)
+			if m.messageIsError {
+				t.Error("success dispatch should not set error flag")
+			}
+			if !strings.Contains(m.message, "dispatched (stub)") {
+				t.Errorf("result message = %q, want it to contain stub output", m.message)
+			}
+		})
 	}
 }
 
