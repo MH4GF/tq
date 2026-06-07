@@ -526,20 +526,19 @@ func TestBulkInsertScheduledActions(t *testing.T) {
 func TestHasActiveActionsForSchedules(t *testing.T) {
 	tests := []struct {
 		name           string
-		seed           func(t *testing.T, d *db.DB)
+		seed           func(d *db.DB)
 		inputIDs       []int64
 		expectedActive map[int64]bool
 	}{
 		{
 			name:           "empty input returns empty map",
-			seed:           func(*testing.T, *db.DB) {},
+			seed:           func(*db.DB) {},
 			inputIDs:       nil,
 			expectedActive: map[int64]bool{},
 		},
 		{
 			name: "active action present",
-			seed: func(t *testing.T, d *db.DB) {
-				testutil.SeedTestProjects(t, d)
+			seed: func(d *db.DB) {
 				taskID, _ := d.InsertTask(1, "test", "{}", "")
 				_, _ = d.InsertAction("a1", taskID, `{"schedule_id":"42"}`, "pending", nil, "")
 			},
@@ -548,8 +547,7 @@ func TestHasActiveActionsForSchedules(t *testing.T) {
 		},
 		{
 			name: "done/failed/cancelled actions are not active",
-			seed: func(t *testing.T, d *db.DB) {
-				testutil.SeedTestProjects(t, d)
+			seed: func(d *db.DB) {
 				taskID, _ := d.InsertTask(1, "test", "{}", "")
 				aid, _ := d.InsertAction("a1", taskID, `{"schedule_id":"7"}`, "pending", nil, "")
 				_ = d.MarkDone(aid, "ok")
@@ -559,8 +557,7 @@ func TestHasActiveActionsForSchedules(t *testing.T) {
 		},
 		{
 			name: "running and dispatched both count as active",
-			seed: func(t *testing.T, d *db.DB) {
-				testutil.SeedTestProjects(t, d)
+			seed: func(d *db.DB) {
 				taskID, _ := d.InsertTask(1, "test", "{}", "")
 				_, _ = d.InsertAction("a1", taskID, `{"schedule_id":"1"}`, "running", nil, "")
 				_, _ = d.InsertAction("a2", taskID, `{"schedule_id":"2"}`, "dispatched", nil, "")
@@ -570,8 +567,7 @@ func TestHasActiveActionsForSchedules(t *testing.T) {
 		},
 		{
 			name: "schedule_id stored as JSON number is reported active",
-			seed: func(t *testing.T, d *db.DB) {
-				testutil.SeedTestProjects(t, d)
+			seed: func(d *db.DB) {
 				taskID, _ := d.InsertTask(1, "test", "{}", "")
 				_, _ = d.InsertAction("a1", taskID, `{"schedule_id":55}`, "pending", nil, "")
 			},
@@ -583,7 +579,8 @@ func TestHasActiveActionsForSchedules(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			d := testutil.NewTestDB(t)
-			tc.seed(t, d)
+			testutil.SeedTestProjects(t, d)
+			tc.seed(d)
 			got, err := d.HasActiveActionsForSchedules(tc.inputIDs)
 			if err != nil {
 				t.Fatal(err)
