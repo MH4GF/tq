@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"strings"
 	"sync"
@@ -286,6 +287,66 @@ func TestReapOrphans_SkipsCloudExecutor(t *testing.T) {
 	updated, _ := d.GetAction(actionID)
 	if updated.Status != db.ActionStatusRunning {
 		t.Errorf("cloud executor orphan unexpectedly reaped: status = %q", updated.Status)
+	}
+}
+
+type failingMergeStore struct {
+	db.Store
+}
+
+func (f *failingMergeStore) MergeActionMetadata(int64, map[string]any) error {
+	return errors.New("simulated merge failure")
+}
+
+func TestQueueWorker_BgMergeFailureDoesNotStrandRunningAction(t *testing.T) {
+	d, actionID := setupTaskAndAction(t, `{"instruction":"x","mode":"interactive"}`)
+	wrapped := &failingMergeStore{Store: d}
+
+	bg := &bgWorkerStub{short: "abcd1234"}
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB:         wrapped,
+			BgFunc:     func() Worker { return bg },
+			RemoteFunc: func() Worker { return &bgWorkerStub{} },
+		},
+		MaxInteractive:    3,
+		MaxNonInteractive: 5,
+		BgMissingJobGrace: 10 * time.Millisecond,
+	}
+
+	dispatched, err := dispatchOne(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("dispatchOne: %v", err)
+	}
+	if !dispatched {
+		t.Fatal("expected dispatchOne to report success despite merge failure")
+	}
+	if bg.count != 1 {
+		t.Errorf("bg worker called %d times, want 1", bg.count)
+	}
+
+	afterDispatch, _ := d.GetAction(actionID)
+	if afterDispatch.Status != db.ActionStatusRunning {
+		t.Fatalf("after dispatch, status = %q, want %q", afterDispatch.Status, db.ActionStatusRunning)
+	}
+	if strings.Contains(afterDispatch.Metadata, "daemon_short") {
+		t.Fatalf("daemon_short unexpectedly persisted despite merge failure: %q", afterDispatch.Metadata)
+	}
+
+	if err := d.SetActionTmuxInfoForTest(actionID, nil, nil, ptr(time.Now().Add(-time.Hour))); err != nil {
+		t.Fatalf("backdate started_at: %v", err)
+	}
+
+	for range 3 {
+		reapStaleActions(cfg)
+	}
+
+	final, _ := d.GetAction(actionID)
+	if final.Status != db.ActionStatusFailed {
+		t.Errorf("after reap ticks, status = %q, want %q (orphan reaped)", final.Status, db.ActionStatusFailed)
+	}
+	if !strings.Contains(final.Result.String, "orphaned") {
+		t.Errorf("reason = %q, want substring %q", final.Result.String, "orphaned")
 	}
 }
 
