@@ -603,9 +603,15 @@ func (db *DB) BulkMergeActionMetadata(merges []ActionMetadataMerge) error {
 }
 
 func (db *DB) UpdateAction(id int64, title *string, taskID *int64, metadata, workDir, result *string) error {
-	var current Action
-	err := db.QueryRow("SELECT "+actionColumns+" FROM actions WHERE id = ?", id).Scan(current.scanFields()...)
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
+		return fmt.Errorf("update action: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var current Action
+	if err := tx.QueryRowContext(ctx, "SELECT "+actionColumns+" FROM actions WHERE id = ?", id).Scan(current.scanFields()...); err != nil {
 		return fmt.Errorf("action #%d not found: %w", id, err)
 	}
 
@@ -663,15 +669,22 @@ func (db *DB) UpdateAction(id int64, title *string, taskID *int64, metadata, wor
 		return fmt.Errorf("no fields to update")
 	}
 
+	// #nosec G202 -- setClauses holds only hardcoded column literals; all
+	// values are bound via ? placeholders in args.
 	query := "UPDATE actions SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
 	args = append(args, id)
-	_, err = db.Exec(query, args...)
-	if err == nil {
-		db.emitEvent("action", id, "action.updated", map[string]any{
-			"fields_count": len(setClauses),
-		})
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return err
 	}
-	return err
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("update action: commit: %w", err)
+	}
+
+	db.emitEvent("action", id, "action.updated", map[string]any{
+		"fields_count": len(setClauses),
+	})
+	return nil
 }
 
 func (db *DB) ListActionsByTaskIDsForView(taskIDs []int64, dateFilter string) (map[int64][]Action, error) {
