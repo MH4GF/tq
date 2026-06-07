@@ -1740,7 +1740,7 @@ func TestMergeActionMetadata_ConcurrentMerges(t *testing.T) {
 	start := make(chan struct{})
 	errs := make(chan error, n)
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -1769,7 +1769,7 @@ func TestMergeActionMetadata_ConcurrentMerges(t *testing.T) {
 	if len(merged) != n {
 		t.Fatalf("expected %d keys, got %d: %s", n, len(merged), a.Metadata)
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		key := fmt.Sprintf("k%d", i)
 		if _, ok := merged[key]; !ok {
 			t.Errorf("missing key %q in merged metadata: %s", key, a.Metadata)
