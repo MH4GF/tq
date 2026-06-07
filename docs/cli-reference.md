@@ -8,8 +8,8 @@ For detailed help on any command, run `tq <command> <subcommand> --help`.
 
 | Command | Description |
 |---------|-------------|
-| `tq project create <NAME> <WORK_DIR>` | Register a project |
-| `tq project list` | List projects (JSON) |
+| `tq project create <NAME> <WORK_DIR>` | Create a new project |
+| `tq project list` | List projects (JSON output) |
 | `tq project update <ID>` | Update a project |
 | `tq project delete <ID>` | Delete a project |
 
@@ -51,9 +51,9 @@ tq project list [--jq <EXPR>] [--limit <N>]
 
 | Command | Description |
 |---------|-------------|
-| `tq task create <TITLE> --project <ID>` | Create a task |
+| `tq task create <TITLE> --project <ID>` | Create a new task |
 | `tq task list` | List tasks (JSON output, includes latest 10 nested actions) |
-| `tq task get <ID>` | Get a task by ID with latest 10 nested actions and status_history (JSON) |
+| `tq task get <ID>` | Get a task by ID (JSON output, includes latest 10 nested actions and status_history) |
 | `tq task update <ID>` | Update a task |
 | `tq task note <ID>` | Record a free-form note on a task without changing its status |
 
@@ -129,17 +129,17 @@ Notes with `kind=triage_keep` are surfaced on `tq task list` as `latest_triage_n
 | Command | Description |
 |---------|-------------|
 | `tq action create <INSTRUCTION> --task <ID> --title <TITLE>` | Create an action |
-| `tq action list` | List actions, optionally filtered by status and/or task ID (JSON) |
-| `tq action get <ID>` | Get an action by ID (JSON) |
+| `tq action list` | List actions |
+| `tq action get <ID>` | Get an action by ID (JSON output) |
 | `tq action update <ID>` | Update an action |
-| `tq action done <ID> [RESULT]` | Mark an action as done, optionally recording a result summary |
-| `tq action fail <ID> [REASON]` | Mark an action as failed when the goal could not be achieved despite genuine effort |
-| `tq action cancel <ID> [REASON]` | Cancel a pending, running, dispatched, or failed action (cannot cancel actions already done or cancelled) |
-| `tq action attach <ID>` | Attach to a running action (`claude attach <daemon_short>`) |
+| `tq action done <ID> [RESULT]` | Mark action as done |
+| `tq action fail <ID> [REASON]` | Mark action as failed when the goal could not be achieved |
+| `tq action cancel <ID> [REASON]` | Cancel a pending, running, dispatched, or failed action |
+| `tq action attach <ID>` | Attach to a running action (claude agent view) |
 | `tq action reset <ID>` | Reset a failed or cancelled action to pending |
-| `tq action dispatch <ID>` | Dispatch a pending action immediately by its ID (manual override, skips the queue) |
+| `tq action dispatch <ID>` | Dispatch an action immediately (skip queue) |
 | `tq action resume <ID>` | Resume the claude session of a closed action |
-| `tq action prompt <ID>` | Render the wrapped claude prompt for an action (used by interactive dispatch) |
+| `tq action prompt <ID>` | Render the wrapped claude prompt for an action |
 
 ### `tq action create`
 
@@ -291,9 +291,9 @@ Only `failed` and `cancelled` actions can be reset. `pending` and `done` actions
 
 | Command | Description |
 |---------|-------------|
-| `tq schedule create` | Create a schedule |
-| `tq schedule list` | List schedules (JSON) |
-| `tq schedule get <ID>` | Get a schedule by ID (JSON) |
+| `tq schedule create` | Create a new schedule |
+| `tq schedule list` | List schedules (JSON output) |
+| `tq schedule get <ID>` | Get a schedule by ID (JSON output) |
 | `tq schedule update <ID>` | Update a schedule |
 | `tq schedule delete <ID>` | Delete a schedule |
 | `tq schedule enable <ID>` | Enable a schedule |
@@ -339,7 +339,7 @@ tq schedule update <ID> [--cron <EXPR>] [--title <TITLE>] [--task <ID>] [--instr
 
 | Command | Description |
 |---------|-------------|
-| `tq event list` | List events from the event log (JSON) |
+| `tq event list` | List events |
 
 ### `tq event list`
 
