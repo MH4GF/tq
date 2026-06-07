@@ -83,12 +83,32 @@ func (db *DB) AddActionDependencies(actionID int64, deps []ActionDep) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	var exists int
-	if err := tx.QueryRowContext(ctx, "SELECT 1 FROM actions WHERE id = ?", actionID).Scan(&exists); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("action #%d not found", actionID)
-		}
+	if err := insertActionDependenciesTx(ctx, tx, actionID, deps, true); err != nil {
 		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	db.emitEvent("action", actionID, "action.dependencies_added", map[string]any{
+		"count": len(deps),
+	})
+	return nil
+}
+
+func insertActionDependenciesTx(ctx context.Context, tx *sql.Tx, actionID int64, deps []ActionDep, checkActionExists bool) error {
+	if len(deps) == 0 {
+		return nil
+	}
+
+	var exists int
+	if checkActionExists {
+		if err := tx.QueryRowContext(ctx, "SELECT 1 FROM actions WHERE id = ?", actionID).Scan(&exists); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("action #%d not found", actionID)
+			}
+			return err
+		}
 	}
 
 	for _, d := range deps {
@@ -129,12 +149,6 @@ func (db *DB) AddActionDependencies(actionID int64, deps []ActionDep) error {
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	db.emitEvent("action", actionID, "action.dependencies_added", map[string]any{
-		"count": len(deps),
-	})
 	return nil
 }
 

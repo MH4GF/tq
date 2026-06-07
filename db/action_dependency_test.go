@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/MH4GF/tq/db"
@@ -427,5 +428,140 @@ func TestActionDependency_ClaimPendingBypassesGate(t *testing.T) {
 	}
 	if a.Status != db.ActionStatusRunning {
 		t.Fatalf("ClaimPending status = %s, want running", a.Status)
+	}
+}
+
+func TestInsertActionWithDependencies_AtomicOnDepFailure(t *testing.T) {
+	tests := []struct {
+		name    string
+		deps    []db.ActionDep
+		wantErr string
+	}{
+		{
+			name:    "missing action blocker",
+			deps:    []db.ActionDep{{Type: db.DepTypeAction, ID: 99999}},
+			wantErr: "blocked-by action #99999 not found",
+		},
+		{
+			name:    "missing task blocker",
+			deps:    []db.ActionDep{{Type: db.DepTypeTask, ID: 99999}},
+			wantErr: "blocked-by task #99999 not found",
+		},
+		{
+			name:    "invalid dep type",
+			deps:    []db.ActionDep{{Type: "bogus", ID: 1}},
+			wantErr: `invalid dependency type "bogus"`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+			before := dispatchable(t, d)
+
+			id, err := d.InsertActionWithDependencies(db.ActionInsertSpec{
+				Title:    "follower",
+				TaskID:   taskID,
+				Metadata: "{}",
+				Status:   db.ActionStatusPending,
+			}, tt.deps)
+			if err == nil {
+				t.Fatalf("InsertActionWithDependencies returned id=%d, want error %q", id, tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("err = %v, want substring %q", err, tt.wantErr)
+			}
+			if id != 0 {
+				t.Errorf("returned id = %d, want 0 on failure", id)
+			}
+
+			if got := dispatchable(t, d); got != before {
+				t.Errorf("dispatchable after rollback = %d, want %d (no orphan)", got, before)
+			}
+
+			actions, err := d.ListActions(db.ActionStatusPending, &taskID, 100)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, a := range actions {
+				if a.Title == "follower" {
+					t.Errorf("orphan action #%d (title=follower) survived rollback", a.ID)
+				}
+			}
+		})
+	}
+}
+
+func TestInsertActionWithDependencies_BlockerGatesDispatch(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+	ctx := context.Background()
+
+	blocker, err := d.InsertAction("blocker", taskID, "{}", db.ActionStatusPending, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = d.SetActionStatusForTest(blocker, db.ActionStatusRunning)
+
+	follower, err := d.InsertActionWithDependencies(db.ActionInsertSpec{
+		Title:    "follower",
+		TaskID:   taskID,
+		Metadata: "{}",
+		Status:   db.ActionStatusPending,
+	}, []db.ActionDep{{Type: db.DepTypeAction, ID: blocker}})
+	if err != nil {
+		t.Fatalf("InsertActionWithDependencies: %v", err)
+	}
+
+	got, err := d.NextPending(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatalf("NextPending returned action #%d, want nil (follower #%d should be gated)", got.ID, follower)
+	}
+
+	deps, err := d.ListActionDependencies(follower)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deps) != 1 || deps[0].ID != blocker {
+		t.Fatalf("ListActionDependencies = %+v, want [{action #%d}]", deps, blocker)
+	}
+
+	if err := d.MarkDone(blocker, "ok"); err != nil {
+		t.Fatal(err)
+	}
+	got, err = d.NextPending(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.ID != follower {
+		t.Fatalf("NextPending = %v, want action #%d after blocker done", got, follower)
+	}
+}
+
+func TestInsertActionWithDependencies_NoDeps(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+	id, err := d.InsertActionWithDependencies(db.ActionInsertSpec{
+		Title:    "plain",
+		TaskID:   taskID,
+		Metadata: "{}",
+		Status:   db.ActionStatusPending,
+	}, nil)
+	if err != nil {
+		t.Fatalf("InsertActionWithDependencies: %v", err)
+	}
+	if id == 0 {
+		t.Fatal("returned id = 0")
+	}
+	if got := dispatchable(t, d); got != 1 {
+		t.Fatalf("dispatchable = %d, want 1", got)
 	}
 }
