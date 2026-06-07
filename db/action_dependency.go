@@ -33,7 +33,7 @@ type ActionDepStatus struct {
 // unsatisfied dependency: a blocker is satisfied only when it reaches a
 // successful terminal state (action=done / task=done|archived). A blocker that
 // ends failed/cancelled keeps the action pending forever (by design — rescue
-// via the tq-dep-triage skill). Keep NextPending and CountPendingByDispatch
+// via the tq:dep-triage skill). Keep NextPending and CountPendingByDispatch
 // using this so the TUI pending count matches what is actually dispatchable.
 //
 // The satisfied-state definition is duplicated here (SQL) and in depSatisfied
@@ -45,7 +45,7 @@ type ActionDepStatus struct {
 // `ORDER BY a.id ASC LIMIT 1` can no longer stop at the first time-ready row —
 // a low-id prefix of blocked-forever actions is walked every poll until
 // triaged away (each step still index-backed; operationally bounded by the
-// tq-dep-triage skill).
+// tq:dep-triage skill).
 const dependencyGatePredicate = `
 	NOT EXISTS (
 	  SELECT 1 FROM action_dependencies dep
