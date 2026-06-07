@@ -792,8 +792,12 @@ func TestTasksModel_TaskDetailView_WithNotes(t *testing.T) {
 		t.Fatalf("did not land on task line, cursor=%d", m.cursor)
 	}
 
-	// Enter task detail view
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	// Enter task detail view — DB work runs in the returned Cmd, not in Update.
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if cmd == nil {
+		t.Fatal("expected a Cmd from pressing v on a task line")
+	}
+	m, _ = m.Update(cmd())
 	if m.mode != modeViewTaskDetail {
 		t.Fatalf("mode = %d, want modeViewTaskDetail", m.mode)
 	}
@@ -842,7 +846,11 @@ func TestTasksModel_TaskDetailView_NoNotes(t *testing.T) {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	}
 
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if cmd == nil {
+		t.Fatal("expected a Cmd from pressing v on a task line")
+	}
+	m, _ = m.Update(cmd())
 	if m.mode != modeViewTaskDetail {
 		t.Fatalf("mode = %d, want modeViewTaskDetail", m.mode)
 	}
@@ -1187,6 +1195,144 @@ func navigateToTaskLine(t *testing.T, m TasksModel, taskID int64) TasksModel {
 	return m
 }
 
+type slowTaskDetailStore struct {
+	db.Store
+	release chan struct{}
+}
+
+func (s *slowTaskDetailStore) GetTask(id int64) (*db.Task, error) {
+	<-s.release
+	return s.Store.GetTask(id)
+}
+
+func (s *slowTaskDetailStore) TaskStatusHistory(id int64) ([]db.TaskStatusHistoryEntry, error) {
+	<-s.release
+	return s.Store.TaskStatusHistory(id)
+}
+
+func (s *slowTaskDetailStore) TaskNotes(id int64, kindFilter string) ([]db.TaskNoteEntry, error) {
+	<-s.release
+	return s.Store.TaskNotes(id, kindFilter)
+}
+
+func TestTasksModel_OpenTaskDetail_RunsInCmd(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	taskID, _ := d.InsertTask(1, "Async task", "{}", "")
+
+	m := NewTasksModel(d, "")
+	cmd := m.openTaskDetail(taskID)
+	if cmd == nil {
+		t.Fatal("openTaskDetail should return a non-nil Cmd")
+	}
+
+	loaded, ok := cmd().(taskDetailLoadedMsg)
+	if !ok {
+		t.Fatalf("msg type = %T, want taskDetailLoadedMsg", cmd())
+	}
+	if loaded.err != nil {
+		t.Errorf("err = %v, want nil", loaded.err)
+	}
+	if loaded.task == nil || loaded.task.ID != taskID {
+		t.Errorf("task = %+v, want task ID %d", loaded.task, taskID)
+	}
+	if len(loaded.partial) != 0 {
+		t.Errorf("partial = %v, want empty", loaded.partial)
+	}
+}
+
+func TestTasksModel_OpenTaskDetail_DoesNotBlockUpdate(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "Slow task", "{}", "")
+
+	release := make(chan struct{})
+	stub := &slowTaskDetailStore{Store: d, release: release}
+
+	m := NewTasksModel(stub, "")
+	m = m.SetSize(120, 40)
+	m, _ = m.Update(m.Init()())
+	m = navigateToTaskLine(t, m, taskID)
+
+	type updateResult struct {
+		model TasksModel
+		cmd   tea.Cmd
+	}
+	resultCh := make(chan updateResult, 1)
+	go func() {
+		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+		resultCh <- updateResult{updated, cmd}
+	}()
+
+	var res updateResult
+	select {
+	case res = <-resultCh:
+	case <-time.After(2 * time.Second):
+		close(release)
+		t.Fatal("Update blocked on 'v' — openTaskDetail must not call the DB in the Update path")
+	}
+
+	if res.cmd == nil {
+		close(release)
+		t.Fatal("expected a load Cmd from pressing v on a task line")
+	}
+	if res.model.mode != modeNormal {
+		t.Errorf("mode = %d, want modeNormal while load is pending", res.model.mode)
+	}
+	if res.model.detailTask != nil {
+		t.Errorf("detailTask = %+v, want nil while load is pending", res.model.detailTask)
+	}
+
+	close(release)
+	loaded, ok := res.cmd().(taskDetailLoadedMsg)
+	if !ok {
+		t.Fatalf("msg type = %T, want taskDetailLoadedMsg", res.cmd())
+	}
+	if loaded.task == nil || loaded.task.ID != taskID {
+		t.Errorf("task = %+v, want task ID %d", loaded.task, taskID)
+	}
+}
+
+func TestTasksModel_TaskDetailLoadedMsg_DroppedWhenModeChanged(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "T", "{}", "")
+	actionID, _ := d.InsertAction("a", taskID, `{"instruction":"x"}`, db.ActionStatusRunning, nil, "")
+	d.MarkDone(actionID, "ok")
+
+	m := NewTasksModel(d, "")
+	m = m.SetSize(120, 40)
+	m, _ = m.Update(m.Init()())
+
+	task, err := d.GetTask(taskID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+
+	action := db.Action{ID: actionID, Title: "a", Status: db.ActionStatusDone}
+	m.detailAction = &action
+	m.detailScroll = 7
+	m.mode = modeViewDetail
+
+	updated, cmd := m.Update(taskDetailLoadedMsg{task: task})
+	if cmd != nil {
+		t.Errorf("expected nil cmd when msg arrives in non-normal mode, got %T", cmd)
+	}
+	if updated.mode != modeViewDetail {
+		t.Errorf("mode = %d, want modeViewDetail (stale task load must not clobber action detail)", updated.mode)
+	}
+	if updated.detailTask != nil {
+		t.Errorf("detailTask = %+v, want nil (stale msg must not populate task fields)", updated.detailTask)
+	}
+	if updated.detailAction == nil || updated.detailAction.ID != actionID {
+		t.Errorf("detailAction = %+v, want preserved action #%d", updated.detailAction, actionID)
+	}
+	if updated.detailScroll != 7 {
+		t.Errorf("detailScroll = %d, want 7 (must not reset scroll of unrelated mode)", updated.detailScroll)
+	}
+}
+
 func TestTasksModel_OpenTaskDetail_GetTaskErrorStaysInList(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -1201,6 +1347,10 @@ func TestTasksModel_OpenTaskDetail_GetTaskErrorStaysInList(t *testing.T) {
 	m = navigateToTaskLine(t, m, taskID)
 
 	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if cmd == nil {
+		t.Fatal("expected a load Cmd from pressing v on a task line")
+	}
+	m, _ = m.Update(cmd())
 
 	if m.mode != modeNormal {
 		t.Errorf("mode = %d, want modeNormal (should stay in list view when GetTask fails)", m.mode)
@@ -1213,9 +1363,6 @@ func TestTasksModel_OpenTaskDetail_GetTaskErrorStaysInList(t *testing.T) {
 	}
 	if !strings.Contains(m.message, "open task detail failed") {
 		t.Errorf("m.message = %q, want prefix 'open task detail failed'", m.message)
-	}
-	if cmd == nil {
-		t.Errorf("expected a TTL clear cmd, got nil")
 	}
 
 	view := m.View()
@@ -1242,6 +1389,10 @@ func TestTasksModel_OpenTaskDetail_PartialErrorsTransitionWithMessage(t *testing
 	m = navigateToTaskLine(t, m, taskID)
 
 	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if cmd == nil {
+		t.Fatal("expected a load Cmd from pressing v on a task line")
+	}
+	m, _ = m.Update(cmd())
 
 	if m.mode != modeViewTaskDetail {
 		t.Errorf("mode = %d, want modeViewTaskDetail (should still transition with partial data)", m.mode)
@@ -1260,9 +1411,6 @@ func TestTasksModel_OpenTaskDetail_PartialErrorsTransitionWithMessage(t *testing
 	}
 	if !strings.Contains(m.message, "history") || !strings.Contains(m.message, "notes") {
 		t.Errorf("m.message = %q, want both 'history' and 'notes'", m.message)
-	}
-	if cmd == nil {
-		t.Errorf("expected a TTL clear cmd, got nil")
 	}
 }
 
