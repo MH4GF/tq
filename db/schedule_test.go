@@ -3,6 +3,7 @@ package db_test
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/MH4GF/tq/db"
@@ -523,84 +524,73 @@ func TestBulkInsertScheduledActions(t *testing.T) {
 }
 
 func TestHasActiveActionsForSchedules(t *testing.T) {
-	t.Run("empty input returns empty map", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		got, err := d.HasActiveActionsForSchedules(nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(got) != 0 {
-			t.Errorf("len = %d, want 0", len(got))
-		}
-	})
+	tests := []struct {
+		name           string
+		seed           func(t *testing.T, d *db.DB)
+		inputIDs       []int64
+		expectedActive map[int64]bool
+	}{
+		{
+			name:           "empty input returns empty map",
+			seed:           func(*testing.T, *db.DB) {},
+			inputIDs:       nil,
+			expectedActive: map[int64]bool{},
+		},
+		{
+			name: "active action present",
+			seed: func(t *testing.T, d *db.DB) {
+				testutil.SeedTestProjects(t, d)
+				taskID, _ := d.InsertTask(1, "test", "{}", "")
+				_, _ = d.InsertAction("a1", taskID, `{"schedule_id":"42"}`, "pending", nil, "")
+			},
+			inputIDs:       []int64{42, 99},
+			expectedActive: map[int64]bool{42: true},
+		},
+		{
+			name: "done/failed/cancelled actions are not active",
+			seed: func(t *testing.T, d *db.DB) {
+				testutil.SeedTestProjects(t, d)
+				taskID, _ := d.InsertTask(1, "test", "{}", "")
+				aid, _ := d.InsertAction("a1", taskID, `{"schedule_id":"7"}`, "pending", nil, "")
+				_ = d.MarkDone(aid, "ok")
+			},
+			inputIDs:       []int64{7},
+			expectedActive: map[int64]bool{},
+		},
+		{
+			name: "running and dispatched both count as active",
+			seed: func(t *testing.T, d *db.DB) {
+				testutil.SeedTestProjects(t, d)
+				taskID, _ := d.InsertTask(1, "test", "{}", "")
+				_, _ = d.InsertAction("a1", taskID, `{"schedule_id":"1"}`, "running", nil, "")
+				_, _ = d.InsertAction("a2", taskID, `{"schedule_id":"2"}`, "dispatched", nil, "")
+			},
+			inputIDs:       []int64{1, 2, 3},
+			expectedActive: map[int64]bool{1: true, 2: true},
+		},
+		{
+			name: "schedule_id stored as JSON number is reported active",
+			seed: func(t *testing.T, d *db.DB) {
+				testutil.SeedTestProjects(t, d)
+				taskID, _ := d.InsertTask(1, "test", "{}", "")
+				_, _ = d.InsertAction("a1", taskID, `{"schedule_id":55}`, "pending", nil, "")
+			},
+			inputIDs:       []int64{55},
+			expectedActive: map[int64]bool{55: true},
+		},
+	}
 
-	t.Run("active action present", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		_, _ = d.InsertAction("a1", taskID, `{"schedule_id":"42"}`, "pending", nil, "")
-
-		got, err := d.HasActiveActionsForSchedules([]int64{42, 99})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !got[42] {
-			t.Errorf("schedule 42 should be active")
-		}
-		if got[99] {
-			t.Errorf("schedule 99 should be absent (no active action)")
-		}
-	})
-
-	t.Run("done/failed/cancelled actions are not active", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		// Insert a done action — should not count as active.
-		aid, _ := d.InsertAction("a1", taskID, `{"schedule_id":"7"}`, "pending", nil, "")
-		_ = d.MarkDone(aid, "ok")
-
-		got, err := d.HasActiveActionsForSchedules([]int64{7})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got[7] {
-			t.Errorf("done action should not count as active")
-		}
-	})
-
-	t.Run("running and dispatched both count as active", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		_, _ = d.InsertAction("a1", taskID, `{"schedule_id":"1"}`, "running", nil, "")
-		_, _ = d.InsertAction("a2", taskID, `{"schedule_id":"2"}`, "dispatched", nil, "")
-
-		got, err := d.HasActiveActionsForSchedules([]int64{1, 2, 3})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !got[1] || !got[2] {
-			t.Errorf("expected schedules 1 and 2 active, got %v", got)
-		}
-		if got[3] {
-			t.Errorf("schedule 3 should be absent")
-		}
-	})
-
-	t.Run("schedule_id stored as JSON number is reported active", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-		// metadata.schedule_id as a JSON number, not a string.
-		_, _ = d.InsertAction("a1", taskID, `{"schedule_id":55}`, "pending", nil, "")
-
-		got, err := d.HasActiveActionsForSchedules([]int64{55})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !got[55] {
-			t.Errorf("schedule 55 (JSON number schedule_id) should be active, got %v", got)
-		}
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			tc.seed(t, d)
+			got, err := d.HasActiveActionsForSchedules(tc.inputIDs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, tc.expectedActive) {
+				t.Errorf("got %v, want %v", got, tc.expectedActive)
+			}
+		})
+	}
 }
