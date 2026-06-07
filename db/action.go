@@ -523,24 +523,34 @@ func (db *DB) movePending(id int64, dispatchAfterValid bool, dispatchAfter, requ
 }
 
 func (db *DB) MergeActionMetadata(id int64, updates map[string]any) error {
-	var existing string
-	err := db.QueryRow("SELECT metadata FROM actions WHERE id = ?", id).Scan(&existing)
+	tx, err := db.Begin()
 	if err != nil {
-		return err
+		return fmt.Errorf("merge action metadata: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var existing string
+	if err := tx.QueryRow("SELECT metadata FROM actions WHERE id = ?", id).Scan(&existing); err != nil {
+		return fmt.Errorf("merge action metadata: get metadata for id=%d: %w", id, err)
 	}
 
 	data, keys, err := mergeMetadataJSON(existing, updates)
 	if err != nil {
-		return err
+		return fmt.Errorf("merge action metadata: merge id=%d: %w", id, err)
 	}
 
-	_, err = db.Exec("UPDATE actions SET metadata = ? WHERE id = ?", data, id)
-	if err == nil {
-		db.emitEvent("action", id, "action.metadata_merged", map[string]any{
-			"keys_updated": keys,
-		})
+	if _, err := tx.Exec("UPDATE actions SET metadata = ? WHERE id = ?", data, id); err != nil {
+		return fmt.Errorf("merge action metadata: update id=%d: %w", id, err)
 	}
-	return err
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("merge action metadata: commit: %w", err)
+	}
+
+	db.emitEvent("action", id, "action.metadata_merged", map[string]any{
+		"keys_updated": keys,
+	})
+	return nil
 }
 
 func (db *DB) BulkMergeActionMetadata(merges []ActionMetadataMerge) error {
