@@ -127,28 +127,6 @@ func TestUpdateAction_WorkDir(t *testing.T) {
 	}
 }
 
-func TestBulkInsertActions_WithWorkDir(t *testing.T) {
-	d := testutil.NewTestDB(t)
-	testutil.SeedTestProjects(t, d)
-	taskID, _ := d.InsertTask(1, "test task", "{}", "")
-
-	specs := []db.ActionInsertSpec{
-		{Title: "a", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending, WorkDir: "/tmp/a"},
-		{Title: "b", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending, WorkDir: ""},
-		{Title: "c", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending, WorkDir: "~/c"},
-	}
-	ids, err := d.BulkInsertActions(specs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, id := range ids {
-		a, _ := d.GetAction(id)
-		if a.WorkDir != specs[i].WorkDir {
-			t.Errorf("specs[%d] work_dir = %q, want %q", i, a.WorkDir, specs[i].WorkDir)
-		}
-	}
-}
-
 func TestNextPending(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
@@ -1584,88 +1562,6 @@ func TestMarkTerminalNoEventWhenAlreadyTerminal(t *testing.T) {
 	if len(after) != len(before) {
 		t.Errorf("event count after no-op marks = %d, want %d (no new events)", len(after), len(before))
 	}
-}
-
-func TestBulkInsertActions(t *testing.T) {
-	t.Run("empty input is no-op", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		ids, err := d.BulkInsertActions(nil)
-		if err != nil {
-			t.Errorf("nil specs returned err: %v", err)
-		}
-		if len(ids) != 0 {
-			t.Errorf("len(ids) = %d, want 0", len(ids))
-		}
-	})
-
-	t.Run("normal: 3 actions inserted with returned IDs in input order", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-
-		specs := []db.ActionInsertSpec{
-			{Title: "first", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending},
-			{Title: "second", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending},
-			{Title: "third", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending},
-		}
-		ids, err := d.BulkInsertActions(specs)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(ids) != 3 {
-			t.Fatalf("len(ids) = %d, want 3", len(ids))
-		}
-		for i, id := range ids {
-			a, err := d.GetAction(id)
-			if err != nil {
-				t.Fatalf("GetAction(%d): %v", id, err)
-			}
-			if a.Title != specs[i].Title {
-				t.Errorf("ids[%d] title = %q, want %q (RETURNING did not preserve input order)", i, a.Title, specs[i].Title)
-			}
-		}
-	})
-
-	t.Run("invalid status fails fast (no rows inserted)", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-
-		specs := []db.ActionInsertSpec{
-			{Title: "ok", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending},
-			{Title: "bogus", TaskID: taskID, Metadata: "{}", Status: "garbage"},
-		}
-		ids, err := d.BulkInsertActions(specs)
-		if err == nil {
-			t.Fatal("expected error for invalid status")
-		}
-		if ids != nil {
-			t.Errorf("ids = %v, want nil on error", ids)
-		}
-		actions, _ := d.ListActions("", nil, 0)
-		if len(actions) != 0 {
-			t.Errorf("expected 0 inserted actions on validation failure, got %d", len(actions))
-		}
-	})
-
-	t.Run("FK violation rolls back entire batch", func(t *testing.T) {
-		d := testutil.NewTestDB(t)
-		testutil.SeedTestProjects(t, d)
-		taskID, _ := d.InsertTask(1, "test", "{}", "")
-
-		specs := []db.ActionInsertSpec{
-			{Title: "good", TaskID: taskID, Metadata: "{}", Status: db.ActionStatusPending},
-			{Title: "bad", TaskID: 99999, Metadata: "{}", Status: db.ActionStatusPending},
-		}
-		_, err := d.BulkInsertActions(specs)
-		if err == nil {
-			t.Fatal("expected FK violation error")
-		}
-		actions, _ := d.ListActions("", nil, 0)
-		if len(actions) != 0 {
-			t.Errorf("expected 0 actions after rollback, got %d (atomicity broken)", len(actions))
-		}
-	})
 }
 
 func TestBulkMarkFailed(t *testing.T) {

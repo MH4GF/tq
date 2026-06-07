@@ -90,10 +90,9 @@ func CheckSchedules(database db.Store, now time.Time) error {
 	}
 
 	if len(inserts) > 0 {
-		ids, err := database.BulkInsertActions(inserts)
+		ids, err := database.BulkInsertScheduledActions(inserts, successUpdates)
 		if err != nil {
-			// Do not write successUpdates; next tick will re-decide and retry.
-			return fmt.Errorf("bulk insert actions: %w", err)
+			return fmt.Errorf("bulk insert scheduled actions: %w", err)
 		}
 		for i, id := range ids {
 			d := insertDecisions[i]
@@ -102,9 +101,6 @@ func CheckSchedules(database db.Store, now time.Time) error {
 				"schedule_id", d.schedule.ID,
 				"instruction", d.schedule.Instruction,
 				"task_id", d.schedule.TaskID)
-		}
-		if err := database.BulkUpdateScheduleRuns(successUpdates); err != nil {
-			return fmt.Errorf("bulk update schedule runs (success): %w", err)
 		}
 	}
 
