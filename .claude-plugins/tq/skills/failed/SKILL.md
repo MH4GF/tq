@@ -1,4 +1,5 @@
 ---
+name: tq-failed
 description: Mark a tq action as failed, then judge task-level completion and propose follow-up actions when retry or alternative approach is needed
 argument-hint: "[action_id]"
 allowed-tools: Bash(tq *)

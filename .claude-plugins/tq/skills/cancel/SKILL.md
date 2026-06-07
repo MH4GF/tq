@@ -1,4 +1,5 @@
 ---
+name: tq-cancel
 description: Cancel a tq action with improvement suggestions, then judge task-level completion and propose follow-up actions when work remains
 argument-hint: "[action_id]"
 allowed-tools: Bash(tq *)

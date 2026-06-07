@@ -16,6 +16,31 @@ claude plugin marketplace add MH4GF/tq
 claude plugin install tq@tq-marketplace
 ```
 
+### Standalone via `npx skills`
+
+The skills are also published via the [Agent Skills](https://agentskills.io) ecosystem and can be installed without the Claude Code plugin layer using [vercel-labs/skills](https://github.com/vercel-labs/skills):
+
+```bash
+# List the 7 tq skills exposed by this repo
+npx skills add MH4GF/tq --list
+
+# Install a specific skill into a target agent
+npx skills add MH4GF/tq --skill tq-create-action -a claude-code
+
+# Install all tq skills
+npx skills add MH4GF/tq --skill '*' -a claude-code
+```
+
+Skill names are prefixed with `tq-` (e.g. `tq-create-action`) to avoid collisions with skills from other publishers when multiple sources are mixed in one agent.
+
+### Standalone via `gh skill` (preview)
+
+[`gh skill`](https://cli.github.com/manual/gh_skill) follows the same Agent Skills spec:
+
+```bash
+gh skill install MH4GF/tq tq-create-action
+```
+
 ## Skills
 
 All tq operations are packaged as Agent Skills. Each one triggers from natural
@@ -75,7 +100,7 @@ Inventory and organize open tasks - review status, propose cleanup, execute
 
 ### `tq:manager`
 
-tq task manager. Triggers on natural-language requests like "create a task", "add an action", "show status", "run an interrupt", or "schedule something".
+Manage tq tasks and actions on behalf of the user via the tq CLI. Use when the user wants to create a task, add or dispatch an action, check queue status, run something now or interrupt, or schedule a recurring action. Lightweight interactive hub; hands off to tq:create-action / tq:done / tq:failed / tq:cancel / tq:triage for disciplined flows.
 
 `skills/manager/SKILL.md`
 
@@ -83,7 +108,7 @@ Local actions (`mode=interactive` or `noninteractive`) launch via `claude --bg` 
 
 ### `tq:investigate-incidents`
 
-Cross-cuts diagnosis of failed actions and permission denials accumulated in the tq queue. Triggers on phrases like "investigate incidents", "summarize recent failures", "show permission block trends", or `/tq:investigate-incidents`.
+Cross-event diagnosis of recent failed actions and permission-blocked actions in the tq queue. Use when the user wants to investigate incidents, summarize recent failures, or review permission-block trends across the queue. Clusters incidents and cross-checks prior remediations rather than per-event firefighting.
 
 `skills/investigate-incidents/SKILL.md`
 
