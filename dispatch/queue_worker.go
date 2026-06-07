@@ -278,6 +278,7 @@ func MetadataHasValue(raw, key, value string) bool {
 const maxDispatchAttemptsPerTick = 16
 
 func dispatchOne(ctx context.Context, cfg WorkerConfig) (bool, error) {
+	//nolint:modernize // `for range N` is a RangeStmt that Rule 15 (TestRule15_NoStoreCallsInLoops) flags; the 3-clause form keeps this bounded retry control-loop exempt from that scan.
 	for attempt := 0; attempt < maxDispatchAttemptsPerTick; attempt++ {
 		action, err := cfg.DB.NextPending(ctx)
 		if err != nil {
