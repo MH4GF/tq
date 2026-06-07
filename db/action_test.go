@@ -1407,6 +1407,75 @@ func TestUpdateAction_NotFound(t *testing.T) {
 	}
 }
 
+func TestUpdateAction_AtomicRollback(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+	id, _ := d.InsertAction("orig", taskID, `{"keep":"me"}`, db.ActionStatusPending, nil, "/orig/dir")
+
+	title := "new"
+	missingTask := int64(99999)
+	wd := "/new/dir"
+	err := d.UpdateAction(id, &title, &missingTask, nil, &wd, nil)
+	if err == nil {
+		t.Fatal("expected FK violation, got nil")
+	}
+
+	a, _ := d.GetAction(id)
+	if a.Title != "orig" {
+		t.Errorf("title changed despite rollback: got %q, want %q", a.Title, "orig")
+	}
+	if a.TaskID != taskID {
+		t.Errorf("task_id changed despite rollback: got %d, want %d", a.TaskID, taskID)
+	}
+	if a.WorkDir != "/orig/dir" {
+		t.Errorf("work_dir changed despite rollback: got %q, want %q", a.WorkDir, "/orig/dir")
+	}
+}
+
+func TestUpdateAction_RaceWithStatusTransition(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+	id, _ := d.InsertAction("orig", taskID, "{}", db.ActionStatusPending, nil, "")
+
+	ctx := context.Background()
+	tx, err := d.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE actions SET status = ? WHERE id = ?", db.ActionStatusRunning, id); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		title := "racy"
+		done <- d.UpdateAction(id, &title, nil, nil, nil, nil)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	updErr := <-done
+	if updErr == nil {
+		t.Fatal("expected UpdateAction to error after concurrent status transition")
+	}
+	if !strings.Contains(updErr.Error(), "title/task/work-dir can only be updated") {
+		t.Errorf("unexpected error: %v", updErr)
+	}
+
+	a, _ := d.GetAction(id)
+	if a.Title != "orig" {
+		t.Errorf("title mutated despite running status: got %q, want %q", a.Title, "orig")
+	}
+	if a.Status != db.ActionStatusRunning {
+		t.Errorf("status: got %q, want %q", a.Status, db.ActionStatusRunning)
+	}
+}
+
 func TestMarkTerminalSkipsTerminalState(t *testing.T) {
 	tests := []struct {
 		name       string
