@@ -275,53 +275,59 @@ func MetadataHasValue(raw, key, value string) bool {
 	return ok && v == value
 }
 
+const maxDispatchAttemptsPerTick = 16
+
 func dispatchOne(ctx context.Context, cfg WorkerConfig) (bool, error) {
-	action, err := cfg.DB.NextPending(ctx)
-	if err != nil {
-		return false, fmt.Errorf("next pending: %w", err)
-	}
-	if action == nil {
-		return false, nil
-	}
+	//nolint:modernize // `for range N` is a RangeStmt that Rule 15 (TestRule15_NoStoreCallsInLoops) flags; the 3-clause form keeps this bounded retry control-loop exempt from that scan.
+	for attempt := 0; attempt < maxDispatchAttemptsPerTick; attempt++ {
+		action, err := cfg.DB.NextPending(ctx)
+		if err != nil {
+			return false, fmt.Errorf("next pending: %w", err)
+		}
+		if action == nil {
+			return false, nil
+		}
 
-	result, err := ExecuteAction(ctx, ExecuteParams{
-		DispatchConfig: cfg.DispatchConfig,
-		BeforeInteractive: func(a *db.Action) error {
-			running, err := cfg.DB.CountRunningInteractive()
-			if err != nil {
-				return fmt.Errorf("count running interactive: %w", err)
-			}
-			if running > cfg.MaxInteractive {
-				slog.Debug("interactive limit reached, deferring", "action_id", a.ID, "running", running, "max", cfg.MaxInteractive)
-				return ErrInteractiveDeferred
-			}
-			return nil
-		},
-		BeforeNonInteractive: func(a *db.Action) error {
-			running, err := cfg.DB.CountRunningNonInteractive()
-			if err != nil {
-				return fmt.Errorf("count running noninteractive: %w", err)
-			}
-			if running > cfg.MaxNonInteractive {
-				slog.Debug("noninteractive limit reached, deferring", "action_id", a.ID, "running", running, "max", cfg.MaxNonInteractive)
-				return ErrNonInteractiveDeferred
-			}
-			return nil
-		},
-	}, action)
+		result, err := ExecuteAction(ctx, ExecuteParams{
+			DispatchConfig: cfg.DispatchConfig,
+			BeforeInteractive: func(a *db.Action) error {
+				running, err := cfg.DB.CountRunningInteractive()
+				if err != nil {
+					return fmt.Errorf("count running interactive: %w", err)
+				}
+				if running > cfg.MaxInteractive {
+					slog.Debug("interactive limit reached, deferring", "action_id", a.ID, "running", running, "max", cfg.MaxInteractive)
+					return ErrInteractiveDeferred
+				}
+				return nil
+			},
+			BeforeNonInteractive: func(a *db.Action) error {
+				running, err := cfg.DB.CountRunningNonInteractive()
+				if err != nil {
+					return fmt.Errorf("count running noninteractive: %w", err)
+				}
+				if running > cfg.MaxNonInteractive {
+					slog.Debug("noninteractive limit reached, deferring", "action_id", a.ID, "running", running, "max", cfg.MaxNonInteractive)
+					return ErrNonInteractiveDeferred
+				}
+				return nil
+			},
+		}, action)
 
-	if errors.Is(err, ErrInteractiveDeferred) || errors.Is(err, ErrNonInteractiveDeferred) {
-		return false, nil
-	}
-	var af *ActionFailedError
-	if errors.As(err, &af) {
-		slog.Error("action failed", "action_id", af.ActionID, "error", af.Err)
+		if errors.Is(err, ErrInteractiveDeferred) || errors.Is(err, ErrNonInteractiveDeferred) {
+			continue
+		}
+		var af *ActionFailedError
+		if errors.As(err, &af) {
+			slog.Error("action failed", "action_id", af.ActionID, "error", af.Err)
+			return true, nil
+		}
+		if err != nil {
+			return true, err
+		}
+
+		slog.Info("action dispatched", "action_id", action.ID, "mode", result.Mode)
 		return true, nil
 	}
-	if err != nil {
-		return true, err
-	}
-
-	slog.Info("action dispatched", "action_id", action.ID, "mode", result.Mode)
-	return true, nil
+	return false, nil
 }

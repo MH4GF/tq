@@ -18,7 +18,7 @@ reapBg / CheckSchedules / Heartbeat   ← always run each poll
 
 `Running` is the live `COUNT(*)` of running actions of that mode **including the just-claimed action** (NextPending marks status=running before the admission check). The predicate is `running > Max` so `MaxInteractive=N` / `MaxNonInteractive=N` means "up to N concurrent" inclusive.
 
-The dispatch loop processes one action per iteration. Each `claude --bg` invocation returns the moment the daemon accepts the session, so the loop is never blocked on a long-running worker. `reapBg`, `CheckSchedules`, and `UpdateWorkerHeartbeat` always run each poll iteration.
+Each poll iteration tries up to `maxDispatchAttemptsPerTick` pending actions: if the head action defers because its slot pool is full, the worker immediately probes the next FIFO candidate so a saturated pool does not stall actions in another pool until the next poll. Each `claude --bg` invocation returns the moment the daemon accepts the session, so the loop is never blocked on a long-running worker. `reapBg`, `CheckSchedules`, and `UpdateWorkerHeartbeat` always run each poll iteration.
 
 ## Slot caps
 
@@ -29,7 +29,7 @@ The dispatch loop processes one action per iteration. Each `claude --bg` invocat
 | `MaxInteractive` | 3 | Cognitive-load cap on simultaneous user-facing sessions surfaced in `claude agents`. |
 | `MaxNonInteractive` | 5 | Throughput pool for high-volume / scheduled work so batch fleets do not crowd out interactive sessions. |
 
-A pending action that would exceed its cap is returned to `pending` via `DeferToPending(id, defaultDeferBackoff)`, which also stamps `dispatch_after = now + 30s`. `NextPending`'s WHERE clause then skips the deferred row for that window, letting the worker attempt other pending actions on the next poll.
+A pending action that would exceed its cap is returned to `pending` via `DeferToPending(id, defaultDeferBackoff)`, which also stamps `dispatch_after = now + 30s`. `NextPending`'s WHERE clause then skips the deferred row for that window, letting the worker probe other pending actions in the same tick (up to `maxDispatchAttemptsPerTick`) before sleeping.
 
 Manual `tq action reset` calls `ResetToPending`, which also clears `dispatch_after` so the action is immediately eligible for `NextPending` again.
 
