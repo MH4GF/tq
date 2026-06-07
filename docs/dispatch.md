@@ -29,7 +29,7 @@ Each poll iteration tries up to `maxDispatchAttemptsPerTick` pending actions: if
 | `MaxInteractive` | 3 | Cognitive-load cap on simultaneous user-facing sessions surfaced in `claude agents`. |
 | `MaxNonInteractive` | 5 | Throughput pool for high-volume / scheduled work so batch fleets do not crowd out interactive sessions. |
 
-A pending action that would exceed its cap is returned to `pending` via `DeferToPending(id, defaultDeferBackoff)`, which also stamps `dispatch_after = now + 30s`. `NextPending`'s WHERE clause then skips the deferred row for that window, letting the worker probe other pending actions in the same tick (up to `maxDispatchAttemptsPerTick`) before sleeping.
+A pending action that would exceed its cap is returned to `pending` via `DeferToPending(id, defaultDeferBackoff)`, which also stamps `dispatch_after = now + 30s`. `NextPending`'s WHERE clause then skips the deferred row for that window, letting the worker probe other pending actions in the same tick (up to `maxDispatchAttemptsPerTick`) before sleeping. The same defer path also catches transient errors from the slot-count query itself (e.g., a busy SQLite write surface): the admission callback's wrapped error is logged at `WARN` and the action is deferred rather than marked failed, so a benign retry replaces a misleading terminal state.
 
 Manual `tq action reset` calls `ResetToPending`, which also clears `dispatch_after` so the action is immediately eligible for `NextPending` again.
 
@@ -58,8 +58,8 @@ Actions whose `metadata.executor` is `"cloud"` are skipped by `reapBg` because t
 ```
             ┌──────────┐
             │ pending  │◄────────────────┐
-            └────┬─────┘ DeferToPending  │ (slot cap reached;
-                 │ NextPending           │  dispatch_after = now+30s)
+            └────┬─────┘ DeferToPending  │ (slot cap reached or admission
+                 │ NextPending           │  errored; dispatch_after = now+30s)
                  ▼                       │
             ┌──────────┐                 │
    ┌────────│ running  │─────────────────┘
