@@ -534,3 +534,58 @@ func TestDispatchOne_DefersWhenSlotFull(t *testing.T) {
 		t.Errorf("status = %q, want %q (deferred)", updated.Status, db.ActionStatusPending)
 	}
 }
+
+func TestDispatchOne_SkipsDeferredHeadAndDispatchesNextPool(t *testing.T) {
+	withShortDeferBackoff(t)
+	d := testutil.NewTestDB(t)
+	projectID, _ := d.InsertProject("p", "", "{}")
+	taskID, _ := d.InsertTask(projectID, "t", "{}", "")
+
+	for range 3 {
+		id, _ := d.InsertAction("blocking", taskID, `{"instruction":"x","mode":"interactive","daemon_short":"running01"}`, db.ActionStatusPending, nil, "")
+		if err := d.SetActionStatusForTest(id, db.ActionStatusRunning); err != nil {
+			t.Fatalf("set status running: %v", err)
+		}
+	}
+
+	deferredID, _ := d.InsertAction("interactive-pending", taskID, `{"instruction":"do","mode":"interactive"}`, db.ActionStatusPending, nil, "")
+	openID, _ := d.InsertAction("noninteractive-pending", taskID, `{"instruction":"do","mode":"noninteractive"}`, db.ActionStatusPending, nil, "")
+
+	bg := &bgWorkerStub{short: "abcd1234"}
+	cfg := WorkerConfig{
+		DispatchConfig: DispatchConfig{
+			DB:         d,
+			BgFunc:     func() Worker { return bg },
+			RemoteFunc: func() Worker { return &bgWorkerStub{} },
+		},
+		MaxInteractive:    3,
+		MaxNonInteractive: 5,
+	}
+
+	dispatched, err := dispatchOne(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("dispatchOne: %v", err)
+	}
+	if !dispatched {
+		t.Fatal("expected dispatchOne to skip deferred interactive head and dispatch the noninteractive successor")
+	}
+	if bg.count != 1 {
+		t.Errorf("BgWorker called %d times, want 1 (only the noninteractive should dispatch)", bg.count)
+	}
+	if bg.gotCfg.Mode != ModeNonInteractive {
+		t.Errorf("dispatched mode = %q, want %q", bg.gotCfg.Mode, ModeNonInteractive)
+	}
+
+	deferred, _ := d.GetAction(deferredID)
+	if deferred.Status != db.ActionStatusPending {
+		t.Errorf("interactive head status = %q, want %q (deferred back to pending)", deferred.Status, db.ActionStatusPending)
+	}
+	if !deferred.DispatchAfter.Valid {
+		t.Error("interactive head should have dispatch_after set after defer")
+	}
+
+	open, _ := d.GetAction(openID)
+	if open.Status != db.ActionStatusRunning {
+		t.Errorf("noninteractive successor status = %q, want %q", open.Status, db.ActionStatusRunning)
+	}
+}
