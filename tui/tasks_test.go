@@ -616,14 +616,18 @@ func TestTasksModel_SortOrder(t *testing.T) {
 	if len(tasks) != 3 {
 		t.Fatalf("tasks = %d, want 3", len(tasks))
 	}
-	if tasks[0].task.Status != db.TaskStatusDone {
-		t.Errorf("tasks[0].status = %q, want %q", tasks[0].task.Status, db.TaskStatusDone)
+	expected := []struct {
+		idx  int
+		want string
+	}{
+		{0, db.TaskStatusDone},
+		{1, db.TaskStatusOpen},
+		{2, db.TaskStatusArchived},
 	}
-	if tasks[1].task.Status != db.TaskStatusOpen {
-		t.Errorf("tasks[1].status = %q, want %q", tasks[1].task.Status, db.TaskStatusOpen)
-	}
-	if tasks[2].task.Status != db.TaskStatusArchived {
-		t.Errorf("tasks[2].status = %q, want %q", tasks[2].task.Status, db.TaskStatusArchived)
+	for _, tc := range expected {
+		if tasks[tc.idx].task.Status != tc.want {
+			t.Errorf("tasks[%d].status = %q, want %q", tc.idx, tasks[tc.idx].task.Status, tc.want)
+		}
 	}
 }
 
@@ -987,17 +991,19 @@ func TestTasksModel_ActionStats(t *testing.T) {
 	m, _ = m.Update(msg)
 
 	stats := m.actionStats()
-	if stats.running != 1 {
-		t.Errorf("running = %d, want 1", stats.running)
+	checks := []struct {
+		name string
+		got  int
+	}{
+		{"running", stats.running},
+		{"pending", stats.pending},
+		{"done", stats.done},
+		{"failed", stats.failed},
 	}
-	if stats.pending != 1 {
-		t.Errorf("pending = %d, want 1", stats.pending)
-	}
-	if stats.done != 1 {
-		t.Errorf("done = %d, want 1", stats.done)
-	}
-	if stats.failed != 1 {
-		t.Errorf("failed = %d, want 1", stats.failed)
+	for _, tc := range checks {
+		if tc.got != 1 {
+			t.Errorf("%s = %d, want 1", tc.name, tc.got)
+		}
 	}
 }
 
