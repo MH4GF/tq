@@ -39,12 +39,14 @@ Invoke manually:
 
 ## Installation
 
-Add to `~/.claude/settings.json`:
+### Add as a marketplace source
 
-```json
-{
-  "enabledPlugins": {
-    "gh-ops@tq-marketplace": true
-  }
-}
+```bash
+claude plugin marketplace add MH4GF/tq
+```
+
+### Install the plugin
+
+```bash
+claude plugin install gh-ops@tq-marketplace
 ```
