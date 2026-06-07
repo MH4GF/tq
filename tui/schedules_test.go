@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/MH4GF/tq/db"
+	"github.com/MH4GF/tq/testutil"
 )
 
 type schedulesErrorStore struct {
@@ -119,5 +120,72 @@ func TestSchedulesModel_ErrorSurfacing(t *testing.T) {
 				tc.extraCheck(t, m)
 			}
 		})
+	}
+}
+
+func TestSchedulesModel_MessageAutoClearsAfterTTL(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	schedID, _ := d.InsertSchedule(taskID, "instr", "Title", "* * * * *", "{}")
+
+	m := NewSchedulesModel(d)
+	m.schedules = []db.Schedule{{ID: schedID, TaskID: taskID, Enabled: true}}
+
+	updated, cmd := m.toggleEnabled(&m.schedules[0])
+	m = updated
+	if m.message == "" {
+		t.Fatal("message should be set after toggleEnabled")
+	}
+	if cmd == nil {
+		t.Fatal("expected a batched cmd after toggleEnabled")
+	}
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.message == "" {
+		t.Error("keystroke should not clear message; TTL should")
+	}
+
+	m, _ = m.Update(clearSchedulesMessageMsg{gen: m.messageGen})
+	if m.message != "" {
+		t.Errorf("message should be cleared after clearSchedulesMessageMsg, got %q", m.message)
+	}
+	if m.messageIsError {
+		t.Error("messageIsError should be reset alongside message")
+	}
+}
+
+func TestSchedulesModel_MessageStaleTimerIgnored(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "test", "{}", "")
+	id1, _ := d.InsertSchedule(taskID, "a", "A", "* * * * *", "{}")
+	id2, _ := d.InsertSchedule(taskID, "b", "B", "* * * * *", "{}")
+
+	m := NewSchedulesModel(d)
+	m.schedules = []db.Schedule{
+		{ID: id1, TaskID: taskID, Enabled: true},
+		{ID: id2, TaskID: taskID, Enabled: true},
+	}
+
+	updated, _ := m.toggleEnabled(&m.schedules[0])
+	m = updated
+	staleGen := m.messageGen
+
+	updated, _ = m.toggleEnabled(&m.schedules[1])
+	m = updated
+	wantSecond := m.message
+	if wantSecond == "" {
+		t.Fatal("second toggle should produce a message")
+	}
+
+	m, _ = m.Update(clearSchedulesMessageMsg{gen: staleGen})
+	if m.message != wantSecond {
+		t.Errorf("stale clear should not wipe newer message, got %q want %q", m.message, wantSecond)
+	}
+
+	m, _ = m.Update(clearSchedulesMessageMsg{gen: m.messageGen})
+	if m.message != "" {
+		t.Errorf("current-gen clear should wipe message, got %q", m.message)
 	}
 }

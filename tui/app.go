@@ -194,7 +194,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.tasks, cmd = m.tasks.Update(msg)
 		return m, cmd
-	case schedulesLoadedMsg:
+	case schedulesLoadedMsg, clearSchedulesMessageMsg:
 		var cmd tea.Cmd
 		m.schedules, cmd = m.schedules.Update(msg)
 		return m, cmd
