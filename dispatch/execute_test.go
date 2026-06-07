@@ -215,6 +215,61 @@ func TestExecuteAction_AdmissionRoutesByMode(t *testing.T) {
 	}
 }
 
+func TestExecuteAction_AdmissionNonSentinelErrorDefers(t *testing.T) {
+	tests := []struct {
+		name     string
+		mode     string
+		err      error
+		wantSent error
+	}{
+		{
+			name:     "interactive count-running error defers",
+			mode:     ModeInteractive,
+			err:      errors.New("count running interactive: database is locked"),
+			wantSent: ErrInteractiveDeferred,
+		},
+		{
+			name:     "noninteractive count-running error defers",
+			mode:     ModeNonInteractive,
+			err:      errors.New("count running noninteractive: database is locked"),
+			wantSent: ErrNonInteractiveDeferred,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			taskID := newTaskForAction(t, d)
+			action := insertPendingAction(t, d, taskID, `{"instruction":"do","mode":"`+tc.mode+`"}`)
+
+			params := ExecuteParams{
+				DispatchConfig: DispatchConfig{
+					DB:         d,
+					BgFunc:     func() Worker { return &fakeWorker{output: "x"} },
+					RemoteFunc: func() Worker { return &fakeWorker{} },
+				},
+			}
+			switch tc.mode {
+			case ModeInteractive:
+				params.BeforeInteractive = func(_ *db.Action) error { return tc.err }
+			case ModeNonInteractive:
+				params.BeforeNonInteractive = func(_ *db.Action) error { return tc.err }
+			}
+
+			_, err := ExecuteAction(context.Background(), params, action)
+			if !errors.Is(err, tc.wantSent) {
+				t.Errorf("err = %v, want %v", err, tc.wantSent)
+			}
+			updated, _ := d.GetAction(action.ID)
+			if updated.Status != db.ActionStatusPending {
+				t.Errorf("status = %q, want %q (deferred, not stuck running or failed)", updated.Status, db.ActionStatusPending)
+			}
+			if !updated.DispatchAfter.Valid {
+				t.Errorf("dispatch_after not set; defer backoff missing")
+			}
+		})
+	}
+}
+
 func TestExecuteAction_WorkerErrorMarksFailed(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	taskID := newTaskForAction(t, d)
