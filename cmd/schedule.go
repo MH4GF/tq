@@ -254,7 +254,7 @@ func init() {
 	scheduleCreateCmd.Flags().Int64("task", 0, "Task ID (required, see: tq task list)")
 	scheduleCreateCmd.Flags().String("title", "", "Schedule title (defaults to instruction)")
 	scheduleCreateCmd.Flags().String("cron", "", "Cron expression (required, e.g. \"0 9 * * *\")")
-	scheduleCreateCmd.Flags().String("meta", "{}", `JSON metadata for dispatch control (keys: mode, claude_args)`)
+	scheduleCreateCmd.Flags().String("meta", "{}", `JSON metadata for dispatch control (keys: mode, claude_args, executor)`)
 
 	scheduleListCmd.Flags().IntVar(&scheduleListLimit, "limit", 0, "Limit number of results (0 = no limit)")
 	scheduleListCmd.Flags().StringVar(&scheduleListJQ, "jq", "", jqFlagUsage(scheduleListFields))
@@ -269,7 +269,7 @@ func init() {
 
 	scheduleUpdateCmd.Flags().String("title", "", "Schedule title")
 	scheduleUpdateCmd.Flags().String("cron", "", "Cron expression")
-	scheduleUpdateCmd.Flags().String("meta", "", `JSON metadata for dispatch control (keys: mode, claude_args)`)
+	scheduleUpdateCmd.Flags().String("meta", "", `JSON metadata for dispatch control (keys: mode, claude_args, executor)`)
 	scheduleUpdateCmd.Flags().String("instruction", "", "Instruction text")
 	scheduleUpdateCmd.Flags().Int64("task", 0, "Task ID")
 	scheduleCmd.AddCommand(scheduleUpdateCmd)

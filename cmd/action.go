@@ -153,7 +153,7 @@ var actionGetCmd = &cobra.Command{
 func init() {
 	actionUpdateCmd.Flags().String("title", "", "Action title")
 	actionUpdateCmd.Flags().Int64("task", 0, "Task ID")
-	actionUpdateCmd.Flags().String("meta", "", `JSON metadata for dispatch control (keys: mode, claude_args)`)
+	actionUpdateCmd.Flags().String("meta", "", `JSON metadata for dispatch control (keys: mode, claude_args, executor)`)
 	actionUpdateCmd.Flags().String("work-dir", "", `Working directory override for this action (pass "" to clear)`)
 	actionUpdateCmd.Flags().String("result", "", "Amend the recorded result (allowed on pending, failed, done, or cancelled actions)")
 	actionUpdateCmd.Flags().Int64Slice("blocked-by-action", nil, "Block until this action reaches done (repeatable; pending/failed actions only)")
