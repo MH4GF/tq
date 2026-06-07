@@ -59,6 +59,8 @@ type Action struct {
 
 const actionColumns = "id, title, task_id, metadata, status, result, tmux_session, tmux_window, dispatch_after, work_dir, created_at, started_at, completed_at"
 
+const MetaKeySuccessfulResult = "successful_result"
+
 // actionColumnsA is actionColumns with each column prefixed by "a." for JOIN
 // queries that need to disambiguate (e.g. NextPending joins tasks/projects).
 var actionColumnsA = "a." + strings.ReplaceAll(actionColumns, ", ", ", a.")
@@ -300,8 +302,11 @@ func (db *DB) markTerminal(id int64, status, result string) error {
 		return fmt.Errorf("get current status: %w", err)
 	}
 
-	if from == ActionStatusDone || from == ActionStatusFailed || from == ActionStatusCancelled {
-		return nil
+	if IsTerminalActionStatus(from) {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		return db.preserveSuccessfulResultOnRaceLoss(id, status, result, from)
 	}
 
 	res, err := tx.ExecContext(ctx,
@@ -320,12 +325,43 @@ func (db *DB) markTerminal(id int64, status, result string) error {
 	}
 
 	if n == 0 {
-		return nil
+		current, err := db.requeryStatus(id)
+		if err != nil {
+			return err
+		}
+		if current == "" {
+			return nil
+		}
+		return db.preserveSuccessfulResultOnRaceLoss(id, status, result, current)
 	}
 	db.emitEvent("action", id, "action.status_changed", map[string]any{
 		"from": from, "to": status, "result": result,
 	})
 	return nil
+}
+
+func (db *DB) requeryStatus(id int64) (string, error) {
+	var current string
+	err := db.QueryRow("SELECT status FROM actions WHERE id = ?", id).Scan(&current)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("re-query status: %w", err)
+	}
+	return current, nil
+}
+
+func (db *DB) preserveSuccessfulResultOnRaceLoss(id int64, attemptedStatus, result, observedStatus string) error {
+	if attemptedStatus != ActionStatusDone || result == "" {
+		return nil
+	}
+	if !IsTerminalActionStatus(observedStatus) || observedStatus == ActionStatusDone {
+		return nil
+	}
+	return db.MergeActionMetadata(id, map[string]any{
+		MetaKeySuccessfulResult: result,
+	})
 }
 
 func (db *DB) MarkDispatched(id int64) error {
@@ -924,8 +960,8 @@ func (db *DB) BulkMarkFailed(updates []ActionFailureUpdate) error {
 }
 
 // BulkMarkDone marks every update.ID as done with its result in one
-// transaction. Already-terminal actions (done/failed/cancelled) are skipped
-// silently so repeat calls are no-ops, mirroring MarkDone.
+// transaction. Already-terminal actions are no-ops via
+// preserveSuccessfulResultOnRaceLoss, mirroring MarkDone.
 func (db *DB) BulkMarkDone(updates []ActionDoneUpdate) error {
 	if len(updates) == 0 {
 		return nil
@@ -942,22 +978,38 @@ func (db *DB) BulkMarkDone(updates []ActionDoneUpdate) error {
 		from   string
 		result string
 	}
+	type raceLoss struct {
+		id               int64
+		result           string
+		observedAtSelect string
+	}
 	var done []committed
+	var lost []raceLoss
 
 	for _, u := range updates {
 		var from string
 		if err := tx.QueryRowContext(ctx, "SELECT status FROM actions WHERE id = ?", u.ID).Scan(&from); err != nil {
 			return fmt.Errorf("bulk mark done: get status for id=%d: %w", u.ID, err)
 		}
-		if from == ActionStatusDone || from == ActionStatusFailed || from == ActionStatusCancelled {
+		if IsTerminalActionStatus(from) {
+			lost = append(lost, raceLoss{id: u.ID, result: u.Result, observedAtSelect: from})
 			continue
 		}
 
-		if _, err := tx.ExecContext(ctx,
+		res, err := tx.ExecContext(ctx,
 			"UPDATE actions SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ? AND status = ?",
 			ActionStatusDone, u.Result, u.ID, from,
-		); err != nil {
+		)
+		if err != nil {
 			return fmt.Errorf("bulk mark done: update id=%d: %w", u.ID, err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("bulk mark done: rows affected id=%d: %w", u.ID, err)
+		}
+		if n == 0 {
+			lost = append(lost, raceLoss{id: u.ID, result: u.Result})
+			continue
 		}
 
 		done = append(done, committed{id: u.ID, from: from, result: u.Result})
@@ -971,6 +1023,22 @@ func (db *DB) BulkMarkDone(updates []ActionDoneUpdate) error {
 		db.emitEvent("action", c.id, "action.status_changed", map[string]any{
 			"from": c.from, "to": ActionStatusDone, "result": c.result,
 		})
+	}
+	for _, l := range lost {
+		observed := l.observedAtSelect
+		if observed == "" {
+			current, err := db.requeryStatus(l.id)
+			if err != nil {
+				return fmt.Errorf("bulk mark done: id=%d: %w", l.id, err)
+			}
+			if current == "" {
+				continue
+			}
+			observed = current
+		}
+		if err := db.preserveSuccessfulResultOnRaceLoss(l.id, ActionStatusDone, l.result, observed); err != nil {
+			return fmt.Errorf("bulk mark done: preserve successful_result for id=%d: %w", l.id, err)
+		}
 	}
 	return nil
 }

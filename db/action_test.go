@@ -1742,6 +1742,194 @@ func TestMergeActionMetadata_ConcurrentMerges(t *testing.T) {
 	}
 }
 
+func TestMarkDone_RaceLossPreservesSuccessfulResult(t *testing.T) {
+	tests := []struct {
+		name          string
+		losingStatus  string
+		losingResult  string
+		wantStatus    string
+		wantResult    string
+		wantPreserved string
+	}{
+		{
+			name:          "done loses to failed: result preserved in metadata",
+			losingStatus:  db.ActionStatusFailed,
+			losingResult:  "stale",
+			wantStatus:    db.ActionStatusFailed,
+			wantResult:    "stale",
+			wantPreserved: "worker output",
+		},
+		{
+			name:          "done loses to cancelled: result preserved in metadata",
+			losingStatus:  db.ActionStatusCancelled,
+			losingResult:  "operator cancelled",
+			wantStatus:    db.ActionStatusCancelled,
+			wantResult:    "operator cancelled",
+			wantPreserved: "worker output",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			taskID, _ := d.InsertTask(1, "task", "{}", "")
+			id, err := d.InsertAction("act", taskID, "{}", db.ActionStatusRunning, nil, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			switch tt.losingStatus {
+			case db.ActionStatusFailed:
+				err = d.MarkFailed(id, tt.losingResult)
+			case db.ActionStatusCancelled:
+				err = d.MarkCancelled(id, tt.losingResult)
+			}
+			if err != nil {
+				t.Fatalf("seed losing transition: %v", err)
+			}
+
+			if err := d.MarkDone(id, "worker output"); err != nil {
+				t.Fatalf("MarkDone after race: %v", err)
+			}
+
+			a, err := d.GetAction(id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if a.Status != tt.wantStatus {
+				t.Errorf("status = %q, want %q", a.Status, tt.wantStatus)
+			}
+			if a.Result.String != tt.wantResult {
+				t.Errorf("result column = %q, want %q", a.Result.String, tt.wantResult)
+			}
+
+			meta := map[string]any{}
+			if err := json.Unmarshal([]byte(a.Metadata), &meta); err != nil {
+				t.Fatalf("parse metadata %s: %v", a.Metadata, err)
+			}
+			got, _ := meta[db.MetaKeySuccessfulResult].(string)
+			if got != tt.wantPreserved {
+				t.Errorf("metadata[%s] = %q, want %q (full metadata: %s)",
+					db.MetaKeySuccessfulResult, got, tt.wantPreserved, a.Metadata)
+			}
+		})
+	}
+}
+
+func TestMarkDone_RaceLossEmptyResultSkipsMetadata(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+	id, err := d.InsertAction("act", taskID, "{}", db.ActionStatusRunning, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.MarkFailed(id, "stale"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.MarkDone(id, ""); err != nil {
+		t.Fatalf("MarkDone with empty result: %v", err)
+	}
+
+	a, err := d.GetAction(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := map[string]any{}
+	if err := json.Unmarshal([]byte(a.Metadata), &meta); err != nil {
+		t.Fatalf("parse metadata %s: %v", a.Metadata, err)
+	}
+	if _, ok := meta[db.MetaKeySuccessfulResult]; ok {
+		t.Errorf("metadata should not contain %s when result is empty: %s",
+			db.MetaKeySuccessfulResult, a.Metadata)
+	}
+}
+
+func TestMarkDone_RedundantDoneCallDoesNotOverwriteMetadata(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+	id, err := d.InsertAction("act", taskID, "{}", db.ActionStatusRunning, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.MarkDone(id, "first"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.MarkDone(id, "second"); err != nil {
+		t.Fatalf("redundant MarkDone: %v", err)
+	}
+
+	a, err := d.GetAction(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Result.String != "first" {
+		t.Errorf("result = %q, want %q", a.Result.String, "first")
+	}
+	meta := map[string]any{}
+	if err := json.Unmarshal([]byte(a.Metadata), &meta); err != nil {
+		t.Fatalf("parse metadata %s: %v", a.Metadata, err)
+	}
+	if _, ok := meta[db.MetaKeySuccessfulResult]; ok {
+		t.Errorf("metadata should not stash result when already done: %s", a.Metadata)
+	}
+}
+
+func TestBulkMarkDone_RaceLossPreservesSuccessfulResult(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+	racedID, _ := d.InsertAction("raced", taskID, "{}", db.ActionStatusRunning, nil, "")
+	cleanID, _ := d.InsertAction("clean", taskID, "{}", db.ActionStatusRunning, nil, "")
+
+	if err := d.MarkFailed(racedID, "stale"); err != nil {
+		t.Fatal(err)
+	}
+
+	updates := []db.ActionDoneUpdate{
+		{ID: racedID, Result: "raced worker output"},
+		{ID: cleanID, Result: "clean worker output"},
+	}
+	if err := d.BulkMarkDone(updates); err != nil {
+		t.Fatalf("BulkMarkDone: %v", err)
+	}
+
+	raced, _ := d.GetAction(racedID)
+	if raced.Status != db.ActionStatusFailed {
+		t.Errorf("raced status = %q, want failed", raced.Status)
+	}
+	if raced.Result.String != "stale" {
+		t.Errorf("raced result column = %q, want %q", raced.Result.String, "stale")
+	}
+	rmeta := map[string]any{}
+	if err := json.Unmarshal([]byte(raced.Metadata), &rmeta); err != nil {
+		t.Fatalf("parse raced metadata: %v", err)
+	}
+	if got, _ := rmeta[db.MetaKeySuccessfulResult].(string); got != "raced worker output" {
+		t.Errorf("metadata[%s] = %q, want %q (full: %s)",
+			db.MetaKeySuccessfulResult, got, "raced worker output", raced.Metadata)
+	}
+
+	clean, _ := d.GetAction(cleanID)
+	if clean.Status != db.ActionStatusDone {
+		t.Errorf("clean status = %q, want done", clean.Status)
+	}
+	if clean.Result.String != "clean worker output" {
+		t.Errorf("clean result column = %q, want %q", clean.Result.String, "clean worker output")
+	}
+	cmeta := map[string]any{}
+	if err := json.Unmarshal([]byte(clean.Metadata), &cmeta); err != nil {
+		t.Fatalf("parse clean metadata: %v", err)
+	}
+	if _, ok := cmeta[db.MetaKeySuccessfulResult]; ok {
+		t.Errorf("clean action should not have %s key (full: %s)",
+			db.MetaKeySuccessfulResult, clean.Metadata)
+	}
+}
+
 func TestActionInstruction(t *testing.T) {
 	tests := []struct {
 		name     string

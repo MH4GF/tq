@@ -34,7 +34,6 @@ const (
 	MetaKeyIsResume          = "is_resume"
 	MetaKeyExecutor          = "executor"
 	MetaKeyDaemonShort       = "daemon_short"
-	MetaKeySuccessfulResult  = "successful_result"
 )
 
 // Executor values for metadata.executor. Distinguishes where the action's
