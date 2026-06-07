@@ -1,6 +1,6 @@
 ---
 name: tq-dep-triage
-description: Rescue tq actions stuck pending forever because a completion dependency ended failed or cancelled. A blocked action is only released when every blocker reaches a successful terminal state, so a failed/cancelled blocker strands the dependent indefinitely. Use this whenever asked to triage blocked/stuck/stalled pending actions, find actions waiting on a dead dependency, audit blocked_by chains, or unblock the dispatch queue — including the scheduled "/tq-dep-triage" run.
+description: Rescue tq actions stuck pending forever because a completion dependency ended failed or cancelled. A blocked action is only released when every blocker reaches a successful terminal state, so a failed/cancelled blocker strands the dependent indefinitely. Use this whenever asked to triage blocked/stuck/stalled pending actions, find actions waiting on a dead dependency, audit blocked_by chains, or unblock the dispatch queue — including the scheduled "/tq:dep-triage" run.
 context: fork
 allowed-tools: Bash(tq action list*), Bash(tq action get*), Bash(tq task get*)
 ---

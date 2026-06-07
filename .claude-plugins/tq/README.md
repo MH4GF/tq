@@ -21,7 +21,7 @@ claude plugin install tq@tq-marketplace
 The skills are also published via the [Agent Skills](https://agentskills.io) ecosystem and can be installed without the Claude Code plugin layer using [vercel-labs/skills](https://github.com/vercel-labs/skills):
 
 ```bash
-# List the 7 tq skills exposed by this repo
+# List the 8 tq skills exposed by this repo
 npx skills add MH4GF/tq --list
 
 # Install a specific skill into a target agent
@@ -97,6 +97,12 @@ Cancel a tq action with improvement suggestions, then judge task-level completio
 Inventory and organize open tasks - review status, propose cleanup, execute
 
 `skills/triage/SKILL.md`
+
+### `tq:dep-triage`
+
+Rescue tq actions stuck pending forever because a completion dependency ended failed or cancelled. A blocked action is only released when every blocker reaches a successful terminal state, so a failed/cancelled blocker strands the dependent indefinitely. Use this whenever asked to triage blocked/stuck/stalled pending actions, find actions waiting on a dead dependency, audit blocked_by chains, or unblock the dispatch queue — including the scheduled "/tq:dep-triage" run.
+
+`skills/dep-triage/SKILL.md`
 
 ### `tq:manager`
 
