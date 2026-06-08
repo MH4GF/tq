@@ -689,7 +689,7 @@ func TestReplaceActionDependencies_RaceWithNextPending(t *testing.T) {
 	const iterations = 20
 	ctx := context.Background()
 
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		oldBlocker, err := d.InsertAction("old", taskID, "{}", db.ActionStatusPending, nil, "")
 		if err != nil {
 			t.Fatal(err)
@@ -717,7 +717,7 @@ func TestReplaceActionDependencies_RaceWithNextPending(t *testing.T) {
 		var claimed atomic.Int64
 		var wg sync.WaitGroup
 		const pollers = 4
-		for p := 0; p < pollers; p++ {
+		for range pollers {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
