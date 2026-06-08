@@ -48,9 +48,9 @@ Current status totals are captured after each rule as `current violations: N`. A
 
 ### Test strategy
 
-**Rule 5 [enforced] — Tests use `testutil.NewTestDB(t)` (in-memory SQLite) rather than calling `db.Open` directly.**
+**Rule 5 [enforced] — Tests use `testutil.NewTestDB(t)` (in-memory SQLite) or `testutil.NewFileTestDB(t)` (file-backed SQLite) rather than calling `db.Open` directly.**
 
-- Why: `testutil.NewTestDB` guarantees migration is applied and cleanup is registered with `t.Cleanup`. Hand-rolled `db.Open(":memory:")` calls diverge from this and silently skip migrations.
+- Why: Both helpers guarantee migration is applied and cleanup is registered with `t.Cleanup`. Hand-rolled `db.Open(":memory:")` calls diverge from this and silently skip migrations. Prefer `NewTestDB` for the common case; reach for `NewFileTestDB` only when the test must exercise the multi-connection pool behavior (e.g., the `SQLITE_BUSY` retry layer in `db/concurrent_writes_test.go`) — `NewTestDB` pins `:memory:` to one connection by design and cannot reproduce cross-connection contention.
 - Verify: `forbidigo` in `.golangci.yml` blocks `db.Open` calls in `_test.go` files. Run `golangci-lint run ./...`.
 - Current violations: 0.
 

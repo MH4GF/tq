@@ -22,7 +22,7 @@ Run `tq --help` for data model, commands, and usage examples.
 
 ## Style
 
-- Table-driven tests in `*_test.go`; use `testutil.NewTestDB()` for in-memory SQLite
+- Table-driven tests in `*_test.go`; use `testutil.NewTestDB()` for in-memory SQLite (or `testutil.NewFileTestDB()` when the test needs the multi-connection pool, e.g. SQLITE_BUSY contention)
 - Wrap errors with `fmt.Errorf`
 
 ## Pointers
