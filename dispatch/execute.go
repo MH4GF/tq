@@ -34,6 +34,7 @@ const (
 	MetaKeyIsResume          = "is_resume"
 	MetaKeyExecutor          = "executor"
 	MetaKeyDaemonShort       = "daemon_short"
+	MetaKeyRemoteSession     = "remote_session"
 )
 
 // Executor values for metadata.executor. Distinguishes where the action's
@@ -281,7 +282,7 @@ func executeRemote(ctx context.Context, params ExecuteParams, action *db.Action,
 	}
 
 	if err := params.DB.MergeActionMetadata(action.ID, map[string]any{
-		"remote_session": result,
+		MetaKeyRemoteSession: result,
 	}); err != nil {
 		slog.Warn("failed to save remote session info", "action_id", action.ID, "error", err)
 	}
