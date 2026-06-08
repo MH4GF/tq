@@ -85,7 +85,8 @@ Current status totals are captured after each rule as `current violations: N`. A
 **Rule 10 [enforced] — Action/task metadata keys are accessed via the `MetaKey*` constants in `dispatch/execute.go`, not via string literals.**
 
 - Why: Metadata is JSON blob storage; literal keys scattered across layers become typo vectors and make key renames painful. Constants localize the allowlist at the dispatch boundary — mirrors the article's "validate at boundaries" example.
-- Verify: Go test harness `internal/goldenrules/` scans for `metadata["` in `cmd/`, `dispatch/`, `tui/`. Run `go test ./internal/goldenrules/`.
+- Verify: Go test harness `internal/goldenrules/` covers both reads and writes in `cmd/`, `dispatch/`, `tui/`. (1) Reader shape: line-based scan for `metadata["` catches direct `metadata["key"]` indexing. (2) Writer shape: type-driven AST scan in `rule10_metadata_test.go` flags string-literal keys in `map[string]any` composite literals passed as the 2nd arg of `db.Store.MergeActionMetadata` or as the `Updates` field of `db.ActionMetadataMerge` (the per-entry map fed to `BulkMergeActionMetadata`). The writer scan was added after `executeRemote` slipped past the reader-only regex with a literal `"remote_session"` key (the writer wasn't using `metadata[…]` syntax, so the regex saw nothing). Run `go test ./internal/goldenrules/`.
+- Detection limits (writer scan): only inline composite literals are inspected — a map built into a variable then passed in (`m := map[string]any{"foo": 1}; store.MergeActionMetadata(id, m)`) is not traced through the assignment. That shape does not appear in the codebase today; if it ever does, extend the rule rather than working around it.
 - Current violations: 0.
 
 ### SQL placement
