@@ -170,6 +170,44 @@ func actionReachable(ctx context.Context, tx *sql.Tx, start, target int64) (bool
 	return true, nil
 }
 
+func (db *DB) ReplaceActionDependencies(actionID int64, deps []ActionDep) error {
+	ctx := context.Background()
+	var clearedCount int64
+	err := db.withTxRetry(ctx, "ReplaceActionDependencies", func(tx *sql.Tx) error {
+		clearedCount = 0
+		var exists int
+		if err := tx.QueryRowContext(ctx, "SELECT 1 FROM actions WHERE id = ?", actionID).Scan(&exists); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("action #%d not found", actionID)
+			}
+			return err
+		}
+		res, err := tx.ExecContext(ctx, "DELETE FROM action_dependencies WHERE action_id = ?", actionID)
+		if err != nil {
+			return err
+		}
+		clearedCount, err = res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		return insertActionDependenciesTx(ctx, tx, actionID, deps, false)
+	})
+	if err != nil {
+		return fmt.Errorf("replace dependencies for action #%d: %w", actionID, err)
+	}
+	if clearedCount > 0 {
+		db.emitEvent("action", actionID, "action.dependencies_cleared", map[string]any{
+			"count": clearedCount,
+		})
+	}
+	if len(deps) > 0 {
+		db.emitEvent("action", actionID, "action.dependencies_added", map[string]any{
+			"count": len(deps),
+		})
+	}
+	return nil
+}
+
 // ClearActionDependencies removes all dependency edges for actionID. Combined
 // with AddActionDependencies it implements replace semantics.
 func (db *DB) ClearActionDependencies(actionID int64) error {
