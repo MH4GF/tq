@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -32,7 +33,10 @@ func (db *DB) getActiveWorker(staleThreshold time.Duration) (*workerHeartbeat, e
 }
 
 func (db *DB) UpdateWorkerHeartbeat(maxInteractive int) error {
-	_, err := db.Exec("REPLACE INTO worker_heartbeats(id, last_heartbeat, max_interactive) VALUES(1, datetime('now'), ?)", maxInteractive)
+	err := withRetry(context.Background(), "UpdateWorkerHeartbeat", func() error {
+		_, err := db.Exec("REPLACE INTO worker_heartbeats(id, last_heartbeat, max_interactive) VALUES(1, datetime('now'), ?)", maxInteractive)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("update worker heartbeat: %w", err)
 	}

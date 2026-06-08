@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"log/slog"
@@ -48,10 +49,13 @@ func (db *DB) emitEvent(entityType string, entityID int64, eventType string, pay
 		slog.Warn("event: marshal payload", "error", err, "event_type", eventType)
 		return
 	}
-	_, err = db.Exec(
-		"INSERT INTO events (entity_type, entity_id, event_type, payload) VALUES (?, ?, ?, ?)",
-		entityType, entityID, eventType, string(data),
-	)
+	err = withRetry(context.Background(), "emitEvent", func() error {
+		_, err := db.Exec(
+			"INSERT INTO events (entity_type, entity_id, event_type, payload) VALUES (?, ?, ?, ?)",
+			entityType, entityID, eventType, string(data),
+		)
+		return err
+	})
 	if err != nil {
 		slog.Warn("event: insert", "error", err, "event_type", eventType)
 	}

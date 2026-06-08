@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -47,10 +48,13 @@ func (db *DB) ListSettings() (map[string]string, error) {
 
 // SetSetting upserts the value for key.
 func (db *DB) SetSetting(key, value string) error {
-	_, err := db.Exec(
-		"REPLACE INTO settings(key, value, updated_at) VALUES(?, ?, datetime('now'))",
-		key, value,
-	)
+	err := withRetry(context.Background(), "SetSetting", func() error {
+		_, err := db.Exec(
+			"REPLACE INTO settings(key, value, updated_at) VALUES(?, ?, datetime('now'))",
+			key, value,
+		)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("set setting %q: %w", key, err)
 	}

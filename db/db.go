@@ -33,25 +33,49 @@ func Open(dsn string) (*DB, error) {
 	driver := "sqlite"
 	if IsLibsqlURL(dsn) {
 		driver = "libsql"
+	} else {
+		dsn = sqliteDSN(dsn)
 	}
 	sqlDB, err := sql.Open(driver, dsn)
 	if err != nil {
 		return nil, err
 	}
-	// PRAGMA journal_mode=WAL is meaningful only for a local sqlite file.
-	// libsql endpoints manage durability server-side and either no-op or
-	// reject the pragma depending on the surface.
-	if driver == "sqlite" {
-		if _, err := sqlDB.Exec("PRAGMA journal_mode=WAL"); err != nil {
+	if driver == "sqlite" && isMemoryDSN(dsn) {
+		if _, err := sqlDB.Exec("PRAGMA foreign_keys=ON"); err != nil {
+			_ = sqlDB.Close()
+			return nil, err
+		}
+		if _, err := sqlDB.Exec("PRAGMA busy_timeout=5000"); err != nil {
 			_ = sqlDB.Close()
 			return nil, err
 		}
 	}
-	if _, err := sqlDB.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		_ = sqlDB.Close()
-		return nil, err
+	if driver == "libsql" {
+		if _, err := sqlDB.Exec("PRAGMA foreign_keys=ON"); err != nil {
+			_ = sqlDB.Close()
+			return nil, err
+		}
 	}
 	return &DB{sqlDB}, nil
+}
+
+func sqliteDSN(dsn string) string {
+	if isMemoryDSN(dsn) {
+		return dsn
+	}
+	const pragmas = "_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)&_pragma=journal_mode(WAL)"
+	if strings.HasPrefix(dsn, "file:") {
+		sep := "?"
+		if strings.Contains(dsn, "?") {
+			sep = "&"
+		}
+		return dsn + sep + pragmas
+	}
+	return "file:" + dsn + "?" + pragmas
+}
+
+func isMemoryDSN(dsn string) bool {
+	return dsn == ":memory:" || strings.HasPrefix(dsn, "file::memory:")
 }
 
 func (db *DB) hasColumn(table, column string) (bool, error) {
@@ -308,41 +332,34 @@ func (db *DB) Migrate() error {
 
 func (db *DB) migrateExperimentalBgToInteractive() error {
 	ctx := context.Background()
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE actions
-		 SET metadata = json_set(metadata, '$.mode', 'interactive')
-		 WHERE metadata IS NOT NULL
-		   AND json_valid(metadata)
-		   AND json_extract(metadata, '$.mode') = 'experimental_bg'`,
-	); err != nil {
-		return fmt.Errorf("update actions: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE settings SET value = 'interactive'
-		 WHERE key = ? AND value = 'experimental_bg'`,
-		SettingDefaultMode,
-	); err != nil {
-		return fmt.Errorf("update settings: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE schedules
-		 SET metadata = json_set(metadata, '$.mode', 'interactive')
-		 WHERE metadata IS NOT NULL
-		   AND json_valid(metadata)
-		   AND json_extract(metadata, '$.mode') = 'experimental_bg'`,
-	); err != nil {
-		return fmt.Errorf("update schedules: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit: %w", err)
-	}
-	return nil
+	return db.withTxRetry(ctx, "migrateExperimentalBgToInteractive", func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE actions
+			 SET metadata = json_set(metadata, '$.mode', 'interactive')
+			 WHERE metadata IS NOT NULL
+			   AND json_valid(metadata)
+			   AND json_extract(metadata, '$.mode') = 'experimental_bg'`,
+		); err != nil {
+			return fmt.Errorf("update actions: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE settings SET value = 'interactive'
+			 WHERE key = ? AND value = 'experimental_bg'`,
+			SettingDefaultMode,
+		); err != nil {
+			return fmt.Errorf("update settings: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE schedules
+			 SET metadata = json_set(metadata, '$.mode', 'interactive')
+			 WHERE metadata IS NOT NULL
+			   AND json_valid(metadata)
+			   AND json_extract(metadata, '$.mode') = 'experimental_bg'`,
+		); err != nil {
+			return fmt.Errorf("update schedules: %w", err)
+		}
+		return nil
+	})
 }
 
 // backfillSearchFTS populates tasks_fts/actions_fts/events_fts from rows that

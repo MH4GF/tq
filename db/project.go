@@ -1,6 +1,8 @@
 package db
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 )
 
@@ -50,14 +52,18 @@ func (db *DB) ListProjects(limit int) ([]Project, error) {
 }
 
 func (db *DB) InsertProject(name, workDir, metadata string) (int64, error) {
-	res, err := db.Exec(
-		"INSERT INTO projects (name, work_dir, metadata) VALUES (?, ?, ?)",
-		name, workDir, metadata,
-	)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
+	var id int64
+	err := withRetry(context.Background(), "InsertProject", func() error {
+		res, err := db.Exec(
+			"INSERT INTO projects (name, work_dir, metadata) VALUES (?, ?, ?)",
+			name, workDir, metadata,
+		)
+		if err != nil {
+			return err
+		}
+		id, err = res.LastInsertId()
+		return err
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -74,26 +80,23 @@ func (db *DB) DeleteProject(id int64, cascade bool) error {
 	}
 
 	if cascade {
-		tx, err := db.Begin()
-		if err != nil {
-			return fmt.Errorf("begin transaction: %w", err)
-		}
-		defer func() { _ = tx.Rollback() }()
-
-		if _, err := tx.Exec("DELETE FROM actions WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)", id); err != nil {
-			return fmt.Errorf("delete actions: %w", err)
-		}
-		if _, err := tx.Exec("DELETE FROM schedules WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)", id); err != nil {
-			return fmt.Errorf("delete schedules: %w", err)
-		}
-		if _, err := tx.Exec("DELETE FROM tasks WHERE project_id = ?", id); err != nil {
-			return fmt.Errorf("delete tasks: %w", err)
-		}
-		if _, err := tx.Exec("DELETE FROM projects WHERE id = ?", id); err != nil {
-			return fmt.Errorf("delete project: %w", err)
-		}
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("commit: %w", err)
+		ctx := context.Background()
+		if err := db.withTxRetry(ctx, "DeleteProjectCascade", func(tx *sql.Tx) error {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM actions WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)", id); err != nil {
+				return fmt.Errorf("delete actions: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, "DELETE FROM schedules WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)", id); err != nil {
+				return fmt.Errorf("delete schedules: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, "DELETE FROM tasks WHERE project_id = ?", id); err != nil {
+				return fmt.Errorf("delete tasks: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, "DELETE FROM projects WHERE id = ?", id); err != nil {
+				return fmt.Errorf("delete project: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
 	} else {
 		var count int
@@ -103,7 +106,10 @@ func (db *DB) DeleteProject(id int64, cascade bool) error {
 		if count > 0 {
 			return fmt.Errorf("project #%d has %d task(s); cannot delete without cascade", id, count)
 		}
-		if _, err := db.Exec("DELETE FROM projects WHERE id = ?", id); err != nil {
+		if err := withRetry(context.Background(), "DeleteProject", func() error {
+			_, err := db.Exec("DELETE FROM projects WHERE id = ?", id)
+			return err
+		}); err != nil {
 			return err
 		}
 	}
@@ -119,12 +125,15 @@ func (db *DB) SetDispatchEnabled(projectID int64, enabled bool) error {
 	if enabled {
 		val = 1
 	}
-	res, err := db.Exec("UPDATE projects SET dispatch_enabled = ? WHERE id = ?", val, projectID)
-	if err != nil {
+	var n int64
+	if err := withRetry(context.Background(), "SetDispatchEnabled", func() error {
+		res, err := db.Exec("UPDATE projects SET dispatch_enabled = ? WHERE id = ?", val, projectID)
+		if err != nil {
+			return err
+		}
+		n, err = res.RowsAffected()
 		return err
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
+	}); err != nil {
 		return err
 	}
 	if n == 0 {
@@ -137,12 +146,15 @@ func (db *DB) SetDispatchEnabled(projectID int64, enabled bool) error {
 }
 
 func (db *DB) SetWorkDir(projectID int64, workDir string) error {
-	res, err := db.Exec("UPDATE projects SET work_dir = ? WHERE id = ?", workDir, projectID)
-	if err != nil {
+	var n int64
+	if err := withRetry(context.Background(), "SetWorkDir", func() error {
+		res, err := db.Exec("UPDATE projects SET work_dir = ? WHERE id = ?", workDir, projectID)
+		if err != nil {
+			return err
+		}
+		n, err = res.RowsAffected()
 		return err
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
+	}); err != nil {
 		return err
 	}
 	if n == 0 {

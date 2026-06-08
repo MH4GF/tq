@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/MH4GF/tq/db"
@@ -16,6 +17,20 @@ func NewTestDB(t *testing.T) *db.DB {
 	// connection so concurrent goroutines (e.g. dispatch worker async) all
 	// hit the same DB instance.
 	d.SetMaxOpenConns(1)
+	if err := d.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	return d
+}
+
+func NewFileTestDB(t *testing.T) *db.DB {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "test.db")
+	d, err := db.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := d.Migrate(); err != nil {
 		t.Fatal(err)
 	}

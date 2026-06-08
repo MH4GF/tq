@@ -411,3 +411,9 @@ Keyboard shortcuts in the task list (the help bar surfaces each key only when th
 - `d` — Dispatch the selected `pending` action immediately, equivalent to `tq action dispatch <ID>` (bypasses the completion-dependency gate).
 - `r` — Resume the selected action by creating a new action that continues its Claude session. Only available on terminal actions (`done` / `failed` / `cancelled`) whose metadata carries a `claude_session_id`.
 - `f` — Toggle `dispatch_enabled` (focus) on the selected project, equivalent to `tq project update <ID> --dispatch-enabled true|false`. Only available when the cursor is on a project header row.
+
+## Debug environment variables
+
+| Variable | Effect |
+|----------|--------|
+| `TQ_LOG_RETRY=1` | Emit a `slog.Debug` line on every SQLite lock retry (`db retry`) and on every give-up after the retry budget is exhausted (`db retry give up`). Useful when diagnosing `database is locked` contention. Under normal load no lines should appear because the per-connection `busy_timeout=5000` PRAGMA absorbs most contention before the retry layer fires. |
