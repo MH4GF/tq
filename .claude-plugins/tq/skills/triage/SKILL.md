@@ -102,11 +102,18 @@ tq schedule list --jq '.[] | {id, task_id, enabled}'
 
 A task is **recurring** when it has a schedule-map entry OR any of its actions' `metadata` contains `schedule_id` (check `tq action list --task <id>` when the map is inconclusive). The map is authoritative for `enabled`.
 
-**Exclude** a recurring task from Step 6 (Step 5 only, Phase annotated `(recurring)`) when **both**: `latest.status ∈ {done, pending}` (a `running` action is kept as In progress, not excluded) AND the task is recurring.
+**Exclude every recurring task** from Step 6 unconditionally — the task is *Leave open by default*, the next scheduled run is the recovery mechanism, and `AskUserQuestion` MUST NOT fire for it.
+This holds regardless of `latest.status` (including `failed`, `pending`, `done`).
+The only exception is when the schedule is **disabled or missing** (see Override below).
+Canonical cases the user has called out as never needing an `AskUserQuestion`: weekly review, Gmail Inbox Zero, work-log recording, MF classification, turso-query-watch.
+These recurring jobs self-heal on the next tick.
 
-**Override — triage normally even when the exclude condition holds**: the backing schedule is absent from the map OR `enabled == false` (disabled/deleted — the recurring task may be orphaned and needs a human decision).
+A task whose `latest.status == running` is also kept out of Step 6 by the existing "In progress" rule — recurring or not, do not interrupt a live action.
 
-A recurring task whose `latest.status == failed` is never excluded in the first place (the exclude condition requires `done`/`pending`), so persistent scheduled-job failures always fall through to normal Step 6 triage by design — no extra override needed.
+Persistent failures on a recurring task surface through other channels (`/tq:investigate-incidents`, the next schedule run, or a human-initiated schedule update).
+They are deliberately outside the triage `AskUserQuestion` path — re-including them would re-introduce the noise this rule eliminates.
+
+**Override — triage normally even when the task is recurring**: the backing schedule is absent from the map OR `enabled == false` (disabled/deleted — the recurring task may be orphaned and needs a human decision).
 
 Excluded tasks are reported under the **recurring** category in Step 6's pre-report, not the triage-note list. If both rules exclude a task, the recurring category wins.
 
@@ -160,7 +167,7 @@ Each line MUST include the task `id`, `title`, the `latest_triage_note.reason` q
 
 **Recurring-task exclusions (separate category, MUST also be emitted)**: list every task excluded by the Step 3 recurring-task exclusion rule. This is distinct from the triage-note list above — a task appears in only one. Use this exact form:
 
-> Skipping M recurring tasks (healthy scheduled ops, latest status done/pending):
+> Skipping M recurring tasks (Leave open by default, next scheduled run is the recovery path):
 > - Task #<id> (<title>) — schedule #<sid> (enabled), latest action #<aid> <status>
 
 If none, emit `Skipping 0 recurring tasks.`.
@@ -210,7 +217,7 @@ Pick the 6-c options (2-4 per task) from this template:
 
 **Universal "leave open" options**: every phase may add `Leave open with note (keep)` and `Snooze N days` so the next triage run can skip the task. Plain `Leave open` remains for "no reason worth recording".
 
-**Forward-motion default**: every phase except In progress MUST include at least one concrete forward-motion option (create next action, mark done, archive). Tasks must not sit as `Leave open` by default.
+**Forward-motion default**: every phase except In progress MUST include at least one concrete forward-motion option (create next action, mark done, archive). Tasks that reach Step 6's `AskUserQuestion` must not sit as `Leave open` by default. (Recurring tasks are exempt — they never reach this question; see the Step 3 recurring-task exclusion rule.)
 
 **Unfocus-aware options**: when the task's project is unfocus AND it has a `pending` action (or the proposal would otherwise be `Leave open`), the option set MUST include both, with the unfocus state stated in the option `description`:
 
