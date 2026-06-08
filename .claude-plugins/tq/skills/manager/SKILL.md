@@ -27,7 +27,7 @@ SID=$(tq action get <id> --jq '.metadata | fromjson.claude_session_id // empty')
 [ -n "$SID" ] && find ~/.claude/projects -name "$SID.jsonl" -print -quit
 ```
 
-- **Schedule/action mode?** Default to `experimental_bg` (or `interactive`); avoid `noninteractive` unless headless `claude -p` is genuinely required — it draws from the capped Agent SDK credit / API billing. Set via `--meta` (merges — pass `mode` *and* `claude_args` together). Rationale and the full decision rule: [docs/best-practices.md](../../../../docs/best-practices.md#dispatch-mode-selection). Metadata keys: `tq schedule create --help`.
+- **Schedule/action mode?** Default to `interactive`; pick `noninteractive` only when a long batch fleet would otherwise saturate the interactive slot pool. Both launch via `claude --bg` and consume the normal Claude Code allowance — the choice is purely a slot-pool concern, not a billing source. Set via `--meta` (merges — pass `mode` *and* `claude_args` together). Rationale and the full decision rule: [docs/best-practices.md](../../../../docs/best-practices.md#dispatch-mode-selection). Metadata keys: `tq schedule create --help`.
 - **Worktree?** Optional. Add `"--worktree"` to `claude_args` for file-modifying actions that may run in parallel; skip for read-only or serialized work. When added, always pair with a scope-derived name (`"--worktree","<scope-name>"` — file, feature, or skill) so sessions are identifiable in the TUI and `git worktree list`.
 
 ## Filtering output
