@@ -3,6 +3,8 @@ package db_test
 import (
 	"context"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/MH4GF/tq/db"
@@ -541,6 +543,227 @@ func TestInsertActionWithDependencies_BlockerGatesDispatch(t *testing.T) {
 	}
 	if got == nil || got.ID != follower {
 		t.Fatalf("NextPending = %v, want action #%d after blocker done", got, follower)
+	}
+}
+
+func TestReplaceActionDependencies_SwapsEdgeSet(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+	oldBlocker, _ := d.InsertAction("old", taskID, "{}", db.ActionStatusPending, nil, "")
+	newBlocker, _ := d.InsertAction("new", taskID, "{}", db.ActionStatusPending, nil, "")
+	_ = d.SetActionStatusForTest(oldBlocker, db.ActionStatusRunning)
+	_ = d.SetActionStatusForTest(newBlocker, db.ActionStatusRunning)
+
+	follower, _ := d.InsertAction("follower", taskID, "{}", db.ActionStatusPending, nil, "")
+	if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: oldBlocker}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.ReplaceActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: newBlocker}}); err != nil {
+		t.Fatalf("ReplaceActionDependencies: %v", err)
+	}
+
+	deps, err := d.ListActionDependencies(follower)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deps) != 1 || deps[0].ID != newBlocker {
+		t.Fatalf("ListActionDependencies = %+v, want [{action #%d}]", deps, newBlocker)
+	}
+	if got := dispatchable(t, d); got != 0 {
+		t.Fatalf("dispatchable = %d, want 0 (new blocker still running)", got)
+	}
+}
+
+func TestReplaceActionDependencies_AtomicOnDepFailure(t *testing.T) {
+	tests := []struct {
+		name    string
+		newDeps []db.ActionDep
+		wantErr string
+	}{
+		{
+			name:    "missing action blocker rolls back",
+			newDeps: []db.ActionDep{{Type: db.DepTypeAction, ID: 99999}},
+			wantErr: "blocked-by action #99999 not found",
+		},
+		{
+			name:    "missing task blocker rolls back",
+			newDeps: []db.ActionDep{{Type: db.DepTypeTask, ID: 99999}},
+			wantErr: "blocked-by task #99999 not found",
+		},
+		{
+			name:    "invalid dep type rolls back",
+			newDeps: []db.ActionDep{{Type: "bogus", ID: 1}},
+			wantErr: `invalid dependency type "bogus"`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+			blocker, _ := d.InsertAction("blocker", taskID, "{}", db.ActionStatusPending, nil, "")
+			_ = d.SetActionStatusForTest(blocker, db.ActionStatusRunning)
+
+			follower, _ := d.InsertAction("follower", taskID, "{}", db.ActionStatusPending, nil, "")
+			if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: blocker}}); err != nil {
+				t.Fatal(err)
+			}
+
+			before := dispatchable(t, d)
+
+			err := d.ReplaceActionDependencies(follower, tt.newDeps)
+			if err == nil {
+				t.Fatalf("ReplaceActionDependencies returned nil, want error %q", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("err = %v, want substring %q", err, tt.wantErr)
+			}
+
+			deps, err := d.ListActionDependencies(follower)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(deps) != 1 || deps[0].ID != blocker {
+				t.Fatalf("after rollback, ListActionDependencies = %+v, want [{action #%d}] (original preserved)", deps, blocker)
+			}
+			if got := dispatchable(t, d); got != before {
+				t.Fatalf("dispatchable after rollback = %d, want %d (no temp unblock)", got, before)
+			}
+		})
+	}
+}
+
+func TestReplaceActionDependencies_MissingAction(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+
+	err := d.ReplaceActionDependencies(99999, []db.ActionDep{})
+	if err == nil || !strings.Contains(err.Error(), "action #99999 not found") {
+		t.Fatalf("ReplaceActionDependencies on missing action: err = %v, want substring %q", err, "action #99999 not found")
+	}
+}
+
+func TestReplaceActionDependencies_EmptyDepsClears(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, _ := d.InsertTask(1, "task", "{}", "")
+
+	blocker, _ := d.InsertAction("blocker", taskID, "{}", db.ActionStatusPending, nil, "")
+	_ = d.SetActionStatusForTest(blocker, db.ActionStatusRunning)
+
+	follower, _ := d.InsertAction("follower", taskID, "{}", db.ActionStatusPending, nil, "")
+	if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: blocker}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.ReplaceActionDependencies(follower, nil); err != nil {
+		t.Fatalf("ReplaceActionDependencies: %v", err)
+	}
+	deps, err := d.ListActionDependencies(follower)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deps) != 0 {
+		t.Fatalf("ListActionDependencies = %+v, want []", deps)
+	}
+	if got := dispatchable(t, d); got != 1 {
+		t.Fatalf("dispatchable = %d, want 1 (no deps left)", got)
+	}
+}
+
+func TestReplaceActionDependencies_RaceWithNextPending(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping race test in short mode")
+	}
+	d := testutil.NewFileTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	taskID, err := d.InsertTask(1, "task", "{}", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const iterations = 20
+	ctx := context.Background()
+
+	for i := range iterations {
+		oldBlocker, err := d.InsertAction("old", taskID, "{}", db.ActionStatusPending, nil, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		newBlocker, err := d.InsertAction("new", taskID, "{}", db.ActionStatusPending, nil, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := d.SetActionStatusForTest(oldBlocker, db.ActionStatusRunning); err != nil {
+			t.Fatal(err)
+		}
+		if err := d.SetActionStatusForTest(newBlocker, db.ActionStatusRunning); err != nil {
+			t.Fatal(err)
+		}
+
+		follower, err := d.InsertAction("follower", taskID, "{}", db.ActionStatusPending, nil, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := d.AddActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: oldBlocker}}); err != nil {
+			t.Fatal(err)
+		}
+
+		var stop atomic.Bool
+		var claimed atomic.Int64
+		var wg sync.WaitGroup
+		const pollers = 4
+		for range pollers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for !stop.Load() {
+					got, err := d.NextPending(ctx)
+					if err != nil {
+						t.Errorf("NextPending: %v", err)
+						return
+					}
+					if got != nil {
+						claimed.Store(got.ID)
+						return
+					}
+				}
+			}()
+		}
+
+		if err := d.ReplaceActionDependencies(follower, []db.ActionDep{{Type: db.DepTypeAction, ID: newBlocker}}); err != nil {
+			stop.Store(true)
+			wg.Wait()
+			t.Fatalf("iter %d: ReplaceActionDependencies: %v", i, err)
+		}
+		stop.Store(true)
+		wg.Wait()
+
+		if got := claimed.Load(); got == follower {
+			t.Fatalf("iter %d: follower #%d was claimed by NextPending during Replace (race window not closed)", i, follower)
+		}
+
+		deps, err := d.ListActionDependencies(follower)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(deps) != 1 || deps[0].ID != newBlocker {
+			t.Fatalf("iter %d: deps = %+v, want [{action #%d}]", i, deps, newBlocker)
+		}
+
+		if err := d.MarkCancelled(follower, "test cleanup"); err != nil {
+			t.Fatal(err)
+		}
+		if err := d.MarkCancelled(oldBlocker, "test cleanup"); err != nil {
+			t.Fatal(err)
+		}
+		if err := d.MarkCancelled(newBlocker, "test cleanup"); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

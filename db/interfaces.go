@@ -27,6 +27,7 @@ type CommandWriter interface {
 	ResumeAction(parentID int64, opts ResumeOptions) (int64, error)
 	AddActionDependencies(actionID int64, deps []ActionDep) error
 	ClearActionDependencies(actionID int64) error
+	ReplaceActionDependencies(actionID int64, deps []ActionDep) error
 	// Task commands
 	InsertTask(projectID int64, title, metadata, workDir string) (int64, error)
 	UpdateTaskFields(id int64, c TaskFieldChanges) error

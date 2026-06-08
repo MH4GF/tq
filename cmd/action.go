@@ -112,12 +112,16 @@ ends failed/cancelled blocks forever — rescue with the /tq:dep-triage skill.
 				return err
 			}
 		}
-		if clearDeps {
+		switch {
+		case clearDeps && len(deps) > 0:
+			if err := database.ReplaceActionDependencies(id, deps); err != nil {
+				return err
+			}
+		case clearDeps:
 			if err := database.ClearActionDependencies(id); err != nil {
 				return err
 			}
-		}
-		if len(deps) > 0 {
+		case len(deps) > 0:
 			if err := database.AddActionDependencies(id, deps); err != nil {
 				return err
 			}
