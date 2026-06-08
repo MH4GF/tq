@@ -38,7 +38,7 @@ Read the file path printed by Phase 1 and fill in each thread.
   - `Action required`: write the body assuming an `addressed in abc1234` style commit hash will be appended after the fix.
   - `Resolve without code change`: write the final body to be posted as-is.
   - `No action`: usually empty. Fill in only if you want to post a comment without resolving.
-- **Edit plan**: how the code will be changed. Fill this in **only** when `Classification` is `Action required` — leave the `_(n/a)_` placeholder for the other two. The plan is what the user signs off on before Phase 3 Step 2 runs, so it must be specific enough that the user can redirect the approach without reading the diff.
+- **Edit plan**: how the code will be changed. Fill this in **only** when `Classification` is `Action required` — leave the `_(n/a)_` placeholder for the other two. The plan is what the user signs off on before Phase 3 Step 1 runs, so it must be specific enough that the user can redirect the approach without reading the diff.
   - Include: target file(s) / function(s) being touched, the intended change (with alternatives when there's a real choice to make), side effects or out-of-scope items being deliberately left alone, and how the change will be verified (test added / existing test exercised / manual check).
   - Keep it proportional to the comment. A typo fix needs a one-liner ("fix typo in `foo.go:42`"). A behavioural change or design call needs the alternatives and the rationale for the chosen one.
   - If the right fix is genuinely unclear, write the plan as a question / option list and surface it to the user before Phase 3 instead of guessing.
@@ -97,7 +97,7 @@ Extracted into `extractFoo()` in `src/util/foo.ts`. Both call sites updated.
 
 For `No action` / `Resolve without code change` threads, leave `Edit plan` as the `_(n/a)_` placeholder — there is no code change to plan.
 
-After editing, present the file to the user and reach agreement on both the Reply draft AND the Edit plan. The user may edit the file directly. Do NOT start Phase 3 without agreement — the Edit plan is what Phase 3 Step 2 implements, so an unreviewed plan means an unreviewed code change.
+After editing, present the file to the user and reach agreement on both the Reply draft AND the Edit plan. The user may edit the file directly. Do NOT start Phase 3 without agreement — the Edit plan is what Phase 3 Step 1 implements, so an unreviewed plan means an unreviewed code change.
 
 **Skip Phase 3 entirely** when every thread is `No action` and every Reply draft is empty. Report `all no-op` and finish.
 
@@ -105,24 +105,19 @@ After editing, present the file to the user and reach agreement on both the Repl
 
 Execute strictly in this order. Each step is a no-op if its target set is empty.
 
-### Step 1: Post "will address" replies
-Post `Will address` on every `Action required` thread (intent declaration before starting work). Run all posts **in parallel** (single message, multiple Bash tool calls).
-
-Skip if no `Action required` threads.
-
-### Step 2: Apply code changes
+### Step 1: Apply code changes
 Implement every fix per the agreed `Edit plan` for each `Action required` thread. The Edit plan is the source of truth for what to change; the Reply draft only describes what happened. Bundle all changes into one commit.
 
 If, while implementing, you discover the Edit plan is wrong or incomplete, stop and re-sync with the user before continuing — do not silently deviate from the plan that was agreed in Phase 2.
 
 Skip if no `Action required` threads.
 
-### Step 3: Push
+### Step 2: Push
 `git push` to remote. Required so GitHub linkifies the commit hash.
 
-Skip if Step 2 produced no commit.
+Skip if Step 1 produced no commit.
 
-### Step 4: Post replies
+### Step 3: Post replies
 - `Action required`: post the completion comment with the commit hash spliced into the Reply draft.
 - `Resolve without code change`: post the Reply draft as-is.
 - `No action` with a Reply draft: post the Reply draft as-is.
@@ -142,10 +137,10 @@ Fixed in abc1234. Typo fix.
 Addressed.
 </example>
 
-### Step 5: Resolve threads
-Resolve every thread that received a reply in Step 4 EXCEPT `No action` threads (those keep the comment without resolving). Run all resolves **in parallel**.
+### Step 4: Resolve threads
+Resolve every thread that received a reply in Step 3 EXCEPT `No action` threads (those keep the comment without resolving). Run all resolves **in parallel**.
 
-### Step 6: Re-request review
+### Step 5: Re-request review
 Re-request review from human reviewers. Skip bot reviewers (e.g., `devin-ai-integration[bot]`).
 
 ```bash
