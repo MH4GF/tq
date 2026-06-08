@@ -1,7 +1,6 @@
 ---
 name: turso-query-watch
 description: Detect production-side Turso rows-read regressions in the tq database. Runs the bundled watcher that inspects `turso db inspect tq --queries`, compares the top queries against a stored baseline, and self-files a tq action when a query's rows-read grows past both gates. Use this whenever asked to check Turso query cost, watch rows-read, run the weekly rows-read regression check, or investigate whether DB query cost regressed in production — including the scheduled "/turso-query-watch" run.
-context: fork
 allowed-tools: Bash(bash *turso-query-watch.sh*)
 ---
 
