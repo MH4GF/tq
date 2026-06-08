@@ -27,14 +27,18 @@ func (s *Schedule) scanFields() []any {
 }
 
 func (db *DB) InsertSchedule(taskID int64, instruction, title, cronExpr, metadata string) (int64, error) {
-	res, err := db.Exec(
-		"INSERT INTO schedules (task_id, instruction, title, cron_expr, metadata) VALUES (?, ?, ?, ?, ?)",
-		taskID, instruction, title, cronExpr, metadata,
-	)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
+	var id int64
+	err := withRetry(context.Background(), "InsertSchedule", func() error {
+		res, err := db.Exec(
+			"INSERT INTO schedules (task_id, instruction, title, cron_expr, metadata) VALUES (?, ?, ?, ?, ?)",
+			taskID, instruction, title, cronExpr, metadata,
+		)
+		if err != nil {
+			return err
+		}
+		id, err = res.LastInsertId()
+		return err
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -77,8 +81,10 @@ func (db *DB) GetSchedule(id int64) (*Schedule, error) {
 }
 
 func (db *DB) UpdateScheduleEnabled(id int64, enabled bool) error {
-	_, err := db.Exec("UPDATE schedules SET enabled = ? WHERE id = ?", enabled, id)
-	return err
+	return withRetry(context.Background(), "UpdateScheduleEnabled", func() error {
+		_, err := db.Exec("UPDATE schedules SET enabled = ? WHERE id = ?", enabled, id)
+		return err
+	})
 }
 
 func (db *DB) UpdateSchedule(id int64, title, cronExpr, metadata, instruction *string, taskID *int64) error {
@@ -118,7 +124,10 @@ func (db *DB) UpdateSchedule(id int64, title, cronExpr, metadata, instruction *s
 
 	query := "UPDATE schedules SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
 	args = append(args, id)
-	_, err := db.Exec(query, args...)
+	err := withRetry(context.Background(), "UpdateSchedule", func() error {
+		_, err := db.Exec(query, args...)
+		return err
+	})
 	if err == nil {
 		db.emitEvent("schedule", id, "schedule.updated", payload)
 	}
@@ -165,57 +174,56 @@ func (db *DB) BulkInsertScheduledActions(specs []ActionInsertSpec, runs []Schedu
 	}
 
 	ctx := context.Background()
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("bulk insert scheduled actions: begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	var sb strings.Builder
-	sb.WriteString("INSERT INTO actions (title, task_id, metadata, status, dispatch_after, work_dir) VALUES ")
-	args := make([]any, 0, len(specs)*6)
-	for i, s := range specs {
-		if i > 0 {
-			sb.WriteString(", ")
+	var ids []int64
+	err := db.withTxRetry(ctx, "BulkInsertScheduledActions", func(tx *sql.Tx) error {
+		ids = nil
+		var sb strings.Builder
+		sb.WriteString("INSERT INTO actions (title, task_id, metadata, status, dispatch_after, work_dir) VALUES ")
+		args := make([]any, 0, len(specs)*6)
+		for i, s := range specs {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString("(?, ?, ?, ?, ?, ?)")
+			args = append(args, s.Title, s.TaskID, s.Metadata, s.Status, s.DispatchAfter, s.WorkDir)
 		}
-		sb.WriteString("(?, ?, ?, ?, ?, ?)")
-		args = append(args, s.Title, s.TaskID, s.Metadata, s.Status, s.DispatchAfter, s.WorkDir)
-	}
-	sb.WriteString(" RETURNING id")
+		sb.WriteString(" RETURNING id")
 
-	rows, err := tx.QueryContext(ctx, sb.String(), args...)
-	if err != nil {
-		return nil, fmt.Errorf("bulk insert scheduled actions: insert: %w", err)
-	}
-	ids := make([]int64, 0, len(specs))
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
+		rows, err := tx.QueryContext(ctx, sb.String(), args...)
+		if err != nil {
+			return fmt.Errorf("bulk insert scheduled actions: insert: %w", err)
+		}
+		freshIDs := make([]int64, 0, len(specs))
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return fmt.Errorf("bulk insert scheduled actions: scan id: %w", err)
+			}
+			freshIDs = append(freshIDs, id)
+		}
+		if err := rows.Err(); err != nil {
 			_ = rows.Close()
-			return nil, fmt.Errorf("bulk insert scheduled actions: scan id: %w", err)
+			return fmt.Errorf("bulk insert scheduled actions: insert rows: %w", err)
 		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
 		_ = rows.Close()
-		return nil, fmt.Errorf("bulk insert scheduled actions: insert rows: %w", err)
-	}
-	_ = rows.Close()
-	if len(ids) != len(specs) {
-		return nil, fmt.Errorf("bulk insert scheduled actions: expected %d ids, got %d", len(specs), len(ids))
-	}
-
-	for _, u := range runs {
-		if _, err := tx.ExecContext(ctx,
-			"UPDATE schedules SET last_run_at = ?, last_error = NULLIF(?, '') WHERE id = ?",
-			u.LastRunAt, u.LastError, u.ID,
-		); err != nil {
-			return nil, fmt.Errorf("bulk insert scheduled actions: update schedule id=%d: %w", u.ID, err)
+		if len(freshIDs) != len(specs) {
+			return fmt.Errorf("bulk insert scheduled actions: expected %d ids, got %d", len(specs), len(freshIDs))
 		}
-	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("bulk insert scheduled actions: commit: %w", err)
+		for _, u := range runs {
+			if _, err := tx.ExecContext(ctx,
+				"UPDATE schedules SET last_run_at = ?, last_error = NULLIF(?, '') WHERE id = ?",
+				u.LastRunAt, u.LastError, u.ID,
+			); err != nil {
+				return fmt.Errorf("bulk insert scheduled actions: update schedule id=%d: %w", u.ID, err)
+			}
+		}
+		ids = freshIDs
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	for i, id := range ids {
@@ -249,23 +257,19 @@ func (db *DB) BulkUpdateScheduleRuns(updates []ScheduleRunUpdate) error {
 		return nil
 	}
 	ctx := context.Background()
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("bulk update schedule runs: begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	for _, u := range updates {
-		if _, err := tx.ExecContext(ctx,
-			"UPDATE schedules SET last_run_at = ?, last_error = NULLIF(?, '') WHERE id = ?",
-			u.LastRunAt, u.LastError, u.ID,
-		); err != nil {
-			return fmt.Errorf("bulk update schedule runs: update id=%d: %w", u.ID, err)
+	err := db.withTxRetry(ctx, "BulkUpdateScheduleRuns", func(tx *sql.Tx) error {
+		for _, u := range updates {
+			if _, err := tx.ExecContext(ctx,
+				"UPDATE schedules SET last_run_at = ?, last_error = NULLIF(?, '') WHERE id = ?",
+				u.LastRunAt, u.LastError, u.ID,
+			); err != nil {
+				return fmt.Errorf("bulk update schedule runs: update id=%d: %w", u.ID, err)
+			}
 		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("bulk update schedule runs: commit: %w", err)
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	for _, u := range updates {
@@ -327,7 +331,10 @@ func (db *DB) DeleteSchedule(id int64) error {
 		return fmt.Errorf("get schedule task_id: %w", err)
 	}
 
-	_, err := db.Exec("DELETE FROM schedules WHERE id = ?", id)
+	err := withRetry(context.Background(), "DeleteSchedule", func() error {
+		_, err := db.Exec("DELETE FROM schedules WHERE id = ?", id)
+		return err
+	})
 	if err == nil {
 		db.emitEvent("schedule", id, "schedule.deleted", map[string]any{
 			"task_id": taskID,

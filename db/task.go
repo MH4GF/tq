@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -55,14 +56,18 @@ func (t Task) MatchesDate(date string) bool {
 }
 
 func (db *DB) InsertTask(projectID int64, title, metadata, workDir string) (int64, error) {
-	res, err := db.Exec(
-		"INSERT INTO tasks (project_id, title, metadata, work_dir) VALUES (?, ?, ?, ?)",
-		projectID, title, metadata, workDir,
-	)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
+	var id int64
+	err := withRetry(context.Background(), "InsertTask", func() error {
+		res, err := db.Exec(
+			"INSERT INTO tasks (project_id, title, metadata, work_dir) VALUES (?, ?, ?, ?)",
+			projectID, title, metadata, workDir,
+		)
+		if err != nil {
+			return err
+		}
+		id, err = res.LastInsertId()
+		return err
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -110,57 +115,59 @@ func (db *DB) UpdateTaskFields(id int64, c TaskFieldChanges) error {
 		}
 	}
 
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
+	ctx := context.Background()
 	var cur Task
-	if err := tx.QueryRow("SELECT "+taskColumns+" FROM tasks WHERE id = ?", id).Scan(cur.scanFields()...); err != nil {
-		return fmt.Errorf("task #%d not found: %w", id, err)
-	}
-
-	setClauses := []string{"updated_at = datetime('now')"}
-	var args []any
-	if c.ProjectID != nil {
-		setClauses = append(setClauses, "project_id = ?")
-		args = append(args, *c.ProjectID)
-	}
-	if c.WorkDir != nil {
-		setClauses = append(setClauses, "work_dir = ?")
-		args = append(args, *c.WorkDir)
-	}
 	var metaKeys []string
-	if c.Metadata != nil {
-		data, keys, err := mergeMetadataJSON(cur.Metadata, c.Metadata)
-		if err != nil {
+	var noChange bool
+	err := db.withTxRetry(ctx, "UpdateTask", func(tx *sql.Tx) error {
+		cur = Task{}
+		metaKeys = nil
+		noChange = false
+		if err := tx.QueryRowContext(ctx, "SELECT "+taskColumns+" FROM tasks WHERE id = ?", id).Scan(cur.scanFields()...); err != nil {
+			return fmt.Errorf("task #%d not found: %w", id, err)
+		}
+		setClauses := []string{"updated_at = datetime('now')"}
+		var args []any
+		if c.ProjectID != nil {
+			setClauses = append(setClauses, "project_id = ?")
+			args = append(args, *c.ProjectID)
+		}
+		if c.WorkDir != nil {
+			setClauses = append(setClauses, "work_dir = ?")
+			args = append(args, *c.WorkDir)
+		}
+		if c.Metadata != nil {
+			data, keys, err := mergeMetadataJSON(cur.Metadata, c.Metadata)
+			if err != nil {
+				return err
+			}
+			setClauses = append(setClauses, "metadata = ?")
+			args = append(args, data)
+			metaKeys = keys
+		}
+		if c.Status != nil {
+			setClauses = append(setClauses, "status = ?")
+			args = append(args, *c.Status)
+		}
+		if len(args) == 0 {
+			noChange = true
+			return nil
+		}
+		args = append(args, id)
+		// #nosec G202 -- setClauses holds only hardcoded column literals; all
+		// values are bound via ? placeholders in args.
+		query := "UPDATE tasks SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
+		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 			return err
 		}
-		setClauses = append(setClauses, "metadata = ?")
-		args = append(args, data)
-		metaKeys = keys
-	}
-	if c.Status != nil {
-		setClauses = append(setClauses, "status = ?")
-		args = append(args, *c.Status)
-	}
-	if len(args) == 0 {
 		return nil
-	}
-
-	args = append(args, id)
-	// #nosec G202 -- setClauses holds only hardcoded column literals; all
-	// values are bound via ? placeholders in args.
-	query := "UPDATE tasks SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
-	if _, err := tx.Exec(query, args...); err != nil {
+	})
+	if err != nil {
 		return err
 	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit: %w", err)
+	if noChange {
+		return nil
 	}
-
 	if c.ProjectID != nil {
 		db.emitEvent("task", id, EventTaskProjectChanged, map[string]any{"from": cur.ProjectID, "to": *c.ProjectID})
 	}

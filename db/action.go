@@ -102,14 +102,18 @@ func (db *DB) InsertAction(title string, taskID int64, metadata, status string, 
 	if !ValidActionStatuses[status] {
 		return 0, fmt.Errorf("invalid action status %q: must be one of pending, running, dispatched, done, failed, cancelled", status)
 	}
-	res, err := db.Exec(
-		"INSERT INTO actions (title, task_id, metadata, status, dispatch_after, work_dir) VALUES (?, ?, ?, ?, ?, ?)",
-		title, taskID, metadata, status, dispatchAfter, workDir,
-	)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
+	var id int64
+	err := withRetry(context.Background(), "InsertAction", func() error {
+		res, err := db.Exec(
+			"INSERT INTO actions (title, task_id, metadata, status, dispatch_after, work_dir) VALUES (?, ?, ?, ?, ?, ?)",
+			title, taskID, metadata, status, dispatchAfter, workDir,
+		)
+		if err != nil {
+			return err
+		}
+		id, err = res.LastInsertId()
+		return err
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -132,29 +136,26 @@ func (db *DB) InsertActionWithDependencies(spec ActionInsertSpec, deps []ActionD
 	}
 
 	ctx := context.Background()
-	tx, err := db.BeginTx(ctx, nil)
+	var id int64
+	err := db.withTxRetry(ctx, "InsertActionWithDependencies", func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx,
+			"INSERT INTO actions (title, task_id, metadata, status, dispatch_after, work_dir) VALUES (?, ?, ?, ?, ?, ?)",
+			spec.Title, spec.TaskID, spec.Metadata, spec.Status, spec.DispatchAfter, spec.WorkDir,
+		)
+		if err != nil {
+			return err
+		}
+		newID, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		if err := insertActionDependenciesTx(ctx, tx, newID, deps, false); err != nil {
+			return err
+		}
+		id = newID
+		return nil
+	})
 	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	res, err := tx.ExecContext(ctx,
-		"INSERT INTO actions (title, task_id, metadata, status, dispatch_after, work_dir) VALUES (?, ?, ?, ?, ?, ?)",
-		spec.Title, spec.TaskID, spec.Metadata, spec.Status, spec.DispatchAfter, spec.WorkDir,
-	)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-
-	if err := insertActionDependenciesTx(ctx, tx, id, deps, false); err != nil {
-		return 0, err
-	}
-
-	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 
@@ -196,41 +197,42 @@ func (db *DB) GetTaskActionCount(taskID int64, statuses []string) (int64, error)
 }
 
 func (db *DB) NextPending(ctx context.Context) (*Action, error) {
-	tx, err := db.BeginTx(ctx, nil)
+	a := &Action{}
+	var found bool
+	err := db.withTxRetry(ctx, "NextPending", func(tx *sql.Tx) error {
+		found = false
+		fresh := &Action{}
+		err := tx.QueryRowContext(ctx,
+			`SELECT `+actionColumnsA+`
+			 FROM actions a
+			 INNER JOIN tasks t ON a.task_id = t.id
+			 INNER JOIN projects p ON t.project_id = p.id
+			 WHERE a.status = ?
+			   AND p.dispatch_enabled = 1
+			   AND (a.dispatch_after IS NULL OR a.dispatch_after <= datetime('now'))
+			   AND `+dependencyGatePredicate+`
+			 ORDER BY a.id ASC LIMIT 1`,
+			ActionStatusPending,
+		).Scan(fresh.scanFields()...)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE actions SET status = ?, started_at = datetime('now') WHERE id = ?", ActionStatusRunning, fresh.ID); err != nil {
+			return err
+		}
+		*a = *fresh
+		found = true
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	a := &Action{}
-	err = tx.QueryRowContext(ctx,
-		`SELECT `+actionColumnsA+`
-		 FROM actions a
-		 INNER JOIN tasks t ON a.task_id = t.id
-		 INNER JOIN projects p ON t.project_id = p.id
-		 WHERE a.status = ?
-		   AND p.dispatch_enabled = 1
-		   AND (a.dispatch_after IS NULL OR a.dispatch_after <= datetime('now'))
-		   AND `+dependencyGatePredicate+`
-		 ORDER BY a.id ASC LIMIT 1`,
-		ActionStatusPending,
-	).Scan(a.scanFields()...)
-	if errors.Is(err, sql.ErrNoRows) {
+	if !found {
 		return nil, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = tx.ExecContext(ctx, "UPDATE actions SET status = ?, started_at = datetime('now') WHERE id = ?", ActionStatusRunning, a.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-
 	db.emitEvent("action", a.ID, "action.claimed", map[string]any{
 		"from": ActionStatusPending, "to": ActionStatusRunning,
 	})
@@ -239,37 +241,31 @@ func (db *DB) NextPending(ctx context.Context) (*Action, error) {
 }
 
 func (db *DB) ClaimPending(ctx context.Context, id int64) (*Action, error) {
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	a := &Action{}
-	err = tx.QueryRowContext(ctx,
-		"SELECT "+actionColumns+" FROM actions WHERE id = ?",
-		id,
-	).Scan(a.scanFields()...)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("action #%d not found", id)
-	}
+	err := db.withTxRetry(ctx, "ClaimPending", func(tx *sql.Tx) error {
+		fresh := &Action{}
+		err := tx.QueryRowContext(ctx,
+			"SELECT "+actionColumns+" FROM actions WHERE id = ?",
+			id,
+		).Scan(fresh.scanFields()...)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("action #%d not found", id)
+		}
+		if err != nil {
+			return err
+		}
+		if fresh.Status != ActionStatusPending {
+			return fmt.Errorf("action #%d is not pending (current: %s)", id, fresh.Status)
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE actions SET status = ?, started_at = datetime('now') WHERE id = ?", ActionStatusRunning, id); err != nil {
+			return err
+		}
+		*a = *fresh
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	if a.Status != ActionStatusPending {
-		return nil, fmt.Errorf("action #%d is not pending (current: %s)", id, a.Status)
-	}
-
-	_, err = tx.ExecContext(ctx, "UPDATE actions SET status = ?, started_at = datetime('now') WHERE id = ?", ActionStatusRunning, id)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-
 	db.emitEvent("action", id, "action.claimed", map[string]any{
 		"from": ActionStatusPending, "to": ActionStatusRunning,
 	})
@@ -291,40 +287,37 @@ func (db *DB) MarkCancelled(id int64, result string) error {
 
 func (db *DB) markTerminal(id int64, status, result string) error {
 	ctx := context.Background()
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	var from string
-	if err := tx.QueryRowContext(ctx, "SELECT status FROM actions WHERE id = ?", id).Scan(&from); err != nil {
-		return fmt.Errorf("get current status: %w", err)
-	}
-
-	if IsTerminalActionStatus(from) {
-		if err := tx.Commit(); err != nil {
+	var rowsAffected int64
+	var earlyTerminal bool
+	err := db.withTxRetry(ctx, "markTerminal", func(tx *sql.Tx) error {
+		from = ""
+		rowsAffected = 0
+		earlyTerminal = false
+		if err := tx.QueryRowContext(ctx, "SELECT status FROM actions WHERE id = ?", id).Scan(&from); err != nil {
+			return fmt.Errorf("get current status: %w", err)
+		}
+		if IsTerminalActionStatus(from) {
+			earlyTerminal = true
+			return nil
+		}
+		res, err := tx.ExecContext(ctx,
+			"UPDATE actions SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ? AND status = ?",
+			status, result, id, from,
+		)
+		if err != nil {
 			return err
 		}
+		rowsAffected, err = res.RowsAffected()
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	if earlyTerminal {
 		return db.preserveSuccessfulResultOnRaceLoss(id, status, result, from)
 	}
-
-	res, err := tx.ExecContext(ctx,
-		"UPDATE actions SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ? AND status = ?",
-		status, result, id, from,
-	)
-	if err != nil {
-		return err
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	if n == 0 {
+	if rowsAffected == 0 {
 		current, err := db.requeryStatus(id)
 		if err != nil {
 			return err
@@ -365,14 +358,18 @@ func (db *DB) preserveSuccessfulResultOnRaceLoss(id int64, attemptedStatus, resu
 }
 
 func (db *DB) MarkDispatched(id int64) error {
-	res, err := db.Exec(
-		"UPDATE actions SET status = ? WHERE id = ? AND status = ?",
-		ActionStatusDispatched, id, ActionStatusRunning,
-	)
-	if err != nil {
+	var n int64
+	err := withRetry(context.Background(), "MarkDispatched", func() error {
+		res, err := db.Exec(
+			"UPDATE actions SET status = ? WHERE id = ? AND status = ?",
+			ActionStatusDispatched, id, ActionStatusRunning,
+		)
+		if err != nil {
+			return err
+		}
+		n, err = res.RowsAffected()
 		return err
-	}
-	n, err := res.RowsAffected()
+	})
 	if err != nil {
 		return err
 	}
@@ -585,16 +582,19 @@ func (db *DB) movePending(id int64, dispatchAfterValid bool, dispatchAfter, requ
 	if dispatchAfterValid {
 		dispatchArg = dispatchAfter
 	}
-	res, err := db.Exec(
-		"UPDATE actions SET status = ?, started_at = NULL, tmux_session = NULL, tmux_window = NULL, dispatch_after = ? WHERE id = ? AND status = ?",
-		ActionStatusPending, dispatchArg, id, from,
-	)
-	if err != nil {
+	var n int64
+	if err := withRetry(context.Background(), "moveToPending", func() error {
+		res, err := db.Exec(
+			"UPDATE actions SET status = ?, started_at = NULL, tmux_session = NULL, tmux_window = NULL, dispatch_after = ? WHERE id = ? AND status = ?",
+			ActionStatusPending, dispatchArg, id, from,
+		)
+		if err != nil {
+			return err
+		}
+		n, err = res.RowsAffected()
+		return err
+	}); err != nil {
 		return fmt.Errorf("move action #%d to pending: %w", id, err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("move action #%d to pending: rows affected: %w", id, err)
 	}
 	if n == 0 {
 		return fmt.Errorf("move action #%d to pending: status changed concurrently (expected from=%s)", id, from)
@@ -609,30 +609,26 @@ func (db *DB) movePending(id int64, dispatchAfterValid bool, dispatchAfter, requ
 }
 
 func (db *DB) MergeActionMetadata(id int64, updates map[string]any) error {
-	tx, err := db.Begin()
+	ctx := context.Background()
+	var keys []string
+	err := db.withTxRetry(ctx, "MergeActionMetadata", func(tx *sql.Tx) error {
+		var existing string
+		if err := tx.QueryRowContext(ctx, "SELECT metadata FROM actions WHERE id = ?", id).Scan(&existing); err != nil {
+			return fmt.Errorf("merge action metadata: get metadata for id=%d: %w", id, err)
+		}
+		data, mergedKeys, err := mergeMetadataJSON(existing, updates)
+		if err != nil {
+			return fmt.Errorf("merge action metadata: merge id=%d: %w", id, err)
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE actions SET metadata = ? WHERE id = ?", data, id); err != nil {
+			return fmt.Errorf("merge action metadata: update id=%d: %w", id, err)
+		}
+		keys = mergedKeys
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("merge action metadata: begin tx: %w", err)
+		return err
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	var existing string
-	if err := tx.QueryRow("SELECT metadata FROM actions WHERE id = ?", id).Scan(&existing); err != nil {
-		return fmt.Errorf("merge action metadata: get metadata for id=%d: %w", id, err)
-	}
-
-	data, keys, err := mergeMetadataJSON(existing, updates)
-	if err != nil {
-		return fmt.Errorf("merge action metadata: merge id=%d: %w", id, err)
-	}
-
-	if _, err := tx.Exec("UPDATE actions SET metadata = ? WHERE id = ?", data, id); err != nil {
-		return fmt.Errorf("merge action metadata: update id=%d: %w", id, err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("merge action metadata: commit: %w", err)
-	}
-
 	db.emitEvent("action", id, "action.metadata_merged", map[string]any{
 		"keys_updated": keys,
 	})
@@ -644,42 +640,35 @@ func (db *DB) BulkMergeActionMetadata(merges []ActionMetadataMerge) error {
 		return nil
 	}
 	ctx := context.Background()
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("bulk merge action metadata: begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	type committed struct {
 		id   int64
 		keys []string
 	}
 	var done []committed
-
-	for _, m := range merges {
-		if len(m.Updates) == 0 {
-			continue
+	err := db.withTxRetry(ctx, "BulkMergeActionMetadata", func(tx *sql.Tx) error {
+		done = nil
+		for _, m := range merges {
+			if len(m.Updates) == 0 {
+				continue
+			}
+			var existing string
+			if err := tx.QueryRowContext(ctx, "SELECT metadata FROM actions WHERE id = ?", m.ID).Scan(&existing); err != nil {
+				return fmt.Errorf("bulk merge action metadata: get metadata for id=%d: %w", m.ID, err)
+			}
+			data, keys, err := mergeMetadataJSON(existing, m.Updates)
+			if err != nil {
+				return fmt.Errorf("bulk merge action metadata: merge id=%d: %w", m.ID, err)
+			}
+			if _, err := tx.ExecContext(ctx, "UPDATE actions SET metadata = ? WHERE id = ?", data, m.ID); err != nil {
+				return fmt.Errorf("bulk merge action metadata: update id=%d: %w", m.ID, err)
+			}
+			done = append(done, committed{id: m.ID, keys: keys})
 		}
-		var existing string
-		if err := tx.QueryRowContext(ctx, "SELECT metadata FROM actions WHERE id = ?", m.ID).Scan(&existing); err != nil {
-			return fmt.Errorf("bulk merge action metadata: get metadata for id=%d: %w", m.ID, err)
-		}
-
-		data, keys, err := mergeMetadataJSON(existing, m.Updates)
-		if err != nil {
-			return fmt.Errorf("bulk merge action metadata: merge id=%d: %w", m.ID, err)
-		}
-
-		if _, err := tx.ExecContext(ctx, "UPDATE actions SET metadata = ? WHERE id = ?", data, m.ID); err != nil {
-			return fmt.Errorf("bulk merge action metadata: update id=%d: %w", m.ID, err)
-		}
-		done = append(done, committed{id: m.ID, keys: keys})
+		return nil
+	})
+	if err != nil {
+		return err
 	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("bulk merge action metadata: commit: %w", err)
-	}
-
 	for _, c := range done {
 		db.emitEvent("action", c.id, "action.metadata_merged", map[string]any{
 			"keys_updated": c.keys,
@@ -690,85 +679,83 @@ func (db *DB) BulkMergeActionMetadata(merges []ActionMetadataMerge) error {
 
 func (db *DB) UpdateAction(id int64, title *string, taskID *int64, metadata, workDir, result *string) error {
 	ctx := context.Background()
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("update action: begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	var fieldsCount int
+	err := db.withTxRetry(ctx, "UpdateAction", func(tx *sql.Tx) error {
+		fieldsCount = 0
+		var current Action
+		if err := tx.QueryRowContext(ctx, "SELECT "+actionColumns+" FROM actions WHERE id = ?", id).Scan(current.scanFields()...); err != nil {
+			return fmt.Errorf("action #%d not found: %w", id, err)
+		}
 
-	var current Action
-	if err := tx.QueryRowContext(ctx, "SELECT "+actionColumns+" FROM actions WHERE id = ?", id).Scan(current.scanFields()...); err != nil {
-		return fmt.Errorf("action #%d not found: %w", id, err)
-	}
+		nonMetadataStructural := title != nil || taskID != nil || workDir != nil
+		if nonMetadataStructural && current.Status != ActionStatusPending && current.Status != ActionStatusFailed {
+			return fmt.Errorf("action #%d has status %q: title/task/work-dir can only be updated on pending or failed actions", id, current.Status)
+		}
+		if metadata != nil && !isResultAmendable(current.Status) {
+			return fmt.Errorf("action #%d has status %q: metadata can only be amended on pending, failed, done, or cancelled actions", id, current.Status)
+		}
+		if result != nil && !isResultAmendable(current.Status) {
+			return fmt.Errorf("action #%d has status %q: result can only be amended on pending, failed, done, or cancelled actions", id, current.Status)
+		}
 
-	nonMetadataStructural := title != nil || taskID != nil || workDir != nil
-	if nonMetadataStructural && current.Status != ActionStatusPending && current.Status != ActionStatusFailed {
-		return fmt.Errorf("action #%d has status %q: title/task/work-dir can only be updated on pending or failed actions", id, current.Status)
-	}
-	if metadata != nil && !isResultAmendable(current.Status) {
-		return fmt.Errorf("action #%d has status %q: metadata can only be amended on pending, failed, done, or cancelled actions", id, current.Status)
-	}
-	if result != nil && !isResultAmendable(current.Status) {
-		return fmt.Errorf("action #%d has status %q: result can only be amended on pending, failed, done, or cancelled actions", id, current.Status)
-	}
+		var setClauses []string
+		var args []any
 
-	var setClauses []string
-	var args []any
-
-	if title != nil {
-		setClauses = append(setClauses, "title = ?")
-		args = append(args, *title)
-	}
-	if taskID != nil {
-		setClauses = append(setClauses, "task_id = ?")
-		args = append(args, *taskID)
-	}
-	if metadata != nil {
-		existing := make(map[string]any)
-		if current.Metadata != "" && current.Metadata != "{}" {
-			if err := json.Unmarshal([]byte(current.Metadata), &existing); err != nil {
-				return fmt.Errorf("parse existing metadata: %w", err)
+		if title != nil {
+			setClauses = append(setClauses, "title = ?")
+			args = append(args, *title)
+		}
+		if taskID != nil {
+			setClauses = append(setClauses, "task_id = ?")
+			args = append(args, *taskID)
+		}
+		if metadata != nil {
+			existing := make(map[string]any)
+			if current.Metadata != "" && current.Metadata != "{}" {
+				if err := json.Unmarshal([]byte(current.Metadata), &existing); err != nil {
+					return fmt.Errorf("parse existing metadata: %w", err)
+				}
 			}
+			updates := make(map[string]any)
+			if err := json.Unmarshal([]byte(*metadata), &updates); err != nil {
+				return fmt.Errorf("parse new metadata: %w", err)
+			}
+			maps.Copy(existing, updates)
+			merged, err := json.Marshal(existing)
+			if err != nil {
+				return fmt.Errorf("marshal metadata: %w", err)
+			}
+			setClauses = append(setClauses, "metadata = ?")
+			args = append(args, string(merged))
 		}
-		updates := make(map[string]any)
-		if err := json.Unmarshal([]byte(*metadata), &updates); err != nil {
-			return fmt.Errorf("parse new metadata: %w", err)
+		if workDir != nil {
+			setClauses = append(setClauses, "work_dir = ?")
+			args = append(args, *workDir)
 		}
-		maps.Copy(existing, updates)
-		merged, err := json.Marshal(existing)
-		if err != nil {
-			return fmt.Errorf("marshal metadata: %w", err)
+		if result != nil {
+			setClauses = append(setClauses, "result = ?")
+			args = append(args, *result)
 		}
-		setClauses = append(setClauses, "metadata = ?")
-		args = append(args, string(merged))
-	}
-	if workDir != nil {
-		setClauses = append(setClauses, "work_dir = ?")
-		args = append(args, *workDir)
-	}
-	if result != nil {
-		setClauses = append(setClauses, "result = ?")
-		args = append(args, *result)
-	}
 
-	if len(setClauses) == 0 {
-		return fmt.Errorf("no fields to update")
-	}
+		if len(setClauses) == 0 {
+			return fmt.Errorf("no fields to update")
+		}
 
-	// #nosec G202 -- setClauses holds only hardcoded column literals; all
-	// values are bound via ? placeholders in args.
-	query := "UPDATE actions SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
-	args = append(args, id)
-	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		// #nosec G202 -- setClauses holds only hardcoded column literals; all
+		// values are bound via ? placeholders in args.
+		query := "UPDATE actions SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
+		args = append(args, id)
+		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+			return err
+		}
+		fieldsCount = len(setClauses)
+		return nil
+	})
+	if err != nil {
 		return err
 	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("update action: commit: %w", err)
-	}
-
 	db.emitEvent("action", id, "action.updated", map[string]any{
-		"fields_count": len(setClauses),
+		"fields_count": fieldsCount,
 	})
 	return nil
 }
@@ -915,42 +902,35 @@ func (db *DB) BulkMarkFailed(updates []ActionFailureUpdate) error {
 		return nil
 	}
 	ctx := context.Background()
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("bulk mark failed: begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	type committed struct {
 		id     int64
 		from   string
 		result string
 	}
 	var done []committed
-
-	for _, u := range updates {
-		var from string
-		if err := tx.QueryRowContext(ctx, "SELECT status FROM actions WHERE id = ?", u.ID).Scan(&from); err != nil {
-			return fmt.Errorf("bulk mark failed: get status for id=%d: %w", u.ID, err)
+	err := db.withTxRetry(ctx, "BulkMarkFailed", func(tx *sql.Tx) error {
+		done = nil
+		for _, u := range updates {
+			var from string
+			if err := tx.QueryRowContext(ctx, "SELECT status FROM actions WHERE id = ?", u.ID).Scan(&from); err != nil {
+				return fmt.Errorf("bulk mark failed: get status for id=%d: %w", u.ID, err)
+			}
+			if from == ActionStatusDone || from == ActionStatusFailed || from == ActionStatusCancelled {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx,
+				"UPDATE actions SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ? AND status = ?",
+				ActionStatusFailed, u.Reason, u.ID, from,
+			); err != nil {
+				return fmt.Errorf("bulk mark failed: update id=%d: %w", u.ID, err)
+			}
+			done = append(done, committed{id: u.ID, from: from, result: u.Reason})
 		}
-		if from == ActionStatusDone || from == ActionStatusFailed || from == ActionStatusCancelled {
-			continue
-		}
-
-		if _, err := tx.ExecContext(ctx,
-			"UPDATE actions SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ? AND status = ?",
-			ActionStatusFailed, u.Reason, u.ID, from,
-		); err != nil {
-			return fmt.Errorf("bulk mark failed: update id=%d: %w", u.ID, err)
-		}
-
-		done = append(done, committed{id: u.ID, from: from, result: u.Reason})
+		return nil
+	})
+	if err != nil {
+		return err
 	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("bulk mark failed: commit: %w", err)
-	}
-
 	for _, c := range done {
 		db.emitEvent("action", c.id, "action.status_changed", map[string]any{
 			"from": c.from, "to": ActionStatusFailed, "result": c.result,
@@ -967,12 +947,6 @@ func (db *DB) BulkMarkDone(updates []ActionDoneUpdate) error {
 		return nil
 	}
 	ctx := context.Background()
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("bulk mark done: begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	type committed struct {
 		id     int64
 		from   string
@@ -985,40 +959,40 @@ func (db *DB) BulkMarkDone(updates []ActionDoneUpdate) error {
 	}
 	var done []committed
 	var lost []raceLoss
-
-	for _, u := range updates {
-		var from string
-		if err := tx.QueryRowContext(ctx, "SELECT status FROM actions WHERE id = ?", u.ID).Scan(&from); err != nil {
-			return fmt.Errorf("bulk mark done: get status for id=%d: %w", u.ID, err)
+	err := db.withTxRetry(ctx, "BulkMarkDone", func(tx *sql.Tx) error {
+		done = nil
+		lost = nil
+		for _, u := range updates {
+			var from string
+			if err := tx.QueryRowContext(ctx, "SELECT status FROM actions WHERE id = ?", u.ID).Scan(&from); err != nil {
+				return fmt.Errorf("bulk mark done: get status for id=%d: %w", u.ID, err)
+			}
+			if IsTerminalActionStatus(from) {
+				lost = append(lost, raceLoss{id: u.ID, result: u.Result, observedAtSelect: from})
+				continue
+			}
+			res, err := tx.ExecContext(ctx,
+				"UPDATE actions SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ? AND status = ?",
+				ActionStatusDone, u.Result, u.ID, from,
+			)
+			if err != nil {
+				return fmt.Errorf("bulk mark done: update id=%d: %w", u.ID, err)
+			}
+			n, err := res.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("bulk mark done: rows affected id=%d: %w", u.ID, err)
+			}
+			if n == 0 {
+				lost = append(lost, raceLoss{id: u.ID, result: u.Result})
+				continue
+			}
+			done = append(done, committed{id: u.ID, from: from, result: u.Result})
 		}
-		if IsTerminalActionStatus(from) {
-			lost = append(lost, raceLoss{id: u.ID, result: u.Result, observedAtSelect: from})
-			continue
-		}
-
-		res, err := tx.ExecContext(ctx,
-			"UPDATE actions SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ? AND status = ?",
-			ActionStatusDone, u.Result, u.ID, from,
-		)
-		if err != nil {
-			return fmt.Errorf("bulk mark done: update id=%d: %w", u.ID, err)
-		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("bulk mark done: rows affected id=%d: %w", u.ID, err)
-		}
-		if n == 0 {
-			lost = append(lost, raceLoss{id: u.ID, result: u.Result})
-			continue
-		}
-
-		done = append(done, committed{id: u.ID, from: from, result: u.Result})
+		return nil
+	})
+	if err != nil {
+		return err
 	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("bulk mark done: commit: %w", err)
-	}
-
 	for _, c := range done {
 		db.emitEvent("action", c.id, "action.status_changed", map[string]any{
 			"from": c.from, "to": ActionStatusDone, "result": c.result,
