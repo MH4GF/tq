@@ -53,8 +53,9 @@ Triage each line into one of two shapes:
    ```
 
    Append the returned id: `- <what to retry / try next> → #<id>`. For
-   time-based blockers (API down, CI flake) put the retry timing in the
-   follow-up's `--meta` as `dispatch_after`.
+   time-based blockers (API down, CI flake) pass the retry timing via
+   `--after "YYYY-MM-DD HH:MM"` (local timezone) so the follow-up stays
+   pending until then.
 
 Get `<task_id>` from the `## tq action context` heading or
 `tq action get <action_id> --jq .task_id`. Write the instruction the way
