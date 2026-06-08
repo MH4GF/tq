@@ -38,7 +38,7 @@ func isRetryableLockError(err error) bool {
 
 func withRetry(ctx context.Context, op string, fn func() error) error {
 	start := retryNow()
-	for attempt := 0; attempt < retryMaxAttempts; attempt++ {
+	for attempt := range retryMaxAttempts {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -76,14 +76,8 @@ func (db *DB) withTxRetry(ctx context.Context, op string, fn func(*sql.Tx) error
 }
 
 func backoffDelay(attempt int) time.Duration {
-	shift := attempt
-	if shift > 8 {
-		shift = 8
-	}
-	d := retryBaseDelay << shift
-	if d > retryCapDelay {
-		d = retryCapDelay
-	}
+	shift := min(attempt, 8)
+	d := min(retryBaseDelay<<shift, retryCapDelay)
 	jitter := 0.5 + retryRand()
 	return time.Duration(float64(d) * jitter)
 }

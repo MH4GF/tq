@@ -140,7 +140,7 @@ func TestWithRetry_CtxCancelled(t *testing.T) {
 
 func TestBackoffDelay_BoundedAndJittered(t *testing.T) {
 	newRetryFixture(t)
-	for attempt := 0; attempt < 16; attempt++ {
+	for attempt := range 16 {
 		d := backoffDelay(attempt)
 		if d < 0 {
 			t.Fatalf("attempt %d: negative delay %v", attempt, d)
