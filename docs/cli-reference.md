@@ -425,4 +425,4 @@ Keyboard shortcuts in the task list (the help bar surfaces each key only when th
 
 | Variable | Effect |
 |----------|--------|
-| `TQ_LOG_RETRY=1` | Emit a `slog.Debug` line on every SQLite lock retry (`db retry`) and on every give-up after the retry budget is exhausted (`db retry give up`). Useful when diagnosing `database is locked` contention. Under normal load no lines should appear because the per-connection `busy_timeout=5000` PRAGMA absorbs most contention before the retry layer fires. |
+| `TQ_LOG_RETRY=1` | Emit a `slog.Debug` line on every SQLite lock retry (`db retry`) and on every give-up after the retry budget is exhausted (`db retry give up`). Useful when diagnosing `database is locked` contention. Under normal load no lines should appear: `_txlock=immediate` queues writers on the writer lock at `BEGIN` time, and `busy_timeout=5000` absorbs that wait before the retry layer fires. |

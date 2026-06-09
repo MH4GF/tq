@@ -63,7 +63,7 @@ func sqliteDSN(dsn string) string {
 	if isMemoryDSN(dsn) {
 		return dsn
 	}
-	const pragmas = "_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)&_pragma=journal_mode(WAL)"
+	const pragmas = "_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)&_pragma=journal_mode(WAL)&_txlock=immediate"
 	if strings.HasPrefix(dsn, "file:") {
 		sep := "?"
 		if strings.Contains(dsn, "?") {
