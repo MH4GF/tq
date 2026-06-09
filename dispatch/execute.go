@@ -459,10 +459,21 @@ var blockedClaudeArgs = map[string]bool{
 	"--remote":        true,
 }
 
+func isTqModeName(s string) bool {
+	return validModes[s] || s == "experimental_bg"
+}
+
 func ValidateClaudeArgs(args []string) error {
-	for _, arg := range args {
+	for i, arg := range args {
 		if blockedClaudeArgs[arg] {
 			return fmt.Errorf("claude_args cannot include %q (managed by tq internally)", arg)
+		}
+		if arg == "--permission-mode" && i+1 < len(args) && isTqModeName(args[i+1]) {
+			return fmt.Errorf(
+				`claude_args has --permission-mode %q, but %q is a tq dispatch mode (metadata "mode"), not a Claude permission-mode value. `+
+					`Valid Claude permission-mode values: acceptEdits, auto, bypassPermissions, default, dontAsk, plan`,
+				args[i+1], args[i+1],
+			)
 		}
 	}
 	return nil

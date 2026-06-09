@@ -374,6 +374,14 @@ func TestValidateClaudeArgs(t *testing.T) {
 		{name: "-p is blocked", args: []string{"-p", "x"}, wantErr: `claude_args cannot include "-p"`},
 		{name: "--print is blocked", args: []string{"--print"}, wantErr: `claude_args cannot include "--print"`},
 		{name: "--remote is blocked", args: []string{"--remote"}, wantErr: `claude_args cannot include "--remote"`},
+		{name: "permission-mode plan is OK", args: []string{"--permission-mode", "plan"}},
+		{name: "permission-mode auto is OK", args: []string{"--permission-mode", "auto"}},
+		{name: "permission-mode experimental_bg rejected as tq mode confusion", args: []string{"--permission-mode", "experimental_bg"}, wantErr: `"experimental_bg" is a tq dispatch mode`},
+		{name: "permission-mode interactive rejected as tq mode confusion", args: []string{"--permission-mode", "interactive"}, wantErr: `"interactive" is a tq dispatch mode`},
+		{name: "permission-mode noninteractive rejected as tq mode confusion", args: []string{"--permission-mode", "noninteractive"}, wantErr: `"noninteractive" is a tq dispatch mode`},
+		{name: "permission-mode remote rejected as tq mode confusion", args: []string{"--permission-mode", "remote"}, wantErr: `"remote" is a tq dispatch mode`},
+		{name: "experimental_bg as bare arg (not after --permission-mode) is allowed", args: []string{"--worktree", "experimental_bg"}},
+		{name: "permission-mode experimental_bg with extra args still rejected", args: []string{"--worktree", "scope", "--permission-mode", "experimental_bg"}, wantErr: `"experimental_bg" is a tq dispatch mode`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
