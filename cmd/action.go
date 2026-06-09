@@ -97,6 +97,12 @@ ends failed/cancelled blocks forever — rescue with the /tq:dep-triage skill.
 			return fmt.Errorf("at least one flag (--title, --task, --meta, --work-dir, --result, --blocked-by-action, --blocked-by-task, --clear-deps) is required")
 		}
 
+		if taskID != nil {
+			if err := database.EnsureTaskOpenForAttach(*taskID, "reassign action to"); err != nil {
+				return err
+			}
+		}
+
 		if depMutation {
 			a, err := database.GetAction(id)
 			if err != nil {

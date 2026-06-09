@@ -123,6 +123,54 @@ func TestSchedulesModel_ErrorSurfacing(t *testing.T) {
 	}
 }
 
+func TestSchedulesModel_ToggleEnableTerminalTaskRejected(t *testing.T) {
+	tests := []struct {
+		name       string
+		taskStatus string
+	}{
+		{name: "done", taskStatus: "done"},
+		{name: "archived", taskStatus: "archived"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			taskID, _ := d.InsertTask(1, "test", "{}", "")
+			schedID, _ := d.InsertSchedule(taskID, "instr", "Title", "* * * * *", "{}")
+			if err := d.UpdateScheduleEnabled(schedID, false); err != nil {
+				t.Fatalf("disable schedule: %v", err)
+			}
+			if err := d.UpdateTask(taskID, tc.taskStatus, ""); err != nil {
+				t.Fatalf("close task: %v", err)
+			}
+
+			m := NewSchedulesModel(d)
+			m.schedules = []db.Schedule{{ID: schedID, TaskID: taskID, Enabled: false}}
+
+			updated, _ := m.toggleEnabled(&m.schedules[0])
+			if !updated.messageIsError {
+				t.Fatal("expected messageIsError=true for terminal-task toggle")
+			}
+			wantHint := fmt.Sprintf("cannot enable schedule on task #%d", taskID)
+			if !strings.Contains(updated.message, wantHint) {
+				t.Errorf("expected message to contain %q, got %q", wantHint, updated.message)
+			}
+			wantStatus := "status=" + tc.taskStatus
+			if !strings.Contains(updated.message, wantStatus) {
+				t.Errorf("expected message to contain %q, got %q", wantStatus, updated.message)
+			}
+
+			s, err := d.GetSchedule(schedID)
+			if err != nil {
+				t.Fatalf("get schedule: %v", err)
+			}
+			if s.Enabled {
+				t.Errorf("schedule should remain disabled, got enabled=true")
+			}
+		})
+	}
+}
+
 func TestSchedulesModel_MessageAutoClearsAfterTTL(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

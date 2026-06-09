@@ -1389,14 +1389,15 @@ func TestUpdateAction_AtomicRollback(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)
 	taskID, _ := d.InsertTask(1, "task", "{}", "")
+	otherTaskID, _ := d.InsertTask(1, "other task", "{}", "")
 	id, _ := d.InsertAction("orig", taskID, `{"keep":"me"}`, db.ActionStatusPending, nil, "/orig/dir")
 
 	title := "new"
-	missingTask := int64(99999)
+	invalidMeta := "{not json}"
 	wd := "/new/dir"
-	err := d.UpdateAction(id, &title, &missingTask, nil, &wd, nil)
+	err := d.UpdateAction(id, &title, &otherTaskID, &invalidMeta, &wd, nil)
 	if err == nil {
-		t.Fatal("expected FK violation, got nil")
+		t.Fatal("expected metadata parse error, got nil")
 	}
 
 	a, _ := d.GetAction(id)

@@ -232,6 +232,7 @@ tq action update <ID> [--title <TITLE>] [--task <ID>] [--meta <JSON>] [--work-di
 
 `--meta` and `--result` are allowed on `pending`, `failed`, `done`, or `cancelled` actions so post-execution observability fields (e.g. `claude_session_id`, `executor`) can be backfilled after the worker has marked the action terminal. Running/dispatched remain rejected because they are in-flight — use `tq action done`/`fail` instead.
 
+- `--task` — Reassign the action to a different task. Rejected if the target task status is `done` or `archived`; reopen with `tq task update <ID> --status open` first if intentional.
 - `--work-dir` — Override or clear the action-level working directory. Pass an empty string (`--work-dir ""`) to clear.
 - `--meta` — Merge JSON object into existing metadata (existing keys are overwritten; other keys preserved). Allowed on `pending`, `failed`, `done`, or `cancelled`. Typical backfill: `tq action update <ID> --meta '{"claude_session_id":"<uuid>"}'` so `tq action resume <ID>` becomes viable for an older action whose session id was not auto-recorded.
 - `--result` — Amend the recorded result. Same status whitelist as `--meta`. This is the recovery path for a result wrongly committed on an already-`done` action.
@@ -336,6 +337,14 @@ tq schedule update <ID> [--cron <EXPR>] [--title <TITLE>] [--task <ID>] [--instr
 ```
 
 - `--task` — Reassign to a different task. Rejected if the target task status is `done` or `archived`; reopen with `tq task update <ID> --status open` first if intentional.
+
+### `tq schedule enable`
+
+```
+tq schedule enable <ID>
+```
+
+Re-enable a previously disabled schedule. Rejected if the parent task status is `done` or `archived`; reopen with `tq task update <ID> --status open` first if intentional. The TUI's enable/disable toggle (key `e` in the Schedules view) is rejected the same way.
 
 ## event
 

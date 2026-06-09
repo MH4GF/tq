@@ -28,6 +28,22 @@ func IsTerminalTaskStatus(status string) bool {
 	return status == TaskStatusDone || status == TaskStatusArchived
 }
 
+func (db *DB) EnsureTaskOpenForAttach(taskID int64, op string) error {
+	parent, err := db.GetTask(taskID)
+	if err != nil {
+		return fmt.Errorf("get parent task #%d: %w", taskID, err)
+	}
+	if IsTerminalTaskStatus(parent.Status) {
+		return fmt.Errorf(
+			"cannot %s task #%d (status=%s): "+
+				"verify the task ID is correct, or reopen with "+
+				"'tq task update %d --status open' if this is intentional",
+			op, taskID, parent.Status, taskID,
+		)
+	}
+	return nil
+}
+
 type Task struct {
 	ID        int64
 	ProjectID int64

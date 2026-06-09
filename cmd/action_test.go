@@ -154,6 +154,66 @@ func TestActionUpdate_WorkDir(t *testing.T) {
 	}
 }
 
+func TestActionUpdate_TerminalTaskRejected(t *testing.T) {
+	tests := []struct {
+		name       string
+		taskStatus string
+		wantErr    string
+	}{
+		{name: "done", taskStatus: "done", wantErr: "status=done"},
+		{name: "archived", taskStatus: "archived", wantErr: "status=archived"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+
+			openTaskID, err := d.InsertTask(1, "open task", "{}", "")
+			if err != nil {
+				t.Fatalf("insert open task: %v", err)
+			}
+			closedTaskID, err := d.InsertTask(1, "closed task", "{}", "")
+			if err != nil {
+				t.Fatalf("insert closed task: %v", err)
+			}
+			actionID, err := d.InsertAction("orig", openTaskID, "{}", db.ActionStatusPending, nil, "")
+			if err != nil {
+				t.Fatalf("insert action: %v", err)
+			}
+			if err := d.UpdateTask(closedTaskID, tc.taskStatus, ""); err != nil {
+				t.Fatalf("close target task: %v", err)
+			}
+
+			root := cmd.GetRootCmd()
+			root.SetOut(new(bytes.Buffer))
+			root.SetErr(new(bytes.Buffer))
+			root.SetArgs([]string{"action", "update", fmt.Sprintf("%d", actionID), "--task", fmt.Sprintf("%d", closedTaskID)})
+
+			err = root.Execute()
+			if err == nil {
+				t.Fatal("expected error for terminal parent task, got nil")
+			}
+			if !contains(err.Error(), tc.wantErr) {
+				t.Errorf("error = %q, want to contain %q", err.Error(), tc.wantErr)
+			}
+			wantHint := fmt.Sprintf("cannot reassign action to task #%d", closedTaskID)
+			if !contains(err.Error(), wantHint) {
+				t.Errorf("error = %q, want to contain %q", err.Error(), wantHint)
+			}
+
+			a, err := d.GetAction(actionID)
+			if err != nil {
+				t.Fatalf("get action: %v", err)
+			}
+			if a.TaskID != openTaskID {
+				t.Errorf("action task_id = %d, want %d (unchanged)", a.TaskID, openTaskID)
+			}
+		})
+	}
+}
+
 func TestActionUpdate_Result(t *testing.T) {
 	d := testutil.NewTestDB(t)
 	testutil.SeedTestProjects(t, d)

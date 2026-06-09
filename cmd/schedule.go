@@ -91,7 +91,7 @@ Metadata keys for dispatch control (passed to actions automatically):
 		if err := validateMetaJSON(meta); err != nil {
 			return err
 		}
-		if err := ensureTaskOpenForAttach(taskID, "create schedule under"); err != nil {
+		if err := database.EnsureTaskOpenForAttach(taskID, "create schedule under"); err != nil {
 			return err
 		}
 
@@ -145,6 +145,13 @@ var scheduleEnableCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := parseID(args[0])
 		if err != nil {
+			return err
+		}
+		s, err := database.GetSchedule(id)
+		if err != nil {
+			return fmt.Errorf("get schedule #%d: %w", id, err)
+		}
+		if err := database.EnsureTaskOpenForAttach(s.TaskID, "enable schedule on"); err != nil {
 			return err
 		}
 		if err := database.UpdateScheduleEnabled(id, true); err != nil {
@@ -237,7 +244,7 @@ var scheduleUpdateCmd = &cobra.Command{
 		}
 
 		if taskID != nil {
-			if err := ensureTaskOpenForAttach(*taskID, "reassign schedule to"); err != nil {
+			if err := database.EnsureTaskOpenForAttach(*taskID, "reassign schedule to"); err != nil {
 				return err
 			}
 		}

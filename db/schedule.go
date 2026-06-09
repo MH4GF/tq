@@ -27,6 +27,9 @@ func (s *Schedule) scanFields() []any {
 }
 
 func (db *DB) InsertSchedule(taskID int64, instruction, title, cronExpr, metadata string) (int64, error) {
+	if err := db.EnsureTaskOpenForAttach(taskID, "create schedule under"); err != nil {
+		return 0, err
+	}
 	var id int64
 	err := withRetry(context.Background(), "InsertSchedule", func() error {
 		res, err := db.Exec(
@@ -81,6 +84,15 @@ func (db *DB) GetSchedule(id int64) (*Schedule, error) {
 }
 
 func (db *DB) UpdateScheduleEnabled(id int64, enabled bool) error {
+	if enabled {
+		s, err := db.GetSchedule(id)
+		if err != nil {
+			return fmt.Errorf("get schedule #%d: %w", id, err)
+		}
+		if err := db.EnsureTaskOpenForAttach(s.TaskID, "enable schedule on"); err != nil {
+			return err
+		}
+	}
 	return withRetry(context.Background(), "UpdateScheduleEnabled", func() error {
 		_, err := db.Exec("UPDATE schedules SET enabled = ? WHERE id = ?", enabled, id)
 		return err
@@ -88,6 +100,11 @@ func (db *DB) UpdateScheduleEnabled(id int64, enabled bool) error {
 }
 
 func (db *DB) UpdateSchedule(id int64, title, cronExpr, metadata, instruction *string, taskID *int64) error {
+	if taskID != nil {
+		if err := db.EnsureTaskOpenForAttach(*taskID, "reassign schedule to"); err != nil {
+			return err
+		}
+	}
 	var setClauses []string
 	var args []any
 	payload := map[string]any{}

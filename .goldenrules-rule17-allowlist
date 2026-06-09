@@ -30,10 +30,10 @@ db/db.go:405 SCAN actions
 # (ORDER BY id DESC LIMIT ?), not a real full scan; no index will help.
 db/event.go:76 SCAN events
 db/project.go:37 SCAN projects
-db/schedule.go:55 SCAN schedules
+db/schedule.go:58 SCAN schedules
 # db/settings.go — ListSettings: full-table list of a tiny KV table, no WHERE
 db/settings.go:29 SCAN settings
 db/search.go:152 SCAN actions_fts
 db/search.go:152 SCAN events_fts
 db/search.go:152 SCAN tasks_fts
-db/task.go:406 SCAN tasks
+db/task.go:422 SCAN tasks
