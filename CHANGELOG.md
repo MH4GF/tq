@@ -1,5 +1,45 @@
 # Changelog
 
+## [v0.21.34](https://github.com/MH4GF/tq/compare/v0.21.33...v0.21.34) - 2026-06-09
+
+- test(tui): collapse schedules_test.go error tests into table-driven by @MH4GF in https://github.com/MH4GF/tq/pull/374
+- feat(tq plugin): expose 7 skills via Agent Skills marketplace for npx skills and gh skill by @MH4GF in https://github.com/MH4GF/tq/pull/376
+- docs(CLAUDE.md): enumerate tq search fields to match CLI help by @MH4GF in https://github.com/MH4GF/tq/pull/377
+- docs(golden-rules): align per-layer quality grades table with legend by @MH4GF in https://github.com/MH4GF/tq/pull/378
+- docs(gh-ops): use canonical plugin CLI flow for installation by @MH4GF in https://github.com/MH4GF/tq/pull/379
+- refactor(tui): read claude_session_id via metaKeyClaudeSessionID constant by @MH4GF in https://github.com/MH4GF/tq/pull/380
+- docs(golden-rules): correct Rule 17 violation counts to 16 across 8 sites by @MH4GF in https://github.com/MH4GF/tq/pull/383
+- test(tui): table-drive SortOrder and ActionStats assertions by @MH4GF in https://github.com/MH4GF/tq/pull/382
+- fix(db): wrap MergeActionMetadata SELECT+merge+UPDATE in a transaction by @MH4GF in https://github.com/MH4GF/tq/pull/381
+- docs: distribute tq-dep-triage skill via plugin by @MH4GF in https://github.com/MH4GF/tq/pull/384
+- fix(db): wrap UpdateAction read+validate+write in a tx by @MH4GF in https://github.com/MH4GF/tq/pull/385
+- test(tui): collapse TestTasksModel_Dispatch* trio into table-driven test by @MH4GF in https://github.com/MH4GF/tq/pull/387
+- docs(tq): mark /tq:done action_id as optional in argument-hint by @MH4GF in https://github.com/MH4GF/tq/pull/386
+- docs(cli-reference): align command-table descriptions with CLI Short strings by @MH4GF in https://github.com/MH4GF/tq/pull/388
+- fix(dispatch): probe next pending action when slot pool defers head by @MH4GF in https://github.com/MH4GF/tq/pull/391
+- docs(cmd): add executor to --meta help on action update + schedule create/update by @MH4GF in https://github.com/MH4GF/tq/pull/392
+- fix(tui): auto-clear SchedulesModel toast messages after TTL by @MH4GF in https://github.com/MH4GF/tq/pull/389
+- fix(cmd/add): atomically create action and dependency edges by @MH4GF in https://github.com/MH4GF/tq/pull/393
+- fix(dispatch): defer admission callback errors instead of MarkFailed by @MH4GF in https://github.com/MH4GF/tq/pull/390
+- fix(cmd/schedule): reject create/update --task on terminal task by @MH4GF in https://github.com/MH4GF/tq/pull/394
+- perf(tui): load task detail asynchronously via tea.Cmd by @MH4GF in https://github.com/MH4GF/tq/pull/396
+- fix(dispatch): atomic schedule-tick prevents duplicate actions by @MH4GF in https://github.com/MH4GF/tq/pull/395
+- test(dispatch): cover bg merge-failure → reapOrphans path end-to-end by @MH4GF in https://github.com/MH4GF/tq/pull/397
+- test(db): refactor TestHasActiveActionsForSchedules to table-driven by @MH4GF in https://github.com/MH4GF/tq/pull/399
+- refactor(dispatch): table-drive TestReapBg_*/TestReapOrphans_* family by @MH4GF in https://github.com/MH4GF/tq/pull/398
+- security(ci): pin third-party actions in claude.yml to commit SHAs by @MH4GF in https://github.com/MH4GF/tq/pull/400
+- fix(db): preserve worker result when MarkDone loses race to terminal transition by @MH4GF in https://github.com/MH4GF/tq/pull/402
+- docs(skill): drop unused context: fork from turso-query-watch frontmatter by @MH4GF in https://github.com/MH4GF/tq/pull/403
+- docs(plugin): fix manager skill mode guidance for current dispatch reality by @MH4GF in https://github.com/MH4GF/tq/pull/401
+- docs(plugins/tq): fix wrong --meta dispatch_after instruction in failed skill by @MH4GF in https://github.com/MH4GF/tq/pull/404
+- refactor(dispatch): route remote_session key through MetaKey constant + close Rule 10 writer-side gap by @MH4GF in https://github.com/MH4GF/tq/pull/405
+- docs(triage): always exclude recurring tasks from Step 6 AskUserQuestion by @MH4GF in https://github.com/MH4GF/tq/pull/406
+- refactor(gh-ops/respond-review): drop pre-emptive "Will address" step by @MH4GF in https://github.com/MH4GF/tq/pull/407
+- feat(db): absorb SQLite database-locked errors via DSN PRAGMA + lock retry by @MH4GF in https://github.com/MH4GF/tq/pull/408
+- fix(db): replace action dependencies atomically by @MH4GF in https://github.com/MH4GF/tq/pull/409
+- fix(dispatch): reject tq mode names as --permission-mode value in claude_args by @MH4GF in https://github.com/MH4GF/tq/pull/410
+- fix(db): close remaining task-attach guard gaps (schedule enable, action update, TUI toggle) by @MH4GF in https://github.com/MH4GF/tq/pull/411
+
 ## [v0.21.33](https://github.com/MH4GF/tq/compare/v0.21.32...v0.21.33) - 2026-06-04
 
 - docs(plugin-readme): refresh SessionStart and dispatch-mode notes after unified bg path by @MH4GF in https://github.com/MH4GF/tq/pull/370
