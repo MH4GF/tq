@@ -67,6 +67,7 @@ type QueryReader interface {
 	ListActionDependencies(actionID int64) ([]ActionDepStatus, error)
 	ListActionDependenciesByActionIDs(ids []int64) (map[int64][]ActionDepStatus, error)
 	// Task queries
+	EnsureTaskOpenForAttach(taskID int64, op string) error
 	GetTask(id int64) (*Task, error)
 	ListTasks(projectID int64, status string, limit int) ([]Task, error)
 	ListTasksByProjectIDs(projectIDs []int64) (map[int64][]Task, error)

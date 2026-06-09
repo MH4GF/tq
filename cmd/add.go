@@ -77,7 +77,7 @@ Metadata keys for dispatch control:
 			return fmt.Errorf("--task must be a positive integer")
 		}
 
-		if err := ensureTaskOpenForAttach(addTask, "create action under"); err != nil {
+		if err := database.EnsureTaskOpenForAttach(addTask, "create action under"); err != nil {
 			return err
 		}
 

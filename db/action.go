@@ -678,6 +678,11 @@ func (db *DB) BulkMergeActionMetadata(merges []ActionMetadataMerge) error {
 }
 
 func (db *DB) UpdateAction(id int64, title *string, taskID *int64, metadata, workDir, result *string) error {
+	if taskID != nil {
+		if err := db.EnsureTaskOpenForAttach(*taskID, "reassign action to"); err != nil {
+			return err
+		}
+	}
 	ctx := context.Background()
 	var fieldsCount int
 	err := db.withTxRetry(ctx, "UpdateAction", func(tx *sql.Tx) error {
