@@ -42,7 +42,7 @@ You have not read the target code in this session, and you must not — that is 
 
 **Self-contained** — no "as we discussed", "the conversation above", or parent-session variables. The worker has none of it.
 
-**Never put `## ` markdown headers in the instruction string** — Bash safety (`Newline followed by # inside a quoted argument`) denies the `tq action create` call. Use `**Header**` (bold) for structure, as the example below does.
+**Long or markdown-heavy instructions** — when the body contains `#` headers, backticks, or multiple paragraphs, write it to a file and pass `--instruction-file <path>` (or pipe and pass `--instruction-file -`). The positional-string form is denied by Bash safety (`Newline followed by # inside a quoted argument`) and by shell quoting traps on backticks. For short single-line instructions the positional form is fine.
 
 #### Ask first if the goal is ambiguous
 
