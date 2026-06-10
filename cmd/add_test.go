@@ -3,6 +3,9 @@ package cmd_test
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/MH4GF/tq/cmd"
@@ -31,7 +34,7 @@ func TestAdd(t *testing.T) {
 		{
 			name:    "no instruction",
 			args:    []string{"action", "create", "--task", "1", "--title", "test"},
-			wantErr: "accepts 1 arg(s), received 0",
+			wantErr: "instruction required",
 		},
 		{
 			name:     "instruction merges meta",
@@ -211,6 +214,110 @@ func TestAdd_InvalidInstruction(t *testing.T) {
 			}
 			if !contains(err.Error(), "instruction must not be empty") {
 				t.Errorf("error = %q, want to contain 'instruction must not be empty'", err.Error())
+			}
+		})
+	}
+}
+
+func TestAdd_InstructionFile(t *testing.T) {
+	tests := []struct {
+		name            string
+		writeFile       string
+		fileContents    string
+		stdin           string
+		argsTail        []string
+		wantErr         string
+		wantInstruction string
+	}{
+		{
+			name:            "file path",
+			writeFile:       "instr.md",
+			fileContents:    "# Goal\n\nLong markdown body.\n",
+			argsTail:        []string{"--instruction-file", "{file}"},
+			wantInstruction: "# Goal\n\nLong markdown body.",
+		},
+		{
+			name:            "stdin via dash",
+			stdin:           "# Header\nstdin body\n",
+			argsTail:        []string{"--instruction-file", "-"},
+			wantInstruction: "# Header\nstdin body",
+		},
+		{
+			name:     "nonexistent file",
+			argsTail: []string{"--instruction-file", "/nonexistent/path/to/instruction.md"},
+			wantErr:  "read instruction file",
+		},
+		{
+			name:         "empty file content",
+			writeFile:    "empty.md",
+			fileContents: "   \n",
+			argsTail:     []string{"--instruction-file", "{file}"},
+			wantErr:      "instruction must not be empty",
+		},
+		{
+			name:         "both positional and file",
+			writeFile:    "instr.md",
+			fileContents: "ignored body\n",
+			argsTail:     []string{"positional inst", "--instruction-file", "{file}"},
+			wantErr:      "not both",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testutil.NewTestDB(t)
+			testutil.SeedTestProjects(t, d)
+			cmd.SetDB(d)
+			cmd.ResetForTest()
+			cmd.SetConfigDir(t.TempDir())
+			d.InsertTask(1, "test task", "{}", "")
+
+			args := []string{"action", "create"}
+			tail := append([]string{}, tc.argsTail...)
+			if tc.writeFile != "" {
+				path := filepath.Join(t.TempDir(), tc.writeFile)
+				if err := os.WriteFile(path, []byte(tc.fileContents), 0o600); err != nil {
+					t.Fatalf("write fixture: %v", err)
+				}
+				for i := range tail {
+					tail[i] = strings.ReplaceAll(tail[i], "{file}", path)
+				}
+			}
+			args = append(args, tail...)
+			args = append(args, "--task", "1", "--title", "t")
+
+			root := cmd.GetRootCmd()
+			buf := new(bytes.Buffer)
+			root.SetOut(buf)
+			root.SetErr(buf)
+			if tc.stdin != "" {
+				root.SetIn(strings.NewReader(tc.stdin))
+			}
+			root.SetArgs(args)
+
+			err := root.Execute()
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tc.wantErr)
+				}
+				if !contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %q, want to contain %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("execute: %v (output: %s)", err, buf.String())
+			}
+			a, err := d.GetAction(1)
+			if err != nil {
+				t.Fatalf("get action: %v", err)
+			}
+			var meta map[string]any
+			if err := json.Unmarshal([]byte(a.Metadata), &meta); err != nil {
+				t.Fatalf("parse metadata: %v", err)
+			}
+			got, _ := meta["instruction"].(string)
+			if got != tc.wantInstruction {
+				t.Errorf("meta.instruction = %q, want %q", got, tc.wantInstruction)
 			}
 		})
 	}

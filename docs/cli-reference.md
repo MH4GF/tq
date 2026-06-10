@@ -128,7 +128,7 @@ Notes with `kind=triage_keep` are surfaced on `tq task list` as `latest_triage_n
 
 | Command | Description |
 |---------|-------------|
-| `tq action create <INSTRUCTION> --task <ID> --title <TITLE>` | Create an action |
+| `tq action create [INSTRUCTION] --task <ID> --title <TITLE> [--instruction-file <PATH>]` | Create an action |
 | `tq action list` | List actions |
 | `tq action get <ID>` | Get an action by ID (JSON output) |
 | `tq action update <ID>` | Update an action |
@@ -144,11 +144,14 @@ Notes with `kind=triage_keep` are surfaced on `tq task list` as `latest_triage_n
 ### `tq action create`
 
 ```
-tq action create <INSTRUCTION> --task <ID> --title <TITLE> [--meta <JSON>] [--status <STATUS>] [--after <TIME>] [--work-dir <PATH>] [--blocked-by-action <ID>]... [--blocked-by-task <ID>]...
+tq action create [INSTRUCTION] --task <ID> --title <TITLE> [--instruction-file <PATH>] [--meta <JSON>] [--status <STATUS>] [--after <TIME>] [--work-dir <PATH>] [--blocked-by-action <ID>]... [--blocked-by-task <ID>]...
 ```
+
+Provide the instruction either as the positional `INSTRUCTION` argument or via `--instruction-file`. The two sources are mutually exclusive and exactly one must be supplied.
 
 - `--task` — Task ID (**required**). Rejected if the task status is `done` or `archived`; reopen with `tq task update <ID> --status open` first if intentional.
 - `--title` — Action title (**required**, max 100 chars)
+- `--instruction-file` — Read the instruction text from `<PATH>`, or from stdin when `<PATH>` is `-`. Mutually exclusive with the positional `INSTRUCTION` argument. Trailing newlines are stripped from the contents. Use this for long markdown bodies that contain `#` headers, backticks, or multiple paragraphs — it bypasses shell-quoting traps the same way `gh pr create --body-file` and `git commit -F` do.
 - `--meta` — JSON metadata for dispatch control:
   - `mode` — `"interactive"`, `"noninteractive"`, or `"remote"`. `interactive` and `noninteractive` both launch via `claude --bg` so the action appears in `claude agents`; the difference is which slot pool the action consumes. `remote` dispatches via `claude --remote` for cloud execution. When omitted, the global default from `tq config get default_mode` is stamped into the action's metadata; if that is also unset it falls back to `"interactive"`. An explicit value here always wins. Any other value is rejected — pass Claude permission-mode (`auto`, `plan`, `acceptEdits`, …) via `claude_args` instead.
   - `claude_args` — Additional CLI arguments for claude (JSON array of strings, e.g. `["--permission-mode","plan","--worktree","--max-turns","5"]`)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -20,22 +21,28 @@ import (
 const maxActionTitleLength = 100
 
 var (
-	addTitle      string
-	addTask       int64
-	addMeta       string
-	addStatus     string
-	addAfter      string
-	addWorkDir    string
-	addBlockedAct []int64
-	addBlockedTsk []int64
+	addTitle           string
+	addTask            int64
+	addMeta            string
+	addStatus          string
+	addAfter           string
+	addWorkDir         string
+	addInstructionFile string
+	addBlockedAct      []int64
+	addBlockedTsk      []int64
 )
 
 var addCmd = &cobra.Command{
-	Use:   "create <instruction>",
+	Use:   "create [instruction]",
 	Short: "Create an action",
 	Long: `Create a new action linked to a task.
 
-Instruction is provided as a positional argument.
+Instruction is provided as a positional argument or via --instruction-file <path>
+(use "-" to read from stdin). The two sources are mutually exclusive; long
+markdown bodies (headers, code spans, multiple paragraphs) should prefer
+--instruction-file to avoid shell-quoting traps, mirroring 'gh pr create
+--body-file' and 'git commit -F'.
+
 --meta passes JSON metadata. The instruction is automatically merged into metadata.
 
 Metadata keys for dispatch control:
@@ -56,11 +63,16 @@ Metadata keys for dispatch control:
                explicit values in --meta are preserved.`,
 	Example: `  tq action create "/github-pr review this" --task 1 --title "Review PR"
   tq action create "Add JWT auth middleware" --task 2 --title "Add auth middleware"
+  tq action create --instruction-file ./instr.md --task 1 --title "Long instruction from file"
+  cat instr.md | tq action create --instruction-file - --task 1 --title "Instruction from stdin"
   tq action create "/review" --task 3 --title "Plan review" --meta '{"claude_args":["--permission-mode","plan","--worktree"]}'
   tq action create "deploy" --task 4 --title "Deploy" --blocked-by-action 41 --blocked-by-task 7`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		instruction := args[0]
+		instruction, err := resolveInstruction(cmd, args, addInstructionFile)
+		if err != nil {
+			return err
+		}
 
 		if strings.TrimSpace(instruction) == "" {
 			return fmt.Errorf("instruction must not be empty")
@@ -148,6 +160,34 @@ Metadata keys for dispatch control:
 		}
 		return nil
 	},
+}
+
+func resolveInstruction(cmd *cobra.Command, args []string, file string) (string, error) {
+	hasArg := len(args) == 1
+	hasFile := file != ""
+	switch {
+	case !hasArg && !hasFile:
+		return "", fmt.Errorf("instruction required: pass as positional arg or via --instruction-file <path>")
+	case hasArg && hasFile:
+		return "", fmt.Errorf("instruction must come from either positional arg or --instruction-file, not both")
+	case hasArg:
+		return args[0], nil
+	}
+
+	var data []byte
+	var err error
+	if file == "-" {
+		data, err = io.ReadAll(cmd.InOrStdin())
+		if err != nil {
+			return "", fmt.Errorf("read instruction from stdin: %w", err)
+		}
+	} else {
+		data, err = os.ReadFile(file)
+		if err != nil {
+			return "", fmt.Errorf("read instruction file %q: %w", file, err)
+		}
+	}
+	return strings.TrimRight(string(data), "\n"), nil
 }
 
 func mergeInstruction(metaJSON, instruction string) (string, error) {
@@ -278,6 +318,7 @@ func init() {
 	if err := addCmd.MarkFlagRequired("task"); err != nil {
 		panic(err)
 	}
+	addCmd.Flags().StringVar(&addInstructionFile, "instruction-file", "", "Read instruction from file ('-' for stdin); mutually exclusive with positional arg")
 	addCmd.Flags().StringVar(&addMeta, "meta", "{}", `JSON metadata for dispatch control (keys: mode, claude_args, executor)`)
 	addCmd.Flags().StringVar(&addStatus, "status", "", "Initial status (default: pending)")
 	addCmd.Flags().StringVar(&addAfter, "after", "", "Dispatch after this time (YYYY-MM-DD HH:MM, local timezone)")
