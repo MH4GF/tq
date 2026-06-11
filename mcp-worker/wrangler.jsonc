@@ -1,0 +1,29 @@
+/**
+ * tq remote MCP server.
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tq-mcp",
+  "main": "./src/index.ts",
+  "compatibility_date": "2025-03-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "dev": {
+    "port": 8787
+  }
+  // Secrets (wrangler secret put / .dev.vars):
+  // - GITHUB_CLIENT_ID
+  // - GITHUB_CLIENT_SECRET
+  // - COOKIE_ENCRYPTION_KEY
+  // - TURSO_URL
+  // - TURSO_TOKEN
+}

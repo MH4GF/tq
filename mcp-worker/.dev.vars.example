@@ -1,0 +1,7 @@
+# GitHub OAuth App (callback: http://localhost:8787/callback)
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+
+# Turso database (turso db show / turso db tokens create)
+TURSO_URL=
+TURSO_TOKEN=
