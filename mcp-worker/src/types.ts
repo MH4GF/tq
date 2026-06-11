@@ -16,5 +16,4 @@ export interface AppEnv extends Env {
 // Stored in the OAuth grant and surfaced on ExecutionContext.props for API requests.
 export interface Props extends Record<string, unknown> {
   login: string;
-  accessToken: string;
 }

@@ -15,7 +15,7 @@ CREATE TABLE projects (
 )`;
 
 function makeContext(db: Client): ToolContext {
-  return { db, props: { login: "MH4GF", accessToken: "test-token" } };
+  return { db, props: { login: "MH4GF" } };
 }
 
 async function insertProject(

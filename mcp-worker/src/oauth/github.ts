@@ -1,6 +1,7 @@
 const GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
 const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
 const GITHUB_USER_URL = "https://api.github.com/user";
+const GITHUB_FETCH_TIMEOUT_MS = 10_000;
 
 export function githubAuthorizeUrl(options: {
   clientId: string;
@@ -31,6 +32,7 @@ export async function exchangeCodeForToken(options: {
       client_secret: options.clientSecret,
       code: options.code,
     }),
+    signal: AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(`GitHub token exchange failed: ${response.status}`);
@@ -52,6 +54,7 @@ export async function fetchGithubLogin(accessToken: string): Promise<string> {
       Accept: "application/vnd.github+json",
       "User-Agent": "tq-mcp",
     },
+    signal: AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(`GitHub user fetch failed: ${response.status}`);

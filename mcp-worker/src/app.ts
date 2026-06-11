@@ -50,7 +50,7 @@ app.get("/callback", async (c) => {
     return c.text("Forbidden", 403);
   }
 
-  const props: Props = { login, accessToken };
+  const props: Props = { login };
   const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
     request: authRequest,
     userId: login,
