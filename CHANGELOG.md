@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.21.35](https://github.com/MH4GF/tq/compare/v0.21.34...v0.21.35) - 2026-06-10
+
+- build(lint): pin golangci-lint to v2.12.2 (mise + CI) by @MH4GF in https://github.com/MH4GF/tq/pull/412
+- feat(action): add --instruction-file flag to tq action create by @MH4GF in https://github.com/MH4GF/tq/pull/414
+
 ## [v0.21.34](https://github.com/MH4GF/tq/compare/v0.21.33...v0.21.34) - 2026-06-09
 
 - test(tui): collapse schedules_test.go error tests into table-driven by @MH4GF in https://github.com/MH4GF/tq/pull/374
