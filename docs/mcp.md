@@ -51,6 +51,8 @@ Add to `claude_desktop_config.json`:
 
 Authentication is GitHub OAuth, but authorization is a hard-coded allowlist (`mcp-worker/src/mcp/allowlist.ts`). Only the GitHub login `MH4GF` can complete the flow; other users receive 403 at the OAuth callback and again at the MCP route. Multi-user support (per-user Turso databases) is out of scope for v1.
 
+Before redirecting to GitHub, `/authorize` shows a consent dialog naming the requesting client and its redirect URI, and the OAuth state is HMAC-signed (`OAUTH_STATE_SECRET`) and verified at the callback. This prevents an attacker-registered MCP client from obtaining a silent grant even though dynamic client registration is open.
+
 ## Local development
 
 See `mcp-worker/README.md`. In short: create a dev GitHub OAuth App pointing at `http://localhost:8787/callback`, fill `.dev.vars`, run `bun run dev`, and connect with MCP Inspector (`npx @modelcontextprotocol/inspector`).

@@ -2,6 +2,9 @@
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 
+# HMAC secret for signing the OAuth state (openssl rand -hex 32)
+OAUTH_STATE_SECRET=
+
 # Turso database (turso db show / turso db tokens create)
 TURSO_URL=
 TURSO_TOKEN=
