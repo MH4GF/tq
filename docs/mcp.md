@@ -12,7 +12,7 @@ The dispatch loop, schedules, and all writes stay in the local tq CLI. The worke
 
 ## Prerequisites
 
-1. A Turso database initialized by the local tq (`tq migrate` applied, projects present).
+1. A Turso database initialized by the local tq (running any tq command, e.g. `tq project list`, applies migrations automatically).
 2. The deployed worker URL (see `mcp-worker/README.md` for deploy steps), referred to as `https://tq-mcp.example.workers.dev` below.
 
 ## Connect from Claude.ai (Web)

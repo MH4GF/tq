@@ -15,6 +15,11 @@ Exposes tq data over MCP (Streamable HTTP) so MCP clients like Claude.ai (Web), 
 
 Authorization is a single-user allowlist (`src/mcp/allowlist.ts`); only the GitHub login `MH4GF` is accepted. Tokens never reach tools for other users: the callback rejects them before a grant is created, and the MCP handler re-checks on every request.
 
+## Security: known v1 limitations
+
+- No consent screen on `/authorize`. The worker redirects straight to GitHub, and dynamic client registration (`/register`) is open, so a malicious MCP client registered by an attacker could obtain a grant if the allowlisted user is tricked into completing the GitHub flow from a crafted link. Blast radius is bounded: the allowlist restricts grants to the owner's account, and v1 exposes a single read-only tool. The fix (an approval dialog bound to a signed cookie, as in Cloudflare's `remote-mcp-github-oauth` demo) is planned for when write tools land.
+- Tool errors propagate to the MCP client unsanitized. Acceptable while the only principal who can invoke tools is the owner.
+
 ## Development
 
 ```sh

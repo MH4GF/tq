@@ -23,7 +23,6 @@
   // Secrets (wrangler secret put / .dev.vars):
   // - GITHUB_CLIENT_ID
   // - GITHUB_CLIENT_SECRET
-  // - COOKIE_ENCRYPTION_KEY
   // - TURSO_URL
   // - TURSO_TOKEN
 }
