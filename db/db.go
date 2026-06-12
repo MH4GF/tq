@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -102,6 +103,11 @@ func (db *DB) hasColumn(table, column string) (bool, error) {
 }
 
 func (db *DB) Migrate() error {
+	staleCountTrigger, err := db.dropStaleCountUpdateTrigger()
+	if err != nil {
+		return fmt.Errorf("migrate task_action_counts trigger: %w", err)
+	}
+
 	if _, err := db.Exec(schemaSQL); err != nil {
 		return err
 	}
@@ -319,6 +325,12 @@ func (db *DB) Migrate() error {
 		return fmt.Errorf("migrate experimental_bg mode: %w", err)
 	}
 
+	if staleCountTrigger {
+		if err := db.rebuildTaskActionCounts(); err != nil {
+			return fmt.Errorf("rebuild task_action_counts: %w", err)
+		}
+	}
+
 	if err := db.backfillTaskActionCounts(); err != nil {
 		return fmt.Errorf("backfill task_action_counts: %w", err)
 	}
@@ -389,6 +401,37 @@ func (db *DB) backfillSearchFTS() error {
 		}
 	}
 	return nil
+}
+
+func (db *DB) dropStaleCountUpdateTrigger() (bool, error) {
+	var sqlText string
+	err := db.QueryRow("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'trg_actions_count_update'").Scan(&sqlText)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read trigger definition: %w", err)
+	}
+	if strings.Contains(sqlText, "OLD.task_id != NEW.task_id") {
+		return false, nil
+	}
+	if _, err := db.Exec("DROP TRIGGER trg_actions_count_update"); err != nil {
+		return false, fmt.Errorf("drop stale trigger: %w", err)
+	}
+	return true, nil
+}
+
+func (db *DB) rebuildTaskActionCounts() error {
+	ctx := context.Background()
+	return db.withTxRetry(ctx, "rebuildTaskActionCounts", func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM task_action_counts"); err != nil {
+			return fmt.Errorf("clear: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO task_action_counts (task_id, status, count) SELECT task_id, status, COUNT(*) FROM actions GROUP BY task_id, status"); err != nil {
+			return fmt.Errorf("recount: %w", err)
+		}
+		return nil
+	})
 }
 
 // backfillTaskActionCounts populates task_action_counts from existing actions

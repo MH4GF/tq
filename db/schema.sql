@@ -81,8 +81,8 @@ BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_actions_count_update
-AFTER UPDATE OF status ON actions
-WHEN OLD.status != NEW.status
+AFTER UPDATE OF task_id, status ON actions
+WHEN OLD.task_id != NEW.task_id OR OLD.status != NEW.status
 BEGIN
   UPDATE task_action_counts SET count = count - 1
   WHERE task_id = OLD.task_id AND status = OLD.status;
