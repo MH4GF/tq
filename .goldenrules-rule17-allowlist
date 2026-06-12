@@ -19,13 +19,18 @@
 #     O(N), shows as SCAN in EXPLAIN but not actionable via index)
 
 db/action.go:399 SCAN actions
-db/db.go:167 SCAN tasks
-db/db.go:184 SCAN actions
-db/db.go:336 SCAN actions
-db/db.go:352 SCAN schedules
-db/db.go:399 SCAN CONSTANT
-db/db.go:399 SCAN task_action_counts
-db/db.go:405 SCAN actions
+db/db.go:173 SCAN tasks
+db/db.go:190 SCAN actions
+db/db.go:348 SCAN actions
+db/db.go:364 SCAN schedules
+# db/db.go:408 — dropStaleCountUpdateTrigger: sqlite_master lookup, no index possible
+db/db.go:408 SCAN sqlite_master
+# db/db.go:429-432 — rebuildTaskActionCounts: one-shot full rebuild on trigger migration
+db/db.go:429 SCAN task_action_counts
+db/db.go:432 SCAN actions
+db/db.go:446 SCAN CONSTANT
+db/db.go:446 SCAN task_action_counts
+db/db.go:452 SCAN actions
 # db/event.go:76 — ListRecentEvents: LIMIT-bounded PK-order scan
 # (ORDER BY id DESC LIMIT ?), not a real full scan; no index will help.
 db/event.go:76 SCAN events

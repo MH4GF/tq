@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/MH4GF/tq/db"
@@ -359,5 +360,164 @@ func TestTaskActionCounts_BackfillFromExisting(t *testing.T) {
 	want := dumpGroupBy(t, d)
 	if !equalCountRows(got, want) {
 		t.Errorf("backfill mismatch:\ngot=%v\nwant=%v", got, want)
+	}
+}
+
+func TestTaskActionCounts_TaskIDChange(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	task1, err := d.InsertTask(1, "task1", "{}", "")
+	if err != nil {
+		t.Fatalf("InsertTask task1: %v", err)
+	}
+	task2, err := d.InsertTask(1, "task2", "{}", "")
+	if err != nil {
+		t.Fatalf("InsertTask task2: %v", err)
+	}
+	a1, err := d.InsertAction("a1", task1, "{}", db.ActionStatusPending, nil, "")
+	if err != nil {
+		t.Fatalf("InsertAction: %v", err)
+	}
+
+	steps := []struct {
+		name   string
+		mutate func() error
+		want   []countRow
+	}{
+		{
+			name:   "initial: pending on task1",
+			mutate: func() error { return nil },
+			want:   []countRow{{task1, db.ActionStatusPending, 1}},
+		},
+		{
+			name: "task_id only: task1 → task2",
+			mutate: func() error {
+				_, err := d.Exec("UPDATE actions SET task_id = ? WHERE id = ?", task2, a1)
+				return err
+			},
+			want: []countRow{{task2, db.ActionStatusPending, 1}},
+		},
+		{
+			name: "task_id and status together: task2/pending → task1/running",
+			mutate: func() error {
+				_, err := d.Exec("UPDATE actions SET task_id = ?, status = ? WHERE id = ?", task1, db.ActionStatusRunning, a1)
+				return err
+			},
+			want: []countRow{{task1, db.ActionStatusRunning, 1}},
+		},
+	}
+
+	for _, st := range steps {
+		t.Run(st.name, func(t *testing.T) {
+			if err := st.mutate(); err != nil {
+				t.Fatalf("mutate: %v", err)
+			}
+			got := dumpCounts(t, d)
+			if !equalCountRows(got, st.want) {
+				t.Errorf("counts: got %v, want %v", got, st.want)
+			}
+			if want := dumpGroupBy(t, d); !equalCountRows(got, want) {
+				t.Errorf("counts diverge from GROUP BY actions:\ngroup_by=%v\ncounts=%v", want, got)
+			}
+		})
+	}
+}
+
+func TestTaskActionCounts_TaskReassignReleasesCloseGuard(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	task1, err := d.InsertTask(1, "task1", "{}", "")
+	if err != nil {
+		t.Fatalf("InsertTask task1: %v", err)
+	}
+	task2, err := d.InsertTask(1, "task2", "{}", "")
+	if err != nil {
+		t.Fatalf("InsertTask task2: %v", err)
+	}
+	a1, err := d.InsertAction("a1", task1, "{}", db.ActionStatusPending, nil, "")
+	if err != nil {
+		t.Fatalf("InsertAction: %v", err)
+	}
+	if _, err := d.Exec("UPDATE actions SET task_id = ? WHERE id = ?", task2, a1); err != nil {
+		t.Fatalf("reassign: %v", err)
+	}
+
+	if err := d.UpdateTask(task1, db.TaskStatusDone, "all actions reassigned"); err != nil {
+		t.Errorf("close task1 after reassign: %v", err)
+	}
+	err = d.UpdateTask(task2, db.TaskStatusDone, "should be blocked")
+	if err == nil || !strings.Contains(err.Error(), "pending/running/dispatched") {
+		t.Errorf("close task2 with active action: got %v, want close-guard error", err)
+	}
+}
+
+const preTaskIDTriggerDDL = `CREATE TRIGGER trg_actions_count_update
+AFTER UPDATE OF status ON actions
+WHEN OLD.status != NEW.status
+BEGIN
+  UPDATE task_action_counts SET count = count - 1
+  WHERE task_id = OLD.task_id AND status = OLD.status;
+  INSERT INTO task_action_counts (task_id, status, count)
+  VALUES (NEW.task_id, NEW.status, 1)
+  ON CONFLICT(task_id, status) DO UPDATE SET count = count + 1;
+END`
+
+func TestTaskActionCounts_MigrateRecreatesStaleTrigger(t *testing.T) {
+	d := testutil.NewTestDB(t)
+	testutil.SeedTestProjects(t, d)
+	task1, err := d.InsertTask(1, "task1", "{}", "")
+	if err != nil {
+		t.Fatalf("InsertTask task1: %v", err)
+	}
+	task2, err := d.InsertTask(1, "task2", "{}", "")
+	if err != nil {
+		t.Fatalf("InsertTask task2: %v", err)
+	}
+	if _, err := d.Exec("DROP TRIGGER trg_actions_count_update"); err != nil {
+		t.Fatalf("drop trigger: %v", err)
+	}
+	if _, err := d.Exec(preTaskIDTriggerDDL); err != nil {
+		t.Fatalf("create stale trigger: %v", err)
+	}
+
+	a1, err := d.InsertAction("a1", task1, "{}", db.ActionStatusPending, nil, "")
+	if err != nil {
+		t.Fatalf("InsertAction: %v", err)
+	}
+	if _, err := d.Exec("UPDATE actions SET task_id = ? WHERE id = ?", task2, a1); err != nil {
+		t.Fatalf("reassign: %v", err)
+	}
+
+	ghost := []countRow{{task1, db.ActionStatusPending, 1}}
+	if got := dumpCounts(t, d); !equalCountRows(got, ghost) {
+		t.Fatalf("stale trigger should leave ghost count: got %v, want %v", got, ghost)
+	}
+	err = d.UpdateTask(task1, db.TaskStatusDone, "blocked by ghost count")
+	if err == nil || !strings.Contains(err.Error(), "pending/running/dispatched") {
+		t.Fatalf("close task1 before Migrate: got %v, want close-guard error", err)
+	}
+
+	if err := d.Migrate(); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	var triggerSQL string
+	if err := d.QueryRow("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'trg_actions_count_update'").Scan(&triggerSQL); err != nil {
+		t.Fatalf("read trigger: %v", err)
+	}
+	if !strings.Contains(triggerSQL, "OLD.task_id != NEW.task_id") {
+		t.Errorf("trigger not recreated with task_id coverage: %s", triggerSQL)
+	}
+
+	got := dumpCounts(t, d)
+	want := []countRow{{task2, db.ActionStatusPending, 1}}
+	if !equalCountRows(got, want) {
+		t.Errorf("counts after rebuild: got %v, want %v", got, want)
+	}
+	if groupBy := dumpGroupBy(t, d); !equalCountRows(got, groupBy) {
+		t.Errorf("counts diverge from GROUP BY actions:\ngroup_by=%v\ncounts=%v", groupBy, got)
+	}
+	if err := d.UpdateTask(task1, db.TaskStatusDone, "ghost count repaired"); err != nil {
+		t.Errorf("close task1 after Migrate: %v", err)
 	}
 }
