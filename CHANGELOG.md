@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.21.36](https://github.com/MH4GF/tq/compare/v0.21.35...v0.21.36) - 2026-06-12
+
+- fix(db): make task_action_counts trigger follow action task_id changes by @MH4GF in https://github.com/MH4GF/tq/pull/416
+
 ## [v0.21.35](https://github.com/MH4GF/tq/compare/v0.21.34...v0.21.35) - 2026-06-10
 
 - build(lint): pin golangci-lint to v2.12.2 (mise + CI) by @MH4GF in https://github.com/MH4GF/tq/pull/412
