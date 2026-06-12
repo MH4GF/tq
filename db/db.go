@@ -415,11 +415,13 @@ func (db *DB) dropStaleCountUpdateTrigger() (bool, error) {
 	if strings.Contains(sqlText, "OLD.task_id != NEW.task_id") {
 		return false, nil
 	}
-	if _, err := db.Exec("DROP TRIGGER trg_actions_count_update"); err != nil {
+	if _, err := db.Exec("DROP TRIGGER IF EXISTS trg_actions_count_update"); err != nil {
 		return false, fmt.Errorf("drop stale trigger: %w", err)
 	}
 	return true, nil
 }
+
+const recountTaskActionCountsSQL = "INSERT INTO task_action_counts (task_id, status, count) SELECT task_id, status, COUNT(*) FROM actions GROUP BY task_id, status"
 
 func (db *DB) rebuildTaskActionCounts() error {
 	ctx := context.Background()
@@ -427,7 +429,7 @@ func (db *DB) rebuildTaskActionCounts() error {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM task_action_counts"); err != nil {
 			return fmt.Errorf("clear: %w", err)
 		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO task_action_counts (task_id, status, count) SELECT task_id, status, COUNT(*) FROM actions GROUP BY task_id, status"); err != nil {
+		if _, err := tx.ExecContext(ctx, recountTaskActionCountsSQL); err != nil {
 			return fmt.Errorf("recount: %w", err)
 		}
 		return nil
@@ -445,7 +447,7 @@ func (db *DB) backfillTaskActionCounts() error {
 	if hasRows != 0 {
 		return nil
 	}
-	if _, err := db.Exec("INSERT INTO task_action_counts (task_id, status, count) SELECT task_id, status, COUNT(*) FROM actions GROUP BY task_id, status"); err != nil {
+	if _, err := db.Exec(recountTaskActionCountsSQL); err != nil {
 		return fmt.Errorf("insert: %w", err)
 	}
 	return nil
