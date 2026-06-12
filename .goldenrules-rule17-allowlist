@@ -28,9 +28,9 @@ db/db.go:408 SCAN sqlite_master
 # db/db.go:429-432 — rebuildTaskActionCounts: one-shot full rebuild on trigger migration
 db/db.go:429 SCAN task_action_counts
 db/db.go:432 SCAN actions
-db/db.go:444 SCAN CONSTANT
-db/db.go:444 SCAN task_action_counts
-db/db.go:450 SCAN actions
+db/db.go:446 SCAN CONSTANT
+db/db.go:446 SCAN task_action_counts
+db/db.go:452 SCAN actions
 # db/event.go:76 — ListRecentEvents: LIMIT-bounded PK-order scan
 # (ORDER BY id DESC LIMIT ?), not a real full scan; no index will help.
 db/event.go:76 SCAN events

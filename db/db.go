@@ -440,17 +440,20 @@ func (db *DB) rebuildTaskActionCounts() error {
 // rows on the first migration. Idempotent: if the table already has rows,
 // triggers have been keeping it in sync, so skip.
 func (db *DB) backfillTaskActionCounts() error {
-	var hasRows int
-	if err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM task_action_counts LIMIT 1)").Scan(&hasRows); err != nil {
-		return fmt.Errorf("check rows: %w", err)
-	}
-	if hasRows != 0 {
+	ctx := context.Background()
+	return db.withTxRetry(ctx, "backfillTaskActionCounts", func(tx *sql.Tx) error {
+		var hasRows int
+		if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM task_action_counts LIMIT 1)").Scan(&hasRows); err != nil {
+			return fmt.Errorf("check rows: %w", err)
+		}
+		if hasRows != 0 {
+			return nil
+		}
+		if _, err := tx.ExecContext(ctx, recountTaskActionCountsSQL); err != nil {
+			return fmt.Errorf("insert: %w", err)
+		}
 		return nil
-	}
-	if _, err := db.Exec(recountTaskActionCountsSQL); err != nil {
-		return fmt.Errorf("insert: %w", err)
-	}
-	return nil
+	})
 }
 
 func (db *DB) Close() error {
